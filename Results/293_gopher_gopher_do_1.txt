@@ -1,0 +1,1 @@
+newp,curl/lib/gopher.c,161,gopherpath,curl/lib/gopher.c,131,1

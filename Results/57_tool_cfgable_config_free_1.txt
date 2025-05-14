@@ -1,0 +1,1 @@
+last,curl/src/tool_cfgable.c,177,prev,curl/src/tool_cfgable.c,181,1

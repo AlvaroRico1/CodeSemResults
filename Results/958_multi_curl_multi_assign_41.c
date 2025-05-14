@@ -1,0 +1,19 @@
+// Source: curl/lib/multi.c
+// Lines 3450-3452
+CURLMcode curl_multi_assign(struct Curl_multi *multi, curl_socket_t s,
+                            void *hashp)
+{
+  struct Curl_sh_entry *there = NULL;
+
+  if(multi->in_callback)
+    return CURLM_RECURSIVE_API_CALL;
+
+  there = sh_getentry(&multi->sockhash, s);
+
+  if(!there)
+    return CURLM_BAD_SOCKET;
+
+  there->socketp = hashp;
+
+  return CURLM_OK;
+}

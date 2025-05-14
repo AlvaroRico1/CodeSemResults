@@ -1,0 +1,1 @@
+verstr,curl/lib/vtls/openssl.c,2116,unknown,curl/lib/vtls/openssl.c,2115,1

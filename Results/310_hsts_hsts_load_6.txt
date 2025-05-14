@@ -1,0 +1,1 @@
+lineptr,curl/lib/hsts.c,493,line,curl/lib/hsts.c,477,1

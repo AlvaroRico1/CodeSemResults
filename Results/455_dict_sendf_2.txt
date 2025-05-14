@@ -1,0 +1,1 @@
+sptr,curl/lib/dict.c,140,s,curl/lib/dict.c,139,1

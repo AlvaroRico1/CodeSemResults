@@ -1,0 +1,1 @@
+ftpwc,curl/lib/ftp.c,3761,ptr,curl/lib/ftp.c,3759,1

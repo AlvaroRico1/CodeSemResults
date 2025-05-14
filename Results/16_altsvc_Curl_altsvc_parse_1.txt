@@ -1,0 +1,1 @@
+value_ptr,curl/lib/altsvc.c,484,end_ptr,curl/lib/altsvc.c,487,1

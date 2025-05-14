@@ -1,0 +1,1 @@
+addresses,curl/lib/hostip.c,1049,end_ptr,curl/lib/hostip.c,1054,1

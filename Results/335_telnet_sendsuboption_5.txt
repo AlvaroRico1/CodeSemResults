@@ -1,0 +1,1 @@
+uc2,curl/lib/telnet.c,962,y,curl/lib/telnet.c,961,1

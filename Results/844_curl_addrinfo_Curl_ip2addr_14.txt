@@ -1,0 +1,1 @@
+h,curl/lib/curl_addrinfo.c,383,addrentry,curl/lib/curl_addrinfo.c,385,1

@@ -1,0 +1,1 @@
+conn_candidate,curl/lib/conncache.c,492,curr,curl/lib/conncache.c,487,1

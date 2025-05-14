@@ -1,0 +1,1 @@
+next,curl/src/tool_cfgable.c,98,urlnode,curl/src/tool_cfgable.c,52,1

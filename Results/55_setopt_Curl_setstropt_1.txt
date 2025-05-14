@@ -1,0 +1,1 @@
+charp,curl/lib/setopt.c,57,str,curl/lib/setopt.c,65,1

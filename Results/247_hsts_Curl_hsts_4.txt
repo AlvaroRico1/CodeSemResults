@@ -1,0 +1,1 @@
+sts,curl/lib/hsts.c,245,e,curl/lib/hsts.c,242,1
