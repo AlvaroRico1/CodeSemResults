@@ -1,5 +1,3 @@
-// Source: curl/lib/base64.c
-// Lines 180-192
 static CURLcode base64_encode(const char *table64,
                               struct Curl_easy *data,
                               const char *inputbuff, size_t insize,
@@ -102,3 +100,7 @@ static CURLcode base64_encode(const char *table64,
 
   return CURLE_OK;
 }
+
+
+// Source: base64.c
+// Lines 178-279

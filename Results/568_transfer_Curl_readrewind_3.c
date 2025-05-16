@@ -1,5 +1,3 @@
-// Source: curl/lib/transfer.c
-// Lines 418-432
 CURLcode Curl_readrewind(struct Curl_easy *data)
 {
   struct connectdata *conn = data->conn;
@@ -22,3 +20,7 @@ CURLcode Curl_readrewind(struct Curl_easy *data)
     if(http->sendit)
       mimepart = http->sendit;
   }
+
+
+// Source: transfer.c
+// Lines 415-436

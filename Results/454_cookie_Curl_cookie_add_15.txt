@@ -1,1 +1,1 @@
-ptr,curl/lib/cookie.c,481,semiptr,curl/lib/cookie.c,482,1
+ptr,curl/lib/cookie.c,38,semiptr,curl/lib/cookie.c,39,1

@@ -1,5 +1,3 @@
-// Source: curl/lib/http_proxy.c
-// Lines 79-81
 CURLcode Curl_proxy_connect(struct Curl_easy *data, int sockindex)
 {
   struct connectdata *conn = data->conn;
@@ -49,3 +47,7 @@ CURLcode Curl_proxy_connect(struct Curl_easy *data, int sockindex)
   /* no HTTP tunnel proxy, just return */
   return CURLE_OK;
 }
+
+
+// Source: http_proxy.c
+// Lines 79-127

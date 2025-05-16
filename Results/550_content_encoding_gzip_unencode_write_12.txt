@@ -1,1 +1,1 @@
-z,curl/lib/content_encoding.c,440,buf,curl/lib/content_encoding.c,437,1
+z,curl/lib/content_encoding.c,6,buf,curl/lib/content_encoding.c,3,1

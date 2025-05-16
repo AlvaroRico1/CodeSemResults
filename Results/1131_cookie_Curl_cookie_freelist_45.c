@@ -1,5 +1,3 @@
-// Source: curl/lib/cookie.c
-// Lines 1475-1477
 void Curl_cookie_freelist(struct Cookie *co)
 {
   struct Cookie *next;
@@ -9,3 +7,7 @@ void Curl_cookie_freelist(struct Cookie *co)
     co = next;
   }
 }
+
+
+// Source: cookie.c
+// Lines 1475-1483

@@ -1,1 +1,1 @@
-data,curl/lib/cookie.c,328,newcookies,curl/lib/cookie.c,334,1
+data,curl/lib/cookie.c,1,newcookies,curl/lib/cookie.c,7,1

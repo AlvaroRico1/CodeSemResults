@@ -1,5 +1,3 @@
-// Source: curl/lib/smtp.c
-// Lines 394-397
 static CURLcode smtp_perform_upgrade_tls(struct Curl_easy *data)
 {
   /* Start the SSL connection */
@@ -21,3 +19,7 @@ static CURLcode smtp_perform_upgrade_tls(struct Curl_easy *data)
 
   return result;
 }
+
+
+// Source: smtp.c
+// Lines 394-414

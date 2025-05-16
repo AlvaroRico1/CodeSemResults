@@ -1,5 +1,3 @@
-// Source: curl/lib/share.c
-// Lines 54-60
 curl_share_setopt(struct Curl_share *share, CURLSHoption option, ...)
 {
   va_list param;
@@ -133,3 +131,7 @@ curl_share_setopt(struct Curl_share *share, CURLSHoption option, ...)
 
   return res;
 }
+
+
+// Source: share.c
+// Lines 54-186

@@ -1,5 +1,3 @@
-// Source: curl/lib/telnet.c
-// Lines 877-877
 static void suboption(struct Curl_easy *data)
 {
   struct curl_slist *v;
@@ -74,3 +72,7 @@ static void suboption(struct Curl_easy *data)
   }
   return;
 }
+
+
+// Source: telnet.c
+// Lines 875-948

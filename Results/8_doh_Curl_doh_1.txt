@@ -1,1 +1,1 @@
-dohp,curl/lib/doh.c,400,hostname,curl/lib/doh.c,394,1
+dohp,curl/lib/doh.c,8,hostname,curl/lib/doh.c,2,1

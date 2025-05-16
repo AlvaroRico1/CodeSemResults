@@ -1,5 +1,3 @@
-// Source: curl/lib/connect.c
-// Lines 938-938
 CURLcode Curl_is_connected(struct Curl_easy *data,
                            struct connectdata *conn,
                            int sockindex,
@@ -113,3 +111,7 @@ CURLcode Curl_is_connected(struct Curl_easy *data,
 
         return CURLE_OK;
       }
+
+
+// Source: connect.c
+// Lines 848-960

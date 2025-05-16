@@ -1,1 +1,1 @@
-dns,curl/lib/hostip.c,422,addr,curl/lib/hostip.c,416,1
+dns,curl/lib/hostip.c,8,addr,curl/lib/hostip.c,2,1

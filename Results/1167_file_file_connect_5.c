@@ -1,5 +1,3 @@
-// Source: curl/lib/file.c
-// Lines 141-142
 static CURLcode file_connect(struct Curl_easy *data, bool *done)
 {
   char *real_path;
@@ -73,3 +71,7 @@ static CURLcode file_connect(struct Curl_easy *data, bool *done)
 
   return CURLE_OK;
 }
+
+
+// Source: file.c
+// Lines 139-211

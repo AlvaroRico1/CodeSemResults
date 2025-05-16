@@ -1,1 +1,1 @@
-begin_pos,curl/lib/vtls/vtls.c,946,pinkeycopy,curl/lib/vtls/vtls.c,946,1
+begin_pos,curl/lib/vtls/vtls.c,19,pinkeycopy,curl/lib/vtls/vtls.c,19,1

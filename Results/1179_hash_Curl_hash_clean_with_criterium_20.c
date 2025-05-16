@@ -1,5 +1,3 @@
-// Source: curl/lib/hash.c
-// Lines 233-235
 Curl_hash_clean_with_criterium(struct Curl_hash *h, void *user,
                                int (*comp)(void *, void *))
 {
@@ -26,3 +24,7 @@ Curl_hash_clean_with_criterium(struct Curl_hash *h, void *user,
     }
   }
 }
+
+
+// Source: hash.c
+// Lines 230-255

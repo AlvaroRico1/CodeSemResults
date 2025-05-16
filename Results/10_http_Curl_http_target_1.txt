@@ -1,1 +1,1 @@
-type,curl/lib/http.c,2248,path,curl/lib/http.c,2178,1
+type,curl/lib/http.c,75,path,curl/lib/http.c,6,1

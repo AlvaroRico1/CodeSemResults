@@ -1,5 +1,3 @@
-// Source: curl/lib/pingpong.c
-// Lines 166-172
 CURLcode Curl_pp_vsendf(struct Curl_easy *data,
                         struct pingpong *pp,
                         const char *fmt,
@@ -71,3 +69,7 @@ CURLcode Curl_pp_vsendf(struct Curl_easy *data,
 
   return CURLE_OK;
 }
+
+
+// Source: pingpong.c
+// Lines 165-235

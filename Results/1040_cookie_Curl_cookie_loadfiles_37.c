@@ -1,5 +1,3 @@
-// Source: curl/lib/cookie.c
-// Lines 330-330
 void Curl_cookie_loadfiles(struct Curl_easy *data)
 {
   struct curl_slist *list = data->state.cookielist;
@@ -25,3 +23,7 @@ void Curl_cookie_loadfiles(struct Curl_easy *data)
     Curl_share_unlock(data, CURL_LOCK_DATA_COOKIE);
   }
 }
+
+
+// Source: cookie.c
+// Lines 328-352

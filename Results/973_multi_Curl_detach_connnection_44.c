@@ -1,5 +1,3 @@
-// Source: curl/lib/multi.c
-// Lines 877-879
 void Curl_detach_connnection(struct Curl_easy *data)
 {
   struct connectdata *conn = data->conn;
@@ -9,3 +7,7 @@ void Curl_detach_connnection(struct Curl_easy *data)
   }
   data->conn = NULL;
 }
+
+
+// Source: multi.c
+// Lines 877-885

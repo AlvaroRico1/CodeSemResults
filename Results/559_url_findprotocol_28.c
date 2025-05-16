@@ -1,5 +1,3 @@
-// Source: curl/lib/url.c
-// Lines 1814-1817
 static CURLcode findprotocol(struct Curl_easy *data,
                              struct connectdata *conn,
                              const char *protostr)
@@ -32,3 +30,7 @@ static CURLcode findprotocol(struct Curl_easy *data,
 
   return CURLE_UNSUPPORTED_PROTOCOL;
 }
+
+
+// Source: url.c
+// Lines 1813-1844

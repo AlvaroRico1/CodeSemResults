@@ -1,5 +1,3 @@
-// Source: curl/lib/multi.c
-// Lines 425-484
 CURLMcode curl_multi_add_handle(struct Curl_multi *multi,
                                 struct Curl_easy *data)
 {
@@ -65,3 +63,7 @@ CURLMcode curl_multi_add_handle(struct Curl_multi *multi,
     data->prev = last;
     multi->easylp = data; /* the new last node */
   }
+
+
+// Source: multi.c
+// Lines 424-488

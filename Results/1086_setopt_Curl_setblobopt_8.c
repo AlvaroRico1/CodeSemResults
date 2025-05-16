@@ -1,5 +1,3 @@
-// Source: curl/lib/setopt.c
-// Lines 83-92
 CURLcode Curl_setblobopt(struct curl_blob **blobp,
                          const struct curl_blob *blob)
 {
@@ -27,3 +25,7 @@ CURLcode Curl_setblobopt(struct curl_blob **blobp,
     *blobp = nblob;
     return CURLE_OK;
   }
+
+
+// Source: setopt.c
+// Lines 83-109

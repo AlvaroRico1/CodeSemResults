@@ -1,5 +1,3 @@
-// Source: curl/lib/ftp.c
-// Lines 4118-4121
 CURLcode ftp_parse_url_path(struct Curl_easy *data)
 {
   /* the ftp struct is already inited in ftp_connect() */
@@ -144,3 +142,7 @@ CURLcode ftp_parse_url_path(struct Curl_easy *data)
   free(rawPath);
   return CURLE_OK;
 }
+
+
+// Source: ftp.c
+// Lines 4112-4255

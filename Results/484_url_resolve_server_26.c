@@ -1,5 +1,3 @@
-// Source: curl/lib/url.c
-// Lines 3308-3335
 static CURLcode resolve_server(struct Curl_easy *data,
                                struct connectdata *conn,
                                bool *async)
@@ -52,3 +50,7 @@ static CURLcode resolve_server(struct Curl_easy *data,
         }
       }
     }
+
+
+// Source: url.c
+// Lines 3307-3358

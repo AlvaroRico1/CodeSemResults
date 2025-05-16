@@ -1,5 +1,3 @@
-// Source: curl/lib/doh.c
-// Lines 219-224
 static CURLcode dohprobe(struct Curl_easy *data,
                          struct dnsprobe *p, DNStype dnstype,
                          const char *host,
@@ -169,3 +167,7 @@ static CURLcode dohprobe(struct Curl_easy *data,
   Curl_close(&doh);
   return result;
 }
+
+
+// Source: doh.c
+// Lines 218-386

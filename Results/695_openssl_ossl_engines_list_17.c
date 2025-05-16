@@ -1,5 +1,3 @@
-// Source: curl/lib/vtls/openssl.c
-// Lines 1375-1377
 static struct curl_slist *ossl_engines_list(struct Curl_easy *data)
 {
   struct curl_slist *list = NULL;
@@ -19,3 +17,7 @@ static struct curl_slist *ossl_engines_list(struct Curl_easy *data)
   (void) data;
   return list;
 }
+
+
+// Source: openssl.c
+// Lines 1373-1391

@@ -1,5 +1,3 @@
-// Source: curl/lib/curl_ntlm_core.c
-// Lines 614-633
 CURLcode Curl_ntlm_core_mk_ntlmv2_resp(unsigned char *ntlmv2hash,
                                        unsigned char *challenge_client,
                                        struct ntlmdata *ntlm,
@@ -76,3 +74,7 @@ CURLcode Curl_ntlm_core_mk_ntlmv2_resp(unsigned char *ntlmv2hash,
 
   return result;
 }
+
+
+// Source: curl_ntlm_core.c
+// Lines 611-686

@@ -1,5 +1,3 @@
-// Source: curl/src/tool_formparse.c
-// Lines 184-186
 size_t tool_mime_stdin_read(char *buffer,
                             size_t size, size_t nitems, void *arg)
 {
@@ -35,3 +33,7 @@ size_t tool_mime_stdin_read(char *buffer,
   }
   return nitems;
 }
+
+
+// Source: tool_formparse.c
+// Lines 183-217

@@ -1,5 +1,3 @@
-// Source: curl/lib/connect.c
-// Lines 185-192
 timediff_t Curl_timeleft(struct Curl_easy *data,
                          struct curltime *nowp,
                          bool duringconnect)
@@ -53,3 +51,7 @@ timediff_t Curl_timeleft(struct Curl_easy *data,
 
   return timeout_ms;
 }
+
+
+// Source: connect.c
+// Lines 184-236

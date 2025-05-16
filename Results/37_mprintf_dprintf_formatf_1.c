@@ -1,5 +1,3 @@
-// Source: curl/lib/mprintf.c
-// Lines 586-891
 static int dprintf_formatf(
   void *data, /* untouched by format(), just sent to the stream() function in
                  the second argument */
@@ -402,3 +400,7 @@ static int dprintf_formatf(
         for(fptr = work; *fptr; fptr++)
           OUTCHAR(*fptr);
       }
+
+
+// Source: mprintf.c
+// Lines 563-964

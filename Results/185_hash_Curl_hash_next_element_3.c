@@ -1,5 +1,3 @@
-// Source: curl/lib/hash.c
-// Lines 289-291
 Curl_hash_next_element(struct Curl_hash_iterator *iter)
 {
   struct Curl_hash *h = iter->hash;
@@ -27,3 +25,7 @@ Curl_hash_next_element(struct Curl_hash_iterator *iter)
   iter->current_element = NULL;
   return NULL;
 }
+
+
+// Source: hash.c
+// Lines 289-315

@@ -1,1 +1,1 @@
-indata,curl/lib/base64.c,192,inputbuff,curl/lib/base64.c,180,1
+indata,curl/lib/base64.c,15,inputbuff,curl/lib/base64.c,3,1

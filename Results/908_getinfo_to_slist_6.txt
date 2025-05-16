@@ -1,1 +1,1 @@
-tsip,curl/lib/getinfo.c,505,tsi,curl/lib/getinfo.c,507,1
+tsip,curl/lib/getinfo.c,20,tsi,curl/lib/getinfo.c,22,1

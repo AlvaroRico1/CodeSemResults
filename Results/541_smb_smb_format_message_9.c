@@ -1,5 +1,3 @@
-// Source: curl/lib/smb.c
-// Lines 354-357
 static void smb_format_message(struct Curl_easy *data, struct smb_header *h,
                                unsigned char cmd, size_t len)
 {
@@ -21,3 +19,7 @@ static void smb_format_message(struct Curl_easy *data, struct smb_header *h,
   h->pid_high = smb_swap16((unsigned short)(pid >> 16));
   h->pid = smb_swap16((unsigned short) pid);
 }
+
+
+// Source: smb.c
+// Lines 354-374

@@ -1,1 +1,1 @@
-conn,curl/lib/getinfo.c,509,data,curl/lib/getinfo.c,481,1
+conn,curl/lib/getinfo.c,29,data,curl/lib/getinfo.c,1,1

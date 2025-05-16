@@ -1,5 +1,3 @@
-// Source: curl/lib/url.c
-// Lines 2217-2218
 static bool check_noproxy(const char *name, const char *no_proxy)
 {
   /* no_proxy=domain1.dom,host.domain2.dom
@@ -70,3 +68,7 @@ static bool check_noproxy(const char *name, const char *no_proxy)
     } /* for(tok_start = 0; tok_start < no_proxy_len;
          tok_start = tok_end + 1) */
   } /* NO_PROXY was specified and it wasn't just an asterisk */
+
+
+// Source: url.c
+// Lines 2205-2274

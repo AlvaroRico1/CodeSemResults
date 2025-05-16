@@ -1,5 +1,3 @@
-// Source: curl/lib/connect.c
-// Lines 770-776
 static CURLcode connect_SOCKS(struct Curl_easy *data, int sockindex,
                               bool *done)
 {
@@ -54,3 +52,7 @@ static CURLcode connect_SOCKS(struct Curl_easy *data, int sockindex,
 
   return result;
 }
+
+
+// Source: connect.c
+// Lines 770-823

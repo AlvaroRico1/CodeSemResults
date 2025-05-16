@@ -1,5 +1,3 @@
-// Source: curl/lib/vtls/openssl.c
-// Lines 1398-1400
 static void ossl_closeone(struct Curl_easy *data,
                           struct connectdata *conn,
                           struct ssl_connect_data *connssl)
@@ -24,3 +22,7 @@ static void ossl_closeone(struct Curl_easy *data,
     backend->ctx = NULL;
   }
 }
+
+
+// Source: openssl.c
+// Lines 1396-1419

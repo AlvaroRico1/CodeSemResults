@@ -1,5 +1,3 @@
-// Source: curl/lib/url.c
-// Lines 3123-3162
 static CURLcode parse_connect_to_string(struct Curl_easy *data,
                                         struct connectdata *conn,
                                         const char *conn_to_host,
@@ -56,3 +54,7 @@ static CURLcode parse_connect_to_string(struct Curl_easy *data,
         }
       }
     }
+
+
+// Source: url.c
+// Lines 3116-3171

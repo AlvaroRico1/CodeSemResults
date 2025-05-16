@@ -1,5 +1,3 @@
-// Source: curl/lib/slist.c
-// Lines 36-36
 static struct curl_slist *slist_get_last(struct curl_slist *list)
 {
   struct curl_slist     *item;
@@ -15,3 +13,7 @@ static struct curl_slist *slist_get_last(struct curl_slist *list)
   }
   return item;
 }
+
+
+// Source: slist.c
+// Lines 34-48

@@ -1,5 +1,3 @@
-// Source: curl/lib/socks.c
-// Lines 281-294
 CURLproxycode Curl_SOCKS4(const char *proxy_user,
                           const char *hostname,
                           int remote_port,
@@ -120,3 +118,7 @@ CURLproxycode Curl_SOCKS4(const char *proxy_user,
 
         Curl_resolv_unlock(data, dns); /* not used anymore from now on */
       }
+
+
+// Source: socks.c
+// Lines 188-307

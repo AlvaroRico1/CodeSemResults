@@ -1,5 +1,3 @@
-// Source: curl/lib/curl_fnmatch.c
-// Lines 163-186
 static int setcharset(unsigned char **p, unsigned char *charset)
 {
   setcharset_state state = CURLFNM_SCHS_DEFAULT;
@@ -33,3 +31,7 @@ static int setcharset(unsigned char **p, unsigned char *charset)
         }
         something_found = TRUE;
       }
+
+
+// Source: curl_fnmatch.c
+// Lines 163-195

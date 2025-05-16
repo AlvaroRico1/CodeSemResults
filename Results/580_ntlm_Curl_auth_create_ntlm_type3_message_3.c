@@ -1,5 +1,3 @@
-// Source: curl/lib/vauth/ntlm.c
-// Lines 473-510
 CURLcode Curl_auth_create_ntlm_type3_message(struct Curl_easy *data,
                                              const char *userp,
                                              const char *passwdp,
@@ -365,3 +363,7 @@ CURLcode Curl_auth_create_ntlm_type3_message(struct Curl_easy *data,
 
   return result;
 }
+
+
+// Source: ntlm.c
+// Lines 472-836

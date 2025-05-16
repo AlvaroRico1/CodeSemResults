@@ -1,5 +1,3 @@
-// Source: curl/lib/conncache.c
-// Lines 91-91
 static int bundle_remove_conn(struct connectbundle *bundle,
                               struct connectdata *conn)
 {
@@ -18,3 +16,7 @@ static int bundle_remove_conn(struct connectbundle *bundle,
   DEBUGASSERT(0);
   return 0;
 }
+
+
+// Source: conncache.c
+// Lines 88-105

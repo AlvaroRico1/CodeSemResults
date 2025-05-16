@@ -1,5 +1,3 @@
-// Source: curl/lib/url.c
-// Lines 3551-3552
 static CURLcode create_conn(struct Curl_easy *data,
                             struct connectdata **in_connect,
                             bool *async)
@@ -479,3 +477,7 @@ static CURLcode create_conn(struct Curl_easy *data,
 out:
   return result;
 }
+
+
+// Source: url.c
+// Lines 3546-4024

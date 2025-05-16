@@ -1,5 +1,3 @@
-// Source: curl/lib/asyn-thread.c
-// Lines 217-222
 int init_thread_sync_data(struct thread_data *td,
                            const char *hostname,
                            int port,
@@ -52,3 +50,7 @@ int init_thread_sync_data(struct thread_data *td,
   destroy_thread_sync_data(tsd);
   return 0;
 }
+
+
+// Source: asyn-thread.c
+// Lines 217-268

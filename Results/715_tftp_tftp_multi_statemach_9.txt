@@ -1,1 +1,1 @@
-conn,curl/lib/tftp.c,1230,data,curl/lib/tftp.c,1226,1
+conn,curl/lib/tftp.c,5,data,curl/lib/tftp.c,1,1

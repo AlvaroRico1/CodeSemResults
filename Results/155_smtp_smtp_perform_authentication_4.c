@@ -1,5 +1,3 @@
-// Source: curl/lib/smtp.c
-// Lines 464-467
 static CURLcode smtp_perform_authentication(struct Curl_easy *data)
 {
   CURLcode result = CURLE_OK;
@@ -30,3 +28,7 @@ static CURLcode smtp_perform_authentication(struct Curl_easy *data)
 
   return result;
 }
+
+
+// Source: smtp.c
+// Lines 464-493

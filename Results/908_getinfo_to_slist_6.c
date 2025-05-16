@@ -1,5 +1,3 @@
-// Source: curl/lib/getinfo.c
-// Lines 505-507
     struct curl_slist    *to_slist;
   } ptr;
 
@@ -42,3 +40,7 @@
       }
 #endif
     }
+
+
+// Source: getinfo.c
+// Lines 486-527

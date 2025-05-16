@@ -1,5 +1,3 @@
-// Source: curl/lib/altsvc.c
-// Lines 190-206
 static CURLcode altsvc_load(struct altsvcinfo *asi, const char *file)
 {
   CURLcode result = CURLE_OK;
@@ -28,3 +26,7 @@ static CURLcode altsvc_load(struct altsvcinfo *asi, const char *file)
 
       altsvc_add(asi, lineptr);
     }
+
+
+// Source: altsvc.c
+// Lines 187-214

@@ -1,5 +1,3 @@
-// Source: curl/lib/imap.c
-// Lines 1535-1540
 static CURLcode imap_perform(struct Curl_easy *data, bool *connected,
                              bool *dophase_done)
 {
@@ -61,3 +59,7 @@ static CURLcode imap_perform(struct Curl_easy *data, bool *connected,
 
   return result;
 }
+
+
+// Source: imap.c
+// Lines 1535-1595

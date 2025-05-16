@@ -1,1 +1,1 @@
-date,curl/lib/parsedate.c,306,end,curl/lib/parsedate.c,362,1
+date,curl/lib/parsedate.c,1,end,curl/lib/parsedate.c,57,1

@@ -1,1 +1,1 @@
-outptr,curl/lib/dotdot.c,59,out,curl/lib/dotdot.c,58,1
+outptr,curl/lib/dotdot.c,7,out,curl/lib/dotdot.c,6,1

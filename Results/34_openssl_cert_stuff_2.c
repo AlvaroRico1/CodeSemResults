@@ -1,5 +1,3 @@
-// Source: curl/lib/vtls/openssl.c
-// Lines 740-821
 int cert_stuff(struct Curl_easy *data,
                SSL_CTX* ctx,
                char *cert_file,
@@ -84,3 +82,7 @@ int cert_stuff(struct Curl_easy *data,
             const char *cert_id;
             X509 *cert;
           } params;
+
+
+// Source: openssl.c
+// Lines 738-821

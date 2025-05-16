@@ -1,5 +1,3 @@
-// Source: curl/lib/share.c
-// Lines 233-236
 Curl_share_lock(struct Curl_easy *data, curl_lock_data type,
                 curl_lock_access accesstype)
 {
@@ -16,3 +14,7 @@ Curl_share_lock(struct Curl_easy *data, curl_lock_data type,
 
   return CURLSHE_OK;
 }
+
+
+// Source: share.c
+// Lines 233-248

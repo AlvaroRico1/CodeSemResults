@@ -1,5 +1,3 @@
-// Source: curl/lib/pop3.c
-// Lines 1026-1029
 static CURLcode pop3_multi_statemach(struct Curl_easy *data, bool *done)
 {
   CURLcode result = CURLE_OK;
@@ -18,3 +16,7 @@ static CURLcode pop3_multi_statemach(struct Curl_easy *data, bool *done)
 
   return result;
 }
+
+
+// Source: pop3.c
+// Lines 1026-1043

@@ -1,5 +1,3 @@
-// Source: curl/lib/mqtt.c
-// Lines 700-710
 static CURLcode mqtt_doing(struct Curl_easy *data, bool *done)
 {
   CURLcode result = CURLE_OK;
@@ -21,3 +19,7 @@ static CURLcode mqtt_doing(struct Curl_easy *data, bool *done)
     if(result)
       return result;
   }
+
+
+// Source: mqtt.c
+// Lines 695-715

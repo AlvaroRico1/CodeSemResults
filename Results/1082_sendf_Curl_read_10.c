@@ -1,5 +1,3 @@
-// Source: curl/lib/sendf.c
-// Lines 678-688
 CURLcode Curl_read(struct Curl_easy *data,   /* transfer */
                    curl_socket_t sockfd,     /* read from this socket */
                    char *buf,                /* store read data here */
@@ -30,3 +28,7 @@ CURLcode Curl_read(struct Curl_easy *data,   /* transfer */
 
   return CURLE_OK;
 }
+
+
+// Source: sendf.c
+// Lines 678-707

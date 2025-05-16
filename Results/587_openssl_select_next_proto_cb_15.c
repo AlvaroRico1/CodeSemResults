@@ -1,5 +1,3 @@
-// Source: curl/lib/vtls/openssl.c
-// Lines 2267-2269
 select_next_proto_cb(SSL *ssl,
                      unsigned char **out, unsigned char *outlen,
                      const unsigned char *in, unsigned int inlen,
@@ -32,3 +30,7 @@ select_next_proto_cb(SSL *ssl,
 
   return SSL_TLSEXT_ERR_OK;
 }
+
+
+// Source: openssl.c
+// Lines 2264-2295

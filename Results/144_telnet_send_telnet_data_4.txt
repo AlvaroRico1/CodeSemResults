@@ -1,1 +1,1 @@
-conn,curl/lib/telnet.c,1182,data,curl/lib/telnet.c,1175,1
+conn,curl/lib/telnet.c,8,data,curl/lib/telnet.c,1,1

@@ -1,1 +1,1 @@
-path,curl/lib/smtp.c,1696,localhost,curl/lib/smtp.c,1697,1
+path,curl/lib/smtp.c,6,localhost,curl/lib/smtp.c,7,1

@@ -1,5 +1,3 @@
-// Source: curl/lib/smtp.c
-// Lines 501-504
 static CURLcode smtp_perform_command(struct Curl_easy *data)
 {
   CURLcode result = CURLE_OK;
@@ -65,3 +63,7 @@ static CURLcode smtp_perform_command(struct Curl_easy *data)
 
   return result;
 }
+
+
+// Source: smtp.c
+// Lines 501-565

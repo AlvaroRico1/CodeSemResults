@@ -1,1 +1,1 @@
-pp,curl/lib/smtp.c,1375,eob,curl/lib/smtp.c,1376,1
+pp,curl/lib/smtp.c,7,eob,curl/lib/smtp.c,8,1

@@ -1,5 +1,3 @@
-// Source: curl/lib/smb.c
-// Lines 376-379
 static CURLcode smb_send(struct Curl_easy *data, ssize_t len,
                          size_t upload_size)
 {
@@ -22,3 +20,7 @@ static CURLcode smb_send(struct Curl_easy *data, ssize_t len,
 
   return CURLE_OK;
 }
+
+
+// Source: smb.c
+// Lines 376-397

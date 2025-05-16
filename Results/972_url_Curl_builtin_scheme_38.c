@@ -1,5 +1,3 @@
-// Source: curl/lib/url.c
-// Lines 1801-1802
 const struct Curl_handler *Curl_builtin_scheme(const char *scheme)
 {
   const struct Curl_handler * const *pp;
@@ -12,3 +10,7 @@ const struct Curl_handler *Curl_builtin_scheme(const char *scheme)
       return p;
   return NULL; /* not found */
 }
+
+
+// Source: url.c
+// Lines 1799-1810

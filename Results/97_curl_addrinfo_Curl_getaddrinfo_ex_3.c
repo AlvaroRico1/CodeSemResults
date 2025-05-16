@@ -1,5 +1,3 @@
-// Source: curl/lib/curl_addrinfo.c
-// Lines 114-114
 Curl_getaddrinfo_ex(const char *nodename,
                     const char *servname,
                     const struct addrinfo *hints,
@@ -106,3 +104,7 @@ Curl_getaddrinfo_ex(const char *nodename,
   /* This is not a CURLcode */
   return error;
 }
+
+
+// Source: curl_addrinfo.c
+// Lines 109-214

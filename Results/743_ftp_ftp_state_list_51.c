@@ -1,5 +1,3 @@
-// Source: curl/lib/ftp.c
-// Lines 1466-1467
 static CURLcode ftp_state_list(struct Curl_easy *data)
 {
   CURLcode result = CURLE_OK;
@@ -44,3 +42,7 @@ static CURLcode ftp_state_list(struct Curl_easy *data)
     else
       free(rawPath);
   }
+
+
+// Source: ftp.c
+// Lines 1442-1485

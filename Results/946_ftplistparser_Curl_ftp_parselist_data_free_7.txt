@@ -1,1 +1,1 @@
-parser,curl/lib/ftplistparser.c,190,parserp,curl/lib/ftplistparser.c,188,1
+parser,curl/lib/ftplistparser.c,3,parserp,curl/lib/ftplistparser.c,1,1

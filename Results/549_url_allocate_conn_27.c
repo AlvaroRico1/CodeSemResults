@@ -1,5 +1,3 @@
-// Source: curl/lib/url.c
-// Lines 1659-1670
 static struct connectdata *allocate_conn(struct Curl_easy *data)
 {
   struct connectdata *conn = calloc(1, sizeof(struct connectdata));
@@ -26,3 +24,7 @@ static struct connectdata *allocate_conn(struct Curl_easy *data)
     conn->proxy_ssl[1].backend = (void *)(ssl + 3 * sslsize);
 #endif
   }
+
+
+// Source: url.c
+// Lines 1657-1682

@@ -1,5 +1,3 @@
-// Source: curl/lib/urlapi.c
-// Lines 103-106
 static const char *find_host_sep(const char *url)
 {
   const char *sep;
@@ -23,3 +21,7 @@ static const char *find_host_sep(const char *url)
 
   return sep < query ? sep : query;
 }
+
+
+// Source: urlapi.c
+// Lines 103-125

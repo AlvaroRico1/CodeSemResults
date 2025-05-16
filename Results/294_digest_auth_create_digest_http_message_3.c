@@ -1,5 +1,3 @@
-// Source: curl/lib/vauth/digest.c
-// Lines 682-769
 static CURLcode auth_create_digest_http_message(
                   struct Curl_easy *data,
                   const char *userp,
@@ -118,3 +116,7 @@ static CURLcode auth_create_digest_http_message(
     free(hashthis);
     hashthis = hashthis2;
   }
+
+
+// Source: digest.c
+// Lines 660-777

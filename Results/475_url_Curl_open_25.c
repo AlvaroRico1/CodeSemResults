@@ -1,5 +1,3 @@
-// Source: curl/lib/url.c
-// Lines 645-648
 CURLcode Curl_open(struct Curl_easy **curl)
 {
   CURLcode result;
@@ -47,3 +45,7 @@ CURLcode Curl_open(struct Curl_easy **curl)
 
   return result;
 }
+
+
+// Source: url.c
+// Lines 645-691

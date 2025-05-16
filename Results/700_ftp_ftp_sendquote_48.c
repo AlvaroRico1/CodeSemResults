@@ -1,5 +1,3 @@
-// Source: curl/lib/ftp.c
-// Lines 3434-3442
 CURLcode ftp_sendquote(struct Curl_easy *data,
                        struct connectdata *conn, struct curl_slist *quote)
 {
@@ -39,3 +37,7 @@ CURLcode ftp_sendquote(struct Curl_easy *data,
         return CURLE_QUOTE_ERROR;
       }
     }
+
+
+// Source: ftp.c
+// Lines 3431-3469

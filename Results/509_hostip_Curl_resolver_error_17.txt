@@ -1,1 +1,1 @@
-conn,curl/lib/hostip.c,1274,data,curl/lib/hostip.c,1268,1
+conn,curl/lib/hostip.c,7,data,curl/lib/hostip.c,1,1

@@ -1,5 +1,3 @@
-// Source: curl/lib/smtp.c
-// Lines 1375-1376
 static CURLcode smtp_done(struct Curl_easy *data, CURLcode status,
                           bool premature)
 {
@@ -77,3 +75,7 @@ static CURLcode smtp_done(struct Curl_easy *data, CURLcode status,
 
   return result;
 }
+
+
+// Source: smtp.c
+// Lines 1369-1445

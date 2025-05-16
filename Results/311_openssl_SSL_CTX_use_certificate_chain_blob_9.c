@@ -1,5 +1,3 @@
-// Source: curl/lib/vtls/openssl.c
-// Lines 669-677
 SSL_CTX_use_certificate_chain_blob(SSL_CTX *ctx, const struct curl_blob *blob,
                                    const char *key_passwd)
 {
@@ -68,3 +66,7 @@ SSL_CTX_use_certificate_chain_blob(SSL_CTX *ctx, const struct curl_blob *blob,
   return 0;
 #endif
 }
+
+
+// Source: openssl.c
+// Lines 668-735

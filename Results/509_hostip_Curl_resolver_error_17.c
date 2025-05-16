@@ -1,5 +1,3 @@
-// Source: curl/lib/hostip.c
-// Lines 1268-1274
 CURLcode Curl_resolver_error(struct Curl_easy *data)
 {
   const char *host_or_proxy;
@@ -23,3 +21,7 @@ CURLcode Curl_resolver_error(struct Curl_easy *data)
 
   return result;
 }
+
+
+// Source: hostip.c
+// Lines 1268-1290

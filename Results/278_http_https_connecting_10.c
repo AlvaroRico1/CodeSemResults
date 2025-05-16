@@ -1,5 +1,3 @@
-// Source: curl/lib/http.c
-// Lines 1577-1580
 static CURLcode https_connecting(struct Curl_easy *data, bool *done)
 {
   CURLcode result;
@@ -20,3 +18,7 @@ static CURLcode https_connecting(struct Curl_easy *data, bool *done)
 
   return result;
 }
+
+
+// Source: http.c
+// Lines 1577-1596

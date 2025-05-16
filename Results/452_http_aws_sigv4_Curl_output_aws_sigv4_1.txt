@@ -1,1 +1,1 @@
-len,curl/lib/http_aws_sigv4.c,73,tmp1,curl/lib/http_aws_sigv4.c,75,1
+len,curl/lib/http_aws_sigv4.c,5,tmp1,curl/lib/http_aws_sigv4.c,7,1

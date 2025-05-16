@@ -1,5 +1,3 @@
-// Source: curl/lib/ftp.c
-// Lines 943-967
 static CURLcode ftp_state_use_port(struct Curl_easy *data,
                                    ftpport fcmd) /* start with this */
 {
@@ -133,3 +131,7 @@ static CURLcode ftp_state_use_port(struct Curl_easy *data,
       /* there was only a port(-range) given, default the host */
       host = NULL;
   } /* data->set.ftpport */
+
+
+// Source: ftp.c
+// Lines 921-1053

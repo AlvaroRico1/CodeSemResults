@@ -1,5 +1,3 @@
-// Source: curl/lib/telnet.c
-// Lines 957-964
 static void sendsuboption(struct Curl_easy *data, int option)
 {
   ssize_t bytes_written;
@@ -53,3 +51,7 @@ static void sendsuboption(struct Curl_easy *data, int option)
     break;
   }
 }
+
+
+// Source: telnet.c
+// Lines 957-1009

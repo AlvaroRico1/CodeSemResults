@@ -1,5 +1,3 @@
-// Source: curl/src/tool_cfgable.c
-// Lines 177-177
 void config_free(struct OperationConfig *config)
 {
   struct OperationConfig *last = config;
@@ -14,3 +12,7 @@ void config_free(struct OperationConfig *config)
     last = prev;
   }
 }
+
+
+// Source: tool_cfgable.c
+// Lines 175-188

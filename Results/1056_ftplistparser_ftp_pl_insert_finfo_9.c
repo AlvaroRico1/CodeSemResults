@@ -1,5 +1,3 @@
-// Source: curl/lib/ftplistparser.c
-// Lines 275-276
 static CURLcode ftp_pl_insert_finfo(struct Curl_easy *data,
                                     struct fileinfo *infop)
 {
@@ -54,3 +52,7 @@ static CURLcode ftp_pl_insert_finfo(struct Curl_easy *data,
   ftpwc->parser->file_data = NULL;
   return CURLE_OK;
 }
+
+
+// Source: ftplistparser.c
+// Lines 271-324

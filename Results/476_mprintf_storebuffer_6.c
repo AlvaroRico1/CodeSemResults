@@ -1,5 +1,3 @@
-// Source: curl/lib/mprintf.c
-// Lines 1102-1104
 static int storebuffer(int output, FILE *data)
 {
   char **buffer = (char **)data;
@@ -8,3 +6,7 @@ static int storebuffer(int output, FILE *data)
   (*buffer)++;
   return outc; /* act like fputc() ! */
 }
+
+
+// Source: mprintf.c
+// Lines 1102-1109

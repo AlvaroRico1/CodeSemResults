@@ -1,5 +1,3 @@
-// Source: curl/lib/telnet.c
-// Lines 1175-1182
 static CURLcode send_telnet_data(struct Curl_easy *data,
                                  char *buffer, ssize_t nread)
 {
@@ -61,3 +59,7 @@ static CURLcode send_telnet_data(struct Curl_easy *data,
 
   return result;
 }
+
+
+// Source: telnet.c
+// Lines 1175-1235

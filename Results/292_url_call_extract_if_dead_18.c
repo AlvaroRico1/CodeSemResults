@@ -1,5 +1,3 @@
-// Source: curl/lib/url.c
-// Lines 1043-1045
 static int call_extract_if_dead(struct Curl_easy *data,
                                 struct connectdata *conn, void *param)
 {
@@ -11,3 +9,7 @@ static int call_extract_if_dead(struct Curl_easy *data,
   }
   return 0; /* continue iteration */
 }
+
+
+// Source: url.c
+// Lines 1042-1052

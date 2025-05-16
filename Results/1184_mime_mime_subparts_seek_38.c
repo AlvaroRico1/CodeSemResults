@@ -1,5 +1,3 @@
-// Source: curl/lib/mime.c
-// Lines 1132-1133
 static int mime_subparts_seek(void *instream, curl_off_t offset, int whence)
 {
   curl_mime *mime = (curl_mime *) instream;
@@ -23,3 +21,7 @@ static int mime_subparts_seek(void *instream, curl_off_t offset, int whence)
 
   return result;
 }
+
+
+// Source: mime.c
+// Lines 1130-1152

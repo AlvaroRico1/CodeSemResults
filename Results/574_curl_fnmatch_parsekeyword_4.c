@@ -1,5 +1,3 @@
-// Source: curl/lib/curl_fnmatch.c
-// Lines 72-79
 static int parsekeyword(unsigned char **pattern, unsigned char *charset)
 {
   parsekey_state state = CURLFNM_PKW_INIT;
@@ -55,3 +53,7 @@ static int parsekeyword(unsigned char **pattern, unsigned char *charset)
     return SETCHARSET_FAIL;
   return SETCHARSET_OK;
 }
+
+
+// Source: curl_fnmatch.c
+// Lines 72-126

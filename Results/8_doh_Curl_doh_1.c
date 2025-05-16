@@ -1,5 +1,3 @@
-// Source: curl/lib/doh.c
-// Lines 394-400
 struct Curl_addrinfo *Curl_doh(struct Curl_easy *data,
                                const char *hostname,
                                int port,
@@ -58,3 +56,7 @@ struct Curl_addrinfo *Curl_doh(struct Curl_easy *data,
   Curl_safefree(data->req.doh);
   return NULL;
 }
+
+
+// Source: doh.c
+// Lines 393-450

@@ -1,5 +1,3 @@
-// Source: curl/lib/hostcheck.c
-// Lines 67-69
 static int hostmatch(char *hostname, char *pattern)
 {
   const char *pattern_label_end, *pattern_wildcard, *hostname_label_end;
@@ -54,3 +52,7 @@ static int hostmatch(char *hostname, char *pattern)
                     suffixlen) ?
     CURL_HOST_MATCH : CURL_HOST_NOMATCH;
 }
+
+
+// Source: hostcheck.c
+// Lines 65-118

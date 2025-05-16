@@ -1,5 +1,3 @@
-// Source: curl/src/tool_cb_rea.c
-// Lines 61-65
 int tool_readbusy_cb(void *clientp,
                      curl_off_t dltotal, curl_off_t dlnow,
                      curl_off_t ultotal, curl_off_t ulnow)
@@ -19,3 +17,7 @@ int tool_readbusy_cb(void *clientp,
 
   return per->noprogress? 0 : CURL_PROGRESSFUNC_CONTINUE;
 }
+
+
+// Source: tool_cb_rea.c
+// Lines 61-79

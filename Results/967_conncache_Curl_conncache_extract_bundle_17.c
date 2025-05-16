@@ -1,5 +1,3 @@
-// Source: curl/lib/conncache.c
-// Lines 439-439
 Curl_conncache_extract_bundle(struct Curl_easy *data,
                               struct connectbundle *bundle)
 {
@@ -39,3 +37,7 @@ Curl_conncache_extract_bundle(struct Curl_easy *data,
 
   return conn_candidate;
 }
+
+
+// Source: conncache.c
+// Lines 436-474

@@ -1,5 +1,3 @@
-// Source: curl/lib/telnet.c
-// Lines 301-305
 static void send_negotiation(struct Curl_easy *data, int cmd, int option)
 {
   unsigned char buf[3];
@@ -18,3 +16,7 @@ static void send_negotiation(struct Curl_easy *data, int cmd, int option)
 
   printoption(data, "SENT", cmd, option);
 }
+
+
+// Source: telnet.c
+// Lines 301-318

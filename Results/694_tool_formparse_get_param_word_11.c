@@ -1,5 +1,3 @@
-// Source: curl/src/tool_formparse.c
-// Lines 351-357
 static char *get_param_word(struct OperationConfig *config, char **str,
                             char **end_pos, char endchar)
 {
@@ -58,3 +56,7 @@ static char *get_param_word(struct OperationConfig *config, char **str,
   *str = *end_pos = ptr;
   return word_begin;
 }
+
+
+// Source: tool_formparse.c
+// Lines 350-407

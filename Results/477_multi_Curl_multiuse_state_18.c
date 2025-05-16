@@ -1,5 +1,3 @@
-// Source: curl/lib/multi.c
-// Lines 3481-3484
 void Curl_multiuse_state(struct Curl_easy *data,
                          int bundlestate) /* use BUNDLE_* defines */
 {
@@ -13,3 +11,7 @@ void Curl_multiuse_state(struct Curl_easy *data,
   conn->bundle->multiuse = bundlestate;
   process_pending_handles(data->multi);
 }
+
+
+// Source: multi.c
+// Lines 3481-3493

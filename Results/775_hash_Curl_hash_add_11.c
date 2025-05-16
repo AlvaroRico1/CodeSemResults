@@ -1,5 +1,3 @@
-// Source: curl/lib/hash.c
-// Lines 112-112
 Curl_hash_add(struct Curl_hash *h, void *key, size_t key_len, void *p)
 {
   struct Curl_hash_element  *he;
@@ -24,3 +22,7 @@ Curl_hash_add(struct Curl_hash *h, void *key, size_t key_len, void *p)
 
   return NULL; /* failure */
 }
+
+
+// Source: hash.c
+// Lines 109-132

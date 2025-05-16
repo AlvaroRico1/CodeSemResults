@@ -1,5 +1,3 @@
-// Source: curl/lib/doh.c
-// Lines 178-181
 doh_write_cb(const void *contents, size_t size, size_t nmemb, void *userp)
 {
   size_t realsize = size * nmemb;
@@ -10,3 +8,7 @@ doh_write_cb(const void *contents, size_t size, size_t nmemb, void *userp)
 
   return realsize;
 }
+
+
+// Source: doh.c
+// Lines 178-187

@@ -1,5 +1,3 @@
-// Source: curl/lib/hsts.c
-// Lines 433-434
 static CURLcode hsts_pull(struct Curl_easy *data, struct hsts *h)
 {
   /* if the HSTS read callback is set, use it */
@@ -35,3 +33,7 @@ static CURLcode hsts_pull(struct Curl_easy *data, struct hsts *h)
       else if(sc == CURLSTS_FAIL)
         return CURLE_BAD_FUNCTION_ARGUMENT;
     } while(sc == CURLSTS_OK);
+
+
+// Source: hsts.c
+// Lines 426-460

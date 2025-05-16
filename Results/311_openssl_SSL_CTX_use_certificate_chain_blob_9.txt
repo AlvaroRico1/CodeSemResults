@@ -1,1 +1,1 @@
-passwd_callback_userdata,curl/lib/vtls/openssl.c,677,key_passwd,curl/lib/vtls/openssl.c,669,1
+passwd_callback_userdata,curl/lib/vtls/openssl.c,10,key_passwd,curl/lib/vtls/openssl.c,2,1

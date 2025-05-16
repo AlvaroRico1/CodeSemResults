@@ -1,5 +1,3 @@
-// Source: curl/lib/rtsp.c
-// Lines 768-787
 CURLcode Curl_rtsp_parseheader(struct Curl_easy *data, char *header)
 {
   long CSeq = 0;
@@ -66,3 +64,7 @@ CURLcode Curl_rtsp_parseheader(struct Curl_easy *data, char *header)
       (data->set.str[STRING_RTSP_SESSION_ID])[idlen] = '\0';
     }
   }
+
+
+// Source: rtsp.c
+// Lines 768-833

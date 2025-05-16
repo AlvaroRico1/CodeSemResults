@@ -1,5 +1,3 @@
-// Source: curl/lib/mprintf.c
-// Lines 592-624
 static int dprintf_formatf(
   void *data, /* untouched by format(), just sent to the stream() function in
                  the second argument */
@@ -425,3 +423,7 @@ static int dprintf_formatf(
     f = *end++; /* goto end of %-code */
 
   }
+
+
+// Source: mprintf.c
+// Lines 563-987

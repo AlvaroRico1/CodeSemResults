@@ -1,5 +1,3 @@
-// Source: curl/lib/mime.c
-// Lines 1174-1176
 static void mime_subparts_free(void *ptr)
 {
   curl_mime *mime = (curl_mime *) ptr;
@@ -10,3 +8,7 @@ static void mime_subparts_free(void *ptr)
   }
   curl_mime_free(mime);
 }
+
+
+// Source: mime.c
+// Lines 1174-1183

@@ -71,8 +71,21 @@ def is_same_function(file_path, line1, line2, function_ranges):
             
     return func_line is not None
 
-def extract_function_content(file_path, start_line, end_line, function_ranges):
-    """Extract function content from specified line range in file"""
+def find_first_occurrence(content, var_name):
+    """Find first occurrence line number of a variable in the function content"""
+    lines = content.splitlines()
+    for i, line in enumerate(lines, 1):
+        # Skip comments
+        if line.strip().startswith('//'):
+            continue
+        # Look for the variable name as a whole word
+        pattern = r'\b' + re.escape(var_name) + r'\b'
+        if re.search(pattern, line):
+            return i
+    return None
+
+def extract_function_content(file_path, var1, var2, start_line, end_line, function_ranges):
+    """Extract function content and find first occurrences of variables"""
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             lines = f.readlines()
@@ -98,8 +111,20 @@ def extract_function_content(file_path, start_line, end_line, function_ranges):
             
         if current_line >= len(lines):
             return None
+
+        # Get function content
+        content = ''.join(lines[function_start:function_end])
+
+        # Find first occurrences
+        var1_line = find_first_occurrence(content, var1)
+        var2_line = find_first_occurrence(content, var2)
+
+        # Add source info as comment at the end
+        content += f"\n\n// Source: {os.path.basename(file_path)}\n"
+        content += f"// Lines {function_start+1}-{function_end}\n"
             
-        return ''.join(lines[function_start:function_end])
+        return content, var1_line, var2_line
+
     except Exception as e:
         print(f"Error processing {file_path}: {str(e)}")
         return None
@@ -123,8 +148,9 @@ def main():
         next(reader)  # Skip header row
         
         for i, row in enumerate(reader, 1):
-            file1, line1 = row[1], int(row[2])
-            file2, line2 = row[4], int(row[5])
+            var1, file1, line1 = row[0], row[1], int(row[2])
+            var2, file2, line2 = row[3], row[4], int(row[5])
+            label = row[6]
             
             # Ensure line numbers are in order
             start_line = min(line1, line2)
@@ -134,9 +160,11 @@ def main():
             relative_path = file1.replace('curl/', '').replace('/', os.sep)
             file_path = os.path.join(curl_base_path, relative_path)
             
-            # Extract function content
-            content = extract_function_content(file_path, start_line, end_line, function_ranges)
-            if content:
+            # Extract function content and get variable line numbers
+            result = extract_function_content(file_path, var1, var2, start_line, end_line, function_ranges)
+            if result:
+                content, var1_line, var2_line = result
+                
                 # Get function name
                 func_name = None
                 for start, name in function_ranges[file_path]:
@@ -159,14 +187,17 @@ def main():
                     # Save .c file
                     c_filename = os.path.join("Results", f"{base_filename}.c")
                     with open(c_filename, 'w', encoding='utf-8') as f:
-                        f.write(f"// Source: {file1}\n")
-                        f.write(f"// Lines {start_line}-{end_line}\n")
                         f.write(content)
                     
-                    # Save .txt file with same base name
+                    # Save .txt file with updated line numbers
                     txt_filename = os.path.join("Results", f"{base_filename}.txt")
                     with open(txt_filename, 'w', encoding='utf-8') as f:
-                        f.write(','.join(row))
+                        new_row = [
+                            var1, file1, str(var1_line),
+                            var2, file2, str(var2_line),
+                            label
+                        ]
+                        f.write(','.join(new_row))
                     
                     # Increment counter after both files are created
                     file_counters[base_name] += 1

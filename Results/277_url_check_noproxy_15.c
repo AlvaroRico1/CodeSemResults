@@ -1,5 +1,3 @@
-// Source: curl/lib/url.c
-// Lines 2205-2261
 static bool check_noproxy(const char *name, const char *no_proxy)
 {
   /* no_proxy=domain1.dom,host.domain2.dom
@@ -67,3 +65,7 @@ static bool check_noproxy(const char *name, const char *no_proxy)
           }
         }
       } /* if((tok_end - tok_start) <= namelen) */
+
+
+// Source: url.c
+// Lines 2205-2271

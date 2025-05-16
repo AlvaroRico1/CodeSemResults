@@ -1,1 +1,1 @@
-endp,curl/lib/strtoofft.c,215,end,curl/lib/strtoofft.c,218,1
+endp,curl/lib/strtoofft.c,1,end,curl/lib/strtoofft.c,4,1

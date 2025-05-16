@@ -1,5 +1,3 @@
-// Source: curl/lib/netrc.c
-// Lines 238-245
 int Curl_parsenetrc(const char *host,
                     char **loginp,
                     char **passwordp,
@@ -26,3 +24,7 @@ int Curl_parsenetrc(const char *host,
       }
 #elif defined(HAVE_GETPWUID) && defined(HAVE_GETEUID)
     }
+
+
+// Source: netrc.c
+// Lines 227-252

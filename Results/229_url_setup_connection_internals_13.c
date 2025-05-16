@@ -1,5 +1,3 @@
-// Source: curl/lib/url.c
-// Lines 2156-2158
 static CURLcode setup_connection_internals(struct Curl_easy *data,
                                            struct connectdata *conn)
 {
@@ -25,3 +23,7 @@ static CURLcode setup_connection_internals(struct Curl_easy *data,
 
   return CURLE_OK;
 }
+
+
+// Source: url.c
+// Lines 2155-2179

@@ -1,1 +1,1 @@
-h,curl/lib/curl_addrinfo.c,383,hoststr,curl/lib/curl_addrinfo.c,386,1
+h,curl/lib/curl_addrinfo.c,12,hoststr,curl/lib/curl_addrinfo.c,15,1

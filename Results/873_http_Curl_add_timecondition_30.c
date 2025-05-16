@@ -1,5 +1,3 @@
-// Source: curl/lib/http.c
-// Lines 1950-1951
 CURLcode Curl_add_timecondition(struct Curl_easy *data,
 #ifndef USE_HYPER
                                 struct dynbuf *req
@@ -72,3 +70,7 @@ CURLcode Curl_add_timecondition(struct Curl_easy *data,
 
   return result;
 }
+
+
+// Source: http.c
+// Lines 1942-2013

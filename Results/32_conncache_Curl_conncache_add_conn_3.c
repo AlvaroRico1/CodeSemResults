@@ -1,5 +1,3 @@
-// Source: curl/lib/conncache.c
-// Lines 234-238
 CURLcode Curl_conncache_add_conn(struct Curl_easy *data)
 {
   CURLcode result = CURLE_OK;
@@ -43,3 +41,7 @@ CURLcode Curl_conncache_add_conn(struct Curl_easy *data)
 
   return result;
 }
+
+
+// Source: conncache.c
+// Lines 234-276

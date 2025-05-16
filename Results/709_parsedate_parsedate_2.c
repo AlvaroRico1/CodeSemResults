@@ -1,5 +1,3 @@
-// Source: curl/lib/parsedate.c
-// Lines 306-362
 static int parsedate(const char *date, time_t *output)
 {
   time_t t = 0;
@@ -151,3 +149,7 @@ static int parsedate(const char *date, time_t *output)
         date = end;
       }
     }
+
+
+// Source: parsedate.c
+// Lines 306-456

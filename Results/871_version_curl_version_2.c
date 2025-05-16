@@ -1,5 +1,3 @@
-// Source: curl/lib/version.c
-// Lines 116-118
 char *curl_version(void)
 {
   static char out[300];
@@ -185,3 +183,7 @@ char *curl_version(void)
 
   return out;
 }
+
+
+// Source: version.c
+// Lines 111-295

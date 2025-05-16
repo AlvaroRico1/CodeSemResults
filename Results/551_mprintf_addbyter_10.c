@@ -1,5 +1,3 @@
-// Source: curl/lib/mprintf.c
-// Lines 992-994
 static int addbyter(int output, FILE *data)
 {
   struct nsprintf *infop = (struct nsprintf *)data;
@@ -14,3 +12,7 @@ static int addbyter(int output, FILE *data)
   }
   return -1;
 }
+
+
+// Source: mprintf.c
+// Lines 992-1005

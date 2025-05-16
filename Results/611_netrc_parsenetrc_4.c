@@ -1,5 +1,3 @@
-// Source: curl/lib/netrc.c
-// Lines 57-65
 static int parsenetrc(const char *host,
                       char **loginp,
                       char **passwordp,
@@ -164,3 +162,7 @@ static int parsenetrc(const char *host,
 
   return retcode;
 }
+
+
+// Source: netrc.c
+// Lines 56-219

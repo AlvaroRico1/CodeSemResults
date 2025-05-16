@@ -1,5 +1,3 @@
-// Source: curl/src/tool_operate.c
-// Lines 2117-2124
 static CURLcode add_parallel_transfers(struct GlobalConfig *global,
                                        CURLM *multi,
                                        CURLSH *share,
@@ -51,3 +49,7 @@ static CURLcode add_parallel_transfers(struct GlobalConfig *global,
     all_added++;
     *addedp = TRUE;
   }
+
+
+// Source: tool_operate.c
+// Lines 2107-2157

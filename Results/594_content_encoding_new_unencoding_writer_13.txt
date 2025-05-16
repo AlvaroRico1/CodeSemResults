@@ -1,1 +1,1 @@
-writer,curl/lib/content_encoding.c,974,handler,curl/lib/content_encoding.c,970,1
+writer,curl/lib/content_encoding.c,6,handler,curl/lib/content_encoding.c,2,1

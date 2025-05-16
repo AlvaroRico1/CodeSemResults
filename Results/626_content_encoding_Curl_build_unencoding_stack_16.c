@@ -1,5 +1,3 @@
-// Source: curl/lib/content_encoding.c
-// Lines 1031-1036
 CURLcode Curl_build_unencoding_stack(struct Curl_easy *data,
                                      const char *enclist, int maybechunked)
 {
@@ -45,3 +43,7 @@ CURLcode Curl_build_unencoding_stack(struct Curl_easy *data,
       k->writer_stack = writer;
     }
   } while(*enclist);
+
+
+// Source: content_encoding.c
+// Lines 1030-1074

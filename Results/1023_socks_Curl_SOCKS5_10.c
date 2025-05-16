@@ -1,5 +1,3 @@
-// Source: curl/lib/socks.c
-// Lines 525-797
 CURLproxycode Curl_SOCKS5(const char *proxy_user,
                           const char *proxy_password,
                           const char *hostname,
@@ -364,3 +362,7 @@ CURLproxycode Curl_SOCKS5(const char *proxy_user,
     Curl_resolv_unlock(data, dns); /* not used anymore from now on */
     goto CONNECT_REQ_SEND;
   }
+
+
+// Source: socks.c
+// Lines 486-849

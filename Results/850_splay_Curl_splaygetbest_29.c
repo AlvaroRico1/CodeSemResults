@@ -1,5 +1,3 @@
-// Source: curl/lib/splay.c
-// Lines 154-158
 struct Curl_tree *Curl_splaygetbest(struct curltime i,
                                     struct Curl_tree *t,
                                     struct Curl_tree **removed)
@@ -43,3 +41,7 @@ struct Curl_tree *Curl_splaygetbest(struct curltime i,
 
   return x;
 }
+
+
+// Source: splay.c
+// Lines 153-195

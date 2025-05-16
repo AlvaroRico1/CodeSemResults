@@ -1,5 +1,3 @@
-// Source: curl/lib/formdata.c
-// Lines 746-748
 void curl_formfree(struct curl_httppost *form)
 {
   struct curl_httppost *next;
@@ -26,3 +24,7 @@ void curl_formfree(struct curl_httppost *form)
     form = next;
   } while(form); /* continue */
 }
+
+
+// Source: formdata.c
+// Lines 746-771

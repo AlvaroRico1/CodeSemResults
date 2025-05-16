@@ -1,5 +1,3 @@
-// Source: curl/lib/http_proxy.c
-// Lines 55-58
 static CURLcode https_proxy_connect(struct Curl_easy *data, int sockindex)
 {
 #ifdef USE_SSL
@@ -23,3 +21,7 @@ static CURLcode https_proxy_connect(struct Curl_easy *data, int sockindex)
   return CURLE_NOT_BUILT_IN;
 #endif
 }
+
+
+// Source: http_proxy.c
+// Lines 55-77

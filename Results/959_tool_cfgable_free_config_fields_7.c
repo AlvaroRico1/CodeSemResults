@@ -1,5 +1,3 @@
-// Source: curl/src/tool_cfgable.c
-// Lines 52-98
 static void free_config_fields(struct OperationConfig *config)
 {
   struct getout *urlnode;
@@ -55,3 +53,7 @@ static void free_config_fields(struct OperationConfig *config)
     Curl_safefree(urlnode);
     urlnode = next;
   }
+
+
+// Source: tool_cfgable.c
+// Lines 50-104

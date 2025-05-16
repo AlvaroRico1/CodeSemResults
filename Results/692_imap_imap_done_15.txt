@@ -1,1 +1,1 @@
-conn,curl/lib/imap.c,1480,data,curl/lib/imap.c,1476,1
+conn,curl/lib/imap.c,5,data,curl/lib/imap.c,1,1

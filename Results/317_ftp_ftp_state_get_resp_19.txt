@@ -1,1 +1,1 @@
-bytes,curl/lib/ftp.c,2475,buf,curl/lib/ftp.c,2476,1
+bytes,curl/lib/ftp.c,14,buf,curl/lib/ftp.c,51,1

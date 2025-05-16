@@ -1,5 +1,3 @@
-// Source: curl/src/tool_cb_see.c
-// Lines 47-49
 int tool_seek_cb(void *userdata, curl_off_t offset, int whence)
 {
   struct InStruct *in = userdata;
@@ -43,3 +41,7 @@ int tool_seek_cb(void *userdata, curl_off_t offset, int whence)
 
   return CURL_SEEKFUNC_OK;
 }
+
+
+// Source: tool_cb_see.c
+// Lines 47-89

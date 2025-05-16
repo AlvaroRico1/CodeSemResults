@@ -1,5 +1,3 @@
-// Source: curl/lib/mime.c
-// Lines 1669-1669
 static curl_off_t multipart_size(curl_mime *mime)
 {
   curl_off_t size;
@@ -24,3 +22,7 @@ static curl_off_t multipart_size(curl_mime *mime)
 
   return size;
 }
+
+
+// Source: mime.c
+// Lines 1665-1688

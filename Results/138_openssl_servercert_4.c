@@ -1,5 +1,3 @@
-// Source: curl/lib/vtls/openssl.c
-// Lines 3835-3847
 static CURLcode servercert(struct Curl_easy *data,
                            struct connectdata *conn,
                            struct ssl_connect_data *connssl,
@@ -182,3 +180,7 @@ static CURLcode servercert(struct Curl_easy *data,
 
   return result;
 }
+
+
+// Source: openssl.c
+// Lines 3833-4014

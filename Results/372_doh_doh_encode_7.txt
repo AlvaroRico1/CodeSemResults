@@ -1,1 +1,1 @@
-labellen,curl/lib/doh.c,139,dot,curl/lib/doh.c,140,1
+labellen,curl/lib/doh.c,60,dot,curl/lib/doh.c,15,1

@@ -1,1 +1,1 @@
-ftpwc,curl/lib/ftp.c,3970,wildcard,curl/lib/ftp.c,3864,1
+ftpwc,curl/lib/ftp.c,20,wildcard,curl/lib/ftp.c,3,1

@@ -1,5 +1,3 @@
-// Source: curl/lib/http_proxy.c
-// Lines 159-159
 static CURLcode connect_init(struct Curl_easy *data, bool reinit)
 {
   struct http_connect_state *s;
@@ -43,3 +41,7 @@ static CURLcode connect_init(struct Curl_easy *data, bool reinit)
   s->close_connection = FALSE;
   return CURLE_OK;
 }
+
+
+// Source: http_proxy.c
+// Lines 157-199

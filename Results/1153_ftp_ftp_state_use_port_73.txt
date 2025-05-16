@@ -1,1 +1,1 @@
-host,curl/lib/ftp.c,942,addr,curl/lib/ftp.c,950,1
+host,curl/lib/ftp.c,22,addr,curl/lib/ftp.c,30,1

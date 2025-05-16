@@ -1,5 +1,3 @@
-// Source: curl/lib/smb.c
-// Lines 769-770
 static CURLcode smb_request_state(struct Curl_easy *data, bool *done)
 {
   struct connectdata *conn = data->conn;
@@ -183,3 +181,7 @@ static CURLcode smb_request_state(struct Curl_easy *data, bool *done)
 
   return CURLE_OK;
 }
+
+
+// Source: smb.c
+// Lines 759-941

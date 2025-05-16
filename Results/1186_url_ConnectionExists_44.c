@@ -1,5 +1,3 @@
-// Source: curl/lib/url.c
-// Lines 1306-1307
 ConnectionExists(struct Curl_easy *data,
                  struct connectdata *needle,
                  struct connectdata **usethis,
@@ -208,3 +206,7 @@ ConnectionExists(struct Curl_easy *data,
         if(entry->multi != data->multi)
           continue;
       }
+
+
+// Source: url.c
+// Lines 1103-1310

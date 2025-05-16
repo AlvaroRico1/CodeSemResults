@@ -1,5 +1,3 @@
-// Source: curl/lib/dotdot.c
-// Lines 58-59
 char *Curl_dedotdotify(const char *input)
 {
   size_t inlen = strlen(input);
@@ -130,3 +128,7 @@ char *Curl_dedotdotify(const char *input)
   free(orgclone);
   return out;
 }
+
+
+// Source: dotdot.c
+// Lines 53-182

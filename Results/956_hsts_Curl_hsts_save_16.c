@@ -1,5 +1,3 @@
-// Source: curl/lib/hsts.c
-// Lines 324-358
 CURLcode Curl_hsts_save(struct Curl_easy *data, struct hsts *h,
                         const char *file)
 {
@@ -43,3 +41,7 @@ CURLcode Curl_hsts_save(struct Curl_easy *data, struct hsts *h,
       if(result)
         break;
     }
+
+
+// Source: hsts.c
+// Lines 321-363

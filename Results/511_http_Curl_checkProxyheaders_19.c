@@ -1,5 +1,3 @@
-// Source: curl/lib/http.c
-// Lines 221-221
 char *Curl_checkProxyheaders(struct Curl_easy *data,
                              const struct connectdata *conn,
                              const char *thisheader)
@@ -17,3 +15,7 @@ char *Curl_checkProxyheaders(struct Curl_easy *data,
 
   return NULL;
 }
+
+
+// Source: http.c
+// Lines 217-233

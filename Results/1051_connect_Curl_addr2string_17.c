@@ -1,5 +1,3 @@
-// Source: curl/lib/connect.c
-// Lines 625-628
 bool Curl_addr2string(struct sockaddr *sa, curl_socklen_t salen,
                       char *addr, int *port)
 {
@@ -54,3 +52,7 @@ bool Curl_addr2string(struct sockaddr *sa, curl_socklen_t salen,
   errno = EAFNOSUPPORT;
   return FALSE;
 }
+
+
+// Source: connect.c
+// Lines 625-678

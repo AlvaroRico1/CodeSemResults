@@ -1,1 +1,1 @@
-blobp,curl/lib/setopt.c,83,nblob,curl/lib/setopt.c,92,1
+blobp,curl/lib/setopt.c,1,nblob,curl/lib/setopt.c,10,1

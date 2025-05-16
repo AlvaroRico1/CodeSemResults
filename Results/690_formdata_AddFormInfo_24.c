@@ -1,5 +1,3 @@
-// Source: curl/lib/formdata.c
-// Lines 126-130
 static struct FormInfo *AddFormInfo(char *value,
                                     char *contenttype,
                                     struct FormInfo *parent_form_info)
@@ -26,3 +24,7 @@ static struct FormInfo *AddFormInfo(char *value,
 
   return form_info;
 }
+
+
+// Source: formdata.c
+// Lines 126-151

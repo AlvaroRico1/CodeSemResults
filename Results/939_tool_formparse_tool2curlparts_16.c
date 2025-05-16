@@ -1,5 +1,3 @@
-// Source: curl/src/tool_formparse.c
-// Lines 243-249
 static CURLcode tool2curlparts(CURL *curl, struct tool_mime *m,
                                curl_mime *mime)
 {
@@ -85,3 +83,7 @@ static CURLcode tool2curlparts(CURL *curl, struct tool_mime *m,
   }
   return ret;
 }
+
+
+// Source: tool_formparse.c
+// Lines 243-327

@@ -1,5 +1,3 @@
-// Source: curl/lib/ftp.c
-// Lines 3723-3729
 CURLcode ftp_perform(struct Curl_easy *data,
                      bool *connected,  /* connect status after PASV / PORT */
                      bool *dophase_done)
@@ -35,3 +33,7 @@ CURLcode ftp_perform(struct Curl_easy *data,
 
   return result;
 }
+
+
+// Source: ftp.c
+// Lines 3723-3757

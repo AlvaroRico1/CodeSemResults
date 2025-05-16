@@ -1,5 +1,3 @@
-// Source: curl/src/tool_easysrc.c
-// Lines 95-98
 CURLcode easysrc_add(struct slist_wc **plist, const char *line)
 {
   CURLcode ret = CURLE_OK;
@@ -12,3 +10,7 @@ CURLcode easysrc_add(struct slist_wc **plist, const char *line)
     *plist = list;
   return ret;
 }
+
+
+// Source: tool_easysrc.c
+// Lines 95-106

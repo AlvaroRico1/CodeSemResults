@@ -1,5 +1,3 @@
-// Source: curl/src/tool_cb_prg.c
-// Lines 132-133
 int tool_progress_cb(void *clientp,
                      curl_off_t dltotal, curl_off_t dlnow,
                      curl_off_t ultotal, curl_off_t ulnow)
@@ -87,3 +85,7 @@ int tool_progress_cb(void *clientp,
 
   return 0;
 }
+
+
+// Source: tool_cb_prg.c
+// Lines 124-210

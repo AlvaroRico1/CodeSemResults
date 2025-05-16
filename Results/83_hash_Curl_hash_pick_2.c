@@ -1,5 +1,3 @@
-// Source: curl/lib/hash.c
-// Lines 162-168
 Curl_hash_pick(struct Curl_hash *h, void *key, size_t key_len)
 {
   struct Curl_llist_element *le;
@@ -13,3 +11,7 @@ Curl_hash_pick(struct Curl_hash *h, void *key, size_t key_len)
         return he->ptr;
       }
     }
+
+
+// Source: hash.c
+// Lines 160-172

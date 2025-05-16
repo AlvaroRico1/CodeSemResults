@@ -1,5 +1,3 @@
-// Source: curl/lib/imap.c
-// Lines 1964-1989
 static CURLcode imap_parse_url_path(struct Curl_easy *data)
 {
   /* The imap struct is already initialised in imap_connect() */
@@ -110,3 +108,7 @@ static CURLcode imap_parse_url_path(struct Curl_easy *data)
     free(name);
     free(value);
   }
+
+
+// Source: imap.c
+// Lines 1960-2069

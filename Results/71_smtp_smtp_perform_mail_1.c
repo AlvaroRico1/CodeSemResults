@@ -1,5 +1,3 @@
-// Source: curl/lib/smtp.c
-// Lines 573-579
 static CURLcode smtp_perform_mail(struct Curl_easy *data)
 {
   char *from = NULL;
@@ -178,3 +176,7 @@ static CURLcode smtp_perform_mail(struct Curl_easy *data)
 
   return result;
 }
+
+
+// Source: smtp.c
+// Lines 573-750

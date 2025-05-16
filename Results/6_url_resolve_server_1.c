@@ -1,5 +1,3 @@
-// Source: curl/lib/url.c
-// Lines 3308-3328
 static CURLcode resolve_server(struct Curl_easy *data,
                                struct connectdata *conn,
                                bool *async)
@@ -120,3 +118,7 @@ static CURLcode resolve_server(struct Curl_easy *data,
     DEBUGASSERT(conn->dns_entry == NULL);
     conn->dns_entry = hostaddr;
   }
+
+
+// Source: url.c
+// Lines 3307-3426

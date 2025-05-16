@@ -1,5 +1,3 @@
-// Source: curl/lib/multi.c
-// Lines 3412-3414
 void Curl_expire_clear(struct Curl_easy *data)
 {
   struct Curl_multi *multi = data->multi;
@@ -33,3 +31,7 @@ void Curl_expire_clear(struct Curl_easy *data)
     nowp->tv_usec = 0;
   }
 }
+
+
+// Source: multi.c
+// Lines 3412-3444

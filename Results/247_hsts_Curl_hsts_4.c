@@ -1,5 +1,3 @@
-// Source: curl/lib/hsts.c
-// Lines 242-245
 struct stsentry *Curl_hsts(struct hsts *h, const char *hostname,
                            bool subdomain)
 {
@@ -29,3 +27,7 @@ struct stsentry *Curl_hsts(struct hsts *h, const char *hostname,
       if(Curl_strcasecompare(hostname, sts->host))
         return sts;
     }
+
+
+// Source: hsts.c
+// Lines 236-264

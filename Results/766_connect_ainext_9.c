@@ -1,5 +1,3 @@
-// Source: curl/lib/connect.c
-// Lines 563-563
 static struct Curl_addrinfo *ainext(struct connectdata *conn,
                                     int tempindex,
                                     bool next) /* use next entry? */
@@ -12,3 +10,7 @@ static struct Curl_addrinfo *ainext(struct connectdata *conn,
   conn->tempaddr[tempindex] = ai;
   return ai;
 }
+
+
+// Source: connect.c
+// Lines 559-570

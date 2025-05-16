@@ -1,1 +1,1 @@
-conn,curl/lib/http_proxy.c,81,data,curl/lib/http_proxy.c,79,1
+conn,curl/lib/http_proxy.c,3,data,curl/lib/http_proxy.c,1,1

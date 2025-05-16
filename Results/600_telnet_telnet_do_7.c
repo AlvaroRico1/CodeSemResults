@@ -1,5 +1,3 @@
-// Source: curl/lib/telnet.c
-// Lines 1255-1258
 static CURLcode telnet_do(struct Curl_easy *data, bool *done)
 {
   CURLcode result;
@@ -334,3 +332,7 @@ static CURLcode telnet_do(struct Curl_easy *data, bool *done)
 
   return result;
 }
+
+
+// Source: telnet.c
+// Lines 1255-1588

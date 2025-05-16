@@ -1,5 +1,3 @@
-// Source: curl/lib/splay.c
-// Lines 209-216
 int Curl_splayremove(struct Curl_tree *t,
                      struct Curl_tree *removenode,
                      struct Curl_tree **newroot)
@@ -68,3 +66,7 @@ int Curl_splayremove(struct Curl_tree *t,
 
   return 0;
 }
+
+
+// Source: splay.c
+// Lines 209-276

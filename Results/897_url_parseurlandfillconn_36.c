@@ -1,5 +1,3 @@
-// Source: curl/lib/url.c
-// Lines 1915-2041
 static CURLcode parseurlandfillconn(struct Curl_easy *data,
                                     struct connectdata *conn)
 {
@@ -139,3 +137,7 @@ static CURLcode parseurlandfillconn(struct Curl_easy *data,
       if(result)
         return result;
     }
+
+
+// Source: url.c
+// Lines 1914-2052

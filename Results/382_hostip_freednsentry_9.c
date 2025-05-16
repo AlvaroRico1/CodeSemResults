@@ -1,5 +1,3 @@
-// Source: curl/lib/hostip.c
-// Lines 967-969
 static void freednsentry(void *freethis)
 {
   struct Curl_dns_entry *dns = (struct Curl_dns_entry *) freethis;
@@ -11,3 +9,7 @@ static void freednsentry(void *freethis)
     free(dns);
   }
 }
+
+
+// Source: hostip.c
+// Lines 967-977

@@ -1,5 +1,3 @@
-// Source: curl/lib/http_proxy.c
-// Lines 250-258
 static CURLcode CONNECT(struct Curl_easy *data,
                         int sockindex,
                         const char *hostname,
@@ -452,3 +450,7 @@ static CURLcode CONNECT(struct Curl_easy *data,
   Curl_dyn_free(&s->rcvbuf);
   return CURLE_OK;
 }
+
+
+// Source: http_proxy.c
+// Lines 250-701

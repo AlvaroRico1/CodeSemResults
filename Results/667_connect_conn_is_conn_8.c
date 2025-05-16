@@ -1,5 +1,3 @@
-// Source: curl/lib/connect.c
-// Lines 1433-1435
 static int conn_is_conn(struct Curl_easy *data,
                         struct connectdata *conn, void *param)
 {
@@ -11,3 +9,7 @@ static int conn_is_conn(struct Curl_easy *data,
   }
   return 0;
 }
+
+
+// Source: connect.c
+// Lines 1432-1442

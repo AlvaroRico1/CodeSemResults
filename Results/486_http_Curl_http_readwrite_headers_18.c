@@ -1,5 +1,3 @@
-// Source: curl/lib/http.c
-// Lines 3804-3808
 CURLcode Curl_http_readwrite_headers(struct Curl_easy *data,
                                      struct connectdata *conn,
                                      ssize_t *nread,
@@ -580,3 +578,7 @@ CURLcode Curl_http_readwrite_headers(struct Curl_easy *data,
 
     Curl_dyn_reset(&data->state.headerb);
   }
+
+
+// Source: http.c
+// Lines 3793-4372

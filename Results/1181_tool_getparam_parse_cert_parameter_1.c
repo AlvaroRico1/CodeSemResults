@@ -1,5 +1,3 @@
-// Source: curl/src/tool_getparam.c
-// Lines 380-380
 void parse_cert_parameter(const char *cert_parameter,
                           char **certname,
                           char **passphrase)
@@ -94,3 +92,7 @@ void parse_cert_parameter(const char *cert_parameter,
 done:
   *certname_place = '\0';
 }
+
+
+// Source: tool_getparam.c
+// Lines 350-443

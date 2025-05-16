@@ -1,5 +1,3 @@
-// Source: curl/lib/vtls/openssl.c
-// Lines 3776-3776
 static CURLcode pkp_pin_peer_pubkey(struct Curl_easy *data, X509* cert,
                                     const char *pinnedpubkey)
 {
@@ -53,3 +51,7 @@ static CURLcode pkp_pin_peer_pubkey(struct Curl_easy *data, X509* cert,
 
   return result;
 }
+
+
+// Source: openssl.c
+// Lines 3771-3823

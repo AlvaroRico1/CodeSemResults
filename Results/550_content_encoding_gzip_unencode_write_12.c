@@ -1,5 +1,3 @@
-// Source: curl/lib/content_encoding.c
-// Lines 437-440
 static CURLcode gzip_unencode_write(struct Curl_easy *data,
                                     struct contenc_writer *writer,
                                     const char *buf, size_t nbytes)
@@ -127,3 +125,7 @@ static CURLcode gzip_unencode_write(struct Curl_easy *data,
   return inflate_stream(data, writer, ZLIB_GZIP_INFLATING);
 #endif
 }
+
+
+// Source: content_encoding.c
+// Lines 435-561

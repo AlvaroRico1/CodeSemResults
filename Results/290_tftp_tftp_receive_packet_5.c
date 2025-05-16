@@ -1,5 +1,3 @@
-// Source: curl/lib/tftp.c
-// Lines 1100-1105
 static CURLcode tftp_receive_packet(struct Curl_easy *data)
 {
   struct Curl_sockaddr_storage fromaddr;
@@ -83,3 +81,7 @@ static CURLcode tftp_receive_packet(struct Curl_easy *data)
   }
   return result;
 }
+
+
+// Source: tftp.c
+// Lines 1100-1182

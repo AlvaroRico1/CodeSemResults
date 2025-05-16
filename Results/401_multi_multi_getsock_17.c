@@ -1,5 +1,3 @@
-// Source: curl/lib/multi.c
-// Lines 982-985
 static int multi_getsock(struct Curl_easy *data,
                          curl_socket_t *socks)
 {
@@ -41,3 +39,7 @@ static int multi_getsock(struct Curl_easy *data,
   }
 
 }
+
+
+// Source: multi.c
+// Lines 982-1022

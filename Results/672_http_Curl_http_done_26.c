@@ -1,5 +1,3 @@
-// Source: curl/lib/http.c
-// Lines 1614-1617
 CURLcode Curl_http_done(struct Curl_easy *data,
                         CURLcode status, bool premature)
 {
@@ -48,3 +46,7 @@ CURLcode Curl_http_done(struct Curl_easy *data,
 
   return CURLE_OK;
 }
+
+
+// Source: http.c
+// Lines 1614-1661

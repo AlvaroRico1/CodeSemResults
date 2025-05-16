@@ -1,5 +1,3 @@
-// Source: curl/src/tool_cb_hdr.c
-// Lines 56-183
 size_t tool_header_cb(char *ptr, size_t size, size_t nmemb, void *userdata)
 {
   struct per_transfer *per = userdata;
@@ -137,3 +135,7 @@ size_t tool_header_cb(char *ptr, size_t size, size_t nmemb, void *userdata)
     else if(ptr[0] == '\r' || ptr[0] == '\n')
       per->was_last_header_empty = TRUE;
   }
+
+
+// Source: tool_cb_hdr.c
+// Lines 56-192

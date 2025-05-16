@@ -1,5 +1,3 @@
-// Source: curl/lib/formdata.c
-// Lines 69-79
 AddHttpPost(char *name, size_t namelength,
             char *value, curl_off_t contentslength,
             char *buffer, size_t bufferlength,
@@ -47,3 +45,7 @@ AddHttpPost(char *name, size_t namelength,
   }
   return post;
 }
+
+
+// Source: formdata.c
+// Lines 68-114

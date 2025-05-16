@@ -1,5 +1,3 @@
-// Source: curl/lib/file.c
-// Lines 253-256
 static CURLcode file_upload(struct Curl_easy *data)
 {
   struct FILEPROTO *file = data->req.p.file;
@@ -107,3 +105,7 @@ static CURLcode file_upload(struct Curl_easy *data)
 
   return result;
 }
+
+
+// Source: file.c
+// Lines 246-352

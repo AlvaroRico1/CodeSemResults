@@ -1,5 +1,3 @@
-// Source: curl/lib/http.c
-// Lines 248-250
 char *Curl_copy_header_value(const char *header)
 {
   const char *start;
@@ -46,3 +44,7 @@ char *Curl_copy_header_value(const char *header)
 
   return value;
 }
+
+
+// Source: http.c
+// Lines 245-290

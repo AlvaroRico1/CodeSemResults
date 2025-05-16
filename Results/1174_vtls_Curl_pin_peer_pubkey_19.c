@@ -1,5 +1,3 @@
-// Source: curl/lib/vtls/vtls.c
-// Lines 946-946
 CURLcode Curl_pin_peer_pubkey(struct Curl_easy *data,
                               const char *pinnedpubkey,
                               const unsigned char *pubkey, size_t pubkeylen)
@@ -85,3 +83,7 @@ CURLcode Curl_pin_peer_pubkey(struct Curl_easy *data,
     Curl_safefree(pinkeycopy);
     return result;
   }
+
+
+// Source: vtls.c
+// Lines 928-1012

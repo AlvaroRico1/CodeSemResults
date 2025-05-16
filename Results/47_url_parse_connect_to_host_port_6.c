@@ -1,5 +1,3 @@
-// Source: curl/lib/url.c
-// Lines 3021-3047
 static CURLcode parse_connect_to_host_port(struct Curl_easy *data,
                                            const char *host,
                                            char **hostname_result,
@@ -63,3 +61,7 @@ static CURLcode parse_connect_to_host_port(struct Curl_easy *data,
     goto error;
 #endif
   }
+
+
+// Source: url.c
+// Lines 3013-3075

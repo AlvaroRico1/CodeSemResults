@@ -1,5 +1,3 @@
-// Source: curl/lib/mime.c
-// Lines 1342-1344
 curl_mimepart *curl_mime_addpart(curl_mime *mime)
 {
   curl_mimepart *part;
@@ -23,3 +21,7 @@ curl_mimepart *curl_mime_addpart(curl_mime *mime)
 
   return part;
 }
+
+
+// Source: mime.c
+// Lines 1342-1364

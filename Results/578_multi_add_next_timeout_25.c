@@ -1,5 +1,3 @@
-// Source: curl/lib/multi.c
-// Lines 2911-2918
 static CURLMcode add_next_timeout(struct curltime now,
                                   struct Curl_multi *multi,
                                   struct Curl_easy *d)
@@ -25,3 +23,7 @@ static CURLMcode add_next_timeout(struct curltime now,
       break;
     e = n;
   }
+
+
+// Source: multi.c
+// Lines 2905-2929

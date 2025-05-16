@@ -1,5 +1,3 @@
-// Source: curl/lib/curl_threads.c
-// Lines 49-51
 static void *curl_thread_create_thunk(void *arg)
 {
   struct Curl_actual_call *ac = arg;
@@ -12,3 +10,7 @@ static void *curl_thread_create_thunk(void *arg)
 
   return 0;
 }
+
+
+// Source: curl_threads.c
+// Lines 49-60

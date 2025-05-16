@@ -1,5 +1,3 @@
-// Source: curl/lib/http_aws_sigv4.c
-// Lines 74-75
 CURLcode Curl_output_aws_sigv4(struct Curl_easy *data, bool proxy)
 {
   CURLcode ret = CURLE_OUT_OF_MEMORY;
@@ -324,3 +322,7 @@ fail:
   free(secret);
   return ret;
 }
+
+
+// Source: http_aws_sigv4.c
+// Lines 69-392

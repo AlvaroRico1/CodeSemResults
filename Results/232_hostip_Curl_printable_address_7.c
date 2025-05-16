@@ -1,5 +1,3 @@
-// Source: curl/lib/hostip.c
-// Lines 144-152
 void Curl_printable_address(const struct Curl_addrinfo *ai, char *buf,
                             size_t bufsize)
 {
@@ -13,3 +11,7 @@ void Curl_printable_address(const struct Curl_addrinfo *ai, char *buf,
     (void)Curl_inet_ntop(ai->ai_family, (const void *)ipaddr4, buf, bufsize);
     break;
   }
+
+
+// Source: hostip.c
+// Lines 144-156

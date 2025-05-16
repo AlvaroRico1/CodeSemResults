@@ -1,1 +1,1 @@
-key,curl/lib/hmac.c,53,hkey,curl/lib/hmac.c,58,1
+key,curl/lib/hmac.c,2,hkey,curl/lib/hmac.c,7,1

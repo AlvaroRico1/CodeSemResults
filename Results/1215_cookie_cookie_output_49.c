@@ -1,5 +1,3 @@
-// Source: curl/lib/cookie.c
-// Lines 1586-1586
 static CURLcode cookie_output(struct Curl_easy *data,
                               struct CookieInfo *c, const char *filename)
 {
@@ -103,3 +101,7 @@ error:
   free(tempstore);
   return error;
 }
+
+
+// Source: cookie.c
+// Lines 1583-1685

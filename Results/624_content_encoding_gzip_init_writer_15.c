@@ -1,5 +1,3 @@
-// Source: curl/lib/content_encoding.c
-// Lines 320-322
 static CURLcode gzip_init_writer(struct Curl_easy *data,
                                  struct contenc_writer *writer)
 {
@@ -31,3 +29,7 @@ static CURLcode gzip_init_writer(struct Curl_easy *data,
 
   return CURLE_OK;
 }
+
+
+// Source: content_encoding.c
+// Lines 319-349

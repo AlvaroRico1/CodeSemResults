@@ -1,1 +1,1 @@
-conn,curl/lib/pingpong.c,84,data,curl/lib/pingpong.c,80,1
+conn,curl/lib/pingpong.c,5,data,curl/lib/pingpong.c,1,1

@@ -1,5 +1,3 @@
-// Source: curl/lib/cookie.c
-// Lines 1355-1419
 struct Cookie *Curl_cookie_getlist(struct CookieInfo *c,
                                    const char *host, const char *path,
                                    bool secure)
@@ -95,3 +93,7 @@ struct Cookie *Curl_cookie_getlist(struct CookieInfo *c,
 
     free(array); /* remove the temporary data again */
   }
+
+
+// Source: cookie.c
+// Lines 1349-1443

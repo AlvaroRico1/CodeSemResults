@@ -1,5 +1,3 @@
-// Source: curl/lib/multi.c
-// Lines 1512-1515
 static CURLcode multi_do(struct Curl_easy *data, bool *done)
 {
   CURLcode result = CURLE_OK;
@@ -14,3 +12,7 @@ static CURLcode multi_do(struct Curl_easy *data, bool *done)
 
   return result;
 }
+
+
+// Source: multi.c
+// Lines 1512-1525

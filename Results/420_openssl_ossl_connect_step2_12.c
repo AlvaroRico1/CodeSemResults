@@ -1,5 +1,3 @@
-// Source: curl/lib/vtls/openssl.c
-// Lines 3288-3289
 static CURLcode ossl_connect_step2(struct Curl_easy *data,
                                    struct connectdata *conn, int sockindex)
 {
@@ -165,3 +163,7 @@ static CURLcode ossl_connect_step2(struct Curl_easy *data,
     return CURLE_OK;
   }
 }
+
+
+// Source: openssl.c
+// Lines 3284-3448

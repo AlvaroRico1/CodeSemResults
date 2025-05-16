@@ -1,5 +1,3 @@
-// Source: curl/lib/vtls/vtls.c
-// Lines 94-101
 static CURLcode blobdup(struct curl_blob **dest,
                         struct curl_blob *src)
 {
@@ -19,3 +17,7 @@ static CURLcode blobdup(struct curl_blob **dest,
     memcpy(d->data, src->data, src->len);
     *dest = d;
   }
+
+
+// Source: vtls.c
+// Lines 94-112

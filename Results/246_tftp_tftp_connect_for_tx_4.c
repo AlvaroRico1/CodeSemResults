@@ -1,5 +1,3 @@
-// Source: curl/lib/tftp.c
-// Lines 393-398
 static CURLcode tftp_connect_for_tx(struct tftp_state_data *state,
                                     tftp_event_t event)
 {
@@ -15,3 +13,7 @@ static CURLcode tftp_connect_for_tx(struct tftp_state_data *state,
     return result;
   return tftp_tx(state, event);
 }
+
+
+// Source: tftp.c
+// Lines 393-407

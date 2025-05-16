@@ -1,1 +1,1 @@
-dsthost,curl/lib/altsvc.c,483,namebuf,curl/lib/altsvc.c,454,1
+dsthost,curl/lib/altsvc.c,37,namebuf,curl/lib/altsvc.c,8,1

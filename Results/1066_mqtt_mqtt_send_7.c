@@ -1,5 +1,3 @@
-// Source: curl/lib/mqtt.c
-// Lines 112-116
 static CURLcode mqtt_send(struct Curl_easy *data,
                           char *buf, size_t len)
 {
@@ -25,3 +23,7 @@ static CURLcode mqtt_send(struct Curl_easy *data,
   }
   return result;
 }
+
+
+// Source: mqtt.c
+// Lines 112-136

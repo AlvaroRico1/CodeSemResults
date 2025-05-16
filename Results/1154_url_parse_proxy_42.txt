@@ -1,1 +1,1 @@
-proxyinfo,curl/lib/url.c,2378,proxyuser,curl/lib/url.c,2373,1
+proxyinfo,curl/lib/url.c,12,proxyuser,curl/lib/url.c,7,1

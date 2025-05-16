@@ -1,5 +1,3 @@
-// Source: curl/lib/base64.c
-// Lines 53-56
 static size_t decodeQuantum(unsigned char *dest, const char *src)
 {
   size_t padding = 0;
@@ -39,3 +37,7 @@ static size_t decodeQuantum(unsigned char *dest, const char *src)
 
   return 3 - padding;
 }
+
+
+// Source: base64.c
+// Lines 53-91

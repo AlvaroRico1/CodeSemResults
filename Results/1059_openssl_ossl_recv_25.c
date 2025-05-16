@@ -1,5 +1,3 @@
-// Source: curl/lib/vtls/openssl.c
-// Lines 4275-4285
 static ssize_t ossl_recv(struct Curl_easy *data,   /* transfer */
                          int num,                  /* socketindex */
                          char *buf,                /* store read data here */
@@ -88,3 +86,7 @@ static ssize_t ossl_recv(struct Curl_easy *data,   /* transfer */
   }
   return nread;
 }
+
+
+// Source: openssl.c
+// Lines 4275-4362

@@ -1,5 +1,3 @@
-// Source: curl/lib/mime.c
-// Lines 712-714
 static int mime_file_seek(void *instream, curl_off_t offset, int whence)
 {
   curl_mimepart *part = (curl_mimepart *) instream;
@@ -13,3 +11,7 @@ static int mime_file_seek(void *instream, curl_off_t offset, int whence)
   return fseek(part->fp, (long) offset, whence)?
                CURL_SEEKFUNC_CANTSEEK: CURL_SEEKFUNC_OK;
 }
+
+
+// Source: mime.c
+// Lines 712-724

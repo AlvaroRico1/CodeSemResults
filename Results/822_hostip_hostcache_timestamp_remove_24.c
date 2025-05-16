@@ -1,5 +1,3 @@
-// Source: curl/lib/hostip.c
-// Lines 199-203
 hostcache_timestamp_remove(void *datap, void *hc)
 {
   struct hostcache_prune_data *data =
@@ -9,3 +7,7 @@ hostcache_timestamp_remove(void *datap, void *hc)
   return (0 != c->timestamp)
     && (data->now - c->timestamp >= data->cache_timeout);
 }
+
+
+// Source: hostip.c
+// Lines 199-207

@@ -1,1 +1,1 @@
-value,curl/lib/imap.c,1918,ptr,curl/lib/imap.c,1912,1
+value,curl/lib/imap.c,11,ptr,curl/lib/imap.c,5,1

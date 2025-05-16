@@ -1,5 +1,3 @@
-// Source: curl/lib/curl_sasl.c
-// Lines 312-325
 CURLcode Curl_sasl_start(struct SASL *sasl, struct Curl_easy *data,
                          struct connectdata *conn,
                          bool force_ir, saslprogress *progress)
@@ -182,3 +180,7 @@ CURLcode Curl_sasl_start(struct SASL *sasl, struct Curl_easy *data,
   Curl_bufref_free(&resp);
   return result;
 }
+
+
+// Source: curl_sasl.c
+// Lines 312-493

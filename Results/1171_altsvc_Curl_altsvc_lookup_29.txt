@@ -1,1 +1,1 @@
-dstentry,curl/lib/altsvc.c,616,as,curl/lib/altsvc.c,627,1
+dstentry,curl/lib/altsvc.c,4,as,curl/lib/altsvc.c,15,1

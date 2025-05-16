@@ -1,5 +1,3 @@
-// Source: curl/lib/mime.c
-// Lines 1307-1309
 curl_mime *curl_mime_init(struct Curl_easy *easy)
 {
   curl_mime *mime;
@@ -24,3 +22,7 @@ curl_mime *curl_mime_init(struct Curl_easy *easy)
 
   return mime;
 }
+
+
+// Source: mime.c
+// Lines 1307-1330

@@ -1,5 +1,3 @@
-// Source: curl/lib/formdata.c
-// Lines 207-207
 CURLFORMcode FormAdd(struct curl_httppost **httppost,
                      struct curl_httppost **last_post,
                      va_list params)
@@ -483,3 +481,7 @@ CURLFORMcode FormAdd(struct curl_httppost **httppost,
 
   return return_value;
 }
+
+
+// Source: formdata.c
+// Lines 203-685

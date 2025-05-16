@@ -1,1 +1,1 @@
-p2,curl/lib/imap.c,1792,newstr,curl/lib/imap.c,1797,1
+p2,curl/lib/imap.c,6,newstr,curl/lib/imap.c,11,1

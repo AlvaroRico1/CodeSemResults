@@ -1,5 +1,3 @@
-// Source: curl/lib/smtp.c
-// Lines 1656-1662
 static CURLcode smtp_parse_url_options(struct connectdata *conn)
 {
   CURLcode result = CURLE_OK;
@@ -29,3 +27,7 @@ static CURLcode smtp_parse_url_options(struct connectdata *conn)
     if(*ptr == ';')
       ptr++;
   }
+
+
+// Source: smtp.c
+// Lines 1652-1680

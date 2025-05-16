@@ -1,5 +1,3 @@
-// Source: curl/lib/hash.c
-// Lines 85-88
 mk_hash_element(const void *key, size_t key_len, const void *p)
 {
   /* allocate the struct plus memory after it to store the key */
@@ -13,3 +11,7 @@ mk_hash_element(const void *key, size_t key_len, const void *p)
   }
   return he;
 }
+
+
+// Source: hash.c
+// Lines 85-97

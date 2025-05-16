@@ -1,5 +1,3 @@
-// Source: curl/lib/multi.c
-// Lines 3295-3297
 multi_addtimeout(struct Curl_easy *data,
                  struct curltime *stamp,
                  expire_id eid)
@@ -34,3 +32,7 @@ multi_addtimeout(struct Curl_easy *data,
   Curl_llist_insert_next(timeoutlist, prev, node, &node->list);
   return CURLM_OK;
 }
+
+
+// Source: multi.c
+// Lines 3291-3324

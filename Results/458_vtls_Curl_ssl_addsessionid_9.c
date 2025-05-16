@@ -1,5 +1,3 @@
-// Source: curl/lib/vtls/vtls.c
-// Lines 517-522
 CURLcode Curl_ssl_addsessionid(struct Curl_easy *data,
                                struct connectdata *conn,
                                const bool isProxy,
@@ -103,3 +101,7 @@ CURLcode Curl_ssl_addsessionid(struct Curl_easy *data,
                isProxy ? "PROXY" : "server"));
   return CURLE_OK;
 }
+
+
+// Source: vtls.c
+// Lines 514-616

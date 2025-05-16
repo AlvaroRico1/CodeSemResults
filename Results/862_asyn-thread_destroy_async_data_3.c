@@ -1,5 +1,3 @@
-// Source: curl/lib/asyn-thread.c
-// Lines 379-382
 static void destroy_async_data(struct Curl_async *async)
 {
   if(async->tdata) {
@@ -39,3 +37,7 @@ static void destroy_async_data(struct Curl_async *async)
     sclose(sock_rd);
 #endif
   }
+
+
+// Source: asyn-thread.c
+// Lines 379-417

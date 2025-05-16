@@ -1,5 +1,3 @@
-// Source: curl/lib/multi.c
-// Lines 1647-1651
 static CURLcode protocol_connect(struct Curl_easy *data,
                                  bool *protocol_done)
 {
@@ -56,3 +54,7 @@ static CURLcode protocol_connect(struct Curl_easy *data,
 
   return result; /* pass back status */
 }
+
+
+// Source: multi.c
+// Lines 1647-1702

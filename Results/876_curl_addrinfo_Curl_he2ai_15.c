@@ -1,5 +1,3 @@
-// Source: curl/lib/curl_addrinfo.c
-// Lines 261-264
 Curl_he2ai(const struct hostent *he, int port)
 {
   struct Curl_addrinfo *ai;
@@ -89,3 +87,7 @@ Curl_he2ai(const struct hostent *he, int port)
 
   return firstai;
 }
+
+
+// Source: curl_addrinfo.c
+// Lines 259-347

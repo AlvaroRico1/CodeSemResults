@@ -1,5 +1,3 @@
-// Source: curl/lib/ftp.c
-// Lines 269-271
 static CURLcode AcceptServerConnect(struct Curl_easy *data)
 {
   struct connectdata *conn = data->conn;
@@ -51,3 +49,7 @@ static CURLcode AcceptServerConnect(struct Curl_easy *data)
   return CURLE_OK;
 
 }
+
+
+// Source: ftp.c
+// Lines 269-319

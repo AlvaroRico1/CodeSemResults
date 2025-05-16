@@ -1,5 +1,3 @@
-// Source: curl/lib/ftplistparser.c
-// Lines 334-420
 size_t Curl_ftp_parselist(char *buffer, size_t size, size_t nmemb,
                           void *connptr)
 {
@@ -108,3 +106,7 @@ size_t Curl_ftp_parselist(char *buffer, size_t size, size_t nmemb,
               parser->state.UNIX.main = PL_UNIX_FILETYPE;
               finfo->b_used = 0;
             }
+
+
+// Source: ftplistparser.c
+// Lines 326-433

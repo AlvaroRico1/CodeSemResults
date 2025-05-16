@@ -1,5 +1,3 @@
-// Source: curl/lib/hostip.c
-// Lines 601-610
 enum resolve_t Curl_resolv(struct Curl_easy *data,
                            const char *hostname,
                            int port,
@@ -159,3 +157,7 @@ enum resolve_t Curl_resolv(struct Curl_easy *data,
 
   return rc;
 }
+
+
+// Source: hostip.c
+// Lines 601-759

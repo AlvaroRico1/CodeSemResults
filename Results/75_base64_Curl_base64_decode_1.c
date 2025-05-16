@@ -1,5 +1,3 @@
-// Source: curl/lib/base64.c
-// Lines 116-117
 CURLcode Curl_base64_decode(const char *src,
                             unsigned char **outptr, size_t *outlen)
 {
@@ -70,3 +68,7 @@ CURLcode Curl_base64_decode(const char *src,
 
   return CURLE_OK;
 }
+
+
+// Source: base64.c
+// Lines 107-176

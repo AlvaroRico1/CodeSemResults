@@ -1,5 +1,3 @@
-// Source: curl/lib/doh.c
-// Lines 818-823
 doh2ai(const struct dohentry *de, const char *hostname, int port)
 {
   struct Curl_addrinfo *ai;
@@ -91,3 +89,7 @@ doh2ai(const struct dohentry *de, const char *hostname, int port)
 
   return firstai;
 }
+
+
+// Source: doh.c
+// Lines 816-906

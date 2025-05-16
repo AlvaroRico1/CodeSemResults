@@ -1,5 +1,3 @@
-// Source: curl/lib/asyn-thread.c
-// Lines 295-296
 static unsigned int CURL_STDCALL getaddrinfo_thread(void *arg)
 {
   struct thread_sync_data *tsd = (struct thread_sync_data *)arg;
@@ -47,3 +45,7 @@ static unsigned int CURL_STDCALL getaddrinfo_thread(void *arg)
 
   return 0;
 }
+
+
+// Source: asyn-thread.c
+// Lines 293-339

@@ -1,1 +1,1 @@
-str,curl/lib/ftp.c,4179,rawPath,curl/lib/ftp.c,4121,1
+str,curl/lib/ftp.c,68,rawPath,curl/lib/ftp.c,10,1

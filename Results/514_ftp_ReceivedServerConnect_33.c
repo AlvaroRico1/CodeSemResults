@@ -1,5 +1,3 @@
-// Source: curl/lib/ftp.c
-// Lines 368-370
 static CURLcode ReceivedServerConnect(struct Curl_easy *data, bool *received)
 {
   struct connectdata *conn = data->conn;
@@ -61,3 +59,7 @@ static CURLcode ReceivedServerConnect(struct Curl_easy *data, bool *received)
 
   return CURLE_OK;
 }
+
+
+// Source: ftp.c
+// Lines 368-428

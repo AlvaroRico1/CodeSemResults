@@ -1,5 +1,3 @@
-// Source: curl/lib/hash.c
-// Lines 257-259
 size_t Curl_hash_str(void *key, size_t key_length, size_t slots_num)
 {
   const char *key_str = (const char *) key;
@@ -13,3 +11,7 @@ size_t Curl_hash_str(void *key, size_t key_length, size_t slots_num)
 
   return (h % slots_num);
 }
+
+
+// Source: hash.c
+// Lines 257-269

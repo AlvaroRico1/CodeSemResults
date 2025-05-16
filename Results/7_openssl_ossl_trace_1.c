@@ -1,5 +1,3 @@
-// Source: curl/lib/vtls/openssl.c
-// Lines 2119-2120
 static void ossl_trace(int direction, int ssl_ver, int content_type,
                        const void *buf, size_t len, SSL *ssl,
                        void *userp)
@@ -103,3 +101,7 @@ static void ossl_trace(int direction, int ssl_ver, int content_type,
              CURLINFO_SSL_DATA_IN, (char *)buf, len);
   (void) ssl;
 }
+
+
+// Source: openssl.c
+// Lines 2111-2213

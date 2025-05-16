@@ -1,5 +1,3 @@
-// Source: curl/lib/vauth/digest.c
-// Lines 161-164
 static char *auth_digest_string_quoted(const char *source)
 {
   char *dest;
@@ -30,3 +28,7 @@ static char *auth_digest_string_quoted(const char *source)
 
   return dest;
 }
+
+
+// Source: digest.c
+// Lines 161-190

@@ -1,5 +1,3 @@
-// Source: curl/lib/slist.c
-// Lines 111-112
 struct curl_slist *Curl_slist_duplicate(struct curl_slist *inlist)
 {
   struct curl_slist *outlist = NULL;
@@ -18,3 +16,7 @@ struct curl_slist *Curl_slist_duplicate(struct curl_slist *inlist)
   }
   return outlist;
 }
+
+
+// Source: slist.c
+// Lines 109-126

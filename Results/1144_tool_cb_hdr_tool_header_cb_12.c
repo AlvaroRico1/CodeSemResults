@@ -1,5 +1,3 @@
-// Source: curl/src/tool_cb_hdr.c
-// Lines 65-106
 size_t tool_header_cb(char *ptr, size_t size, size_t nmemb, void *userdata)
 {
   struct per_transfer *per = userdata;
@@ -66,3 +64,7 @@ size_t tool_header_cb(char *ptr, size_t size, size_t nmemb, void *userdata)
         }
       }
     }
+
+
+// Source: tool_cb_hdr.c
+// Lines 56-121

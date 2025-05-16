@@ -1,5 +1,3 @@
-// Source: curl/lib/http.c
-// Lines 2178-2248
 CURLcode Curl_http_target(struct Curl_easy *data,
                           struct connectdata *conn,
                           struct dynbuf *r)
@@ -93,3 +91,7 @@ CURLcode Curl_http_target(struct Curl_easy *data,
             return result;
         }
       }
+
+
+// Source: http.c
+// Lines 2173-2265

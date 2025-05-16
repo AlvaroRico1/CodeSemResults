@@ -1,5 +1,3 @@
-// Source: curl/lib/escape.c
-// Lines 144-148
 CURLcode Curl_urldecode(struct Curl_easy *data,
                         const char *string, size_t length,
                         char **ostring, size_t *olen,
@@ -68,3 +66,7 @@ CURLcode Curl_urldecode(struct Curl_easy *data,
 
   return CURLE_OK;
 }
+
+
+// Source: escape.c
+// Lines 142-209

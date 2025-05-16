@@ -1,5 +1,3 @@
-// Source: curl/lib/cookie.c
-// Lines 255-257
 static size_t cookie_hash_domain(const char *domain, const size_t len)
 {
   const char *end = domain + len;
@@ -12,3 +10,7 @@ static size_t cookie_hash_domain(const char *domain, const size_t len)
 
   return (h % COOKIE_HASH_SIZE);
 }
+
+
+// Source: cookie.c
+// Lines 255-266

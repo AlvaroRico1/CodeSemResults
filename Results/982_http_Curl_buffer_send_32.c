@@ -1,5 +1,3 @@
-// Source: curl/lib/http.c
-// Lines 1232-1235
 CURLcode Curl_buffer_send(struct dynbuf *in,
                           struct Curl_easy *data,
                           /* add the number of sent bytes to this
@@ -193,3 +191,7 @@ CURLcode Curl_buffer_send(struct dynbuf *in,
   data->req.pendingheader = 0;
   return result;
 }
+
+
+// Source: http.c
+// Lines 1221-1413

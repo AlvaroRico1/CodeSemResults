@@ -1,5 +1,3 @@
-// Source: curl/lib/doh.c
-// Lines 82-87
 UNITTEST DOHcode doh_encode(const char *host,
                             DNStype dnstype,
                             unsigned char *dnsp, /* buffer */
@@ -96,3 +94,7 @@ UNITTEST DOHcode doh_encode(const char *host,
   DEBUGASSERT(*olen == expected_len);
   return DOH_OK;
 }
+
+
+// Source: doh.c
+// Lines 80-175

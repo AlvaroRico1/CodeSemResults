@@ -1,5 +1,3 @@
-// Source: curl/lib/http.c
-// Lines 1168-1170
 static size_t readmoredata(char *buffer,
                            size_t size,
                            size_t nitems,
@@ -49,3 +47,7 @@ static size_t readmoredata(char *buffer,
 
   return fullsize;
 }
+
+
+// Source: http.c
+// Lines 1165-1213

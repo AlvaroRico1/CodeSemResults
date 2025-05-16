@@ -1,5 +1,3 @@
-// Source: curl/lib/sendf.c
-// Lines 339-342
 ssize_t Curl_send_plain(struct Curl_easy *data, int num,
                         const void *mem, size_t len, CURLcode *code)
 {
@@ -61,3 +59,7 @@ ssize_t Curl_send_plain(struct Curl_easy *data, int num,
   }
   return bytes_written;
 }
+
+
+// Source: sendf.c
+// Lines 339-399

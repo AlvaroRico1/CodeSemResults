@@ -1,1 +1,1 @@
-conn,curl/lib/vtls/openssl.c,2117,userp,curl/lib/vtls/openssl.c,2113,1
+conn,curl/lib/vtls/openssl.c,7,userp,curl/lib/vtls/openssl.c,3,1

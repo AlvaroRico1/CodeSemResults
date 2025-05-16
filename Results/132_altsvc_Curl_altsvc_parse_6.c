@@ -1,5 +1,3 @@
-// Source: curl/lib/altsvc.c
-// Lines 452-487
 CURLcode Curl_altsvc_parse(struct Curl_easy *data,
                            struct altsvcinfo *asi, const char *value,
                            enum alpnid srcalpnid, const char *srchost,
@@ -144,3 +142,7 @@ CURLcode Curl_altsvc_parse(struct Curl_easy *data,
                 alpnbuf);
         }
       }
+
+
+// Source: altsvc.c
+// Lines 447-590

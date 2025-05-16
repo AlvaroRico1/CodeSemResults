@@ -1,5 +1,3 @@
-// Source: curl/lib/vtls/openssl.c
-// Lines 1441-1449
 static int ossl_shutdown(struct Curl_easy *data,
                          struct connectdata *conn, int sockindex)
 {
@@ -101,3 +99,7 @@ static int ossl_shutdown(struct Curl_easy *data,
   }
   return retval;
 }
+
+
+// Source: openssl.c
+// Lines 1437-1537

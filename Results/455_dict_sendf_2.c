@@ -1,5 +1,3 @@
-// Source: curl/lib/dict.c
-// Lines 139-140
 static CURLcode sendf(curl_socket_t sockfd, struct Curl_easy *data,
                       const char *fmt, ...)
 {
@@ -42,3 +40,7 @@ static CURLcode sendf(curl_socket_t sockfd, struct Curl_easy *data,
 
   return result;
 }
+
+
+// Source: dict.c
+// Lines 133-174

@@ -1,5 +1,3 @@
-// Source: curl/lib/imap.c
-// Lines 622-625
 static CURLcode imap_perform_list(struct Curl_easy *data)
 {
   CURLcode result = CURLE_OK;
@@ -28,3 +26,7 @@ static CURLcode imap_perform_list(struct Curl_easy *data)
 
   return result;
 }
+
+
+// Source: imap.c
+// Lines 622-649

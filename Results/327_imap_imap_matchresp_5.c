@@ -1,5 +1,3 @@
-// Source: curl/lib/imap.c
-// Lines 215-217
 static bool imap_matchresp(const char *line, size_t len, const char *cmd)
 {
   const char *end = line + len;
@@ -30,3 +28,7 @@ static bool imap_matchresp(const char *line, size_t len, const char *cmd)
 
   return FALSE;
 }
+
+
+// Source: imap.c
+// Lines 215-244

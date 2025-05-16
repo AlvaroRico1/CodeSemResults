@@ -1,5 +1,3 @@
-// Source: curl/lib/mime.c
-// Lines 1944-1947
 void Curl_mime_unpause(curl_mimepart *part)
 {
   if(part) {
@@ -14,3 +12,7 @@ void Curl_mime_unpause(curl_mimepart *part)
         for(subpart = mime->firstpart; subpart; subpart = subpart->nextpart)
           Curl_mime_unpause(subpart);
       }
+
+
+// Source: mime.c
+// Lines 1938-1951

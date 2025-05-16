@@ -1,5 +1,3 @@
-// Source: curl/src/tool_cb_wrt.c
-// Lines 52-56
 bool tool_create_output_file(struct OutStruct *outs,
                              struct OperationConfig *config)
 {
@@ -50,3 +48,7 @@ bool tool_create_output_file(struct OutStruct *outs,
   outs->init = 0;
   return TRUE;
 }
+
+
+// Source: tool_cb_wrt.c
+// Lines 52-101

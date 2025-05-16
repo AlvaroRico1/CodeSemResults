@@ -1,5 +1,3 @@
-// Source: curl/lib/mime.c
-// Lines 1186-1188
 static void mime_subparts_unbind(void *ptr)
 {
   curl_mime *mime = (curl_mime *) ptr;
@@ -10,3 +8,7 @@ static void mime_subparts_unbind(void *ptr)
     mime->parent = NULL;
   }
 }
+
+
+// Source: mime.c
+// Lines 1186-1195

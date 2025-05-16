@@ -1,5 +1,3 @@
-// Source: curl/lib/mprintf.c
-// Lines 1058-1061
 int Curl_dyn_vprintf(struct dynbuf *dyn, const char *format, va_list ap_save)
 {
   int retcode;
@@ -14,3 +12,7 @@ int Curl_dyn_vprintf(struct dynbuf *dyn, const char *format, va_list ap_save)
   }
   return 0;
 }
+
+
+// Source: mprintf.c
+// Lines 1058-1071

@@ -1,5 +1,3 @@
-// Source: curl/lib/altsvc.c
-// Lines 619-620
 bool Curl_altsvc_lookup(struct altsvcinfo *asi,
                         enum alpnid srcalpnid, const char *srchost,
                         int srcport,
@@ -33,3 +31,7 @@ bool Curl_altsvc_lookup(struct altsvcinfo *asi,
   }
   return FALSE;
 }
+
+
+// Source: altsvc.c
+// Lines 613-645

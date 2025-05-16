@@ -1,5 +1,3 @@
-// Source: curl/lib/curl_threads.c
-// Lines 62-65
 curl_thread_t Curl_thread_create(unsigned int (*func) (void *), void *arg)
 {
   curl_thread_t t = malloc(sizeof(pthread_t));
@@ -20,3 +18,7 @@ err:
   free(ac);
   return curl_thread_t_null;
 }
+
+
+// Source: curl_threads.c
+// Lines 62-81

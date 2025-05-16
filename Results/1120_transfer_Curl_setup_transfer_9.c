@@ -1,5 +1,3 @@
-// Source: curl/lib/transfer.c
-// Lines 1874-1883
 Curl_setup_transfer(
   struct Curl_easy *data,   /* transfer */
   int sockindex,            /* socket index to read from or -1 */
@@ -86,3 +84,7 @@ Curl_setup_transfer(
   } /* if(k->getheader || !data->set.opt_no_body) */
 
 }
+
+
+// Source: transfer.c
+// Lines 1873-1958

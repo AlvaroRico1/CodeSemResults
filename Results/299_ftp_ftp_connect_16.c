@@ -1,5 +1,3 @@
-// Source: curl/lib/ftp.c
-// Lines 3145-3149
 static CURLcode ftp_connect(struct Curl_easy *data,
                             bool *done) /* see description above */
 {
@@ -34,3 +32,7 @@ static CURLcode ftp_connect(struct Curl_easy *data,
 
   return result;
 }
+
+
+// Source: ftp.c
+// Lines 3145-3178

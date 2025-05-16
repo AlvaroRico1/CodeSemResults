@@ -1,5 +1,3 @@
-// Source: curl/lib/http_proxy.c
-// Lines 221-224
 static CURLcode CONNECT_host(struct Curl_easy *data,
                              struct connectdata *conn,
                              const char *hostname,
@@ -31,3 +29,7 @@ static CURLcode CONNECT_host(struct Curl_easy *data,
   *hostp = host;
   return CURLE_OK;
 }
+
+
+// Source: http_proxy.c
+// Lines 217-247

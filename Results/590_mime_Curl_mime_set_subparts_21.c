@@ -1,5 +1,3 @@
-// Source: curl/lib/mime.c
-// Lines 1567-1570
 CURLcode Curl_mime_set_subparts(curl_mimepart *part,
                                 curl_mime *subparts, int take_ownership)
 {
@@ -46,3 +44,7 @@ CURLcode Curl_mime_set_subparts(curl_mimepart *part,
 
   return CURLE_OK;
 }
+
+
+// Source: mime.c
+// Lines 1567-1612

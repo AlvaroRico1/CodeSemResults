@@ -1,5 +1,3 @@
-// Source: curl/lib/setopt.c
-// Lines 160-2215
 CURLcode Curl_vsetopt(struct Curl_easy *data, CURLoption option, va_list param)
 {
   char *argptr;
@@ -2122,3 +2120,7 @@ CURLcode Curl_vsetopt(struct Curl_easy *data, CURLoption option, va_list param)
     /* check for host cache not needed,
      * it will be done by curl_easy_perform */
   }
+
+
+// Source: setopt.c
+// Lines 160-2281

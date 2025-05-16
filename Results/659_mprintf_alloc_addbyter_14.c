@@ -1,5 +1,3 @@
-// Source: curl/lib/mprintf.c
-// Lines 1042-1044
 static int alloc_addbyter(int output, FILE *data)
 {
   struct asprintf *infop = (struct asprintf *)data;
@@ -11,3 +9,7 @@ static int alloc_addbyter(int output, FILE *data)
   }
   return outc; /* fputc() returns like this on success */
 }
+
+
+// Source: mprintf.c
+// Lines 1042-1052

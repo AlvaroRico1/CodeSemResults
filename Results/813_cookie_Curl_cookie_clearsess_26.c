@@ -1,5 +1,3 @@
-// Source: curl/lib/cookie.c
-// Lines 1492-1492
 void Curl_cookie_clearsess(struct CookieInfo *cookies)
 {
   struct Cookie *first, *curr, *next, *prev = NULL;
@@ -35,3 +33,7 @@ void Curl_cookie_clearsess(struct CookieInfo *cookies)
     cookies->cookies[i] = first;
   }
 }
+
+
+// Source: cookie.c
+// Lines 1490-1524

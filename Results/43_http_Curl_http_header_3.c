@@ -1,5 +1,3 @@
-// Source: curl/lib/http.c
-// Lines 3408-3560
 CURLcode Curl_http_header(struct Curl_easy *data, struct connectdata *conn,
                           char *headp)
 {
@@ -170,3 +168,7 @@ CURLcode Curl_http_header(struct Curl_easy *data, struct connectdata *conn,
     else
       data->state.resume_from = 0; /* get everything */
   }
+
+
+// Source: http.c
+// Lines 3407-3576

@@ -1,5 +1,3 @@
-// Source: curl/lib/curl_sasl.c
-// Lines 500-511
 CURLcode Curl_sasl_continue(struct SASL *sasl, struct Curl_easy *data,
                             struct connectdata *conn,
                             int code, saslprogress *progress)
@@ -227,3 +225,7 @@ CURLcode Curl_sasl_continue(struct SASL *sasl, struct Curl_easy *data,
 
   return result;
 }
+
+
+// Source: curl_sasl.c
+// Lines 500-726

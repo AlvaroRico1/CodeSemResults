@@ -1,5 +1,3 @@
-// Source: curl/src/tool_operate.c
-// Lines 219-219
 static CURLcode add_per_transfer(struct per_transfer **per)
 {
   struct per_transfer *p;
@@ -21,3 +19,7 @@ static CURLcode add_per_transfer(struct per_transfer **per)
   all_xfers++; /* count total number of transfers added */
   return CURLE_OK;
 }
+
+
+// Source: tool_operate.c
+// Lines 211-231

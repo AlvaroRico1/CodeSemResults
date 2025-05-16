@@ -1,5 +1,3 @@
-// Source: curl/lib/multi.c
-// Lines 1722-2482
 static CURLMcode multi_runsingle(struct Curl_multi *multi,
                                  struct curltime *nowp,
                                  struct Curl_easy *data)
@@ -775,3 +773,7 @@ static CURLMcode multi_runsingle(struct Curl_multi *multi,
             /* disconnect properly */
             Curl_disconnect(data, conn, dead_connection);
           }
+
+
+// Source: multi.c
+// Lines 1720-2494

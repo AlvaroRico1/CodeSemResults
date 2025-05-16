@@ -1,5 +1,3 @@
-// Source: curl/lib/mime.c
-// Lines 1744-1769
 const char *Curl_mime_contenttype(const char *filename)
 {
   /*
@@ -35,3 +33,7 @@ const char *Curl_mime_contenttype(const char *filename)
           return ctts[i].type;
     }
   }
+
+
+// Source: mime.c
+// Lines 1744-1778

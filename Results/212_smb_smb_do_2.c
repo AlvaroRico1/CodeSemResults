@@ -1,5 +1,3 @@
-// Source: curl/lib/smb.c
-// Lines 971-973
 static CURLcode smb_do(struct Curl_easy *data, bool *done)
 {
   struct connectdata *conn = data->conn;
@@ -11,3 +9,7 @@ static CURLcode smb_do(struct Curl_easy *data, bool *done)
   }
   return CURLE_URL_MALFORMAT;
 }
+
+
+// Source: smb.c
+// Lines 971-981

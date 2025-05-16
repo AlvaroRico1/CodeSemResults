@@ -1,5 +1,3 @@
-// Source: curl/lib/http_proxy.c
-// Lines 81-93
 CURLcode Curl_proxy_connect(struct Curl_easy *data, int sockindex)
 {
   struct connectdata *conn = data->conn;
@@ -46,3 +44,7 @@ CURLcode Curl_proxy_connect(struct Curl_easy *data, int sockindex)
     return CURLE_NOT_BUILT_IN;
 #endif
   }
+
+
+// Source: http_proxy.c
+// Lines 79-124

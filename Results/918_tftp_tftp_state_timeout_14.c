@@ -1,5 +1,3 @@
-// Source: curl/lib/tftp.c
-// Lines 1191-1195
 static timediff_t tftp_state_timeout(struct Curl_easy *data,
                                      tftp_event_t *event)
 {
@@ -27,3 +25,7 @@ static timediff_t tftp_state_timeout(struct Curl_easy *data,
 
   return timeout_ms;
 }
+
+
+// Source: tftp.c
+// Lines 1191-1217

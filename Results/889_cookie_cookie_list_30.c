@@ -1,5 +1,3 @@
-// Source: curl/lib/cookie.c
-// Lines 1691-1691
 static struct curl_slist *cookie_list(struct Curl_easy *data)
 {
   struct curl_slist *list = NULL;
@@ -32,3 +30,7 @@ static struct curl_slist *cookie_list(struct Curl_easy *data)
 
   return list;
 }
+
+
+// Source: cookie.c
+// Lines 1687-1718

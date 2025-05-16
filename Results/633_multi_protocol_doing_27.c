@@ -1,5 +1,3 @@
-// Source: curl/lib/multi.c
-// Lines 1627-1630
 static CURLcode protocol_doing(struct Curl_easy *data, bool *done)
 {
   CURLcode result = CURLE_OK;
@@ -14,3 +12,7 @@ static CURLcode protocol_doing(struct Curl_easy *data, bool *done)
 
   return result;
 }
+
+
+// Source: multi.c
+// Lines 1627-1640

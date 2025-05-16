@@ -1,5 +1,3 @@
-// Source: curl/lib/ftp.c
-// Lines 3553-3555
 static CURLcode ftp_do_more(struct Curl_easy *data, int *completep)
 {
   struct connectdata *conn = data->conn;
@@ -158,3 +156,7 @@ static CURLcode ftp_do_more(struct Curl_easy *data, int *completep)
 
   return result;
 }
+
+
+// Source: ftp.c
+// Lines 3553-3710

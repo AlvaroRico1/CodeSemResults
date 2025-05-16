@@ -1,1 +1,1 @@
-conn,curl/lib/socks.c,117,data,curl/lib/socks.c,110,1
+conn,curl/lib/socks.c,8,data,curl/lib/socks.c,1,1

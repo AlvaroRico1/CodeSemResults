@@ -1,5 +1,3 @@
-// Source: curl/lib/socks.c
-// Lines 797-830
 CURLproxycode Curl_SOCKS5(const char *proxy_user,
                           const char *proxy_password,
                           const char *hostname,
@@ -355,3 +353,7 @@ CURLproxycode Curl_SOCKS5(const char *proxy_user,
 
       infof(data, "SOCKS5 connect to IPv6 %s (locally resolved)", dest);
     }
+
+
+// Source: socks.c
+// Lines 486-840

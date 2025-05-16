@@ -1,5 +1,3 @@
-// Source: curl/lib/hostip.c
-// Lines 1240-1243
 CURLcode Curl_once_resolved(struct Curl_easy *data, bool *protocol_done)
 {
   CURLcode result;
@@ -21,3 +19,7 @@ CURLcode Curl_once_resolved(struct Curl_easy *data, bool *protocol_done)
   }
   return result;
 }
+
+
+// Source: hostip.c
+// Lines 1240-1260

@@ -1,5 +1,3 @@
-// Source: curl/lib/hash.c
-// Lines 35-37
 hash_element_dtor(void *user, void *element)
 {
   struct Curl_hash *h = (struct Curl_hash *) user;
@@ -14,3 +12,7 @@ hash_element_dtor(void *user, void *element)
 
   free(e);
 }
+
+
+// Source: hash.c
+// Lines 35-48

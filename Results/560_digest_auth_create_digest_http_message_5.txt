@@ -1,1 +1,1 @@
-response,curl/lib/vauth/digest.c,681,tmp,curl/lib/vauth/digest.c,683,1
+response,curl/lib/vauth/digest.c,22,tmp,curl/lib/vauth/digest.c,24,1

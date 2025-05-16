@@ -1,5 +1,3 @@
-// Source: curl/lib/ftplistparser.c
-// Lines 188-190
 void Curl_ftp_parselist_data_free(struct ftp_parselist_data **parserp)
 {
   struct ftp_parselist_data *parser = *parserp;
@@ -8,3 +6,7 @@ void Curl_ftp_parselist_data_free(struct ftp_parselist_data **parserp)
   free(parser);
   *parserp = NULL;
 }
+
+
+// Source: ftplistparser.c
+// Lines 188-195

@@ -1,5 +1,3 @@
-// Source: curl/lib/mprintf.c
-// Lines 229-231
 static int dprintf_Pass1(const char *format, struct va_stack *vto,
                          char **endpos, va_list arglist)
 {
@@ -334,3 +332,7 @@ static int dprintf_Pass1(const char *format, struct va_stack *vto,
   return 0;
 
 }
+
+
+// Source: mprintf.c
+// Lines 228-561

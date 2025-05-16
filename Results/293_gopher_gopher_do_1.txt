@@ -1,1 +1,1 @@
-newp,curl/lib/gopher.c,161,gopherpath,curl/lib/gopher.c,131,1
+newp,curl/lib/gopher.c,36,gopherpath,curl/lib/gopher.c,6,1

@@ -1,5 +1,3 @@
-// Source: curl/src/tool_dirhie.c
-// Lines 104-105
 CURLcode create_dir_hierarchy(const char *outfile, FILE *errors)
 {
   char *tempdir;
@@ -69,3 +67,7 @@ CURLcode create_dir_hierarchy(const char *outfile, FILE *errors)
 
   return result;
 }
+
+
+// Source: tool_dirhie.c
+// Lines 102-170

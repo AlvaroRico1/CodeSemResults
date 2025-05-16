@@ -1,5 +1,3 @@
-// Source: curl/lib/http.c
-// Lines 2710-2710
 CURLcode Curl_http_cookies(struct Curl_easy *data,
                            struct connectdata *conn,
                            struct dynbuf *r)
@@ -60,3 +58,7 @@ CURLcode Curl_http_cookies(struct Curl_easy *data,
     if(result)
       return result;
   }
+
+
+// Source: http.c
+// Lines 2700-2759

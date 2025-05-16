@@ -1,1 +1,1 @@
-lstArg,curl/lib/ftp.c,1461,rawPath,curl/lib/ftp.c,1467,1
+lstArg,curl/lib/ftp.c,20,rawPath,curl/lib/ftp.c,26,1

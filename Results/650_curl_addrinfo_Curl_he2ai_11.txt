@@ -1,1 +1,1 @@
-prevai,curl/lib/curl_addrinfo.c,262,ai,curl/lib/curl_addrinfo.c,261,1
+prevai,curl/lib/curl_addrinfo.c,4,ai,curl/lib/curl_addrinfo.c,3,1

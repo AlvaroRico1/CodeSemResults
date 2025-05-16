@@ -1,5 +1,3 @@
-// Source: curl/lib/strerror.c
-// Lines 715-721
 const char *Curl_strerror(int err, char *buf, size_t buflen)
 {
 #ifdef PRESERVE_WINDOWS_ERROR_CODE
@@ -105,3 +103,7 @@ const char *Curl_strerror(int err, char *buf, size_t buflen)
 
   return buf;
 }
+
+
+// Source: strerror.c
+// Lines 715-819

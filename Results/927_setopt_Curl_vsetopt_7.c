@@ -1,5 +1,3 @@
-// Source: curl/lib/setopt.c
-// Lines 160-778
 CURLcode Curl_vsetopt(struct Curl_easy *data, CURLoption option, va_list param)
 {
   char *argptr;
@@ -632,3 +630,7 @@ CURLcode Curl_vsetopt(struct Curl_easy *data, CURLoption option, va_list param)
       result = CURLE_OUT_OF_MEMORY;
     data->cookies = newcookies;
   }
+
+
+// Source: setopt.c
+// Lines 160-791

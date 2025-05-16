@@ -1,5 +1,3 @@
-// Source: curl/lib/pingpong.c
-// Lines 473-477
 CURLcode Curl_pp_flushsend(struct Curl_easy *data,
                            struct pingpong *pp)
 {
@@ -23,3 +21,7 @@ CURLcode Curl_pp_flushsend(struct Curl_easy *data,
   }
   return CURLE_OK;
 }
+
+
+// Source: pingpong.c
+// Lines 473-495

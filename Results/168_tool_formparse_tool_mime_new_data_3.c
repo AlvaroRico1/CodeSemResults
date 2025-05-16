@@ -1,5 +1,3 @@
-// Source: curl/src/tool_formparse.c
-// Lines 67-69
 static struct tool_mime *tool_mime_new_data(struct tool_mime *parent,
                                             const char *data)
 {
@@ -15,3 +13,7 @@ static struct tool_mime *tool_mime_new_data(struct tool_mime *parent,
   }
   return m;
 }
+
+
+// Source: tool_formparse.c
+// Lines 66-80

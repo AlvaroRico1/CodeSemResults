@@ -1,5 +1,3 @@
-// Source: curl/lib/multi.c
-// Lines 2870-2874
 void Curl_multi_closed(struct Curl_easy *data, curl_socket_t s)
 {
   if(data) {
@@ -21,3 +19,7 @@ void Curl_multi_closed(struct Curl_easy *data, curl_socket_t s)
       }
     }
   }
+
+
+// Source: multi.c
+// Lines 2870-2890

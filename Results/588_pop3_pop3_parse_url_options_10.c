@@ -1,5 +1,3 @@
-// Source: curl/lib/pop3.c
-// Lines 1340-1349
 static CURLcode pop3_parse_url_options(struct connectdata *conn)
 {
   CURLcode result = CURLE_OK;
@@ -36,3 +34,7 @@ static CURLcode pop3_parse_url_options(struct connectdata *conn)
     if(*ptr == ';')
       ptr++;
   }
+
+
+// Source: pop3.c
+// Lines 1340-1375

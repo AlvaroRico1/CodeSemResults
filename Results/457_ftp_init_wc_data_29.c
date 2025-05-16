@@ -1,5 +1,3 @@
-// Source: curl/lib/ftp.c
-// Lines 3772-3774
 static CURLcode init_wc_data(struct Curl_easy *data)
 {
   char *last_slash;
@@ -94,3 +92,7 @@ static CURLcode init_wc_data(struct Curl_easy *data)
   wildcard->protdata = NULL;
   return result;
 }
+
+
+// Source: ftp.c
+// Lines 3767-3860

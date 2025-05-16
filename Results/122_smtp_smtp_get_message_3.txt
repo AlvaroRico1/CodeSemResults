@@ -1,1 +1,1 @@
-outptr,curl/lib/smtp.c,251,message,curl/lib/smtp.c,254,1
+outptr,curl/lib/smtp.c,1,message,curl/lib/smtp.c,4,1

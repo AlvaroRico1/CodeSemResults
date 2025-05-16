@@ -1,5 +1,3 @@
-// Source: curl/lib/getinfo.c
-// Lines 482-505
 static CURLcode getinfo_slist(struct Curl_easy *data, CURLINFO info,
                               struct curl_slist **param_slistp)
 {
@@ -47,3 +45,7 @@ static CURLcode getinfo_slist(struct Curl_easy *data, CURLINFO info,
       }
 #endif
     }
+
+
+// Source: getinfo.c
+// Lines 481-527

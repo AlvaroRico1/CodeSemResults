@@ -1,5 +1,3 @@
-// Source: curl/lib/ftp.c
-// Lines 4315-4320
 CURLcode ftp_regular_transfer(struct Curl_easy *data,
                               bool *dophase_done)
 {
@@ -36,3 +34,7 @@ CURLcode ftp_regular_transfer(struct Curl_easy *data,
 
   return result;
 }
+
+
+// Source: ftp.c
+// Lines 4315-4350

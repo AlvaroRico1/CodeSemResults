@@ -1,5 +1,3 @@
-// Source: curl/lib/altsvc.c
-// Lines 404-405
 static void altsvc_flush(struct altsvcinfo *asi, enum alpnid srcalpnid,
                          const char *srchost, unsigned short srcport)
 {
@@ -16,3 +14,7 @@ static void altsvc_flush(struct altsvcinfo *asi, enum alpnid srcalpnid,
     }
   }
 }
+
+
+// Source: altsvc.c
+// Lines 401-416

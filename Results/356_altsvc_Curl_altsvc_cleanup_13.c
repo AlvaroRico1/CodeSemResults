@@ -1,5 +1,3 @@
-// Source: curl/lib/altsvc.c
-// Lines 307-308
 void Curl_altsvc_cleanup(struct altsvcinfo **altsvcp)
 {
   struct Curl_llist_element *e;
@@ -16,3 +14,7 @@ void Curl_altsvc_cleanup(struct altsvcinfo **altsvcp)
     *altsvcp = NULL; /* clear the pointer */
   }
 }
+
+
+// Source: altsvc.c
+// Lines 305-320

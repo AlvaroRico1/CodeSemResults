@@ -1,5 +1,3 @@
-// Source: curl/lib/setopt.c
-// Lines 743-1934
 CURLcode Curl_vsetopt(struct Curl_easy *data, CURLoption option, va_list param)
 {
   char *argptr;
@@ -1776,3 +1774,7 @@ CURLcode Curl_vsetopt(struct Curl_easy *data, CURLoption option, va_list param)
       data->conn->proxy_ssl_config.verifyhost =
         data->set.proxy_ssl.primary.verifyhost;
     }
+
+
+// Source: setopt.c
+// Lines 160-1935

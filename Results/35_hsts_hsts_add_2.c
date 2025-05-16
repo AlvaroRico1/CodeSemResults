@@ -1,5 +1,3 @@
-// Source: curl/lib/hsts.c
-// Lines 398-408
 static CURLcode hsts_add(struct hsts *h, char *line)
 {
   /* Example lines:
@@ -26,3 +24,7 @@ static CURLcode hsts_add(struct hsts *h, char *line)
     if(result)
       return result;
   }
+
+
+// Source: hsts.c
+// Lines 392-417

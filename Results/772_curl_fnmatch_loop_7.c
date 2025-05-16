@@ -1,5 +1,3 @@
-// Source: curl/lib/curl_fnmatch.c
-// Lines 255-258
 static int loop(const unsigned char *pattern, const unsigned char *string,
                 int maxstars)
 {
@@ -94,3 +92,7 @@ static int loop(const unsigned char *pattern, const unsigned char *string,
     }
   }
 }
+
+
+// Source: curl_fnmatch.c
+// Lines 255-348

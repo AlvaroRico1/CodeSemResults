@@ -1,5 +1,3 @@
-// Source: curl/src/tool_cb_wrt.c
-// Lines 107-110
 size_t tool_write_cb(char *buffer, size_t sz, size_t nmemb, void *userdata)
 {
   size_t rc;
@@ -143,3 +141,7 @@ size_t tool_write_cb(char *buffer, size_t sz, size_t nmemb, void *userdata)
 
   return rc;
 }
+
+
+// Source: tool_cb_wrt.c
+// Lines 107-249

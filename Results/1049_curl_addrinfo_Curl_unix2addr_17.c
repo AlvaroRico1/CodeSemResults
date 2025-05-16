@@ -1,5 +1,3 @@
-// Source: curl/lib/curl_addrinfo.c
-// Lines 473-474
 struct Curl_addrinfo *Curl_unix2addr(const char *path, bool *longpath,
                                      bool abstract)
 {
@@ -38,3 +36,7 @@ struct Curl_addrinfo *Curl_unix2addr(const char *path, bool *longpath,
 
   return ai;
 }
+
+
+// Source: curl_addrinfo.c
+// Lines 470-507

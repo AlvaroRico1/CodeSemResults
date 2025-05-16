@@ -1,1 +1,1 @@
-connecthostp,curl/lib/http_proxy.c,221,hostheader,curl/lib/http_proxy.c,224,1
+connecthostp,curl/lib/http_proxy.c,5,hostheader,curl/lib/http_proxy.c,8,1

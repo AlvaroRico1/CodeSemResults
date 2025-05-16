@@ -1,5 +1,3 @@
-// Source: curl/lib/url.c
-// Lines 4031-4035
 CURLcode Curl_setup_conn(struct Curl_easy *data,
                          bool *protocol_done)
 {
@@ -52,3 +50,7 @@ CURLcode Curl_setup_conn(struct Curl_easy *data,
                              this here perhaps a second time */
   return result;
 }
+
+
+// Source: url.c
+// Lines 4031-4082

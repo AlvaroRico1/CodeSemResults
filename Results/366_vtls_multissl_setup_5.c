@@ -1,5 +1,3 @@
-// Source: curl/lib/vtls/vtls.c
-// Lines 1382-1383
 static int multissl_setup(const struct Curl_ssl *backend)
 {
   const char *env;
@@ -37,3 +35,7 @@ static int multissl_setup(const struct Curl_ssl *backend)
   free(env_tmp);
   return 0;
 }
+
+
+// Source: vtls.c
+// Lines 1380-1416

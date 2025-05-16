@@ -1,5 +1,3 @@
-// Source: curl/lib/mime.c
-// Lines 1799-1806
 CURLcode Curl_mime_prepare_headers(curl_mimepart *part,
                                    const char *contenttype,
                                    const char *disposition,
@@ -137,3 +135,7 @@ CURLcode Curl_mime_prepare_headers(curl_mimepart *part,
   }
   return ret;
 }
+
+
+// Source: mime.c
+// Lines 1799-1935

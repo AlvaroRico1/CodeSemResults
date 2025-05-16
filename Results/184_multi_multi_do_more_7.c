@@ -1,5 +1,3 @@
-// Source: curl/lib/multi.c
-// Lines 1536-1539
 static CURLcode multi_do_more(struct Curl_easy *data, int *complete)
 {
   CURLcode result = CURLE_OK;
@@ -12,3 +10,7 @@ static CURLcode multi_do_more(struct Curl_easy *data, int *complete)
 
   return result;
 }
+
+
+// Source: multi.c
+// Lines 1536-1547

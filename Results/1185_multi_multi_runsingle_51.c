@@ -1,5 +1,3 @@
-// Source: curl/lib/multi.c
-// Lines 1722-1854
 static CURLMcode multi_runsingle(struct Curl_multi *multi,
                                  struct curltime *nowp,
                                  struct Curl_easy *data)
@@ -202,3 +200,7 @@ static CURLMcode multi_runsingle(struct Curl_multi *multi,
         break;
       }
     }
+
+
+// Source: multi.c
+// Lines 1720-1921

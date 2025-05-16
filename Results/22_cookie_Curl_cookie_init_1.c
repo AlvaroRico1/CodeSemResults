@@ -1,5 +1,3 @@
-// Source: curl/lib/cookie.c
-// Lines 1159-1162
 struct CookieInfo *Curl_cookie_init(struct Curl_easy *data,
                                     const char *file,
                                     struct CookieInfo *inc,
@@ -95,3 +93,7 @@ fail:
     fclose(fp);
   return NULL; /* out of memory */
 }
+
+
+// Source: cookie.c
+// Lines 1157-1251

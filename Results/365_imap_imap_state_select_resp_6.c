@@ -1,5 +1,3 @@
-// Source: curl/lib/imap.c
-// Lines 1064-1068
 static CURLcode imap_state_select_resp(struct Curl_easy *data, int imapcode,
                                        imapstate instate)
 {
@@ -45,3 +43,7 @@ static CURLcode imap_state_select_resp(struct Curl_easy *data, int imapcode,
 
   return result;
 }
+
+
+// Source: imap.c
+// Lines 1064-1108

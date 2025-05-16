@@ -1,5 +1,3 @@
-// Source: curl/lib/multi.c
-// Lines 3497-3499
 static void process_pending_handles(struct Curl_multi *multi)
 {
   struct Curl_llist_element *e = multi->pending.head;
@@ -19,3 +17,7 @@ static void process_pending_handles(struct Curl_multi *multi)
     /* mark this as having been in the pending queue */
     data->state.previouslypending = TRUE;
   }
+
+
+// Source: multi.c
+// Lines 3495-3513

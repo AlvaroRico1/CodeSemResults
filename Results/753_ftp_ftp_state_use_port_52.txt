@@ -1,1 +1,1 @@
-res,curl/lib/ftp.c,931,h,curl/lib/ftp.c,944,1
+res,curl/lib/ftp.c,11,h,curl/lib/ftp.c,24,1

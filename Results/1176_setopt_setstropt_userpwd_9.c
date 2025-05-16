@@ -1,5 +1,3 @@
-// Source: curl/lib/setopt.c
-// Lines 114-117
 static CURLcode setstropt_userpwd(char *option, char **userp, char **passwdp)
 {
   CURLcode result = CURLE_OK;
@@ -38,3 +36,7 @@ static CURLcode setstropt_userpwd(char *option, char **userp, char **passwdp)
 
   return result;
 }
+
+
+// Source: setopt.c
+// Lines 114-151

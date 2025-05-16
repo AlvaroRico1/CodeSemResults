@@ -1,5 +1,3 @@
-// Source: curl/lib/mprintf.c
-// Lines 813-814
 static int dprintf_formatf(
   void *data, /* untouched by format(), just sent to the stream() function in
                  the second argument */
@@ -291,3 +289,7 @@ static int dprintf_formatf(
         if(p->flags & FLAGS_ALT)
           OUTCHAR('"');
       }
+
+
+// Source: mprintf.c
+// Lines 563-853

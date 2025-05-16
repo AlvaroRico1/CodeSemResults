@@ -1,5 +1,3 @@
-// Source: curl/lib/smtp.c
-// Lines 1814-1815
 CURLcode Curl_smtp_escape_eob(struct Curl_easy *data, const ssize_t nread)
 {
   /* When sending a SMTP payload we must detect CRLF. sequences making sure
@@ -99,3 +97,7 @@ CURLcode Curl_smtp_escape_eob(struct Curl_easy *data, const ssize_t nread)
 
   return CURLE_OK;
 }
+
+
+// Source: smtp.c
+// Lines 1803-1901

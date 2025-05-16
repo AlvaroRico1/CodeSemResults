@@ -1,5 +1,3 @@
-// Source: curl/lib/multi.c
-// Lines 721-721
 CURLMcode curl_multi_remove_handle(struct Curl_multi *multi,
                                    struct Curl_easy *data)
 {
@@ -148,3 +146,7 @@ CURLMcode curl_multi_remove_handle(struct Curl_multi *multi,
   Curl_update_timer(multi);
   return CURLM_OK;
 }
+
+
+// Source: multi.c
+// Lines 716-863

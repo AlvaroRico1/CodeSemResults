@@ -1,5 +1,3 @@
-// Source: curl/lib/mime.c
-// Lines 530-534
 static size_t encoder_qp_read(char *buffer, size_t size, bool ateof,
                               curl_mimepart *part)
 {
@@ -100,3 +98,7 @@ static size_t encoder_qp_read(char *buffer, size_t size, bool ateof,
 
   return cursize;
 }
+
+
+// Source: mime.c
+// Lines 530-629

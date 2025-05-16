@@ -1,5 +1,3 @@
-// Source: curl/lib/hsts.c
-// Lines 274-277
 static CURLcode hsts_push(struct Curl_easy *data,
                           struct curl_index *i,
                           struct stsentry *sts,
@@ -27,3 +25,7 @@ static CURLcode hsts_push(struct Curl_easy *data,
   *stop = (sc != CURLSTS_OK);
   return sc == CURLSTS_FAIL ? CURLE_BAD_FUNCTION_ARGUMENT : CURLE_OK;
 }
+
+
+// Source: hsts.c
+// Lines 272-298

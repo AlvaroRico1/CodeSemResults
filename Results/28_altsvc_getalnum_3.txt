@@ -1,1 +1,1 @@
-protop,curl/lib/altsvc.c,382,ptr,curl/lib/altsvc.c,379,1
+protop,curl/lib/altsvc.c,4,ptr,curl/lib/altsvc.c,1,1

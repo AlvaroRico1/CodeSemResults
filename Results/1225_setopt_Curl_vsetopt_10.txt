@@ -1,1 +1,1 @@
-primary,curl/lib/setopt.c,417,data,curl/lib/setopt.c,267,1
+primary,curl/lib/setopt.c,258,data,curl/lib/setopt.c,1,1

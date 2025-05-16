@@ -1,5 +1,3 @@
-// Source: curl/lib/curl_addrinfo.c
-// Lines 383-385
 Curl_ip2addr(int af, const void *inaddr, const char *hostname, int port)
 {
   struct Curl_addrinfo *ai;
@@ -70,3 +68,7 @@ Curl_ip2addr(int af, const void *inaddr, const char *hostname, int port)
 
   return ai;
 }
+
+
+// Source: curl_addrinfo.c
+// Lines 372-441

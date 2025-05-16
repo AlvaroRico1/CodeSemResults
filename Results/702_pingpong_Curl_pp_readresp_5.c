@@ -1,5 +1,3 @@
-// Source: curl/lib/pingpong.c
-// Lines 276-278
 CURLcode Curl_pp_readresp(struct Curl_easy *data,
                           curl_socket_t sockfd,
                           struct pingpong *pp,
@@ -190,3 +188,7 @@ CURLcode Curl_pp_readresp(struct Curl_easy *data,
 
   return result;
 }
+
+
+// Source: pingpong.c
+// Lines 267-456

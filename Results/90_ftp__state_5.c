@@ -1,5 +1,3 @@
-// Source: curl/lib/ftp.c
-// Lines 755-762
 static void _state(struct Curl_easy *data,
                    ftpstate newstate
 #ifdef DEBUGBUILD
@@ -24,3 +22,7 @@ static void _state(struct Curl_easy *data,
 
   ftpc->state = newstate;
 }
+
+
+// Source: ftp.c
+// Lines 755-778

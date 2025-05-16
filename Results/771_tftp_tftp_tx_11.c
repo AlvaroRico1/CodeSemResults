@@ -1,5 +1,3 @@
-// Source: curl/lib/tftp.c
-// Lines 702-704
 static CURLcode tftp_tx(struct tftp_state_data *state, tftp_event_t event)
 {
   struct Curl_easy *data = state->data;
@@ -139,3 +137,7 @@ static CURLcode tftp_tx(struct tftp_state_data *state, tftp_event_t event)
 
   return result;
 }
+
+
+// Source: tftp.c
+// Lines 702-840

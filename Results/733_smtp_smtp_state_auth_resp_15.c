@@ -1,5 +1,3 @@
-// Source: curl/lib/smtp.c
-// Lines 977-982
 static CURLcode smtp_state_auth_resp(struct Curl_easy *data,
                                      int smtpcode,
                                      smtpstate instate)
@@ -27,3 +25,7 @@ static CURLcode smtp_state_auth_resp(struct Curl_easy *data,
 
   return result;
 }
+
+
+// Source: smtp.c
+// Lines 977-1003

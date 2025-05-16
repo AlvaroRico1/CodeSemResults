@@ -1,5 +1,3 @@
-// Source: curl/lib/conncache.c
-// Lines 487-487
 Curl_conncache_extract_oldest(struct Curl_easy *data)
 {
   struct conncache *connc = data->state.conn_cache;
@@ -55,3 +53,7 @@ Curl_conncache_extract_oldest(struct Curl_easy *data)
 
   return conn_candidate;
 }
+
+
+// Source: conncache.c
+// Lines 483-537

@@ -1,5 +1,3 @@
-// Source: curl/lib/url.c
-// Lines 2753-2757
 CURLcode Curl_parse_login_details(const char *login, const size_t len,
                                   char **userp, char **passwdp,
                                   char **optionsp)
@@ -103,3 +101,7 @@ CURLcode Curl_parse_login_details(const char *login, const size_t len,
 
   return result;
 }
+
+
+// Source: url.c
+// Lines 2752-2854

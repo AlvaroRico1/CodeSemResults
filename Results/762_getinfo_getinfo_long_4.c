@@ -1,5 +1,3 @@
-// Source: curl/lib/getinfo.c
-// Lines 176-183
 static CURLcode getinfo_long(struct Curl_easy *data, CURLINFO info,
                              long *param_longp)
 {
@@ -9,3 +7,7 @@ static CURLcode getinfo_long(struct Curl_easy *data, CURLINFO info,
     unsigned long *to_ulong;
     long          *to_long;
   } lptr;
+
+
+// Source: getinfo.c
+// Lines 175-183

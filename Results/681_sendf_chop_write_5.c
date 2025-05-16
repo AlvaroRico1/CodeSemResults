@@ -1,5 +1,3 @@
-// Source: curl/lib/sendf.c
-// Lines 522-527
 static CURLcode chop_write(struct Curl_easy *data,
                            int type,
                            char *optr,
@@ -84,3 +82,7 @@ static CURLcode chop_write(struct Curl_easy *data,
 
   return CURLE_OK;
 }
+
+
+// Source: sendf.c
+// Lines 522-605

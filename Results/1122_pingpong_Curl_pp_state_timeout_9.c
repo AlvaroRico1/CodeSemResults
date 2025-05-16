@@ -1,5 +1,3 @@
-// Source: curl/lib/pingpong.c
-// Lines 47-50
 timediff_t Curl_pp_state_timeout(struct Curl_easy *data,
                                  struct pingpong *pp, bool disconnecting)
 {
@@ -29,3 +27,7 @@ timediff_t Curl_pp_state_timeout(struct Curl_easy *data,
 
   return timeout_ms;
 }
+
+
+// Source: pingpong.c
+// Lines 47-75

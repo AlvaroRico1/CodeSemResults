@@ -1,1 +1,1 @@
-host_begin,curl/lib/hostip.c,1056,hostp,curl/lib/hostip.c,1010,1
+host_begin,curl/lib/hostip.c,49,hostp,curl/lib/hostip.c,3,1

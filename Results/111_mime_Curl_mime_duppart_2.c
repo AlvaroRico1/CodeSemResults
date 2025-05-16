@@ -1,5 +1,3 @@
-// Source: curl/lib/mime.c
-// Lines 1231-1231
 CURLcode Curl_mime_duppart(curl_mimepart *dst, const curl_mimepart *src)
 {
   curl_mime *mime;
@@ -74,3 +72,7 @@ CURLcode Curl_mime_duppart(curl_mimepart *dst, const curl_mimepart *src)
 
   return res;
 }
+
+
+// Source: mime.c
+// Lines 1227-1300

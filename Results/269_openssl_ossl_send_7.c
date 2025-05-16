@@ -1,5 +1,3 @@
-// Source: curl/lib/vtls/openssl.c
-// Lines 4193-4206
 static ssize_t ossl_send(struct Curl_easy *data,
                          int sockindex,
                          const void *mem,
@@ -81,3 +79,7 @@ static ssize_t ossl_send(struct Curl_easy *data,
   *curlcode = CURLE_OK;
   return (ssize_t)rc; /* number of bytes */
 }
+
+
+// Source: openssl.c
+// Lines 4193-4273

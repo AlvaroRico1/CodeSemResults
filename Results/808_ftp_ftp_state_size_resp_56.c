@@ -1,5 +1,3 @@
-// Source: curl/lib/ftp.c
-// Lines 2300-2301
 static CURLcode ftp_state_size_resp(struct Curl_easy *data,
                                     int ftpcode,
                                     ftpstate instate)
@@ -28,3 +26,7 @@ static CURLcode ftp_state_size_resp(struct Curl_easy *data,
     (void)curlx_strtoofft(fdigit, NULL, 0, &filesize);
 
   }
+
+
+// Source: ftp.c
+// Lines 2287-2314

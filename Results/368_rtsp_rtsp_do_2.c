@@ -1,5 +1,3 @@
-// Source: curl/lib/rtsp.c
-// Lines 241-243
 static CURLcode rtsp_do(struct Curl_easy *data, bool *done)
 {
   struct connectdata *conn = data->conn;
@@ -359,3 +357,7 @@ static CURLcode rtsp_do(struct Curl_easy *data, bool *done)
 
   return result;
 }
+
+
+// Source: rtsp.c
+// Lines 241-599

@@ -1,5 +1,3 @@
-// Source: curl/lib/pop3.c
-// Lines 1089-1092
 static CURLcode pop3_connect(struct Curl_easy *data, bool *done)
 {
   CURLcode result = CURLE_OK;
@@ -34,3 +32,7 @@ static CURLcode pop3_connect(struct Curl_easy *data, bool *done)
 
   return result;
 }
+
+
+// Source: pop3.c
+// Lines 1089-1122

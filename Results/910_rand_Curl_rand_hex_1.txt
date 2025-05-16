@@ -1,1 +1,1 @@
-bufp,curl/lib/rand.c,156,buffer,curl/lib/rand.c,155,1
+bufp,curl/lib/rand.c,7,buffer,curl/lib/rand.c,6,1

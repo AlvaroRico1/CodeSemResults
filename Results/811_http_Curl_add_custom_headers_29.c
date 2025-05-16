@@ -1,5 +1,3 @@
-// Source: curl/lib/http.c
-// Lines 1795-1841
 CURLcode Curl_add_custom_headers(struct Curl_easy *data,
                                  bool is_connect,
 #ifndef USE_HYPER
@@ -88,3 +86,7 @@ CURLcode Curl_add_custom_headers(struct Curl_easy *data,
           ptr = optr;
         }
       }
+
+
+// Source: http.c
+// Lines 1785-1872

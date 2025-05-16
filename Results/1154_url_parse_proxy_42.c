@@ -1,5 +1,3 @@
-// Source: curl/lib/url.c
-// Lines 2373-2378
 static CURLcode parse_proxy(struct Curl_easy *data,
                             struct connectdata *conn, char *proxy,
                             curl_proxytype proxytype)
@@ -152,3 +150,7 @@ static CURLcode parse_proxy(struct Curl_easy *data,
   curl_url_cleanup(uhp);
   return result;
 }
+
+
+// Source: url.c
+// Lines 2367-2518

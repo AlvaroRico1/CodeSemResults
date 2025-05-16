@@ -1,5 +1,3 @@
-// Source: curl/lib/http.c
-// Lines 909-915
 CURLcode Curl_http_input_auth(struct Curl_easy *data, bool proxy,
                               const char *auth) /* the first non-space */
 {
@@ -167,3 +165,7 @@ CURLcode Curl_http_input_auth(struct Curl_easy *data, bool proxy,
 
   return CURLE_OK;
 }
+
+
+// Source: http.c
+// Lines 909-1075

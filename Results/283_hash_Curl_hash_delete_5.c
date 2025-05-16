@@ -1,5 +1,3 @@
-// Source: curl/lib/hash.c
-// Lines 141-145
 int Curl_hash_delete(struct Curl_hash *h, void *key, size_t key_len)
 {
   struct Curl_llist_element *le;
@@ -13,3 +11,7 @@ int Curl_hash_delete(struct Curl_hash *h, void *key, size_t key_len)
       return 0;
     }
   }
+
+
+// Source: hash.c
+// Lines 139-151

@@ -1,5 +1,3 @@
-// Source: curl/lib/setopt.c
-// Lines 57-65
 CURLcode Curl_setstropt(char **charp, const char *s)
 {
   /* Release the previous storage at `charp' and replace by a dynamic storage
@@ -22,3 +20,7 @@ CURLcode Curl_setstropt(char **charp, const char *s)
 
     *charp = str;
   }
+
+
+// Source: setopt.c
+// Lines 57-78

@@ -1,1 +1,1 @@
-n,curl/lib/altsvc.c,308,e,curl/lib/altsvc.c,307,1
+n,curl/lib/altsvc.c,4,e,curl/lib/altsvc.c,3,1

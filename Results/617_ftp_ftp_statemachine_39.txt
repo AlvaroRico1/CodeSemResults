@@ -1,1 +1,1 @@
-ftpc,curl/lib/ftp.c,2668,os,curl/lib/ftp.c,2930,1
+ftpc,curl/lib/ftp.c,7,os,curl/lib/ftp.c,269,1

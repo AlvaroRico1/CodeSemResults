@@ -1,5 +1,3 @@
-// Source: curl/lib/http.c
-// Lines 3323-3323
 checkhttpprefix(struct Curl_easy *data,
                 const char *s, size_t len)
 {
@@ -37,3 +35,7 @@ checkhttpprefix(struct Curl_easy *data,
 #endif /* CURL_DOES_CONVERSIONS */
   return rc;
 }
+
+
+// Source: http.c
+// Lines 3320-3356

@@ -1,5 +1,3 @@
-// Source: curl/lib/content_encoding.c
-// Lines 300-302
 static void deflate_close_writer(struct Curl_easy *data,
                                  struct contenc_writer *writer)
 {
@@ -8,3 +6,7 @@ static void deflate_close_writer(struct Curl_easy *data,
 
   exit_zlib(data, z, &zp->zlib_init, CURLE_OK);
 }
+
+
+// Source: content_encoding.c
+// Lines 299-306

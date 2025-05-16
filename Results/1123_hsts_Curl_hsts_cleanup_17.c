@@ -1,5 +1,3 @@
-// Source: curl/lib/hsts.c
-// Lines 92-95
 void Curl_hsts_cleanup(struct hsts **hp)
 {
   struct hsts *h = *hp;
@@ -11,3 +9,7 @@ void Curl_hsts_cleanup(struct hsts **hp)
       n = e->next;
       hsts_free(sts);
     }
+
+
+// Source: hsts.c
+// Lines 88-98

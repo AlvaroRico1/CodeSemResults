@@ -1,5 +1,3 @@
-// Source: curl/lib/sendf.c
-// Lines 289-297
 CURLcode Curl_write(struct Curl_easy *data,
                     curl_socket_t sockfd,
                     const void *mem,
@@ -49,3 +47,7 @@ CURLcode Curl_write(struct Curl_easy *data,
     return result;
   }
 }
+
+
+// Source: sendf.c
+// Lines 289-337

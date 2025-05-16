@@ -1,5 +1,3 @@
-// Source: curl/lib/transfer.c
-// Lines 908-911
 CURLcode Curl_done_sending(struct Curl_easy *data,
                            struct SingleRequest *k)
 {
@@ -17,3 +15,7 @@ CURLcode Curl_done_sending(struct Curl_easy *data,
   }
   return CURLE_OK;
 }
+
+
+// Source: transfer.c
+// Lines 908-924

@@ -1,5 +1,3 @@
-// Source: curl/lib/transfer.c
-// Lines 159-166
 CURLcode Curl_fillreadbuffer(struct Curl_easy *data, size_t bytes,
                              size_t *nreadp)
 {
@@ -249,3 +247,7 @@ CURLcode Curl_fillreadbuffer(struct Curl_easy *data, size_t bytes,
 
   return CURLE_OK;
 }
+
+
+// Source: transfer.c
+// Lines 159-407

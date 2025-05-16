@@ -1,5 +1,3 @@
-// Source: curl/lib/hmac.c
-// Lines 52-57
 Curl_HMAC_init(const struct HMAC_params *hashparams,
                const unsigned char *key,
                unsigned int keylen)
@@ -51,3 +49,7 @@ Curl_HMAC_init(const struct HMAC_params *hashparams,
   /* Done, return pointer to HMAC context. */
   return ctxt;
 }
+
+
+// Source: hmac.c
+// Lines 52-102

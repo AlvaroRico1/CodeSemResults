@@ -1,5 +1,3 @@
-// Source: curl/lib/ftp.c
-// Lines 2668-2838
 static CURLcode ftp_statemachine(struct Curl_easy *data,
                                  struct connectdata *conn)
 {
@@ -261,3 +259,7 @@ static CURLcode ftp_statemachine(struct Curl_easy *data,
           infof(data, "Failed to figure out path");
         }
       }
+
+
+// Source: ftp.c
+// Lines 2662-2922

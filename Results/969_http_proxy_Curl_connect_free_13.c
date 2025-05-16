@@ -1,5 +1,3 @@
-// Source: curl/lib/http_proxy.c
-// Lines 965-966
 void Curl_connect_free(struct Curl_easy *data)
 {
   struct connectdata *conn = data->conn;
@@ -9,3 +7,7 @@ void Curl_connect_free(struct Curl_easy *data)
     conn->connect_state = NULL;
   }
 }
+
+
+// Source: http_proxy.c
+// Lines 963-971

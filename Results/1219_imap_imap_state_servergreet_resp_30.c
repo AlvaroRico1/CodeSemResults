@@ -1,5 +1,3 @@
-// Source: curl/lib/imap.c
-// Lines 852-856
 static CURLcode imap_state_servergreet_resp(struct Curl_easy *data,
                                             int imapcode,
                                             imapstate instate)
@@ -20,3 +18,7 @@ static CURLcode imap_state_servergreet_resp(struct Curl_easy *data,
 
   return imap_perform_capability(data, conn);
 }
+
+
+// Source: imap.c
+// Lines 852-871

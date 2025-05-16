@@ -1,5 +1,3 @@
-// Source: curl/lib/ftplistparser.c
-// Lines 331-332
 size_t Curl_ftp_parselist(char *buffer, size_t size, size_t nmemb,
                           void *connptr)
 {
@@ -691,3 +689,7 @@ fail:
 
   return retsize;
 }
+
+
+// Source: ftplistparser.c
+// Lines 326-1016

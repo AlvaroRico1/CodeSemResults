@@ -1,1 +1,1 @@
-conn,curl/lib/pop3.c,685,data,curl/lib/pop3.c,681,1
+conn,curl/lib/pop3.c,5,data,curl/lib/pop3.c,1,1

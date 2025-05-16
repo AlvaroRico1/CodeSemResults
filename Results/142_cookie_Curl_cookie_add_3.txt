@@ -1,1 +1,1 @@
-endslash,curl/lib/cookie.c,783,path,curl/lib/cookie.c,455,1
+endslash,curl/lib/cookie.c,340,path,curl/lib/cookie.c,12,1

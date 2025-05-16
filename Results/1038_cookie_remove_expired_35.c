@@ -1,5 +1,3 @@
-// Source: curl/lib/cookie.c
-// Lines 380-399
 static void remove_expired(struct CookieInfo *cookies)
 {
   struct Cookie *co, *nx;
@@ -47,3 +45,7 @@ static void remove_expired(struct CookieInfo *cookies)
       co = nx;
     }
   }
+
+
+// Source: cookie.c
+// Lines 378-424

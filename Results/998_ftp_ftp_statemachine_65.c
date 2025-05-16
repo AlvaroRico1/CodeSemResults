@@ -1,5 +1,3 @@
-// Source: curl/lib/ftp.c
-// Lines 2838-2861
 static CURLcode ftp_statemachine(struct Curl_easy *data,
                                  struct connectdata *conn)
 {
@@ -221,3 +219,7 @@ static CURLcode ftp_statemachine(struct Curl_easy *data,
           }
           *store = '\0'; /* null-terminate */
         }
+
+
+// Source: ftp.c
+// Lines 2662-2882

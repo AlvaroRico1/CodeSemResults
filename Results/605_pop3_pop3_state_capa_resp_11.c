@@ -1,5 +1,3 @@
-// Source: curl/lib/pop3.c
-// Lines 681-685
 static CURLcode pop3_state_capa_resp(struct Curl_easy *data, int pop3code,
                                      pop3state instate)
 {
@@ -83,3 +81,7 @@ static CURLcode pop3_state_capa_resp(struct Curl_easy *data, int pop3code,
 
   return result;
 }
+
+
+// Source: pop3.c
+// Lines 681-763

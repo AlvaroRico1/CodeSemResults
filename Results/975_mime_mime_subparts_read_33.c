@@ -1,5 +1,3 @@
-// Source: curl/lib/mime.c
-// Lines 1005-1007
 static size_t mime_subparts_read(char *buffer, size_t size, size_t nitems,
                                  void *instream, bool *hasread)
 {
@@ -91,3 +89,7 @@ static size_t mime_subparts_read(char *buffer, size_t size, size_t nitems,
 
   return cursize;
 }
+
+
+// Source: mime.c
+// Lines 1004-1094

@@ -1,5 +1,3 @@
-// Source: curl/lib/mime.c
-// Lines 1211-1213
 void curl_mime_free(curl_mime *mime)
 {
   curl_mimepart *part;
@@ -15,3 +13,7 @@ void curl_mime_free(curl_mime *mime)
     free(mime);
   }
 }
+
+
+// Source: mime.c
+// Lines 1211-1225

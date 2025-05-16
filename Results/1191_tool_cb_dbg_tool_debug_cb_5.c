@@ -1,5 +1,3 @@
-// Source: curl/src/tool_cb_dbg.c
-// Lines 49-50
 int tool_debug_cb(CURL *handle, curl_infotype type,
                   char *data, size_t size,
                   void *userdata)
@@ -175,3 +173,7 @@ int tool_debug_cb(CURL *handle, curl_infotype type,
        type);
   return 0;
 }
+
+
+// Source: tool_cb_dbg.c
+// Lines 44-218

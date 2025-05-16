@@ -1,5 +1,3 @@
-// Source: curl/lib/imap.c
-// Lines 1908-1912
 static CURLcode imap_parse_url_options(struct connectdata *conn)
 {
   CURLcode result = CURLE_OK;
@@ -44,3 +42,7 @@ static CURLcode imap_parse_url_options(struct connectdata *conn)
 
   return result;
 }
+
+
+// Source: imap.c
+// Lines 1908-1951

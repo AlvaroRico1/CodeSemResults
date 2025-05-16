@@ -1,5 +1,3 @@
-// Source: curl/lib/multi.c
-// Lines 2672-2680
 CURLMsg *curl_multi_info_read(struct Curl_multi *multi, int *msgs_in_queue)
 {
   struct Curl_message *msg;
@@ -24,3 +22,7 @@ CURLMsg *curl_multi_info_read(struct Curl_multi *multi, int *msgs_in_queue)
 
     return &msg->extmsg;
   }
+
+
+// Source: multi.c
+// Lines 2670-2693

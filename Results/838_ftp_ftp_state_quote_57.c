@@ -1,5 +1,3 @@
-// Source: curl/lib/ftp.c
-// Lines 1684-1720
 static CURLcode ftp_state_quote(struct Curl_easy *data,
                                 bool init,
                                 ftpstate instate)
@@ -59,3 +57,7 @@ static CURLcode ftp_state_quote(struct Curl_easy *data,
       state(data, instate);
       quote = TRUE;
     }
+
+
+// Source: ftp.c
+// Lines 1675-1733

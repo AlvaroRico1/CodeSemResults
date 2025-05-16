@@ -1,5 +1,3 @@
-// Source: curl/lib/file.c
-// Lines 411-412
 static CURLcode file_do(struct Curl_easy *data, bool *done)
 {
   /* This implementation ignores the host name in conformance with
@@ -92,3 +90,7 @@ static CURLcode file_do(struct Curl_easy *data, bool *done)
     if(data->set.opt_no_body)
       return result;
   }
+
+
+// Source: file.c
+// Lines 362-453

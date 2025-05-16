@@ -1,1 +1,1 @@
-conn,curl/lib/gopher.c,129,data,curl/lib/gopher.c,126,1
+conn,curl/lib/gopher.c,4,data,curl/lib/gopher.c,1,1

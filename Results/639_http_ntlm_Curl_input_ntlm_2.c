@@ -1,5 +1,3 @@
-// Source: curl/lib/http_ntlm.c
-// Lines 63-72
 CURLcode Curl_input_ntlm(struct Curl_easy *data,
                          bool proxy,         /* if proxy or not */
                          const char *header) /* rest of the www-authenticate:
@@ -60,3 +58,7 @@ CURLcode Curl_input_ntlm(struct Curl_easy *data,
 
   return result;
 }
+
+
+// Source: http_ntlm.c
+// Lines 63-122

@@ -1,5 +1,3 @@
-// Source: curl/lib/urlapi.c
-// Lines 143-148
 static size_t strlen_url(const char *url, bool relative)
 {
   const unsigned char *ptr;
@@ -36,3 +34,7 @@ static size_t strlen_url(const char *url, bool relative)
   }
   return newlen;
 }
+
+
+// Source: urlapi.c
+// Lines 143-178

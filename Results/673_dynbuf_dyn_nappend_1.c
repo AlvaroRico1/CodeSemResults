@@ -1,5 +1,3 @@
-// Source: curl/lib/dynbuf.c
-// Lines 65-98
 static CURLcode dyn_nappend(struct dynbuf *s,
                             const unsigned char *mem, size_t len)
 {
@@ -42,3 +40,7 @@ static CURLcode dyn_nappend(struct dynbuf *s,
     s->bufr = p;
     s->allc = a;
   }
+
+
+// Source: dynbuf.c
+// Lines 65-106

@@ -1,5 +1,3 @@
-// Source: curl/lib/pop3.c
-// Lines 568-571
 static CURLcode pop3_perform_command(struct Curl_easy *data)
 {
   CURLcode result = CURLE_OK;
@@ -33,3 +31,7 @@ static CURLcode pop3_perform_command(struct Curl_easy *data)
 
   return result;
 }
+
+
+// Source: pop3.c
+// Lines 568-600

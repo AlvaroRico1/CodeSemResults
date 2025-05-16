@@ -1,1 +1,1 @@
-scratch,curl/lib/smtp.c,1814,newscratch,curl/lib/smtp.c,1815,1
+scratch,curl/lib/smtp.c,12,newscratch,curl/lib/smtp.c,13,1

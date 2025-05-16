@@ -1,5 +1,3 @@
-// Source: curl/lib/url.c
-// Lines 1139-1139
 ConnectionExists(struct Curl_easy *data,
                  struct connectdata *needle,
                  struct connectdata **usethis,
@@ -394,3 +392,7 @@ ConnectionExists(struct Curl_easy *data,
       }
     }
   }
+
+
+// Source: url.c
+// Lines 1103-1496

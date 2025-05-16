@@ -1,5 +1,3 @@
-// Source: curl/lib/connect.c
-// Lines 1555-1559
 CURLcode Curl_socket(struct Curl_easy *data,
                      const struct Curl_addrinfo *ai,
                      struct Curl_sockaddr_ex *addr,
@@ -82,3 +80,7 @@ CURLcode Curl_socket(struct Curl_easy *data,
 
   return CURLE_OK;
 }
+
+
+// Source: connect.c
+// Lines 1553-1634

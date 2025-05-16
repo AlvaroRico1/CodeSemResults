@@ -1,5 +1,3 @@
-// Source: curl/lib/ftp.c
-// Lines 2426-2432
 static CURLcode ftp_state_get_resp(struct Curl_easy *data,
                                    int ftpcode,
                                    ftpstate instate)
@@ -127,3 +125,7 @@ static CURLcode ftp_state_get_resp(struct Curl_easy *data,
 
   return result;
 }
+
+
+// Source: ftp.c
+// Lines 2426-2552

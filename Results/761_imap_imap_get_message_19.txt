@@ -1,1 +1,1 @@
-outptr,curl/lib/imap.c,355,message,curl/lib/imap.c,358,1
+outptr,curl/lib/imap.c,1,message,curl/lib/imap.c,4,1

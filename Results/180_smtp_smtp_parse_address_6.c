@@ -1,5 +1,3 @@
-// Source: curl/lib/smtp.c
-// Lines 1766-1773
 static CURLcode smtp_parse_address(struct Curl_easy *data, const char *fqma,
                                    char **address, struct hostname *host)
 {
@@ -37,3 +35,7 @@ static CURLcode smtp_parse_address(struct Curl_easy *data, const char *fqma,
 
   return result;
 }
+
+
+// Source: smtp.c
+// Lines 1765-1801

@@ -1,5 +1,3 @@
-// Source: curl/lib/smb.c
-// Lines 299-301
 static CURLcode smb_recv_message(struct Curl_easy *data, void **msg)
 {
   struct connectdata *conn = data->conn;
@@ -47,3 +45,7 @@ static CURLcode smb_recv_message(struct Curl_easy *data, void **msg)
 
   return CURLE_OK;
 }
+
+
+// Source: smb.c
+// Lines 299-345

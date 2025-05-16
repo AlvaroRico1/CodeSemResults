@@ -1,5 +1,3 @@
-// Source: curl/lib/http.c
-// Lines 573-575
 CURLcode Curl_http_auth_act(struct Curl_easy *data)
 {
   struct connectdata *conn = data->conn;
@@ -81,3 +79,7 @@ CURLcode Curl_http_auth_act(struct Curl_easy *data)
 
   return result;
 }
+
+
+// Source: http.c
+// Lines 573-653

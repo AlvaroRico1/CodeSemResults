@@ -1,5 +1,3 @@
-// Source: curl/lib/urlapi.c
-// Lines 1108-1284
 CURLUcode curl_url_get(CURLU *u, CURLUPart what,
                        char **part, unsigned int flags)
 {
@@ -190,3 +188,7 @@ CURLUcode curl_url_get(CURLU *u, CURLUPart what,
       }
       *part = decoded;
     }
+
+
+// Source: urlapi.c
+// Lines 1107-1296

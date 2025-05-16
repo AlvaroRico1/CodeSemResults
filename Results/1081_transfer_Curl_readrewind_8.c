@@ -1,5 +1,3 @@
-// Source: curl/lib/transfer.c
-// Lines 415-417
 CURLcode Curl_readrewind(struct Curl_easy *data)
 {
   struct connectdata *conn = data->conn;
@@ -75,3 +73,7 @@ CURLcode Curl_readrewind(struct Curl_easy *data)
   }
   return CURLE_OK;
 }
+
+
+// Source: transfer.c
+// Lines 415-489

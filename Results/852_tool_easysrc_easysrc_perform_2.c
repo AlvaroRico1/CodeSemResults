@@ -1,5 +1,3 @@
-// Source: curl/src/tool_easysrc.c
-// Lines 140-140
 CURLcode easysrc_perform(void)
 {
   /* Note any setopt calls which we could not convert */
@@ -22,3 +20,7 @@ CURLcode easysrc_perform(void)
     slist_wc_free_all(easysrc_toohard);
     easysrc_toohard = NULL;
   }
+
+
+// Source: tool_easysrc.c
+// Lines 135-156

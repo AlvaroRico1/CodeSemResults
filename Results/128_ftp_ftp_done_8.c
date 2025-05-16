@@ -1,5 +1,3 @@
-// Source: curl/lib/ftp.c
-// Lines 3189-3192
 static CURLcode ftp_done(struct Curl_easy *data, CURLcode status,
                          bool premature)
 {
@@ -230,3 +228,7 @@ static CURLcode ftp_done(struct Curl_easy *data, CURLcode status,
   Curl_safefree(ftp->pathalloc);
   return result;
 }
+
+
+// Source: ftp.c
+// Lines 3189-3418

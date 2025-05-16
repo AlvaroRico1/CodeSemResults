@@ -1,5 +1,3 @@
-// Source: curl/lib/multi.c
-// Lines 3337-3339
 void Curl_expire(struct Curl_easy *data, timediff_t milli, expire_id id)
 {
   struct Curl_multi *multi = data->multi;
@@ -57,3 +55,7 @@ void Curl_expire(struct Curl_easy *data, timediff_t milli, expire_id id)
   multi->timetree = Curl_splayinsert(*nowp, multi->timetree,
                                      &data->state.timenode);
 }
+
+
+// Source: multi.c
+// Lines 3337-3393

@@ -1,1 +1,1 @@
-find_pos,curl/lib/vauth/digest.c,201,chlg,curl/lib/vauth/digest.c,195,1
+find_pos,curl/lib/vauth/digest.c,7,chlg,curl/lib/vauth/digest.c,1,1

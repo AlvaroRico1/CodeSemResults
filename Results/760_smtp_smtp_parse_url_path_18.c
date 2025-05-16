@@ -1,5 +1,3 @@
-// Source: curl/lib/smtp.c
-// Lines 1691-1694
 static CURLcode smtp_parse_url_path(struct Curl_easy *data)
 {
   /* The SMTP struct is already initialised in smtp_connect() */
@@ -20,3 +18,7 @@ static CURLcode smtp_parse_url_path(struct Curl_easy *data)
   return Curl_urldecode(data, path, 0, &smtpc->domain, NULL,
                         REJECT_CTRL);
 }
+
+
+// Source: smtp.c
+// Lines 1691-1710

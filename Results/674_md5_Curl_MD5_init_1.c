@@ -1,5 +1,3 @@
-// Source: curl/lib/md5.c
-// Lines 554-556
 struct MD5_context *Curl_MD5_init(const struct MD5_params *md5params)
 {
   struct MD5_context *ctxt;
@@ -23,3 +21,7 @@ struct MD5_context *Curl_MD5_init(const struct MD5_params *md5params)
 
   return ctxt;
 }
+
+
+// Source: md5.c
+// Lines 554-576

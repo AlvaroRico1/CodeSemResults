@@ -1,5 +1,3 @@
-// Source: curl/lib/hostip.c
-// Lines 422-423
 Curl_cache_addr(struct Curl_easy *data,
                 struct Curl_addrinfo *addr,
                 const char *hostname,
@@ -47,3 +45,7 @@ Curl_cache_addr(struct Curl_easy *data,
   dns->inuse++;         /* mark entry as in-use */
   return dns;
 }
+
+
+// Source: hostip.c
+// Lines 415-461

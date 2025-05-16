@@ -1,1 +1,1 @@
-data,curl/lib/ftplistparser.c,330,connptr,curl/lib/ftplistparser.c,327,1
+data,curl/lib/ftplistparser.c,5,connptr,curl/lib/ftplistparser.c,2,1

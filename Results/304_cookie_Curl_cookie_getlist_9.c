@@ -1,5 +1,3 @@
-// Source: curl/lib/cookie.c
-// Lines 1353-1355
 struct Cookie *Curl_cookie_getlist(struct CookieInfo *c,
                                    const char *host, const char *path,
                                    bool secure)
@@ -103,3 +101,7 @@ fail:
   Curl_cookie_freelist(mainco);
   return NULL;
 }
+
+
+// Source: cookie.c
+// Lines 1349-1451

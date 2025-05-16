@@ -1,5 +1,3 @@
-// Source: curl/lib/vtls/vtls.c
-// Lines 788-789
 CURLcode Curl_ssl_init_certinfo(struct Curl_easy *data, int num)
 {
   struct curl_certinfo *ci = &data->info.certs;
@@ -18,3 +16,7 @@ CURLcode Curl_ssl_init_certinfo(struct Curl_easy *data, int num)
 
   return CURLE_OK;
 }
+
+
+// Source: vtls.c
+// Lines 786-803

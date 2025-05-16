@@ -1,5 +1,3 @@
-// Source: curl/src/slist_wc.c
-// Lines 36-39
 struct slist_wc *slist_wc_append(struct slist_wc *list,
                                  const char *data)
 {
@@ -25,3 +23,7 @@ struct slist_wc *slist_wc_append(struct slist_wc *list,
   list->last = list->last->next;
   return list;
 }
+
+
+// Source: slist_wc.c
+// Lines 36-60

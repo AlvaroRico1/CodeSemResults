@@ -1,5 +1,3 @@
-// Source: curl/lib/tftp.c
-// Lines 1226-1230
 static CURLcode tftp_multi_statemach(struct Curl_easy *data, bool *done)
 {
   tftp_event_t event;
@@ -51,3 +49,7 @@ static CURLcode tftp_multi_statemach(struct Curl_easy *data, bool *done)
 
   return result;
 }
+
+
+// Source: tftp.c
+// Lines 1226-1276

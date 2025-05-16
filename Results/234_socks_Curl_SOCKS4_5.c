@@ -1,5 +1,3 @@
-// Source: curl/lib/socks.c
-// Lines 281-281
 CURLproxycode Curl_SOCKS4(const char *proxy_user,
                           const char *hostname,
                           int remote_port,
@@ -130,3 +128,7 @@ CURLproxycode Curl_SOCKS4(const char *proxy_user,
     if(!hp)
       return CURLPX_RESOLVE_HOST;
   }
+
+
+// Source: socks.c
+// Lines 188-317

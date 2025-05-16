@@ -1,5 +1,3 @@
-// Source: curl/lib/cookie.c
-// Lines 1586-1629
 static CURLcode cookie_output(struct Curl_easy *data,
                               struct CookieInfo *c, const char *filename)
 {
@@ -78,3 +76,7 @@ static CURLcode cookie_output(struct Curl_easy *data,
 
     free(array);
   }
+
+
+// Source: cookie.c
+// Lines 1583-1660

@@ -1,5 +1,3 @@
-// Source: curl/lib/if2ip.c
-// Lines 64-70
 unsigned int Curl_ipv6_scope(const struct sockaddr *sa)
 {
 #ifndef ENABLE_IPV6
@@ -27,3 +25,7 @@ unsigned int Curl_ipv6_scope(const struct sockaddr *sa)
       break;
     }
   }
+
+
+// Source: if2ip.c
+// Lines 64-90

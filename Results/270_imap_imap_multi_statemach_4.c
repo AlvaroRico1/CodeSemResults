@@ -1,5 +1,3 @@
-// Source: curl/lib/imap.c
-// Lines 1364-1367
 static CURLcode imap_multi_statemach(struct Curl_easy *data, bool *done)
 {
   CURLcode result = CURLE_OK;
@@ -18,3 +16,7 @@ static CURLcode imap_multi_statemach(struct Curl_easy *data, bool *done)
 
   return result;
 }
+
+
+// Source: imap.c
+// Lines 1364-1381

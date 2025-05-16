@@ -1,5 +1,3 @@
-// Source: curl/lib/ftp.c
-// Lines 3106-3109
 static CURLcode ftp_multi_statemach(struct Curl_easy *data,
                                     bool *done)
 {
@@ -14,3 +12,7 @@ static CURLcode ftp_multi_statemach(struct Curl_easy *data,
 
   return result;
 }
+
+
+// Source: ftp.c
+// Lines 3106-3119

@@ -1,5 +1,3 @@
-// Source: curl/lib/gopher.c
-// Lines 131-161
 static CURLcode gopher_do(struct Curl_easy *data, bool *done)
 {
   CURLcode result = CURLE_OK;
@@ -48,3 +46,7 @@ static CURLcode gopher_do(struct Curl_easy *data, bool *done)
       return result;
     sel_org = sel;
   }
+
+
+// Source: gopher.c
+// Lines 126-173

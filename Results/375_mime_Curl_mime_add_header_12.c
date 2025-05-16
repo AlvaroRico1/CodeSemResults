@@ -1,5 +1,3 @@
-// Source: curl/lib/mime.c
-// Lines 1714-1716
 CURLcode Curl_mime_add_header(struct curl_slist **slp, const char *fmt, ...)
 {
   struct curl_slist *hdr = NULL;
@@ -20,3 +18,7 @@ CURLcode Curl_mime_add_header(struct curl_slist **slp, const char *fmt, ...)
 
   return hdr? CURLE_OK: CURLE_OUT_OF_MEMORY;
 }
+
+
+// Source: mime.c
+// Lines 1714-1733

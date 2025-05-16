@@ -1,5 +1,3 @@
-// Source: curl/lib/content_encoding.c
-// Lines 1002-1003
 void Curl_unencode_cleanup(struct Curl_easy *data)
 {
   struct SingleRequest *k = &data->req;
@@ -12,3 +10,7 @@ void Curl_unencode_cleanup(struct Curl_easy *data)
     writer = k->writer_stack;
   }
 }
+
+
+// Source: content_encoding.c
+// Lines 1000-1011

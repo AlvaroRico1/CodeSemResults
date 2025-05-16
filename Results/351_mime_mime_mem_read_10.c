@@ -1,5 +1,3 @@
-// Source: curl/lib/mime.c
-// Lines 642-644
 static size_t mime_mem_read(char *buffer, size_t size, size_t nitems,
                             void *instream)
 {
@@ -18,3 +16,7 @@ static size_t mime_mem_read(char *buffer, size_t size, size_t nitems,
 
   return sz;
 }
+
+
+// Source: mime.c
+// Lines 641-658

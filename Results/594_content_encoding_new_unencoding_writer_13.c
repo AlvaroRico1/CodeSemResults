@@ -1,5 +1,3 @@
-// Source: curl/lib/content_encoding.c
-// Lines 970-974
 new_unencoding_writer(struct Curl_easy *data,
                       const struct content_encoding *handler,
                       struct contenc_writer *downstream)
@@ -18,3 +16,7 @@ new_unencoding_writer(struct Curl_easy *data,
 
   return writer;
 }
+
+
+// Source: content_encoding.c
+// Lines 969-986

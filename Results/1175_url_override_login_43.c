@@ -1,5 +1,3 @@
-// Source: curl/lib/url.c
-// Lines 2887-2890
 static CURLcode override_login(struct Curl_easy *data,
                                struct connectdata *conn)
 {
@@ -88,3 +86,7 @@ static CURLcode override_login(struct Curl_easy *data,
 
   return CURLE_OK;
 }
+
+
+// Source: url.c
+// Lines 2886-2973

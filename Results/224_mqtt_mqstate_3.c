@@ -1,5 +1,3 @@
-// Source: curl/lib/mqtt.c
-// Lines 560-564
 static void mqstate(struct Curl_easy *data,
                     enum mqttstate state,
                     enum mqttstate nextstate) /* used if state == FIRST */
@@ -16,3 +14,7 @@ static void mqstate(struct Curl_easy *data,
   if(state == MQTT_FIRST)
     mqtt->nextstate = nextstate;
 }
+
+
+// Source: mqtt.c
+// Lines 560-575

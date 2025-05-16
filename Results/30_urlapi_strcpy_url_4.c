@@ -1,5 +1,3 @@
-// Source: curl/lib/urlapi.c
-// Lines 185-189
 static void strcpy_url(char *output, const char *url, bool relative)
 {
   /* we must add this with whitespace-replacing */
@@ -46,3 +44,7 @@ static void strcpy_url(char *output, const char *url, bool relative)
   *optr = 0; /* null-terminate output buffer */
 
 }
+
+
+// Source: urlapi.c
+// Lines 185-230

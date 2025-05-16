@@ -1,1 +1,1 @@
-imap,curl/lib/imap.c,1964,value,curl/lib/imap.c,1989,1
+imap,curl/lib/imap.c,3,value,curl/lib/imap.c,30,1

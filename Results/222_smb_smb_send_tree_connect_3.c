@@ -1,5 +1,3 @@
-// Source: curl/lib/smb.c
-// Lines 501-503
 static CURLcode smb_send_tree_connect(struct Curl_easy *data)
 {
   struct smb_tree_connect msg;
@@ -27,3 +25,7 @@ static CURLcode smb_send_tree_connect(struct Curl_easy *data)
   return smb_send_message(data, SMB_COM_TREE_CONNECT_ANDX, &msg,
                           sizeof(msg) - sizeof(msg.bytes) + byte_count);
 }
+
+
+// Source: smb.c
+// Lines 496-522

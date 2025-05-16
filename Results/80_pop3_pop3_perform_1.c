@@ -1,5 +1,3 @@
-// Source: curl/lib/pop3.c
-// Lines 1166-1171
 static CURLcode pop3_perform(struct Curl_easy *data, bool *connected,
                              bool *dophase_done)
 {
@@ -31,3 +29,7 @@ static CURLcode pop3_perform(struct Curl_easy *data, bool *connected,
 
   return result;
 }
+
+
+// Source: pop3.c
+// Lines 1166-1196

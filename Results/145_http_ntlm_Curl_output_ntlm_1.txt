@@ -1,1 +1,1 @@
-conn,curl/lib/http_ntlm.c,148,data,curl/lib/http_ntlm.c,127,1
+conn,curl/lib/http_ntlm.c,22,data,curl/lib/http_ntlm.c,1,1

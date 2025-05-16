@@ -1,5 +1,3 @@
-// Source: curl/lib/content_encoding.c
-// Lines 856-869
 char *Curl_all_content_encodings(void)
 {
   size_t len = 0;
@@ -30,3 +28,7 @@ char *Curl_all_content_encodings(void)
     }
     p[-2] = '\0';
   }
+
+
+// Source: content_encoding.c
+// Lines 851-880

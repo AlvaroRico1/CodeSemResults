@@ -1,1 +1,1 @@
-peer_CN,curl/lib/vtls/openssl.c,1763,nulstr,curl/lib/vtls/openssl.c,1762,1
+peer_CN,curl/lib/vtls/openssl.c,121,nulstr,curl/lib/vtls/openssl.c,120,1

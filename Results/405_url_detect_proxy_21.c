@@ -1,5 +1,3 @@
-// Source: curl/lib/url.c
-// Lines 2288-2310
 static char *detect_proxy(struct Curl_easy *data,
                           struct connectdata *conn)
 {
@@ -75,3 +73,7 @@ static char *detect_proxy(struct Curl_easy *data,
 
   return proxy;
 }
+
+
+// Source: url.c
+// Lines 2285-2359

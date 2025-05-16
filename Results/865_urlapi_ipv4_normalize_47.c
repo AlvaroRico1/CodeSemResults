@@ -1,5 +1,3 @@
-// Source: curl/lib/urlapi.c
-// Lines 681-685
 static bool ipv4_normalize(const char *hostname, char *outp, size_t olen)
 {
   bool done = FALSE;
@@ -77,3 +75,7 @@ static bool ipv4_normalize(const char *hostname, char *outp, size_t olen)
   }
   return TRUE;
 }
+
+
+// Source: urlapi.c
+// Lines 681-757

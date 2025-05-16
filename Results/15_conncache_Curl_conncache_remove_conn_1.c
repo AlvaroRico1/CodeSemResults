@@ -1,5 +1,3 @@
-// Source: curl/lib/conncache.c
-// Lines 286-288
 void Curl_conncache_remove_conn(struct Curl_easy *data,
                                 struct connectdata *conn, bool lock)
 {
@@ -26,3 +24,7 @@ void Curl_conncache_remove_conn(struct Curl_easy *data,
     }
   }
 }
+
+
+// Source: conncache.c
+// Lines 285-310

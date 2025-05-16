@@ -1,1 +1,1 @@
-p,curl/lib/vtls/openssl.c,1848,status,curl/lib/vtls/openssl.c,1847,1
+p,curl/lib/vtls/openssl.c,6,status,curl/lib/vtls/openssl.c,5,1

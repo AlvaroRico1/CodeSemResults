@@ -1,5 +1,3 @@
-// Source: curl/lib/ftp.c
-// Lines 611-622
 CURLcode Curl_GetFTPResponse(struct Curl_easy *data,
                              ssize_t *nreadp, /* return number of bytes read */
                              int *ftpcode) /* return the ftp-code */
@@ -101,3 +99,7 @@ CURLcode Curl_GetFTPResponse(struct Curl_easy *data,
 
   return result;
 }
+
+
+// Source: ftp.c
+// Lines 611-711

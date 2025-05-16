@@ -1,5 +1,3 @@
-// Source: curl/lib/llist.c
-// Lines 93-96
 Curl_llist_remove(struct Curl_llist *list, struct Curl_llist_element *e,
                   void *user)
 {
@@ -39,3 +37,7 @@ Curl_llist_remove(struct Curl_llist *list, struct Curl_llist_element *e,
   if(list->dtor)
     list->dtor(user, ptr);
 }
+
+
+// Source: llist.c
+// Lines 93-131

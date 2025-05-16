@@ -1,5 +1,3 @@
-// Source: curl/lib/mprintf.c
-// Lines 1007-1011
 int curl_mvsnprintf(char *buffer, size_t maxlength, const char *format,
                     va_list ap_save)
 {
@@ -23,3 +21,7 @@ int curl_mvsnprintf(char *buffer, size_t maxlength, const char *format,
   }
   return retcode;
 }
+
+
+// Source: mprintf.c
+// Lines 1007-1029

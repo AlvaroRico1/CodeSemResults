@@ -1,5 +1,3 @@
-// Source: curl/lib/smb.c
-// Lines 399-401
 static CURLcode smb_flush(struct Curl_easy *data)
 {
   struct connectdata *conn = data->conn;
@@ -24,3 +22,7 @@ static CURLcode smb_flush(struct Curl_easy *data)
 
   return CURLE_OK;
 }
+
+
+// Source: smb.c
+// Lines 399-422

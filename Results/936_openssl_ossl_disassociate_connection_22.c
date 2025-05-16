@@ -1,5 +1,3 @@
-// Source: curl/lib/vtls/openssl.c
-// Lines 4538-4539
 static void ossl_disassociate_connection(struct Curl_easy *data,
                                          int sockindex)
 {
@@ -28,3 +26,7 @@ static void ossl_disassociate_connection(struct Curl_easy *data,
     }
   }
 }
+
+
+// Source: openssl.c
+// Lines 4534-4561

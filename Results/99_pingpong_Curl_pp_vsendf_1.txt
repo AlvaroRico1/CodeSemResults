@@ -1,1 +1,1 @@
-pp,curl/lib/pingpong.c,166,s,curl/lib/pingpong.c,172,1
+pp,curl/lib/pingpong.c,2,s,curl/lib/pingpong.c,8,1

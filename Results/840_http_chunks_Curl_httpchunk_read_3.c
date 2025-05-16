@@ -1,5 +1,3 @@
-// Source: curl/lib/http_chunks.c
-// Lines 113-122
 CHUNKcode Curl_httpchunk_read(struct Curl_easy *data,
                               char *datap,
                               ssize_t datalen,
@@ -211,3 +209,7 @@ CHUNKcode Curl_httpchunk_read(struct Curl_easy *data,
   }
   return CHUNKE_OK;
 }
+
+
+// Source: http_chunks.c
+// Lines 110-320

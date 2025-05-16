@@ -1,5 +1,3 @@
-// Source: curl/lib/ftp.c
-// Lines 3864-3881
 static CURLcode wc_statemach(struct Curl_easy *data)
 {
   struct WildcardData * const wildcard = &(data->wildcard);
@@ -38,3 +36,7 @@ static CURLcode wc_statemach(struct Curl_easy *data)
       }
       continue;
     }
+
+
+// Source: ftp.c
+// Lines 3862-3899

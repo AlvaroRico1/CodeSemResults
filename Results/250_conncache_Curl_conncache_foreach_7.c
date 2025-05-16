@@ -1,5 +1,3 @@
-// Source: curl/lib/conncache.c
-// Lines 332-342
 bool Curl_conncache_foreach(struct Curl_easy *data,
                             struct conncache *connc,
                             void *param,
@@ -36,3 +34,7 @@ bool Curl_conncache_foreach(struct Curl_easy *data,
       }
     }
   }
+
+
+// Source: conncache.c
+// Lines 324-359

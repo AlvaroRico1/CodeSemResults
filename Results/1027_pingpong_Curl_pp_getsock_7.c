@@ -1,5 +1,3 @@
-// Source: curl/lib/pingpong.c
-// Lines 458-461
 int Curl_pp_getsock(struct Curl_easy *data,
                     struct pingpong *pp, curl_socket_t *socks)
 {
@@ -14,3 +12,7 @@ int Curl_pp_getsock(struct Curl_easy *data,
   /* read mode */
   return GETSOCK_READSOCK(0);
 }
+
+
+// Source: pingpong.c
+// Lines 458-471

@@ -1,5 +1,3 @@
-// Source: curl/lib/url.c
-// Lines 1060-1072
 static void prune_dead_connections(struct Curl_easy *data)
 {
   struct curltime now = Curl_now();
@@ -29,3 +27,7 @@ static void prune_dead_connections(struct Curl_easy *data)
     data->state.conn_cache->last_cleanup = now;
     CONNCACHE_UNLOCK(data);
   }
+
+
+// Source: url.c
+// Lines 1060-1088

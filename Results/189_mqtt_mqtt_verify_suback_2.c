@@ -1,5 +1,3 @@
-// Source: curl/lib/mqtt.c
-// Lines 441-444
 static CURLcode mqtt_verify_suback(struct Curl_easy *data)
 {
   CURLcode result;
@@ -30,3 +28,7 @@ static CURLcode mqtt_verify_suback(struct Curl_easy *data)
 fail:
   return result;
 }
+
+
+// Source: mqtt.c
+// Lines 441-470

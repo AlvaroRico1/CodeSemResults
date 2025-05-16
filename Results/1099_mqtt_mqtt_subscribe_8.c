@@ -1,5 +1,3 @@
-// Source: curl/lib/mqtt.c
-// Lines 393-402
 static CURLcode mqtt_subscribe(struct Curl_easy *data)
 {
   CURLcode result = CURLE_OK;
@@ -44,3 +42,7 @@ fail:
   free(packet);
   return result;
 }
+
+
+// Source: mqtt.c
+// Lines 393-436

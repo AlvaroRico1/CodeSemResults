@@ -1,5 +1,3 @@
-// Source: curl/lib/tftp.c
-// Lines 310-314
 static CURLcode tftp_parse_option_ack(struct tftp_state_data *state,
                                       const char *ptr, int len)
 {
@@ -72,3 +70,7 @@ static CURLcode tftp_parse_option_ack(struct tftp_state_data *state,
 
   return CURLE_OK;
 }
+
+
+// Source: tftp.c
+// Lines 310-381

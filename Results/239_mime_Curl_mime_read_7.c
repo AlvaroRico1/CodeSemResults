@@ -1,5 +1,3 @@
-// Source: curl/lib/mime.c
-// Lines 1622-1624
 size_t Curl_mime_read(char *buffer, size_t size, size_t nitems, void *instream)
 {
   curl_mimepart *part = (curl_mimepart *) instream;
@@ -21,3 +19,7 @@ size_t Curl_mime_read(char *buffer, size_t size, size_t nitems, void *instream)
 
   return ret;
 }
+
+
+// Source: mime.c
+// Lines 1622-1642

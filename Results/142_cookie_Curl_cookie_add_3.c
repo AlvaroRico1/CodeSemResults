@@ -1,5 +1,3 @@
-// Source: curl/lib/cookie.c
-// Lines 455-783
 Curl_cookie_add(struct Curl_easy *data,
                 /*
                  * The 'data' pointer here may be NULL at times, and thus
@@ -358,3 +356,7 @@ Curl_cookie_add(struct Curl_easy *data,
           badcookie = TRUE;
       }
     }
+
+
+// Source: cookie.c
+// Lines 444-801

@@ -1,1 +1,1 @@
-req,curl/lib/smb.c,986,slash,curl/lib/smb.c,989,1
+req,curl/lib/smb.c,4,slash,curl/lib/smb.c,7,1

@@ -1,5 +1,3 @@
-// Source: curl/lib/curl_fnmatch.c
-// Lines 141-143
 static void setcharorrange(unsigned char **pp, unsigned char *charset)
 {
   unsigned char *p = (*pp)++;
@@ -20,3 +18,7 @@ static void setcharorrange(unsigned char **pp, unsigned char *charset)
     }
   }
 }
+
+
+// Source: curl_fnmatch.c
+// Lines 141-160

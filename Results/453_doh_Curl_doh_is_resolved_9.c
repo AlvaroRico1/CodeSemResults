@@ -1,5 +1,3 @@
-// Source: curl/lib/doh.c
-// Lines 924-969
 CURLcode Curl_doh_is_resolved(struct Curl_easy *data,
                               struct Curl_dns_entry **dnsp)
 {
@@ -77,3 +75,7 @@ CURLcode Curl_doh_is_resolved(struct Curl_easy *data,
         result = CURLE_OK;      /* address resolution OK */
       }
     } /* address processing done */
+
+
+// Source: doh.c
+// Lines 923-999

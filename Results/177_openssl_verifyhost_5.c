@@ -1,5 +1,3 @@
-// Source: curl/lib/vtls/openssl.c
-// Lines 1762-1763
 static CURLcode verifyhost(struct Curl_easy *data, struct connectdata *conn,
                            X509 *server_cert)
 {
@@ -194,3 +192,7 @@ static CURLcode verifyhost(struct Curl_easy *data, struct connectdata *conn,
     if(peer_CN)
       OPENSSL_free(peer_CN);
   }
+
+
+// Source: openssl.c
+// Lines 1643-1836

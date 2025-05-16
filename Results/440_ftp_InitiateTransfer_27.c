@@ -1,5 +1,3 @@
-// Source: curl/lib/ftp.c
-// Lines 439-442
 static CURLcode InitiateTransfer(struct Curl_easy *data)
 {
   CURLcode result = CURLE_OK;
@@ -35,3 +33,7 @@ static CURLcode InitiateTransfer(struct Curl_easy *data)
 
   return CURLE_OK;
 }
+
+
+// Source: ftp.c
+// Lines 439-473

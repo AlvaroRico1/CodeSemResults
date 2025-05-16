@@ -1,5 +1,3 @@
-// Source: curl/lib/altsvc.c
-// Lines 379-383
 static CURLcode getalnum(const char **ptr, char *alpnbuf, size_t buflen)
 {
   size_t len;
@@ -19,3 +17,7 @@ static CURLcode getalnum(const char **ptr, char *alpnbuf, size_t buflen)
   alpnbuf[len] = 0;
   return CURLE_OK;
 }
+
+
+// Source: altsvc.c
+// Lines 379-397

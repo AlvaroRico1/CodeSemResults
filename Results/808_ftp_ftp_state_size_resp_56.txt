@@ -1,1 +1,1 @@
-fdigit,curl/lib/ftp.c,2301,start,curl/lib/ftp.c,2300,1
+fdigit,curl/lib/ftp.c,15,start,curl/lib/ftp.c,14,1

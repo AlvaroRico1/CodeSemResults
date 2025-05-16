@@ -1,5 +1,3 @@
-// Source: curl/lib/ftp.c
-// Lines 1576-1580
 static CURLcode ftp_state_ul_setup(struct Curl_easy *data,
                                    bool sizechecked)
 {
@@ -98,3 +96,7 @@ static CURLcode ftp_state_ul_setup(struct Curl_easy *data,
 
   return result;
 }
+
+
+// Source: ftp.c
+// Lines 1576-1673

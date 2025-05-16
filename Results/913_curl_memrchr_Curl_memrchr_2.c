@@ -1,5 +1,3 @@
-// Source: curl/lib/curl_memrchr.c
-// Lines 45-49
 Curl_memrchr(const void *s, int c, size_t n)
 {
   if(n > 0) {
@@ -14,3 +12,7 @@ Curl_memrchr(const void *s, int c, size_t n)
       p--;
     }
   }
+
+
+// Source: curl_memrchr.c
+// Lines 45-58

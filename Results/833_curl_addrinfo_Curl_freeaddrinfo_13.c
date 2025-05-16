@@ -1,5 +1,3 @@
-// Source: curl/lib/curl_addrinfo.c
-// Lines 81-84
 Curl_freeaddrinfo(struct Curl_addrinfo *cahead)
 {
   struct Curl_addrinfo *vqualifier canext;
@@ -10,3 +8,7 @@ Curl_freeaddrinfo(struct Curl_addrinfo *cahead)
     free(ca);
   }
 }
+
+
+// Source: curl_addrinfo.c
+// Lines 81-90

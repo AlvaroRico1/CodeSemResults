@@ -1,5 +1,3 @@
-// Source: curl/lib/mime.c
-// Lines 660-662
 static int mime_mem_seek(void *instream, curl_off_t offset, int whence)
 {
   curl_mimepart *part = (curl_mimepart *) instream;
@@ -19,3 +17,7 @@ static int mime_mem_seek(void *instream, curl_off_t offset, int whence)
   part->state.offset = offset;
   return CURL_SEEKFUNC_OK;
 }
+
+
+// Source: mime.c
+// Lines 660-678

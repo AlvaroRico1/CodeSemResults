@@ -1,1 +1,1 @@
-canext,curl/lib/curl_addrinfo.c,83,ca,curl/lib/curl_addrinfo.c,84,1
+canext,curl/lib/curl_addrinfo.c,3,ca,curl/lib/curl_addrinfo.c,4,1

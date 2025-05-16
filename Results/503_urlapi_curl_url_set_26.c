@@ -1,5 +1,3 @@
-// Source: curl/lib/urlapi.c
-// Lines 1304-1478
 CURLUcode curl_url_set(CURLU *u, CURLUPart what,
                        const char *part, unsigned int flags)
 {
@@ -267,3 +265,7 @@ CURLUcode curl_url_set(CURLU *u, CURLUPart what,
     free(*storep);
     *storep = (char *)newp;
   }
+
+
+// Source: urlapi.c
+// Lines 1303-1569

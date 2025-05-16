@@ -1,1 +1,1 @@
-hp,curl/lib/socks.c,281,hp,curl/lib/socks.c,281,1
+hp,curl/lib/socks.c,94,hp,curl/lib/socks.c,94,1

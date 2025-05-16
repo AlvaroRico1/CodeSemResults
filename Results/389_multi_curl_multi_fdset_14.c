@@ -1,5 +1,3 @@
-// Source: curl/lib/multi.c
-// Lines 1024-1031
 CURLMcode curl_multi_fdset(struct Curl_multi *multi,
                            fd_set *read_fd_set, fd_set *write_fd_set,
                            fd_set *exc_fd_set, int *max_fd)
@@ -53,3 +51,7 @@ CURLMcode curl_multi_fdset(struct Curl_multi *multi,
 
   return CURLM_OK;
 }
+
+
+// Source: multi.c
+// Lines 1024-1076

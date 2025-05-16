@@ -1,5 +1,3 @@
-// Source: curl/src/tool_formparse.c
-// Lines 88-108
 static struct tool_mime *tool_mime_new_filedata(struct tool_mime *parent,
                                                 const char *filename,
                                                 bool isremotefile,
@@ -79,3 +77,7 @@ static struct tool_mime *tool_mime_new_filedata(struct tool_mime *parent,
       *errcode = result;
     }
   }
+
+
+// Source: tool_formparse.c
+// Lines 82-160

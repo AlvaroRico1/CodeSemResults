@@ -1,5 +1,3 @@
-// Source: curl/lib/connect.c
-// Lines 1451-1462
 curl_socket_t Curl_getconnectinfo(struct Curl_easy *data,
                                   struct connectdata **connp)
 {
@@ -31,3 +29,7 @@ curl_socket_t Curl_getconnectinfo(struct Curl_easy *data,
       *connp = c;
     return c->sock[FIRSTSOCKET];
   }
+
+
+// Source: connect.c
+// Lines 1450-1480

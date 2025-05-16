@@ -1,1 +1,1 @@
-suffixlen,curl/lib/hostcheck.c,69,pattern_label_end,curl/lib/hostcheck.c,67,1
+suffixlen,curl/lib/hostcheck.c,5,pattern_label_end,curl/lib/hostcheck.c,3,1

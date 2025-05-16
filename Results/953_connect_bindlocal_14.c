@@ -1,5 +1,3 @@
-// Source: curl/lib/connect.c
-// Lines 242-243
 static CURLcode bindlocal(struct Curl_easy *data,
                           curl_socket_t sockfd, int af, unsigned int scope)
 {
@@ -251,3 +249,7 @@ static CURLcode bindlocal(struct Curl_easy *data,
 
   return CURLE_INTERFACE_FAILED;
 }
+
+
+// Source: connect.c
+// Lines 238-488

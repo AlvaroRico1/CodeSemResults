@@ -1,5 +1,3 @@
-// Source: curl/lib/dict.c
-// Lines 101-112
 static char *unescape_word(struct Curl_easy *data, const char *inputbuff)
 {
   char *newp = NULL;
@@ -29,3 +27,7 @@ static char *unescape_word(struct Curl_easy *data, const char *inputbuff)
     }
     dictp[olen] = 0;
   }
+
+
+// Source: dict.c
+// Lines 99-127

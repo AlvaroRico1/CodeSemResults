@@ -1,5 +1,3 @@
-// Source: curl/lib/altsvc.c
-// Lines 328-362
 CURLcode Curl_altsvc_save(struct Curl_easy *data,
                           struct altsvcinfo *altsvc, const char *file)
 {
@@ -43,3 +41,7 @@ CURLcode Curl_altsvc_save(struct Curl_easy *data,
       if(result)
         break;
     }
+
+
+// Source: altsvc.c
+// Lines 325-367

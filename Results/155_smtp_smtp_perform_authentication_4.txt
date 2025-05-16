@@ -1,1 +1,1 @@
-conn,curl/lib/smtp.c,467,data,curl/lib/smtp.c,464,1
+conn,curl/lib/smtp.c,4,data,curl/lib/smtp.c,1,1

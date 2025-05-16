@@ -1,5 +1,3 @@
-// Source: curl/src/tool_easysrc.c
-// Lines 175-175
 void dumpeasysrc(struct GlobalConfig *config)
 {
   struct curl_slist *ptr;
@@ -62,3 +60,7 @@ void dumpeasysrc(struct GlobalConfig *config)
 
   easysrc_free();
 }
+
+
+// Source: tool_easysrc.c
+// Lines 173-234

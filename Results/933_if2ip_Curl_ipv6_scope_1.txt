@@ -1,1 +1,1 @@
-sa6,curl/lib/if2ip.c,70,sa,curl/lib/if2ip.c,64,1
+sa6,curl/lib/if2ip.c,7,sa,curl/lib/if2ip.c,1,1

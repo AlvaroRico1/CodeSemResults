@@ -1,5 +1,3 @@
-// Source: curl/lib/http.c
-// Lines 2026-2029
 void Curl_http_method(struct Curl_easy *data, struct connectdata *conn,
                       const char **method, Curl_HttpReq *reqp)
 {
@@ -39,3 +37,7 @@ void Curl_http_method(struct Curl_easy *data, struct connectdata *conn,
   *method = request;
   *reqp = httpreq;
 }
+
+
+// Source: http.c
+// Lines 2025-2063

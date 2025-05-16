@@ -1,5 +1,3 @@
-// Source: curl/lib/multi.c
-// Lines 556-562
 static CURLcode multi_done(struct Curl_easy *data,
                            CURLcode status,  /* an error if this is called
                                                 after an error was detected */
@@ -144,3 +142,7 @@ static CURLcode multi_done(struct Curl_easy *data,
   Curl_free_request_state(data);
   return result;
 }
+
+
+// Source: multi.c
+// Lines 556-699

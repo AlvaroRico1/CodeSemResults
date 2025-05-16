@@ -1,5 +1,3 @@
-// Source: curl/lib/sendf.c
-// Lines 617-622
 CURLcode Curl_client_write(struct Curl_easy *data,
                            int type,
                            char *ptr,
@@ -28,3 +26,7 @@ CURLcode Curl_client_write(struct Curl_easy *data,
 
   return chop_write(data, type, ptr, len);
 }
+
+
+// Source: sendf.c
+// Lines 617-644

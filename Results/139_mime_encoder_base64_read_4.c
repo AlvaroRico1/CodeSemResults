@@ -1,5 +1,3 @@
-// Source: curl/lib/mime.c
-// Lines 409-415
 static size_t encoder_base64_read(char *buffer, size_t size, bool ateof,
                                 curl_mimepart *part)
 {
@@ -86,3 +84,7 @@ static size_t encoder_base64_read(char *buffer, size_t size, bool ateof,
 
   return cursize;
 }
+
+
+// Source: mime.c
+// Lines 409-494

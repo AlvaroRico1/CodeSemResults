@@ -1,5 +1,3 @@
-// Source: curl/lib/pop3.c
-// Lines 1435-1440
 CURLcode Curl_pop3_write(struct Curl_easy *data, char *str, size_t nread)
 {
   /* This code could be made into a special function in the handler struct */
@@ -128,3 +126,7 @@ CURLcode Curl_pop3_write(struct Curl_easy *data, char *str, size_t nread)
 
   return result;
 }
+
+
+// Source: pop3.c
+// Lines 1435-1562

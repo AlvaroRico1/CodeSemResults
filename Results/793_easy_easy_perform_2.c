@@ -1,5 +1,3 @@
-// Source: curl/lib/easy.c
-// Lines 648-650
 static CURLcode easy_perform(struct Curl_easy *data, bool events)
 {
   struct Curl_multi *multi;
@@ -59,3 +57,7 @@ static CURLcode easy_perform(struct Curl_easy *data, bool events)
   /* The multi handle is kept alive, owned by the easy handle */
   return result;
 }
+
+
+// Source: easy.c
+// Lines 648-706

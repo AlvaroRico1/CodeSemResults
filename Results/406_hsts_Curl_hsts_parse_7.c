@@ -1,5 +1,3 @@
-// Source: curl/lib/hsts.c
-// Lines 133-152
 CURLcode Curl_hsts_parse(struct hsts *h, const char *hostname,
                          const char *header)
 {
@@ -48,3 +46,7 @@ CURLcode Curl_hsts_parse(struct hsts *h, const char *hostname,
       }
       gotma = TRUE;
     }
+
+
+// Source: hsts.c
+// Lines 130-177

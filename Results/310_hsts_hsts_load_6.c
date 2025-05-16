@@ -1,5 +1,3 @@
-// Source: curl/lib/hsts.c
-// Lines 477-493
 static CURLcode hsts_load(struct hsts *h, const char *file)
 {
   CURLcode result = CURLE_OK;
@@ -28,3 +26,7 @@ static CURLcode hsts_load(struct hsts *h, const char *file)
 
       hsts_add(h, lineptr);
     }
+
+
+// Source: hsts.c
+// Lines 474-501

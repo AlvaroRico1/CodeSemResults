@@ -1,5 +1,3 @@
-// Source: curl/lib/hmac.c
-// Lines 114-116
 int Curl_HMAC_final(struct HMAC_context *ctxt, unsigned char *result)
 {
   const struct HMAC_params *hashparams = ctxt->hmac_hash;
@@ -18,3 +16,7 @@ int Curl_HMAC_final(struct HMAC_context *ctxt, unsigned char *result)
   free((char *) ctxt);
   return 0;
 }
+
+
+// Source: hmac.c
+// Lines 114-131

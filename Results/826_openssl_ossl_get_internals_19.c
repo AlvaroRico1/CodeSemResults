@@ -1,5 +1,3 @@
-// Source: curl/lib/vtls/openssl.c
-// Lines 4483-4487
 static void *ossl_get_internals(struct ssl_connect_data *connssl,
                                 CURLINFO info)
 {
@@ -8,3 +6,7 @@ static void *ossl_get_internals(struct ssl_connect_data *connssl,
   return info == CURLINFO_TLS_SESSION ?
          (void *)backend->ctx : (void *)backend->handle;
 }
+
+
+// Source: openssl.c
+// Lines 4483-4490

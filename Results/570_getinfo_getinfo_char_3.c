@@ -1,5 +1,3 @@
-// Source: curl/lib/getinfo.c
-// Lines 93-100
 static CURLcode getinfo_char(struct Curl_easy *data, CURLINFO info,
                              const char **param_charp)
 {
@@ -36,3 +34,7 @@ static CURLcode getinfo_char(struct Curl_easy *data, CURLINFO info,
     }
     *param_charp = m;
   }
+
+
+// Source: getinfo.c
+// Lines 92-127

@@ -1,1 +1,1 @@
-psig,curl/lib/vtls/openssl.c,3583,x,curl/lib/vtls/openssl.c,3579,1
+psig,curl/lib/vtls/openssl.c,31,x,curl/lib/vtls/openssl.c,27,1

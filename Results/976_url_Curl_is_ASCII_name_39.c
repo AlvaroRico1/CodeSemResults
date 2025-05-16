@@ -1,5 +1,3 @@
-// Source: curl/lib/url.c
-// Lines 1538-1541
 bool Curl_is_ASCII_name(const char *hostname)
 {
   /* get an UNSIGNED local version of the pointer */
@@ -14,3 +12,7 @@ bool Curl_is_ASCII_name(const char *hostname)
   }
   return TRUE;
 }
+
+
+// Source: url.c
+// Lines 1538-1551

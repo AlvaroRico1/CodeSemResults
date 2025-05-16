@@ -1,5 +1,3 @@
-// Source: curl/lib/content_encoding.c
-// Lines 282-285
 static CURLcode deflate_unencode_write(struct Curl_easy *data,
                                        struct contenc_writer *writer,
                                        const char *buf, size_t nbytes)
@@ -17,3 +15,7 @@ static CURLcode deflate_unencode_write(struct Curl_easy *data,
   /* Now uncompress the data */
   return inflate_stream(data, writer, ZLIB_INFLATING);
 }
+
+
+// Source: content_encoding.c
+// Lines 281-297

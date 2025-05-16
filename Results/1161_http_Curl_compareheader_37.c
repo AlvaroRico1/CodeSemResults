@@ -1,5 +1,3 @@
-// Source: curl/lib/http.c
-// Lines 1440-1442
 Curl_compareheader(const char *headerline, /* line to check */
                    const char *header,  /* header keyword _with_ colon */
                    const char *content) /* content string to find */
@@ -47,3 +45,7 @@ Curl_compareheader(const char *headerline, /* line to check */
 
   return FALSE; /* no match */
 }
+
+
+// Source: http.c
+// Lines 1429-1475

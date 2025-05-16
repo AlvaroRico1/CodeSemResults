@@ -1,5 +1,3 @@
-// Source: curl/lib/imap.c
-// Lines 355-358
 static void imap_get_message(char *buffer, char **outptr)
 {
   size_t len = strlen(buffer);
@@ -29,3 +27,7 @@ static void imap_get_message(char *buffer, char **outptr)
 
   *outptr = message;
 }
+
+
+// Source: imap.c
+// Lines 355-383

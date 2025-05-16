@@ -1,1 +1,1 @@
-slashPos,curl/lib/ftp.c,1466,rawPath,curl/lib/ftp.c,1467,1
+slashPos,curl/lib/ftp.c,25,rawPath,curl/lib/ftp.c,26,1

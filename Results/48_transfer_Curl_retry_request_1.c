@@ -1,5 +1,3 @@
-// Source: curl/lib/transfer.c
-// Lines 1797-1799
 CURLcode Curl_retry_request(struct Curl_easy *data, char **url)
 {
   struct connectdata *conn = data->conn;
@@ -70,3 +68,7 @@ CURLcode Curl_retry_request(struct Curl_easy *data, char **url)
   }
   return CURLE_OK;
 }
+
+
+// Source: transfer.c
+// Lines 1797-1866

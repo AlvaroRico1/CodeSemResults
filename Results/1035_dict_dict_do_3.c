@@ -1,5 +1,3 @@
-// Source: curl/lib/dict.c
-// Lines 176-186
 static CURLcode dict_do(struct Curl_easy *data, bool *done)
 {
   char *word;
@@ -148,3 +146,7 @@ static CURLcode dict_do(struct Curl_easy *data, bool *done)
 
   return CURLE_OK;
 }
+
+
+// Source: dict.c
+// Lines 176-323

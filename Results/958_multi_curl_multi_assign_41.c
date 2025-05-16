@@ -1,5 +1,3 @@
-// Source: curl/lib/multi.c
-// Lines 3450-3452
 CURLMcode curl_multi_assign(struct Curl_multi *multi, curl_socket_t s,
                             void *hashp)
 {
@@ -17,3 +15,7 @@ CURLMcode curl_multi_assign(struct Curl_multi *multi, curl_socket_t s,
 
   return CURLM_OK;
 }
+
+
+// Source: multi.c
+// Lines 3449-3465

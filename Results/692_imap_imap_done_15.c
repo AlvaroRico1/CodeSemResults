@@ -1,5 +1,3 @@
-// Source: curl/lib/imap.c
-// Lines 1476-1480
 static CURLcode imap_done(struct Curl_easy *data, CURLcode status,
                           bool premature)
 {
@@ -51,3 +49,7 @@ static CURLcode imap_done(struct Curl_easy *data, CURLcode status,
 
   return result;
 }
+
+
+// Source: imap.c
+// Lines 1476-1526

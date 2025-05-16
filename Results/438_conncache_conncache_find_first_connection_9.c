@@ -1,5 +1,3 @@
-// Source: curl/lib/conncache.c
-// Lines 374-375
 conncache_find_first_connection(struct conncache *connc)
 {
   struct Curl_hash_iterator iter;
@@ -23,3 +21,7 @@ conncache_find_first_connection(struct conncache *connc)
 
   return NULL;
 }
+
+
+// Source: conncache.c
+// Lines 371-393

@@ -1,5 +1,3 @@
-// Source: curl/lib/vtls/vtls.c
-// Lines 394-398
 bool Curl_ssl_getsessionid(struct Curl_easy *data,
                            struct connectdata *conn,
                            const bool isProxy,
@@ -78,3 +76,7 @@ bool Curl_ssl_getsessionid(struct Curl_easy *data,
                conn->handler->scheme, name, port));
   return no_match;
 }
+
+
+// Source: vtls.c
+// Lines 391-468

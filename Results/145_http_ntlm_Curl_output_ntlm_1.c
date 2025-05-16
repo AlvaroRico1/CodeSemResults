@@ -1,5 +1,3 @@
-// Source: curl/lib/http_ntlm.c
-// Lines 127-148
 CURLcode Curl_output_ntlm(struct Curl_easy *data, bool proxy)
 {
   char *base64 = NULL;
@@ -136,3 +134,7 @@ CURLcode Curl_output_ntlm(struct Curl_easy *data, bool proxy)
 
   return result;
 }
+
+
+// Source: http_ntlm.c
+// Lines 127-262

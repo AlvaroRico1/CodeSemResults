@@ -1,5 +1,3 @@
-// Source: curl/lib/cookie.c
-// Lines 1165-1201
 struct CookieInfo *Curl_cookie_init(struct Curl_easy *data,
                                     const char *file,
                                     struct CookieInfo *inc,
@@ -76,3 +74,7 @@ struct CookieInfo *Curl_cookie_init(struct Curl_easy *data,
     if(fromfile)
       fclose(fp);
   }
+
+
+// Source: cookie.c
+// Lines 1157-1232

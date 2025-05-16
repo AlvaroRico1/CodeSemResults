@@ -1,5 +1,3 @@
-// Source: curl/lib/tftp.c
-// Lines 1312-1315
 static CURLcode tftp_perform(struct Curl_easy *data, bool *dophase_done)
 {
   CURLcode result = CURLE_OK;
@@ -20,3 +18,7 @@ static CURLcode tftp_perform(struct Curl_easy *data, bool *dophase_done)
 
   return result;
 }
+
+
+// Source: tftp.c
+// Lines 1312-1331

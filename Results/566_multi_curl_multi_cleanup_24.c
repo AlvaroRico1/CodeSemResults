@@ -1,5 +1,3 @@
-// Source: curl/lib/multi.c
-// Lines 2597-2599
 CURLMcode curl_multi_cleanup(struct Curl_multi *multi)
 {
   struct Curl_easy *data;
@@ -62,3 +60,7 @@ CURLMcode curl_multi_cleanup(struct Curl_multi *multi)
   }
   return CURLM_BAD_HANDLE;
 }
+
+
+// Source: multi.c
+// Lines 2597-2658

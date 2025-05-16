@@ -1,5 +1,3 @@
-// Source: curl/lib/ftp.c
-// Lines 1552-1555
 static CURLcode ftp_state_mdtm(struct Curl_easy *data)
 {
   CURLcode result = CURLE_OK;
@@ -21,3 +19,7 @@ static CURLcode ftp_state_mdtm(struct Curl_easy *data)
 
   return result;
 }
+
+
+// Source: ftp.c
+// Lines 1552-1572

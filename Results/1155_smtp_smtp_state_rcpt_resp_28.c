@@ -1,5 +1,3 @@
-// Source: curl/lib/smtp.c
-// Lines 1074-1074
 static CURLcode smtp_state_rcpt_resp(struct Curl_easy *data,
                                      struct connectdata *conn, int smtpcode,
                                      smtpstate instate)
@@ -58,3 +56,7 @@ static CURLcode smtp_state_rcpt_resp(struct Curl_easy *data,
 
   return result;
 }
+
+
+// Source: smtp.c
+// Lines 1069-1126

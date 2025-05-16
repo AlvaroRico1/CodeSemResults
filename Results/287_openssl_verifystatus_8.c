@@ -1,5 +1,3 @@
-// Source: curl/lib/vtls/openssl.c
-// Lines 1844-1854
 static CURLcode verifystatus(struct Curl_easy *data,
                              struct ssl_connect_data *connssl)
 {
@@ -151,3 +149,7 @@ end:
 
   return result;
 }
+
+
+// Source: openssl.c
+// Lines 1843-1993

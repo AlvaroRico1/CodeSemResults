@@ -1,5 +1,3 @@
-// Source: curl/lib/tftp.c
-// Lines 1058-1062
 static CURLcode tftp_done(struct Curl_easy *data, CURLcode status,
                           bool premature)
 {
@@ -19,3 +17,7 @@ static CURLcode tftp_done(struct Curl_easy *data, CURLcode status,
 
   return result;
 }
+
+
+// Source: tftp.c
+// Lines 1058-1076

@@ -1,1 +1,1 @@
-store,curl/lib/vtls/vtls.c,522,clone_conn_to_host,curl/lib/vtls/vtls.c,525,1
+store,curl/lib/vtls/vtls.c,9,clone_conn_to_host,curl/lib/vtls/vtls.c,12,1

@@ -1,5 +1,3 @@
-// Source: curl/lib/ftp.c
-// Lines 4258-4260
 static CURLcode ftp_dophase_done(struct Curl_easy *data, bool connected)
 {
   struct connectdata *conn = data->conn;
@@ -27,3 +25,7 @@ static CURLcode ftp_dophase_done(struct Curl_easy *data, bool connected)
 
   return CURLE_OK;
 }
+
+
+// Source: ftp.c
+// Lines 4258-4284

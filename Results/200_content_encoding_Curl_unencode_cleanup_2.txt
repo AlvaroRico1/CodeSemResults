@@ -1,1 +1,1 @@
-writer,curl/lib/content_encoding.c,1003,k,curl/lib/content_encoding.c,1002,1
+writer,curl/lib/content_encoding.c,4,k,curl/lib/content_encoding.c,3,1

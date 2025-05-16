@@ -1,5 +1,3 @@
-// Source: curl/lib/smtp.c
-// Lines 251-254
 static void smtp_get_message(char *buffer, char **outptr)
 {
   size_t len = strlen(buffer);
@@ -29,3 +27,7 @@ static void smtp_get_message(char *buffer, char **outptr)
 
   *outptr = message;
 }
+
+
+// Source: smtp.c
+// Lines 251-279

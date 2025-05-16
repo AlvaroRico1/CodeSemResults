@@ -1,5 +1,3 @@
-// Source: curl/src/tool_formparse.c
-// Lines 219-221
 int tool_mime_stdin_seek(void *instream, curl_off_t offset, int whence)
 {
   struct tool_mime *sip = (struct tool_mime *) instream;
@@ -21,3 +19,7 @@ int tool_mime_stdin_seek(void *instream, curl_off_t offset, int whence)
   sip->curpos = offset;
   return CURL_SEEKFUNC_OK;
 }
+
+
+// Source: tool_formparse.c
+// Lines 219-239

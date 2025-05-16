@@ -1,5 +1,3 @@
-// Source: curl/lib/sendf.c
-// Lines 65-65
 static size_t convert_lineends(struct Curl_easy *data,
                                char *startPtr, size_t size)
 {
@@ -73,3 +71,7 @@ static size_t convert_lineends(struct Curl_easy *data,
   }
   return size;
 }
+
+
+// Source: sendf.c
+// Lines 62-134

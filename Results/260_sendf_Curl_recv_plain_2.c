@@ -1,5 +1,3 @@
-// Source: curl/lib/sendf.c
-// Lines 423-426
 ssize_t Curl_recv_plain(struct Curl_easy *data, int num, char *buf,
                         size_t len, CURLcode *code)
 {
@@ -48,3 +46,7 @@ ssize_t Curl_recv_plain(struct Curl_easy *data, int num, char *buf,
   }
   return nread;
 }
+
+
+// Source: sendf.c
+// Lines 423-470

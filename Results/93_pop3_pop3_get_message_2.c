@@ -1,5 +1,3 @@
-// Source: curl/lib/pop3.c
-// Lines 253-256
 static void pop3_get_message(char *buffer, char **outptr)
 {
   size_t len = strlen(buffer);
@@ -29,3 +27,7 @@ static void pop3_get_message(char *buffer, char **outptr)
 
   *outptr = message;
 }
+
+
+// Source: pop3.c
+// Lines 253-281

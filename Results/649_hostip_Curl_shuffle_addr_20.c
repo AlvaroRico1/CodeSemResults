@@ -1,5 +1,3 @@
-// Source: curl/lib/hostip.c
-// Lines 358-377
 UNITTEST CURLcode Curl_shuffle_addr(struct Curl_easy *data,
                                     struct Curl_addrinfo **addr)
 {
@@ -41,3 +39,7 @@ UNITTEST CURLcode Curl_shuffle_addr(struct Curl_easy *data,
           nodes[num_addrs-1]->ai_next = NULL;
           *addr = nodes[0];
         }
+
+
+// Source: hostip.c
+// Lines 351-391

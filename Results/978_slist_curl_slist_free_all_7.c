@@ -1,5 +1,3 @@
-// Source: curl/lib/slist.c
-// Lines 131-132
 void curl_slist_free_all(struct curl_slist *list)
 {
   struct curl_slist     *next;
@@ -16,3 +14,7 @@ void curl_slist_free_all(struct curl_slist *list)
     item = next;
   } while(next);
 }
+
+
+// Source: slist.c
+// Lines 129-144

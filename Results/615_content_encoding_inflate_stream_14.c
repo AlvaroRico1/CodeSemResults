@@ -1,5 +1,3 @@
-// Source: curl/lib/content_encoding.c
-// Lines 164-169
 static CURLcode inflate_stream(struct Curl_easy *data,
                                struct contenc_writer *writer,
                                zlibInitState started)
@@ -100,3 +98,7 @@ static CURLcode inflate_stream(struct Curl_easy *data,
 
   return result;
 }
+
+
+// Source: content_encoding.c
+// Lines 159-258

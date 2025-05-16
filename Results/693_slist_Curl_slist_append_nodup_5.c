@@ -1,5 +1,3 @@
-// Source: curl/lib/slist.c
-// Lines 59-62
 struct curl_slist *Curl_slist_append_nodup(struct curl_slist *list, char *data)
 {
   struct curl_slist     *last;
@@ -22,3 +20,7 @@ struct curl_slist *Curl_slist_append_nodup(struct curl_slist *list, char *data)
   last->next = new_item;
   return list;
 }
+
+
+// Source: slist.c
+// Lines 59-80

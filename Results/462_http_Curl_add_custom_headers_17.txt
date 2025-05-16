@@ -1,1 +1,1 @@
-compare,curl/lib/http.c,1883,headers,curl/lib/http.c,1797,1
+compare,curl/lib/http.c,99,headers,curl/lib/http.c,13,1

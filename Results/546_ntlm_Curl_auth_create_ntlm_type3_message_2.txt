@@ -1,1 +1,1 @@
-domlen,curl/lib/vauth/ntlm.c,517,user,curl/lib/vauth/ntlm.c,510,1
+domlen,curl/lib/vauth/ntlm.c,46,user,curl/lib/vauth/ntlm.c,39,1

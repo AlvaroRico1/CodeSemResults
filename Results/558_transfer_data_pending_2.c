@@ -1,5 +1,3 @@
-// Source: curl/lib/transfer.c
-// Lines 491-493
 static int data_pending(const struct Curl_easy *data)
 {
   struct connectdata *conn = data->conn;
@@ -27,3 +25,7 @@ static int data_pending(const struct Curl_easy *data)
 #endif
     Curl_ssl_data_pending(conn, FIRSTSOCKET);
 }
+
+
+// Source: transfer.c
+// Lines 491-517

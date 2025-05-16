@@ -1,1 +1,1 @@
-login,curl/lib/netrc.c,65,loginp,curl/lib/netrc.c,57,1
+login,curl/lib/netrc.c,10,loginp,curl/lib/netrc.c,2,1

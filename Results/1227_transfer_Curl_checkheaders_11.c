@@ -1,5 +1,3 @@
-// Source: curl/lib/transfer.c
-// Lines 100-100
 char *Curl_checkheaders(const struct Curl_easy *data,
                         const char *thisheader)
 {
@@ -16,3 +14,7 @@ char *Curl_checkheaders(const struct Curl_easy *data,
 
   return NULL;
 }
+
+
+// Source: transfer.c
+// Lines 97-112

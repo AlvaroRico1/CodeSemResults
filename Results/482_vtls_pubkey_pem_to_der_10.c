@@ -1,5 +1,3 @@
-// Source: curl/lib/vtls/vtls.c
-// Lines 870-873
 static CURLcode pubkey_pem_to_der(const char *pem,
                                   unsigned char **der, size_t *der_len)
 {
@@ -53,3 +51,7 @@ static CURLcode pubkey_pem_to_der(const char *pem,
 
   return result;
 }
+
+
+// Source: vtls.c
+// Lines 870-922

@@ -1,1 +1,1 @@
-last_slash,curl/lib/ftp.c,3769,ftp,curl/lib/ftp.c,3770,1
+last_slash,curl/lib/ftp.c,3,ftp,curl/lib/ftp.c,4,1

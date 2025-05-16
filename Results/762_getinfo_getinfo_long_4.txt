@@ -1,1 +1,1 @@
-lptr,curl/lib/getinfo.c,183,param_longp,curl/lib/getinfo.c,176,1
+lptr,curl/lib/getinfo.c,9,param_longp,curl/lib/getinfo.c,2,1

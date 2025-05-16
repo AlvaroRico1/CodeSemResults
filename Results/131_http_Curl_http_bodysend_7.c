@@ -1,5 +1,3 @@
-// Source: curl/lib/http.c
-// Lines 2380-2380
 CURLcode Curl_http_bodysend(struct Curl_easy *data, struct connectdata *conn,
                             struct dynbuf *r, Curl_HttpReq httpreq)
 {
@@ -326,3 +324,7 @@ CURLcode Curl_http_bodysend(struct Curl_easy *data, struct connectdata *conn,
 
   return result;
 }
+
+
+// Source: http.c
+// Lines 2372-2697

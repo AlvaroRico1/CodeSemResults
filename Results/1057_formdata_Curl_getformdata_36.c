@@ -1,5 +1,3 @@
-// Source: curl/lib/formdata.c
-// Lines 808-827
 CURLcode Curl_getformdata(struct Curl_easy *data,
                           curl_mimepart *finalform,
                           struct curl_httppost *post,
@@ -117,3 +115,7 @@ CURLcode Curl_getformdata(struct Curl_easy *data,
           result = curl_mime_filename(part, post->showfilename);
     }
   }
+
+
+// Source: formdata.c
+// Lines 802-918

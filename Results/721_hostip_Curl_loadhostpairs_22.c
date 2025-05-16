@@ -1,5 +1,3 @@
-// Source: curl/lib/hostip.c
-// Lines 1045-1045
 CURLcode Curl_loadhostpairs(struct Curl_easy *data)
 {
   struct curl_slist *hostp;
@@ -193,3 +191,7 @@ CURLcode Curl_loadhostpairs(struct Curl_easy *data)
         data->state.wildcard_resolve = true;
       }
     }
+
+
+// Source: hostip.c
+// Lines 1008-1200

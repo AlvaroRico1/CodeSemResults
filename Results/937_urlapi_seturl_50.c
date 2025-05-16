@@ -1,5 +1,3 @@
-// Source: curl/lib/urlapi.c
-// Lines 759-867
 static CURLUcode seturl(const char *url, CURLU *u, unsigned int flags)
 {
   char *path;
@@ -169,3 +167,7 @@ static CURLUcode seturl(const char *url, CURLU *u, unsigned int flags)
         return CURLUE_OUT_OF_MEMORY;
     }
   }
+
+
+// Source: urlapi.c
+// Lines 759-927

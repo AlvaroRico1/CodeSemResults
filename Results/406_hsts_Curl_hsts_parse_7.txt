@@ -1,1 +1,1 @@
-p,curl/lib/hsts.c,133,endp,curl/lib/hsts.c,152,1
+p,curl/lib/hsts.c,4,endp,curl/lib/hsts.c,23,1

@@ -1,1 +1,1 @@
-dns,curl/lib/hostip.c,969,freethis,curl/lib/hostip.c,967,1
+dns,curl/lib/hostip.c,3,freethis,curl/lib/hostip.c,1,1

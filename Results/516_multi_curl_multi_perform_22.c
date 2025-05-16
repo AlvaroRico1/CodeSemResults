@@ -1,5 +1,3 @@
-// Source: curl/lib/multi.c
-// Lines 2543-2545
 CURLMcode curl_multi_perform(struct Curl_multi *multi, int *running_handles)
 {
   struct Curl_easy *data;
@@ -53,3 +51,7 @@ CURLMcode curl_multi_perform(struct Curl_multi *multi, int *running_handles)
 
   return returncode;
 }
+
+
+// Source: multi.c
+// Lines 2543-2595

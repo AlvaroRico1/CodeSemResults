@@ -1,5 +1,3 @@
-// Source: curl/lib/vtls/vtls.c
-// Lines 1339-1346
 static size_t multissl_version(char *buffer, size_t size)
 {
   static const struct Curl_ssl *selected;
@@ -30,3 +28,7 @@ static size_t multissl_version(char *buffer, size_t size)
 
     backends_len = p - backends;
   }
+
+
+// Source: vtls.c
+// Lines 1336-1365

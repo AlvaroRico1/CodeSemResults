@@ -1,5 +1,3 @@
-// Source: curl/lib/http_proxy.c
-// Lines 201-203
 static void connect_done(struct Curl_easy *data)
 {
   struct connectdata *conn = data->conn;
@@ -15,3 +13,7 @@ static void connect_done(struct Curl_easy *data)
     infof(data, "CONNECT phase completed!");
   }
 }
+
+
+// Source: http_proxy.c
+// Lines 201-215

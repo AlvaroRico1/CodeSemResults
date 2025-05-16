@@ -1,1 +1,1 @@
-saddr_in,curl/lib/socks.c,294,hp,curl/lib/socks.c,281,1
+saddr_in,curl/lib/socks.c,107,hp,curl/lib/socks.c,94,1

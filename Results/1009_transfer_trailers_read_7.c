@@ -1,5 +1,3 @@
-// Source: curl/lib/transfer.c
-// Lines 131-133
 static size_t trailers_read(char *buffer, size_t size, size_t nitems,
                             void *raw)
 {
@@ -16,3 +14,7 @@ static size_t trailers_read(char *buffer, size_t size, size_t nitems,
   }
   return to_copy;
 }
+
+
+// Source: transfer.c
+// Lines 130-145

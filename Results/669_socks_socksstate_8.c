@@ -1,5 +1,3 @@
-// Source: curl/lib/socks.c
-// Lines 110-117
 static void socksstate(struct Curl_easy *data,
                        enum connect_t state
 #ifdef DEBUG_AND_VERBOSE
@@ -46,3 +44,7 @@ static void socksstate(struct Curl_easy *data,
         lineno);
 #endif
 }
+
+
+// Source: socks.c
+// Lines 110-155

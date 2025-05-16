@@ -1,5 +1,3 @@
-// Source: curl/lib/imap.c
-// Lines 2095-2104
 static CURLcode imap_parse_custom_request(struct Curl_easy *data)
 {
   CURLcode result = CURLE_OK;
@@ -25,3 +23,7 @@ static CURLcode imap_parse_custom_request(struct Curl_easy *data)
           result = CURLE_OUT_OF_MEMORY;
       }
     }
+
+
+// Source: imap.c
+// Lines 2092-2116

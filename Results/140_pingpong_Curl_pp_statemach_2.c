@@ -1,5 +1,3 @@
-// Source: curl/lib/pingpong.c
-// Lines 80-84
 CURLcode Curl_pp_statemach(struct Curl_easy *data,
                            struct pingpong *pp, bool block,
                            bool disconnecting)
@@ -58,3 +56,7 @@ CURLcode Curl_pp_statemach(struct Curl_easy *data,
 
   return result;
 }
+
+
+// Source: pingpong.c
+// Lines 80-137

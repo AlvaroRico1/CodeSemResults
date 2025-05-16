@@ -1,5 +1,3 @@
-// Source: curl/lib/http.c
-// Lines 1481-1484
 CURLcode Curl_http_connect(struct Curl_easy *data, bool *done)
 {
   CURLcode result;
@@ -45,3 +43,7 @@ CURLcode Curl_http_connect(struct Curl_easy *data, bool *done)
 
   return CURLE_OK;
 }
+
+
+// Source: http.c
+// Lines 1481-1525

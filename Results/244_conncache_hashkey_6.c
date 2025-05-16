@@ -1,5 +1,3 @@
-// Source: curl/lib/conncache.c
-// Lines 142-144
 static void hashkey(struct connectdata *conn, char *buf,
                     size_t len,  /* something like 128 is fine */
                     const char **hostp)
@@ -27,3 +25,7 @@ static void hashkey(struct connectdata *conn, char *buf,
   msnprintf(buf, len, "%ld%s", port, hostname);
   Curl_strntolower(buf, buf, len);
 }
+
+
+// Source: conncache.c
+// Lines 140-166

@@ -1,1 +1,1 @@
-param_slistp,curl/lib/getinfo.c,482,ptr,curl/lib/getinfo.c,487,1
+param_slistp,curl/lib/getinfo.c,2,ptr,curl/lib/getinfo.c,7,1

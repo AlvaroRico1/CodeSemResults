@@ -1,1 +1,1 @@
-hashthis,curl/lib/vauth/digest.c,682,hashthis2,curl/lib/vauth/digest.c,769,1
+hashthis,curl/lib/vauth/digest.c,23,hashthis2,curl/lib/vauth/digest.c,110,1

@@ -1,5 +1,3 @@
-// Source: curl/lib/content_encoding.c
-// Lines 263-265
 static CURLcode deflate_init_writer(struct Curl_easy *data,
                                     struct contenc_writer *writer)
 {
@@ -18,3 +16,7 @@ static CURLcode deflate_init_writer(struct Curl_easy *data,
   zp->zlib_init = ZLIB_INIT;
   return CURLE_OK;
 }
+
+
+// Source: content_encoding.c
+// Lines 262-279

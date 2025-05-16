@@ -1,5 +1,3 @@
-// Source: curl/lib/content_encoding.c
-// Lines 854-855
 char *Curl_all_content_encodings(void)
 {
   size_t len = 0;
@@ -33,3 +31,7 @@ char *Curl_all_content_encodings(void)
 
   return ace;
 }
+
+
+// Source: content_encoding.c
+// Lines 851-883

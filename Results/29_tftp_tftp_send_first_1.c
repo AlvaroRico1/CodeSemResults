@@ -1,5 +1,3 @@
-// Source: curl/lib/tftp.c
-// Lines 425-432
 static CURLcode tftp_send_first(struct tftp_state_data *state,
                                 tftp_event_t event)
 {
@@ -142,3 +140,7 @@ static CURLcode tftp_send_first(struct tftp_state_data *state,
 
   return result;
 }
+
+
+// Source: tftp.c
+// Lines 425-566

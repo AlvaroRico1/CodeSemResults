@@ -1,5 +1,3 @@
-// Source: curl/lib/imap.c
-// Lines 1428-1431
 static CURLcode imap_connect(struct Curl_easy *data, bool *done)
 {
   CURLcode result = CURLE_OK;
@@ -38,3 +36,7 @@ static CURLcode imap_connect(struct Curl_easy *data, bool *done)
 
   return result;
 }
+
+
+// Source: imap.c
+// Lines 1428-1465

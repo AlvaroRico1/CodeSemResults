@@ -1,1 +1,1 @@
-whatptr,curl/lib/cookie.c,508,what,curl/lib/cookie.c,480,1
+whatptr,curl/lib/cookie.c,65,what,curl/lib/cookie.c,37,1

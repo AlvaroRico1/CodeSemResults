@@ -1,1 +1,1 @@
-rtspc,curl/lib/rtsp.c,607,scratch,curl/lib/rtsp.c,611,1
+rtspc,curl/lib/rtsp.c,6,scratch,curl/lib/rtsp.c,10,1

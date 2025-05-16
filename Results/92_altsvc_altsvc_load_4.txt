@@ -1,1 +1,1 @@
-lineptr,curl/lib/altsvc.c,206,line,curl/lib/altsvc.c,190,1
+lineptr,curl/lib/altsvc.c,20,line,curl/lib/altsvc.c,4,1

@@ -1,1 +1,1 @@
-backend,curl/lib/vtls/openssl.c,2625,connssl,curl/lib/vtls/openssl.c,2596,1
+backend,curl/lib/vtls/openssl.c,38,connssl,curl/lib/vtls/openssl.c,9,1

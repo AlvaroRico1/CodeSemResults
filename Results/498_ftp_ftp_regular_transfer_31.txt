@@ -1,1 +1,1 @@
-conn,curl/lib/ftp.c,4320,data,curl/lib/ftp.c,4315,1
+conn,curl/lib/ftp.c,6,data,curl/lib/ftp.c,1,1

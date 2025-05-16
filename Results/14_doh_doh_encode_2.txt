@@ -1,1 +1,1 @@
-orig,curl/lib/doh.c,87,dnsp,curl/lib/doh.c,82,1
+orig,curl/lib/doh.c,8,dnsp,curl/lib/doh.c,3,1

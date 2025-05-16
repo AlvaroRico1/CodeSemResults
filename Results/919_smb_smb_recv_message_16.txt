@@ -1,1 +1,1 @@
-buf,curl/lib/smb.c,303,smbc,curl/lib/smb.c,302,1
+buf,curl/lib/smb.c,5,smbc,curl/lib/smb.c,4,1

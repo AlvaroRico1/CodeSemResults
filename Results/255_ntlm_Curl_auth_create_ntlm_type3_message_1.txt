@@ -1,1 +1,1 @@
-ptr_ntresp,curl/lib/vauth/ntlm.c,505,ntlmv2resp,curl/lib/vauth/ntlm.c,506,1
+ptr_ntresp,curl/lib/vauth/ntlm.c,34,ntlmv2resp,curl/lib/vauth/ntlm.c,35,1

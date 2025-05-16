@@ -1,5 +1,3 @@
-// Source: curl/lib/urlapi.c
-// Lines 761-934
 static CURLUcode seturl(const char *url, CURLU *u, unsigned int flags)
 {
   char *path;
@@ -182,3 +180,7 @@ static CURLUcode seturl(const char *url, CURLU *u, unsigned int flags)
     strcpy_url(newp, path, TRUE); /* consider it relative */
     u->temppath = path = newp;
   }
+
+
+// Source: urlapi.c
+// Lines 759-940

@@ -1,5 +1,3 @@
-// Source: curl/lib/tftp.c
-// Lines 964-966
 static CURLcode tftp_connect(struct Curl_easy *data, bool *done)
 {
   struct tftp_state_data *state;
@@ -86,3 +84,7 @@ static CURLcode tftp_connect(struct Curl_easy *data, bool *done)
 
   return CURLE_OK;
 }
+
+
+// Source: tftp.c
+// Lines 964-1049

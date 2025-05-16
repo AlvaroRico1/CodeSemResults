@@ -1,1 +1,1 @@
-conn,curl/lib/smb.c,258,data,curl/lib/smb.c,256,1
+conn,curl/lib/smb.c,3,data,curl/lib/smb.c,1,1

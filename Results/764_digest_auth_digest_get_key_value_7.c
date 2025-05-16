@@ -1,5 +1,3 @@
-// Source: curl/lib/vauth/digest.c
-// Lines 195-201
 static bool auth_digest_get_key_value(const char *chlg,
                                       const char *key,
                                       char *value,
@@ -21,3 +19,7 @@ static bool auth_digest_get_key_value(const char *chlg,
 
   return TRUE;
 }
+
+
+// Source: digest.c
+// Lines 195-215

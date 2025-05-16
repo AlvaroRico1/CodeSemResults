@@ -1,5 +1,3 @@
-// Source: curl/lib/urlapi.c
-// Lines 279-372
 static char *concat_url(const char *base, const char *relurl)
 {
   /***
@@ -107,3 +105,7 @@ static char *concat_url(const char *base, const char *relurl)
           pathsep = sep;
         *pathsep = 0;
       }
+
+
+// Source: urlapi.c
+// Lines 270-376

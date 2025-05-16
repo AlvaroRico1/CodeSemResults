@@ -1,5 +1,3 @@
-// Source: curl/lib/smtp.c
-// Lines 1454-1459
 static CURLcode smtp_perform(struct Curl_easy *data, bool *connected,
                              bool *dophase_done)
 {
@@ -52,3 +50,7 @@ static CURLcode smtp_perform(struct Curl_easy *data, bool *connected,
 
   return result;
 }
+
+
+// Source: smtp.c
+// Lines 1454-1505

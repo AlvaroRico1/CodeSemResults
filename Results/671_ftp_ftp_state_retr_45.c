@@ -1,5 +1,3 @@
-// Source: curl/lib/ftp.c
-// Lines 2204-2209
 static CURLcode ftp_state_retr(struct Curl_easy *data,
                                curl_off_t filesize)
 {
@@ -82,3 +80,7 @@ static CURLcode ftp_state_retr(struct Curl_easy *data,
 
   return result;
 }
+
+
+// Source: ftp.c
+// Lines 2204-2285

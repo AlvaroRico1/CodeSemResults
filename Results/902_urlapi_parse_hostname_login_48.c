@@ -1,5 +1,3 @@
-// Source: curl/lib/urlapi.c
-// Lines 431-449
 static CURLUcode parse_hostname_login(struct Curl_URL *u,
                                       char **hostname,
                                       unsigned int flags)
@@ -69,3 +67,7 @@ static CURLUcode parse_hostname_login(struct Curl_URL *u,
 
   return result;
 }
+
+
+// Source: urlapi.c
+// Lines 430-498

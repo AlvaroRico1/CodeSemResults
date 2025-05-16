@@ -1,5 +1,3 @@
-// Source: curl/lib/multi.c
-// Lines 3271-3272
 multi_deltimeout(struct Curl_easy *data, expire_id eid)
 {
   struct Curl_llist_element *e;
@@ -13,3 +11,7 @@ multi_deltimeout(struct Curl_easy *data, expire_id eid)
     }
   }
 }
+
+
+// Source: multi.c
+// Lines 3269-3281

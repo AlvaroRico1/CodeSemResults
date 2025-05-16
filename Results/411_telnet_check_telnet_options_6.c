@@ -1,5 +1,3 @@
-// Source: curl/lib/telnet.c
-// Lines 773-773
 static CURLcode check_telnet_options(struct Curl_easy *data)
 {
   struct curl_slist *head;
@@ -96,3 +94,7 @@ static CURLcode check_telnet_options(struct Curl_easy *data)
 
   return result;
 }
+
+
+// Source: telnet.c
+// Lines 771-866

@@ -1,5 +1,3 @@
-// Source: curl/lib/smb.c
-// Lines 986-989
 static CURLcode smb_parse_url_path(struct Curl_easy *data,
                                    struct connectdata *conn)
 {
@@ -41,3 +39,7 @@ static CURLcode smb_parse_url_path(struct Curl_easy *data,
   }
   return CURLE_OK;
 }
+
+
+// Source: smb.c
+// Lines 983-1023

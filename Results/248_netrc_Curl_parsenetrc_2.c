@@ -1,5 +1,3 @@
-// Source: curl/lib/netrc.c
-// Lines 238-239
 int Curl_parsenetrc(const char *host,
                     char **loginp,
                     char **passwordp,
@@ -62,3 +60,7 @@ int Curl_parsenetrc(const char *host,
 #endif
     free(homea);
   }
+
+
+// Source: netrc.c
+// Lines 227-288

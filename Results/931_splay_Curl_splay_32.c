@@ -1,5 +1,3 @@
-// Source: curl/lib/splay.c
-// Lines 41-43
 struct Curl_tree *Curl_splay(struct curltime i,
                              struct Curl_tree *t)
 {
@@ -53,3 +51,7 @@ struct Curl_tree *Curl_splay(struct curltime i,
 
   return t;
 }
+
+
+// Source: splay.c
+// Lines 40-92

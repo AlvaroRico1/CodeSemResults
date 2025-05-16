@@ -1,5 +1,3 @@
-// Source: curl/lib/multi.c
-// Lines 2949-2956
 static CURLMcode multi_socket(struct Curl_multi *multi,
                               bool checkall,
                               curl_socket_t s,
@@ -113,3 +111,7 @@ static CURLMcode multi_socket(struct Curl_multi *multi,
   *running_handles = multi->num_alive;
   return result;
 }
+
+
+// Source: multi.c
+// Lines 2949-3061

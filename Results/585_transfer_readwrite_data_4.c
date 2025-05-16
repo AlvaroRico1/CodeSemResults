@@ -1,5 +1,3 @@
-// Source: curl/lib/transfer.c
-// Lines 561-570
 static CURLcode readwrite_data(struct Curl_easy *data,
                                struct connectdata *conn,
                                struct SingleRequest *k,
@@ -348,3 +346,7 @@ static CURLcode readwrite_data(struct Curl_easy *data,
 
   return CURLE_OK;
 }
+
+
+// Source: transfer.c
+// Lines 559-906

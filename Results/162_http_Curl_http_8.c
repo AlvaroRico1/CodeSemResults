@@ -1,5 +1,3 @@
-// Source: curl/lib/http.c
-// Lines 3016-3018
 CURLcode Curl_http(struct Curl_easy *data, bool *done)
 {
   struct connectdata *conn = data->conn;
@@ -281,3 +279,7 @@ CURLcode Curl_http(struct Curl_easy *data, bool *done)
     data->req.upload_chunky = FALSE;
   return result;
 }
+
+
+// Source: http.c
+// Lines 3016-3296

@@ -1,5 +1,3 @@
-// Source: curl/lib/mime.c
-// Lines 1503-1506
 CURLcode curl_mime_encoder(curl_mimepart *part, const char *encoding)
 {
   CURLcode result = CURLE_BAD_FUNCTION_ARGUMENT;
@@ -21,3 +19,7 @@ CURLcode curl_mime_encoder(curl_mimepart *part, const char *encoding)
 
   return result;
 }
+
+
+// Source: mime.c
+// Lines 1503-1523

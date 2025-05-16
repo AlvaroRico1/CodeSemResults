@@ -1,5 +1,3 @@
-// Source: curl/lib/rtsp.c
-// Lines 607-616
 static CURLcode rtsp_rtp_readwrite(struct Curl_easy *data,
                                    struct connectdata *conn,
                                    ssize_t *nread,
@@ -27,3 +25,7 @@ static CURLcode rtsp_rtp_readwrite(struct Curl_easy *data,
     rtp = rtspc->rtp_buf;
     rtp_dataleft = rtspc->rtp_bufsize;
   }
+
+
+// Source: rtsp.c
+// Lines 602-628

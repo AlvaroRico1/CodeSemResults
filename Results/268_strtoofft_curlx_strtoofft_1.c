@@ -1,5 +1,3 @@
-// Source: curl/lib/strtoofft.c
-// Lines 215-218
 CURLofft curlx_strtoofft(const char *str, char **endp, int base,
                          curl_off_t *num)
 {
@@ -28,3 +26,7 @@ CURLofft curlx_strtoofft(const char *str, char **endp, int base,
   *num = number;
   return CURL_OFFT_OK;
 }
+
+
+// Source: strtoofft.c
+// Lines 215-242

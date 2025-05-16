@@ -1,5 +1,3 @@
-// Source: curl/lib/imap.c
-// Lines 1792-1797
 static char *imap_atom(const char *str, bool escape_only)
 {
   /* !checksrc! disable PARENBRACE 1 */
@@ -76,3 +74,7 @@ static char *imap_atom(const char *str, bool escape_only)
 
   return newstr;
 }
+
+
+// Source: imap.c
+// Lines 1787-1862

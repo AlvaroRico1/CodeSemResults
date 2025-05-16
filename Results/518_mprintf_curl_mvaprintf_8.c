@@ -1,5 +1,3 @@
-// Source: curl/lib/mprintf.c
-// Lines 1076-1077
 char *curl_mvaprintf(const char *format, va_list ap_save)
 {
   int retcode;
@@ -18,3 +16,7 @@ char *curl_mvaprintf(const char *format, va_list ap_save)
     return Curl_dyn_ptr(info.b);
   return strdup("");
 }
+
+
+// Source: mprintf.c
+// Lines 1073-1090

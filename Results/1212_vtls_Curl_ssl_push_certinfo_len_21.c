@@ -1,5 +1,3 @@
-// Source: curl/lib/vtls/vtls.c
-// Lines 814-816
 CURLcode Curl_ssl_push_certinfo_len(struct Curl_easy *data,
                                     int certnum,
                                     const char *label,
@@ -36,3 +34,7 @@ CURLcode Curl_ssl_push_certinfo_len(struct Curl_easy *data,
   ci->certinfo[certnum] = nl;
   return result;
 }
+
+
+// Source: vtls.c
+// Lines 808-843

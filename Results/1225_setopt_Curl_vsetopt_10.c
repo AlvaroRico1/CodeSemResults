@@ -1,5 +1,3 @@
-// Source: curl/lib/setopt.c
-// Lines 267-417
 CURLcode Curl_vsetopt(struct Curl_easy *data, CURLoption option, va_list param)
 {
   char *argptr;
@@ -279,3 +277,7 @@ CURLcode Curl_vsetopt(struct Curl_easy *data, CURLoption option, va_list param)
       primary->version = version;
       primary->version_max = version_max;
     }
+
+
+// Source: setopt.c
+// Lines 160-438

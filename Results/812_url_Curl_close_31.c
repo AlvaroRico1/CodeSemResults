@@ -1,5 +1,3 @@
-// Source: curl/lib/url.c
-// Lines 362-365
 CURLcode Curl_close(struct Curl_easy **datap)
 {
   struct Curl_multi *m;
@@ -118,3 +116,7 @@ CURLcode Curl_close(struct Curl_easy **datap)
   free(data);
   return CURLE_OK;
 }
+
+
+// Source: url.c
+// Lines 362-479

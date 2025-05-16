@@ -1,1 +1,1 @@
-digest,curl/lib/vauth/digest.c,666,cnonce,curl/lib/vauth/digest.c,678,1
+digest,curl/lib/vauth/digest.c,7,cnonce,curl/lib/vauth/digest.c,19,1

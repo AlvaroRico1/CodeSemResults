@@ -1,5 +1,3 @@
-// Source: curl/lib/rtsp.c
-// Lines 607-609
 static CURLcode rtsp_rtp_readwrite(struct Curl_easy *data,
                                    struct connectdata *conn,
                                    ssize_t *nread,
@@ -123,3 +121,7 @@ static CURLcode rtsp_rtp_readwrite(struct Curl_easy *data,
 
   return CURLE_OK;
 }
+
+
+// Source: rtsp.c
+// Lines 602-724

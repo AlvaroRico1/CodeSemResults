@@ -1,5 +1,3 @@
-// Source: curl/lib/inet_ntop.c
-// Lines 86-87
 static char *inet_ntop6 (const unsigned char *src, char *dst, size_t size)
 {
   /*
@@ -92,3 +90,7 @@ static char *inet_ntop6 (const unsigned char *src, char *dst, size_t size)
   strcpy(dst, tmp);
   return dst;
 }
+
+
+// Source: inet_ntop.c
+// Lines 77-168

@@ -1,5 +1,3 @@
-// Source: curl/lib/urlapi.c
-// Lines 278-288
 static char *concat_url(const char *base, const char *relurl)
 {
   /***
@@ -152,3 +150,7 @@ static char *concat_url(const char *base, const char *relurl)
 
   return newest;
 }
+
+
+// Source: urlapi.c
+// Lines 270-421

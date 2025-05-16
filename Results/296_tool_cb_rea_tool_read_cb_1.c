@@ -1,5 +1,3 @@
-// Source: curl/src/tool_cb_rea.c
-// Lines 38-41
 size_t tool_read_cb(char *buffer, size_t sz, size_t nmemb, void *userdata)
 {
   ssize_t rc;
@@ -18,3 +16,7 @@ size_t tool_read_cb(char *buffer, size_t sz, size_t nmemb, void *userdata)
   in->config->readbusy = FALSE;
   return (size_t)rc;
 }
+
+
+// Source: tool_cb_rea.c
+// Lines 38-55
