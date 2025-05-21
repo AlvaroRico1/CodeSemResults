@@ -1,1 +1,0 @@
-head,curl/lib/telnet.c,3,head,curl/lib/telnet.c,3,1

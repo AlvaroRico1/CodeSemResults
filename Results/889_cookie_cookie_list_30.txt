@@ -1,1 +1,0 @@
-c,curl/lib/cookie.c,5,c,curl/lib/cookie.c,5,1

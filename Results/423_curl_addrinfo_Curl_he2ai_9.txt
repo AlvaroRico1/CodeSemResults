@@ -1,1 +1,0 @@
-curr,curl/lib/curl_addrinfo.c,12,he,curl/lib/curl_addrinfo.c,1,1

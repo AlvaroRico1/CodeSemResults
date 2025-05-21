@@ -1,1 +1,0 @@
-sa,curl/lib/ftp.c,14,ss,curl/lib/ftp.c,10,1

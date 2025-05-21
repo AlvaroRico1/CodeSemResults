@@ -1,1 +1,0 @@
-ntresp,curl/lib/curl_ntlm_core.c,4,ptr,curl/lib/curl_ntlm_core.c,23,1

@@ -1,1 +1,0 @@
-value,curl/lib/mime.c,3,hdr,curl/lib/mime.c,1,1

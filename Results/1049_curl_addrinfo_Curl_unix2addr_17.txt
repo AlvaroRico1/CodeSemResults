@@ -1,1 +1,0 @@
-sa_un,curl/lib/curl_addrinfo.c,5,ai,curl/lib/curl_addrinfo.c,4,1

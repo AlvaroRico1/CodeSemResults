@@ -1,1 +1,0 @@
-value,curl/lib/pop3.c,11,ptr,curl/lib/pop3.c,5,1

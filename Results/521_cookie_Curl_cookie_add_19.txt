@@ -1,1 +1,0 @@
-ptr,curl/lib/cookie.c,38,firstptr,curl/lib/cookie.c,376,1

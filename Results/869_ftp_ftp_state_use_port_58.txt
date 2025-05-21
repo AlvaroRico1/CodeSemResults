@@ -1,1 +1,0 @@
-ip_end,curl/lib/ftp.c,48,string_ftpport,curl/lib/ftp.c,23,1

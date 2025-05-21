@@ -1,1 +1,0 @@
-outbuf,curl/lib/telnet.c,5,buffer,curl/lib/telnet.c,2,1

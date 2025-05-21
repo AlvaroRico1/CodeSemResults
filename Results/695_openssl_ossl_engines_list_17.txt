@@ -1,1 +1,0 @@
-list,curl/lib/vtls/openssl.c,3,beg,curl/lib/vtls/openssl.c,5,1

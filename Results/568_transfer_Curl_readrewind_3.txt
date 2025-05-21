@@ -1,1 +1,0 @@
-mimepart,curl/lib/transfer.c,4,http,curl/lib/transfer.c,18,1

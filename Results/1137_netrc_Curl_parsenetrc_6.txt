@@ -1,1 +1,0 @@
-home,curl/lib/netrc.c,12,pw,curl/lib/netrc.c,19,1

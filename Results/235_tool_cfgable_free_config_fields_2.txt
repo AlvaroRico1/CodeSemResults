@@ -1,1 +1,0 @@
-next,curl/src/tool_cfgable.c,49,next,curl/src/tool_cfgable.c,49,0

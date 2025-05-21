@@ -1,1 +1,0 @@
-p,curl/lib/strerror.c,7,buf,curl/lib/strerror.c,1,1

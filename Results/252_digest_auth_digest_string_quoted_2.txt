@@ -1,1 +1,0 @@
-s,curl/lib/vauth/digest.c,4,source,curl/lib/vauth/digest.c,1,1

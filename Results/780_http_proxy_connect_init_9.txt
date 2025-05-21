@@ -1,1 +1,0 @@
-s,curl/lib/http_proxy.c,3,s,curl/lib/http_proxy.c,3,1

@@ -1,1 +1,0 @@
-sel_org,curl/lib/gopher.c,10,sel,curl/lib/gopher.c,9,1

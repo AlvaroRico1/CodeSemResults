@@ -1,1 +1,0 @@
-cmd,curl/lib/ftp.c,46,item,curl/lib/ftp.c,10,1

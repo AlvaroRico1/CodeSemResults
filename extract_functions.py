@@ -3,7 +3,13 @@ import csv
 import re
 import subprocess
 
-def generate_tags(curl_path):
+
+csv_folder = os.path.join(os.getcwd(), "CodeSem", "datasets", "alias_prediction", "fine-tune")
+repo_folder = os.path.join(os.getcwd(), "Repos")
+repo_names = ["curl", "gcc", "git", "h2o", "libgit2", "linux", "mysql", "protobuf", "redis", "the-silver-searcher", "tmux"]
+
+
+def generate_tags(repo_path):
     """Generate function location information using ctags"""
     # Set the full path of ctags executable
     ctags_exe = "/usr/bin/ctags"  # ctags path in WSL
@@ -15,7 +21,7 @@ def generate_tags(curl_path):
 
     # Run ctags command
     try:
-        subprocess.run([ctags_exe, '-R', '--fields=+n', '-f', '.tags', curl_path], 
+        subprocess.run([ctags_exe, '-R', '--fields=+n', '-f', '.tags', repo_path], 
                       check=True, 
                       capture_output=True)
     except subprocess.CalledProcessError as e:
@@ -31,7 +37,7 @@ def generate_tags(curl_path):
     current_file = None
     current_start = None
     
-    with open('.tags', 'r', encoding='utf-8') as f:
+    with open('.tags', 'r', encoding='utf-8',  errors='replace') as f:
         for line in f:
             if line.startswith('!'):
                 continue
@@ -129,21 +135,28 @@ def extract_function_content(file_path, var1, var2, start_line, end_line, functi
         print(f"Error processing {file_path}: {str(e)}")
         return None
 
-def main():
+def produce_dataset_for_repo(repo_name):
+    print("begin produce dataset for " + repo_name + "...")
     # Create results directory
     os.makedirs("Results", exist_ok=True)
+    os.system("cd Results && mkdir " + repo_name + " && cd ..")
     
     # Read CSV file - using Linux path format
-    csv_path = "/mnt/d/CodeSem/CodeSem/datasets/alias_prediction/fine-tune/curl.csv"
-    curl_base_path = "/mnt/d/CodeSem/CodeSem/curl-curl-7_79_0"
+    repo_csv_path = os.path.join(csv_folder, repo_name + ".csv")
+    repo_base_path = os.path.join(repo_folder, repo_name)
+
+    
+
     
     # Generate function location information
-    function_ranges = generate_tags(curl_base_path)
+    print("begin generate ctags file...")
+    function_ranges = generate_tags(repo_base_path)
+    print("ctags file generated")
     
     # Dictionary to track appearance count of each source file
     file_counters = {}
     
-    with open(csv_path, 'r', encoding='utf-8') as csvfile:
+    with open(repo_csv_path, 'r') as csvfile:
         reader = csv.reader(csvfile)
         next(reader)  # Skip header row
         
@@ -157,8 +170,8 @@ def main():
             end_line = max(line1, line2)
             
             # Construct full file path
-            relative_path = file1.replace('curl/', '').replace('/', os.sep)
-            file_path = os.path.join(curl_base_path, relative_path)
+            relative_path = file1.replace('/', os.sep)
+            file_path = os.path.join(repo_folder, relative_path)
             
             # Extract function content and get variable line numbers
             result = extract_function_content(file_path, var1, var2, start_line, end_line, function_ranges)
@@ -185,12 +198,12 @@ def main():
                     base_filename = f"{i}_{base_name}_{func_name}_{file_counters[base_name]}"
                     
                     # Save .c file
-                    c_filename = os.path.join("Results", f"{base_filename}.c")
+                    c_filename = os.path.join("Results", repo_name, f"{base_filename}.c")
                     with open(c_filename, 'w', encoding='utf-8') as f:
                         f.write(content)
                     
                     # Save .txt file with updated line numbers
-                    txt_filename = os.path.join("Results", f"{base_filename}.txt")
+                    txt_filename = os.path.join("Results", repo_name, f"{base_filename}.txt")
                     with open(txt_filename, 'w', encoding='utf-8') as f:
                         new_row = [
                             var1, file1, str(var1_line),
@@ -203,5 +216,7 @@ def main():
                     file_counters[base_name] += 1
 
 if __name__ == "__main__":
-    main()
+    os.system("cd Results && rm -rf * && cd ..")
+    for repo in repo_names:
+        produce_dataset_for_repo(repo)
     print("Complete! Please check the Results folder.")

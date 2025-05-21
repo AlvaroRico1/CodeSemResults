@@ -1,1 +1,0 @@
-end_ptr,curl/lib/hostip.c,47,addr_end,curl/lib/hostip.c,45,1

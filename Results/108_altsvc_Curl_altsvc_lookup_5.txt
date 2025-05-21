@@ -1,1 +1,0 @@
-as,curl/lib/altsvc.c,15,e,curl/lib/altsvc.c,7,1

@@ -1,1 +1,0 @@
-store,curl/lib/ftp.c,200,dir,curl/lib/ftp.c,177,1

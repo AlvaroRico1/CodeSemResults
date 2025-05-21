@@ -1,1 +1,0 @@
-service,curl/lib/curl_sasl.c,12,sasl,curl/lib/curl_sasl.c,1,1

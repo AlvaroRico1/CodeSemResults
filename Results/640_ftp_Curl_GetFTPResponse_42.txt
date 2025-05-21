@@ -1,1 +1,0 @@
-ftpcode,curl/lib/ftp.c,3,value_to_be_ignored,curl/lib/ftp.c,19,1

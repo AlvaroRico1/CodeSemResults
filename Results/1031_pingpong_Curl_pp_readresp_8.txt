@@ -1,1 +1,0 @@
-pp,curl/lib/pingpong.c,3,ptr,curl/lib/pingpong.c,10,1

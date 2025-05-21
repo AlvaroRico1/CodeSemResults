@@ -1,1 +1,0 @@
-point,curl/lib/mprintf.c,311,strnil,curl/lib/mprintf.c,310,1

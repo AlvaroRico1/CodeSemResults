@@ -1,1 +1,0 @@
-mainco,curl/lib/cookie.c,7,newco,curl/lib/cookie.c,5,1

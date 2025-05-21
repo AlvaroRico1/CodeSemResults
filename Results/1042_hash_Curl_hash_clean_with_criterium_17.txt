@@ -1,1 +1,0 @@
-lnext,curl/lib/hash.c,5,le,curl/lib/hash.c,4,1

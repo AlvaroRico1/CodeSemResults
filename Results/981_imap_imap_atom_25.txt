@@ -1,1 +1,0 @@
-p3,curl/lib/imap.c,25,atom_specials,curl/lib/imap.c,4,1

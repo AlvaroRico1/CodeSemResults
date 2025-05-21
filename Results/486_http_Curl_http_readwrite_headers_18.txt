@@ -1,1 +1,0 @@
-rest_length,curl/lib/http.c,16,end_ptr,curl/lib/http.c,12,1

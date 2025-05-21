@@ -1,1 +1,0 @@
-lineptr,curl/lib/altsvc.c,20,line,curl/lib/altsvc.c,4,1

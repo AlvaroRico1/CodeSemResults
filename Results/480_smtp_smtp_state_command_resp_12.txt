@@ -1,1 +1,0 @@
-smtp,curl/lib/smtp.c,5,smtp,curl/lib/smtp.c,5,1

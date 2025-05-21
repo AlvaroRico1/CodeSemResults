@@ -1,1 +1,0 @@
-co,curl/lib/cookie.c,18,clist,curl/lib/cookie.c,17,1

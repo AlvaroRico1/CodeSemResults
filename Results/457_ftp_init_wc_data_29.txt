@@ -1,1 +1,0 @@
-wildcard,curl/lib/ftp.c,6,ftpwc,curl/lib/ftp.c,8,1

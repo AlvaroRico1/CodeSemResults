@@ -1,1 +1,0 @@
-message,curl/lib/pop3.c,4,buffer,curl/lib/pop3.c,1,1

@@ -1,1 +1,0 @@
-end_ptr,curl/lib/http.c,12,str_start,curl/lib/http.c,11,1

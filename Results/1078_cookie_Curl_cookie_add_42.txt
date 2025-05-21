@@ -1,1 +1,0 @@
-lastc,curl/lib/cookie.c,19,co,curl/lib/cookie.c,18,1

@@ -1,1 +1,0 @@
-next,curl/lib/slist.c,3,item,curl/lib/slist.c,4,1

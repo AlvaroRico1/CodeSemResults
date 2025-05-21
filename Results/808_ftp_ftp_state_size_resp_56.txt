@@ -1,1 +1,0 @@
-fdigit,curl/lib/ftp.c,15,start,curl/lib/ftp.c,14,1

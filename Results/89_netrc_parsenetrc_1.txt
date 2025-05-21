@@ -1,1 +1,0 @@
-password,curl/lib/netrc.c,11,passwordp,curl/lib/netrc.c,3,1

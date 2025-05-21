@@ -1,1 +1,0 @@
-infop,curl/lib/ftplistparser.c,8,parser,curl/lib/ftplistparser.c,7,1

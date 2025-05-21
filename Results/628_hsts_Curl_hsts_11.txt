@@ -1,1 +1,0 @@
-e,curl/lib/hsts.c,7,n,curl/lib/hsts.c,8,1

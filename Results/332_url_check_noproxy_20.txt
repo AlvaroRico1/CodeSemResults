@@ -1,1 +1,0 @@
-namelen,curl/lib/url.c,13,endptr,curl/lib/url.c,14,1

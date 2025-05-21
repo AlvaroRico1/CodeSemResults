@@ -1,1 +1,0 @@
-param_place,curl/src/tool_getparam.c,7,cert_parameter,curl/src/tool_getparam.c,1,0

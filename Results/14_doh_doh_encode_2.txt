@@ -1,1 +1,0 @@
-orig,curl/lib/doh.c,8,dnsp,curl/lib/doh.c,3,1

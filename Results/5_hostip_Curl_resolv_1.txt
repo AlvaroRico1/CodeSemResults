@@ -1,1 +1,0 @@
-entry,curl/lib/hostip.c,5,dns,curl/lib/hostip.c,7,1

@@ -1,1 +1,0 @@
-login,curl/lib/netrc.c,10,loginp,curl/lib/netrc.c,2,1

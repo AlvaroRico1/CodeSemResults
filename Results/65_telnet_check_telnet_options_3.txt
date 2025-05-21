@@ -1,1 +1,0 @@
-tn,curl/lib/telnet.c,7,beg,curl/lib/telnet.c,4,1

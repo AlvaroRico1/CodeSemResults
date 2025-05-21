@@ -1,1 +1,0 @@
-finfo,curl/lib/ftplistparser.c,9,tmp,curl/lib/ftplistparser.c,33,1

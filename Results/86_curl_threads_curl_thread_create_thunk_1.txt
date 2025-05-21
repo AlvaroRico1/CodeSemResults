@@ -1,1 +1,0 @@
-func,curl/lib/curl_threads.c,4,ac,curl/lib/curl_threads.c,3,1

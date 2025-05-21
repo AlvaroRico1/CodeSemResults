@@ -1,1 +1,0 @@
-ptr_ntresp,curl/lib/vauth/ntlm.c,34,ntlmv2resp,curl/lib/vauth/ntlm.c,35,1

@@ -1,1 +1,0 @@
-result,curl/lib/curl_addrinfo.c,4,cafirst,curl/lib/curl_addrinfo.c,8,1

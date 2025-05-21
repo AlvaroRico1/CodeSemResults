@@ -1,1 +1,0 @@
-imap,curl/lib/imap.c,3,value,curl/lib/imap.c,30,1

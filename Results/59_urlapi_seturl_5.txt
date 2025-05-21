@@ -1,1 +1,0 @@
-path,curl/lib/urlapi.c,3,ptr,curl/lib/urlapi.c,56,1

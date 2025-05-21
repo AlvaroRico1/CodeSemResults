@@ -1,1 +1,0 @@
-user,curl/lib/vauth/ntlm.c,39,userp,curl/lib/vauth/ntlm.c,2,1
