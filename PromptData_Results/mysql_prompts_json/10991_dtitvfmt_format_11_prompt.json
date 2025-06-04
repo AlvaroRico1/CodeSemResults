@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'interval' at line 11\n2. Pointer 'formatObj' at line 10\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nDateIntervalFormat::format(const Formattable& obj,\n                           UnicodeString& appendTo,\n                           FieldPosition& fieldPosition,\n                           UErrorCode& status) const {\n    if ( U_FAILURE(status) ) {\n        return appendTo;\n    }\n\n    if ( obj.getType() == Formattable::kObject ) {\n        const UObject* formatObj = obj.getObject();\n        const DateInterval* interval = dynamic_cast<const DateInterval*>(formatObj);\n        if (interval != NULL) {\n            return format(interval, appendTo, fieldPosition, status);\n        }\n    }\n\n\n// Source: dtitvfmt.cpp\n// Lines 258-272\n",
+  "ANSWER": "MUST"
+}

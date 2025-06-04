@@ -1,0 +1,37 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'buf' at line 4
+2. Pointer 'ictx' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+input_dcs_dispatch(struct input_ctx *ictx)
+{
+	struct screen_write_ctx	*sctx = &ictx->ctx;
+	u_char			*buf = ictx->input_buf;
+	size_t			 len = ictx->input_len;
+	const char		 prefix[] = "tmux;";
+	const u_int		 prefixlen = (sizeof prefix) - 1;
+
+	if (ictx->flags & INPUT_DISCARD)
+		return (0);
+
+	log_debug("%s: \"%s\"", __func__, buf);
+
+	if (len >= prefixlen && strncmp(buf, prefix, prefixlen) == 0)
+		screen_write_rawstring(sctx, buf + prefixlen, len - prefixlen);
+
+	return (0);
+}
+
+
+// Source: input.c
+// Lines 2232-2249
+
+
+[ANSWER]
+MUST

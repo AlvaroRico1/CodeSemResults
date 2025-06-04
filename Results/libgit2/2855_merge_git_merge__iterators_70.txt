@@ -1,0 +1,1 @@
+empty_theirs,libgit2/src/libgit2/merge.c,11,resolved,libgit2/src/libgit2/merge.c,59,2

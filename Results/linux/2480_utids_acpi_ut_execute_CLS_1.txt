@@ -1,0 +1,1 @@
+cls_objects,linux/drivers/acpi/acpica/utids.c,5,obj_desc,linux/drivers/acpi/acpica/utids.c,4,2

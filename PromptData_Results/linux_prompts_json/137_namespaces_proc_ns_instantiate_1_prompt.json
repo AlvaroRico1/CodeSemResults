@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ei' at line 6\n2. Pointer 'ns_ops' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic struct dentry *proc_ns_instantiate(struct dentry *dentry,\n\tstruct task_struct *task, const void *ptr)\n{\n\tconst struct proc_ns_operations *ns_ops = ptr;\n\tstruct inode *inode;\n\tstruct proc_inode *ei;\n\n\tinode = proc_pid_make_inode(dentry->d_sb, task, S_IFLNK | S_IRWXUGO);\n\tif (!inode)\n\t\treturn ERR_PTR(-ENOENT);\n\n\tei = PROC_I(inode);\n\tinode->i_op = &proc_ns_link_inode_operations;\n\tei->ns_ops = ns_ops;\n\tpid_update_inode(task, inode);\n\n\td_set_d_op(dentry, &pid_dentry_operations);\n\treturn d_splice_alias(inode, dentry);\n}\n\n\n// Source: namespaces.c\n// Lines 90-108\n",
+  "ANSWER": "MUST"
+}

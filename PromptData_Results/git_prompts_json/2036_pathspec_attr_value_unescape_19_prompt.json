@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'dst' at line 4\n2. Pointer 'ret' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic char *attr_value_unescape(const char *value)\n{\n\tconst char *src;\n\tchar *dst, *ret;\n\n\tret = xmallocz(strlen(value));\n\tfor (src = value, dst = ret; *src; src++, dst++) {\n\t\tif (*src == '\\\\') {\n\t\t\tif (!src[1])\n\t\t\t\tdie(_(\"Escape character '\\\\' not allowed as \"\n\t\t\t\t      \"last character in attr value\"));\n\t\t\tsrc++;\n\t\t}\n\t\tif (invalid_value_char(*src))\n\t\t\tdie(\"cannot use '%c' for value matching\", *src);\n\t\t*dst = *src;\n\t}\n\t*dst = '\\0';\n\treturn ret;\n}\n\n\n// Source: pathspec.c\n// Lines 141-160\n",
+  "ANSWER": "MUST"
+}

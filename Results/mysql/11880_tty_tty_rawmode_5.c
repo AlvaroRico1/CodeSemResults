@@ -1,0 +1,73 @@
+tty_rawmode(EditLine *el)
+{
+
+	if (el->el_tty.t_mode == ED_IO || el->el_tty.t_mode == QU_IO)
+		return 0;
+
+	if (el->el_flags & EDIT_DISABLED)
+		return 0;
+
+	if (tty_getty(el, &el->el_tty.t_ts) == -1) {
+#ifdef DEBUG_TTY
+		(void) fprintf(el->el_errfile, "%s: tty_getty: %s\n", __func__,
+		    strerror(errno));
+#endif /* DEBUG_TTY */
+		return -1;
+	}
+	/*
+         * We always keep up with the eight bit setting and the speed of the
+         * tty. But we only believe changes that are made to cooked mode!
+         */
+	el->el_tty.t_eight = tty__geteightbit(&el->el_tty.t_ts);
+	el->el_tty.t_speed = tty__getspeed(&el->el_tty.t_ts);
+
+	if (tty__getspeed(&el->el_tty.t_ex) != el->el_tty.t_speed ||
+	    tty__getspeed(&el->el_tty.t_ed) != el->el_tty.t_speed) {
+		(void) cfsetispeed(&el->el_tty.t_ex, el->el_tty.t_speed);
+		(void) cfsetospeed(&el->el_tty.t_ex, el->el_tty.t_speed);
+		(void) cfsetispeed(&el->el_tty.t_ed, el->el_tty.t_speed);
+		(void) cfsetospeed(&el->el_tty.t_ed, el->el_tty.t_speed);
+	}
+	if (tty__cooked_mode(&el->el_tty.t_ts)) {
+		int i;
+
+		for (i = MD_INP; i <= MD_LIN; i++)
+			tty_update_flags(el, i);
+
+		if (tty__gettabs(&el->el_tty.t_ex) == 0)
+			el->el_tty.t_tabs = 0;
+		else
+			el->el_tty.t_tabs = EL_CAN_TAB ? 1 : 0;
+
+		tty__getchar(&el->el_tty.t_ts, el->el_tty.t_c[TS_IO]);
+		/*
+		 * Check if the user made any changes.
+		 * If he did, then propagate the changes to the
+		 * edit and execute data structures.
+		 */
+		for (i = 0; i < C_NCC; i++)
+			if (el->el_tty.t_c[TS_IO][i] !=
+			    el->el_tty.t_c[EX_IO][i])
+				break;
+
+		if (i != C_NCC) {
+			/*
+			 * Propagate changes only to the unlibedit_private
+			 * chars that have been modified just now.
+			 */
+			for (i = 0; i < C_NCC; i++)
+				tty_update_char(el, ED_IO, i);
+
+			tty_bind_char(el, 0);
+			tty__setchar(&el->el_tty.t_ed, el->el_tty.t_c[ED_IO]);
+
+			for (i = 0; i < C_NCC; i++)
+				tty_update_char(el, EX_IO, i);
+
+			tty__setchar(&el->el_tty.t_ex, el->el_tty.t_c[EX_IO]);
+		}
+	}
+
+
+// Source: tty.c
+// Lines 996-1064

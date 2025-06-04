@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'node' at line 2\n2. Pointer 'zl' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid quicklistAppendZiplist(quicklist *quicklist, unsigned char *zl) {\n    quicklistNode *node = quicklistCreateNode();\n\n    node->zl = zl;\n    node->count = ziplistLen(node->zl);\n    node->sz = ziplistBlobLen(zl);\n\n    _quicklistInsertNodeAfter(quicklist, quicklist->tail, node);\n    quicklist->count += node->count;\n}\n\n\n// Source: quicklist.c\n// Lines 539-548\n",
+  "ANSWER": "MUST"
+}

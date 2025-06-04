@@ -1,0 +1,1 @@
+read_value64,linux/drivers/acpi/acpica/hwregs.c,5,read_value,linux/drivers/acpi/acpica/hwregs.c,4,2

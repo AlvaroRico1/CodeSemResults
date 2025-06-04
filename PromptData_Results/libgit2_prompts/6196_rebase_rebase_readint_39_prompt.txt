@@ -1,0 +1,38 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'num' at line 4
+2. Pointer 'eol' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+GIT_INLINE(int) rebase_readint(
+	size_t *out, git_str *asc_out, git_str *state_path, const char *filename)
+{
+	int32_t num;
+	const char *eol;
+	int error = 0;
+
+	if ((error = rebase_readfile(asc_out, state_path, filename)) < 0)
+		return error;
+
+	if (git__strntol32(&num, asc_out->ptr, asc_out->size, &eol, 10) < 0 || num < 0 || *eol) {
+		git_error_set(GIT_ERROR_REBASE, "the file '%s' contains an invalid numeric value", filename);
+		return -1;
+	}
+
+	*out = (size_t) num;
+
+	return 0;
+}
+
+
+// Source: rebase.c
+// Lines 146-164
+
+
+[ANSWER]
+MAY

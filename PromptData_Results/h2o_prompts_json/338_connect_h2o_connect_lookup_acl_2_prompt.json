@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'sin' at line 9\n2. Pointer 'target' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint h2o_connect_lookup_acl(h2o_connect_acl_entry_t *acl_entries, size_t num_acl_entries, struct sockaddr *target)\n{\n    uint32_t target_v4addr = 0;\n    uint16_t target_port;\n\n    /* reject anything other than v4/v6, as well as converting the values to native format */\n    switch (target->sa_family) {\n    case AF_INET: {\n        struct sockaddr_in *sin = (void *)target;\n        target_v4addr = ntohl(sin->sin_addr.s_addr);\n        target_port = ntohs(sin->sin_port);\n    } break;\n\n\n// Source: connect.c\n// Lines 977-988\n",
+  "ANSWER": "MUST"
+}

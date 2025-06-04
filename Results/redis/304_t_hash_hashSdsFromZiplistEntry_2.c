@@ -1,0 +1,37 @@
+sds hashSdsFromZiplistEntry(ziplistEntry *e) {
+    return e->sval ? sdsnewlen(e->sval, e->slen) : sdsfromlonglong(e->lval);
+}
+
+/* Reply with bulk string from the ziplist entry. */
+void hashReplyFromZiplistEntry(client *c, ziplistEntry *e) {
+    if (e->sval)
+        addReplyBulkCBuffer(c, e->sval, e->slen);
+    else
+        addReplyBulkLongLong(c, e->lval);
+}
+
+/* Return random element from a non empty hash.
+ * 'key' and 'val' will be set to hold the element.
+ * The memory in them is not to be freed or modified by the caller.
+ * 'val' can be NULL in which case it's not extracted. */
+void hashTypeRandomElement(robj *hashobj, unsigned long hashsize, ziplistEntry *key, ziplistEntry *val) {
+    if (hashobj->encoding == OBJ_ENCODING_HT) {
+        dictEntry *de = dictGetFairRandomKey(hashobj->ptr);
+        sds s = dictGetKey(de);
+        key->sval = (unsigned char*)s;
+        key->slen = sdslen(s);
+        if (val) {
+            sds s = dictGetVal(de);
+            val->sval = (unsigned char*)s;
+            val->slen = sdslen(s);
+        }
+    } else if (hashobj->encoding == OBJ_ENCODING_ZIPLIST) {
+        ziplistRandomPair(hashobj->ptr, hashsize, key, val);
+    } else {
+        serverPanic("Unknown hash encoding");
+    }
+}
+
+
+// Source: t_hash.c
+// Lines 604-636

@@ -1,0 +1,60 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'value' at line None
+2. Pointer 'renormalize' at line None
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int merge_recursive_generic(struct merge_options *opt,
+			    const struct object_id *head,
+			    const struct object_id *merge,
+			    int num_merge_bases,
+			    const struct object_id **merge_bases,
+			    struct commit **result)
+{
+	int clean;
+	struct lock_file lock = LOCK_INIT;
+	struct commit *head_commit = get_ref(opt->repo, head, opt->branch1);
+	struct commit *next_commit = get_ref(opt->repo, merge, opt->branch2);
+	struct commit_list *ca = NULL;
+
+	if (merge_bases) {
+		int i;
+		for (i = 0; i < num_merge_bases; ++i) {
+			struct commit *base;
+			if (!(base = get_ref(opt->repo, merge_bases[i],
+					     oid_to_hex(merge_bases[i]))))
+				return err(opt, _("Could not parse object '%s'"),
+					   oid_to_hex(merge_bases[i]));
+			commit_list_insert(base, &ca);
+		}
+		if (num_merge_bases == 1)
+			opt->ancestor = "constructed merge base";
+	}
+
+	repo_hold_locked_index(opt->repo, &lock, LOCK_DIE_ON_ERROR);
+	clean = merge_recursive(opt, head_commit, next_commit, ca,
+				result);
+	if (clean < 0) {
+		rollback_lock_file(&lock);
+		return clean;
+	}
+
+	if (write_locked_index(opt->repo->index, &lock,
+			       COMMIT_LOCK | SKIP_IF_UNCHANGED))
+		return err(opt, _("Unable to write index."));
+
+	return clean ? 0 : 1;
+}
+
+
+// Source: merge-recursive.c
+// Lines 3798-3838
+
+
+[ANSWER]
+MAY

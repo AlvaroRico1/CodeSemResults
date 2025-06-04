@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'msg' at line 3\n2. Pointer 'imsg' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nfile_write_data(struct client_files *files, struct imsg *imsg)\n{\n\tstruct msg_write_data\t*msg = imsg->data;\n\tsize_t\t\t\t msglen = imsg->hdr.len - IMSG_HEADER_SIZE;\n\tstruct client_file\t find, *cf;\n\tsize_t\t\t\t size = msglen - sizeof *msg;\n\n\tif (msglen < sizeof *msg)\n\t\tfatalx(\"bad MSG_WRITE size\");\n\tfind.stream = msg->stream;\n\tif ((cf = RB_FIND(client_files, files, &find)) == NULL)\n\t\tfatalx(\"unknown stream number\");\n\tlog_debug(\"write %zu to file %d\", size, cf->stream);\n\n\tif (cf->event != NULL)\n\t\tbufferevent_write(cf->event, msg + 1, size);\n}\n\n\n// Source: file.c\n// Lines 599-615\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,1 @@
+p,gcc/gcc/attribs.c,3,attr_name,gcc/gcc/attribs.c,1,0

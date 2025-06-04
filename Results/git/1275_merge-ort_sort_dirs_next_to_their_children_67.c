@@ -1,0 +1,57 @@
+static int sort_dirs_next_to_their_children(const char *one, const char *two)
+{
+	unsigned char c1, c2;
+
+	/*
+	 * Here we only care that entries for directories appear adjacent
+	 * to and before files underneath the directory.  We can achieve
+	 * that by pretending to add a trailing slash to every file and
+	 * then sorting.  In other words, we do not want the natural
+	 * sorting of
+	 *     foo
+	 *     foo.txt
+	 *     foo/bar
+	 * Instead, we want "foo" to sort as though it were "foo/", so that
+	 * we instead get
+	 *     foo.txt
+	 *     foo
+	 *     foo/bar
+	 * To achieve this, we basically implement our own strcmp, except that
+	 * if we get to the end of either string instead of comparing NUL to
+	 * another character, we compare '/' to it.
+	 *
+	 * If this unusual "sort as though '/' were appended" perplexes
+	 * you, perhaps it will help to note that this is not the final
+	 * sort.  write_tree() will sort again without the trailing slash
+	 * magic, but just on paths immediately under a given tree.
+	 *
+	 * The reason to not use df_name_compare directly was that it was
+	 * just too expensive (we don't have the string lengths handy), so
+	 * it was reimplemented.
+	 */
+
+	/*
+	 * NOTE: This function will never be called with two equal strings,
+	 * because it is used to sort the keys of a strmap, and strmaps have
+	 * unique keys by construction.  That simplifies our c1==c2 handling
+	 * below.
+	 */
+
+	while (*one && (*one == *two)) {
+		one++;
+		two++;
+	}
+
+	c1 = *one ? *one : '/';
+	c2 = *two ? *two : '/';
+
+	if (c1 == c2) {
+		/* Getting here means one is a leading directory of the other */
+		return (*one) ? 1 : -1;
+	} else
+		return c1 - c2;
+}
+
+
+// Source: merge-ort.c
+// Lines 3159-3211

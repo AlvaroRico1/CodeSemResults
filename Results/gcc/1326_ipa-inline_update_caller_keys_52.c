@@ -1,0 +1,44 @@
+update_caller_keys (edge_heap_t *heap, struct cgraph_node *node,
+		    bitmap updated_nodes,
+		    struct cgraph_edge *check_inlinablity_for)
+{
+  struct cgraph_edge *edge;
+  struct ipa_ref *ref;
+
+  if ((!node->alias && !ipa_fn_summaries->get (node)->inlinable)
+      || node->inlined_to)
+    return;
+  if (!bitmap_set_bit (updated_nodes, node->get_uid ()))
+    return;
+
+  FOR_EACH_ALIAS (node, ref)
+    {
+      struct cgraph_node *alias = dyn_cast <cgraph_node *> (ref->referring);
+      update_caller_keys (heap, alias, updated_nodes, check_inlinablity_for);
+    }
+
+  for (edge = node->callers; edge; edge = edge->next_caller)
+    if (edge->inline_failed)
+      {
+        if (!check_inlinablity_for
+	    || check_inlinablity_for == edge)
+	  {
+	    if (can_inline_edge_p (edge, false)
+		&& want_inline_small_function_p (edge, false)
+		&& can_inline_edge_by_limits_p (edge, false))
+	      update_edge_key (heap, edge);
+	    else if (edge->aux)
+	      {
+		report_inline_failed_reason (edge);
+		heap->delete_node ((edge_heap_node_t *) edge->aux);
+		edge->aux = NULL;
+	      }
+	  }
+	else if (edge->aux)
+	  update_edge_key (heap, edge);
+      }
+}
+
+
+// Source: ipa-inline.c
+// Lines 1429-1468

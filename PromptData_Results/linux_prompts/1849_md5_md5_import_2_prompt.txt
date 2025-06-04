@@ -1,0 +1,26 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'in' at line 1
+2. Pointer 'ctx' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int md5_import(struct shash_desc *desc, const void *in)
+{
+	struct md5_state *ctx = shash_desc_ctx(desc);
+
+	memcpy(ctx, in, sizeof(*ctx));
+	return 0;
+}
+
+
+// Source: md5.c
+// Lines 213-219
+
+
+[ANSWER]
+MAY

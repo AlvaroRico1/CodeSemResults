@@ -1,0 +1,88 @@
+ira_update_equiv_info_by_shuffle_insn (int to_regno, int from_regno, rtx_insn *insns)
+{
+  rtx_insn *insn;
+  rtx x, note;
+
+  if (! ira_reg_equiv[from_regno].defined_p
+      && (! ira_reg_equiv[to_regno].defined_p
+	  || ((x = ira_reg_equiv[to_regno].memory) != NULL_RTX
+	      && ! MEM_READONLY_P (x))))
+    return;
+  insn = insns;
+  if (NEXT_INSN (insn) != NULL_RTX)
+    {
+      if (! ira_reg_equiv[to_regno].defined_p)
+	{
+	  ira_assert (ira_reg_equiv[to_regno].init_insns == NULL_RTX);
+	  return;
+	}
+      ira_reg_equiv[to_regno].defined_p = false;
+      ira_reg_equiv[to_regno].memory
+	= ira_reg_equiv[to_regno].constant
+	= ira_reg_equiv[to_regno].invariant
+	= ira_reg_equiv[to_regno].init_insns = NULL;
+      if (internal_flag_ira_verbose > 3 && ira_dump_file != NULL)
+	fprintf (ira_dump_file,
+		 "      Invalidating equiv info for reg %d\n", to_regno);
+      return;
+    }
+  /* It is possible that FROM_REGNO still has no equivalence because
+     in shuffles to_regno<-from_regno and from_regno<-to_regno the 2nd
+     insn was not processed yet.  */
+  if (ira_reg_equiv[from_regno].defined_p)
+    {
+      ira_reg_equiv[to_regno].defined_p = true;
+      if ((x = ira_reg_equiv[from_regno].memory) != NULL_RTX)
+	{
+	  ira_assert (ira_reg_equiv[from_regno].invariant == NULL_RTX
+		      && ira_reg_equiv[from_regno].constant == NULL_RTX);
+	  ira_assert (ira_reg_equiv[to_regno].memory == NULL_RTX
+		      || rtx_equal_p (ira_reg_equiv[to_regno].memory, x));
+	  ira_reg_equiv[to_regno].memory = x;
+	  if (! MEM_READONLY_P (x))
+	    /* We don't add the insn to insn init list because memory
+	       equivalence is just to say what memory is better to use
+	       when the pseudo is spilled.  */
+	    return;
+	}
+      else if ((x = ira_reg_equiv[from_regno].constant) != NULL_RTX)
+	{
+	  ira_assert (ira_reg_equiv[from_regno].invariant == NULL_RTX);
+	  ira_assert (ira_reg_equiv[to_regno].constant == NULL_RTX
+		      || rtx_equal_p (ira_reg_equiv[to_regno].constant, x));
+	  ira_reg_equiv[to_regno].constant = x;
+	}
+      else
+	{
+	  x = ira_reg_equiv[from_regno].invariant;
+	  ira_assert (x != NULL_RTX);
+	  ira_assert (ira_reg_equiv[to_regno].invariant == NULL_RTX
+		      || rtx_equal_p (ira_reg_equiv[to_regno].invariant, x));
+	  ira_reg_equiv[to_regno].invariant = x;
+	}
+      if (find_reg_note (insn, REG_EQUIV, x) == NULL_RTX)
+	{
+	  note = set_unique_reg_note (insn, REG_EQUIV, copy_rtx (x));
+	  gcc_assert (note != NULL_RTX);
+	  if (internal_flag_ira_verbose > 3 && ira_dump_file != NULL)
+	    {
+	      fprintf (ira_dump_file,
+		       "      Adding equiv note to insn %u for reg %d ",
+		       INSN_UID (insn), to_regno);
+	      dump_value_slim (ira_dump_file, x, 1);
+	      fprintf (ira_dump_file, "\n");
+	    }
+	}
+    }
+  ira_reg_equiv[to_regno].init_insns
+    = gen_rtx_INSN_LIST (VOIDmode, insn,
+			 ira_reg_equiv[to_regno].init_insns);
+  if (internal_flag_ira_verbose > 3 && ira_dump_file != NULL)
+    fprintf (ira_dump_file,
+	     "      Adding equiv init move insn %u to reg %d\n",
+	     INSN_UID (insn), to_regno);
+}
+
+
+// Source: ira.c
+// Lines 2578-2661

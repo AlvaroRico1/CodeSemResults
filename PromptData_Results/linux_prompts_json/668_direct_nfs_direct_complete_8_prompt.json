@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'inode' at line 3\n2. Pointer 'dreq' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void nfs_direct_complete(struct nfs_direct_req *dreq)\n{\n\tstruct inode *inode = dreq->inode;\n\n\tinode_dio_end(inode);\n\n\tif (dreq->iocb) {\n\t\tlong res = (long) dreq->error;\n\t\tif (dreq->count != 0) {\n\t\t\tres = (long) dreq->count;\n\t\t\tWARN_ON_ONCE(dreq->count < 0);\n\t\t}\n\t\tdreq->iocb->ki_complete(dreq->iocb, res, 0);\n\t}\n\n\tcomplete(&dreq->completion);\n\n\tnfs_direct_req_release(dreq);\n}\n\n\n// Source: direct.c\n// Lines 379-397\n",
+  "ANSWER": "MUST"
+}

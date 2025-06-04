@@ -1,0 +1,1 @@
+master,redis/src/sentinel.c,9,ri,redis/src/sentinel.c,1,1

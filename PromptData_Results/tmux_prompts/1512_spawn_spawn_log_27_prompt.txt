@@ -1,0 +1,40 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'wp0' at line 5
+2. Pointer 'sc' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+spawn_log(const char *from, struct spawn_context *sc)
+{
+	struct session		*s = sc->s;
+	struct winlink		*wl = sc->wl;
+	struct window_pane	*wp0 = sc->wp0;
+	const char		*name = cmdq_get_name(sc->item);
+	char			 tmp[128];
+
+	log_debug("%s: %s, flags=%#x", from, name, sc->flags);
+
+	if (wl != NULL && wp0 != NULL)
+		xsnprintf(tmp, sizeof tmp, "wl=%d wp0=%%%u", wl->idx, wp0->id);
+	else if (wl != NULL)
+		xsnprintf(tmp, sizeof tmp, "wl=%d wp0=none", wl->idx);
+	else if (wp0 != NULL)
+		xsnprintf(tmp, sizeof tmp, "wl=none wp0=%%%u", wp0->id);
+	else
+		xsnprintf(tmp, sizeof tmp, "wl=none wp0=none");
+	log_debug("%s: s=$%u %s idx=%d", from, s->id, tmp, sc->idx);
+	log_debug("%s: name=%s", from, sc->name == NULL ? "none" : sc->name);
+}
+
+
+// Source: spawn.c
+// Lines 52-72
+
+
+[ANSWER]
+MUST

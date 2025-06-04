@@ -1,0 +1,1 @@
+head,gcc/gcc/ipa-comdats.c,4,head_p,gcc/gcc/ipa-comdats.c,2,1

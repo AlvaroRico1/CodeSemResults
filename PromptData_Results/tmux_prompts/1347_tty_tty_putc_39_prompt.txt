@@ -1,0 +1,55 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'acs' at line 3
+2. Pointer 'ch' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+tty_putc(struct tty *tty, u_char ch)
+{
+	const char	*acs;
+
+	if ((tty->term->flags & TERM_NOAM) &&
+	    ch >= 0x20 && ch != 0x7f &&
+	    tty->cy == tty->sy - 1 &&
+	    tty->cx + 1 >= tty->sx)
+		return;
+
+	if (tty->cell.attr & GRID_ATTR_CHARSET) {
+		acs = tty_acs_get(tty, ch);
+		if (acs != NULL)
+			tty_add(tty, acs, strlen(acs));
+		else
+			tty_add(tty, &ch, 1);
+	} else
+		tty_add(tty, &ch, 1);
+
+	if (ch >= 0x20 && ch != 0x7f) {
+		if (tty->cx >= tty->sx) {
+			tty->cx = 1;
+			if (tty->cy != tty->rlower)
+				tty->cy++;
+
+			/*
+			 * On !am terminals, force the cursor position to where
+			 * we think it should be after a line wrap - this means
+			 * it works on sensible terminals as well.
+			 */
+			if (tty->term->flags & TERM_NOAM)
+				tty_putcode2(tty, TTYC_CUP, tty->cy, tty->cx);
+		} else
+			tty->cx++;
+	}
+}
+
+
+// Source: tty.c
+// Lines 569-604
+
+
+[ANSWER]
+MAY

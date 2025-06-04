@@ -1,0 +1,65 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'list_col_array' at line 5
+2. Pointer 'part_info' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static uint32 get_partition_id_cols_list_for_endpoint(partition_info *part_info,
+                                                      bool left_endpoint,
+                                                      bool include_endpoint,
+                                                      uint32 nparts) {
+  part_column_list_val *list_col_array = part_info->list_col_array;
+  uint num_columns = part_info->part_field_list.elements;
+  uint list_index;
+  uint min_list_index = 0;
+  int cmp;
+  /* Notice that max_list_index = last_index + 1 here! */
+  uint max_list_index = part_info->num_list_values;
+  DBUG_TRACE;
+
+  /* Find the matching partition (including taking endpoint into account). */
+  do {
+    /* Midpoint, adjusted down, so it can never be >= max_list_index. */
+    list_index = (max_list_index + min_list_index) >> 1;
+    cmp = cmp_rec_and_tuple_prune(list_col_array + list_index * num_columns,
+                                  nparts, left_endpoint, include_endpoint);
+    if (cmp > 0) {
+      min_list_index = list_index + 1;
+    } else {
+      max_list_index = list_index;
+      if (cmp == 0) break;
+    }
+  } while (max_list_index > min_list_index);
+  list_index = max_list_index;
+
+  /* Given value must be LESS THAN or EQUAL to the found partition. */
+  assert(
+      list_index == part_info->num_list_values ||
+      (0 >= cmp_rec_and_tuple_prune(list_col_array + list_index * num_columns,
+                                    nparts, left_endpoint, include_endpoint)));
+  /* Given value must be GREATER THAN the previous partition. */
+  assert(list_index == 0 ||
+         (0 < cmp_rec_and_tuple_prune(
+                  list_col_array + (list_index - 1) * num_columns, nparts,
+                  left_endpoint, include_endpoint)));
+
+  /* Include the right endpoint if not already passed end of array. */
+  if (!left_endpoint && include_endpoint && cmp == 0 &&
+      list_index < part_info->num_list_values)
+    list_index++;
+
+  return list_index;
+}
+
+
+// Source: sql_partition.cc
+// Lines 2888-2933
+
+
+[ANSWER]
+MUST

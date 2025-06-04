@@ -1,0 +1,1 @@
+count,mysql/libmysql/libmysql.cc,2,my_bind,mysql/libmysql/libmysql.cc,1,0

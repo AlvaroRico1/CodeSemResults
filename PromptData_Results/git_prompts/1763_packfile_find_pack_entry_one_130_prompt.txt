@@ -1,0 +1,36 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'result' at line 6
+2. Pointer 'sha1' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+off_t find_pack_entry_one(const unsigned char *sha1,
+				  struct packed_git *p)
+{
+	const unsigned char *index = p->index_data;
+	struct object_id oid;
+	uint32_t result;
+
+	if (!index) {
+		if (open_pack_index(p))
+			return 0;
+	}
+
+	hashcpy(oid.hash, sha1);
+	if (bsearch_pack(&oid, p, &result))
+		return nth_packed_object_offset(p, result);
+	return 0;
+}
+
+
+// Source: packfile.c
+// Lines 1950-1966
+
+
+[ANSWER]
+MAY

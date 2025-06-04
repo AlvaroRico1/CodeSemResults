@@ -1,0 +1,44 @@
+expand_omp_ordered_source_sink (struct omp_region *region,
+				struct omp_for_data *fd, tree *counts,
+				basic_block cont_bb)
+{
+  struct omp_region *inner;
+  int i;
+  for (i = fd->collapse - 1; i < fd->ordered; i++)
+    if (i == fd->collapse - 1 && fd->collapse > 1)
+      counts[i] = NULL_TREE;
+    else if (i >= fd->collapse && !cont_bb)
+      counts[i] = build_zero_cst (fd->iter_type);
+    else if (!POINTER_TYPE_P (TREE_TYPE (fd->loops[i].v))
+	     && integer_onep (fd->loops[i].step))
+      counts[i] = NULL_TREE;
+    else
+      counts[i] = create_tmp_var (fd->iter_type, ".orditer");
+  tree atype
+    = build_array_type_nelts (fd->iter_type, fd->ordered - fd->collapse + 1);
+  counts[fd->ordered] = create_tmp_var (atype, ".orditera");
+  TREE_ADDRESSABLE (counts[fd->ordered]) = 1;
+
+  for (inner = region->inner; inner; inner = inner->next)
+    if (inner->type == GIMPLE_OMP_ORDERED)
+      {
+	gomp_ordered *ord_stmt = inner->ord_stmt;
+	gimple_stmt_iterator gsi = gsi_for_stmt (ord_stmt);
+	location_t loc = gimple_location (ord_stmt);
+	tree c;
+	for (c = gimple_omp_ordered_clauses (ord_stmt);
+	     c; c = OMP_CLAUSE_CHAIN (c))
+	  if (OMP_CLAUSE_DEPEND_KIND (c) == OMP_CLAUSE_DEPEND_SOURCE)
+	    break;
+	if (c)
+	  expand_omp_ordered_source (&gsi, fd, counts, loc);
+	for (c = gimple_omp_ordered_clauses (ord_stmt);
+	     c; c = OMP_CLAUSE_CHAIN (c))
+	  if (OMP_CLAUSE_DEPEND_KIND (c) == OMP_CLAUSE_DEPEND_SINK)
+	    expand_omp_ordered_sink (&gsi, fd, counts, c, loc);
+	gsi_remove (&gsi, true);
+      }
+
+
+// Source: omp-expand.c
+// Lines 2370-2409

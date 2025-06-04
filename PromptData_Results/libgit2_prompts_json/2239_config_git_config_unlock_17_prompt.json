@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'backend' at line 3\n2. Pointer 'internal' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint git_config_unlock(git_config *cfg, int commit)\n{\n\tgit_config_backend *backend;\n\tbackend_internal *internal;\n\n\tGIT_ASSERT_ARG(cfg);\n\n\tinternal = git_vector_get(&cfg->backends, 0);\n\tif (!internal || !internal->backend) {\n\t\tgit_error_set(GIT_ERROR_CONFIG, \"cannot lock; the config has no backends\");\n\t\treturn -1;\n\t}\n\n\tbackend = internal->backend;\n\n\treturn backend->unlock(backend, commit);\n}\n\n\n// Source: config.c\n// Lines 1268-1284\n",
+  "ANSWER": "MUST"
+}

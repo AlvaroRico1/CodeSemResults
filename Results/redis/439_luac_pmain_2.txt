@@ -1,0 +1,1 @@
+argv,redis/deps/lua/src/luac.c,5,s,redis/deps/lua/src/luac.c,3,1

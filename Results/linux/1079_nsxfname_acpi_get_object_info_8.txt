@@ -1,0 +1,1 @@
+hid,linux/drivers/acpi/acpica/nsxfname.c,7,cid_list,linux/drivers/acpi/acpica/nsxfname.c,6,2

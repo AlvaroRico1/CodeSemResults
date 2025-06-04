@@ -1,0 +1,83 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'table_list' at line 3
+2. Pointer 'all_tables' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool flush_tables_with_read_lock(THD *thd, TABLE_LIST *all_tables) {
+  Lock_tables_prelocking_strategy lock_tables_prelocking_strategy;
+  TABLE_LIST *table_list;
+
+  /*
+    This is called from SQLCOM_FLUSH, the transaction has
+    been committed implicitly.
+  */
+
+  if (thd->locked_tables_mode) {
+    my_error(ER_LOCK_OR_ACTIVE_TRANSACTION, MYF(0));
+    goto error;
+  }
+
+  /*
+    Acquire SNW locks on tables to be flushed. Don't acquire global
+    IX and database-scope IX locks on the tables as this will make
+    this statement incompatible with FLUSH TABLES WITH READ LOCK.
+  */
+  if (lock_table_names(thd, all_tables, nullptr,
+                       thd->variables.lock_wait_timeout,
+                       MYSQL_OPEN_SKIP_SCOPED_MDL_LOCK))
+    goto error;
+
+  DEBUG_SYNC(thd, "flush_tables_with_read_lock_after_acquire_locks");
+
+  for (table_list = all_tables; table_list;
+       table_list = table_list->next_global) {
+    /* Request removal of table from cache. */
+    tdc_remove_table(thd, TDC_RT_REMOVE_UNUSED, table_list->db,
+                     table_list->table_name, false);
+    /* Reset ticket to satisfy asserts in open_tables(). */
+    table_list->mdl_request.ticket = nullptr;
+  }
+
+  /*
+    Before opening and locking tables the below call also waits
+    for old shares to go away, so the fact that we don't pass
+    MYSQL_OPEN_IGNORE_FLUSH flag to it is important.
+    Also we don't pass MYSQL_OPEN_HAS_MDL_LOCK flag as we want
+    to open underlying tables if merge table is flushed.
+    For underlying tables of the merge the below call has to
+    acquire SNW locks to ensure that they can be locked for
+    read without further waiting.
+  */
+  if (open_and_lock_tables(thd, all_tables, MYSQL_OPEN_SKIP_SCOPED_MDL_LOCK,
+                           &lock_tables_prelocking_strategy) ||
+      thd->locked_tables_list.init_locked_tables(thd)) {
+    goto error;
+  }
+  thd->variables.option_bits |= OPTION_TABLE_LOCK;
+
+  /*
+    We don't downgrade MDL_SHARED_NO_WRITE here as the intended
+    post effect of this call is identical to LOCK TABLES <...> READ,
+    and we didn't use thd->in_lock_talbes and
+    thd->sql_command= SQLCOM_LOCK_TABLES hacks to enter the LTM.
+  */
+
+  return false;
+
+error:
+  return true;
+}
+
+
+// Source: sql_reload.cc
+// Lines 452-515
+
+
+[ANSWER]
+MUST

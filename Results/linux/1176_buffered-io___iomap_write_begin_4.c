@@ -1,0 +1,35 @@
+__iomap_write_begin(struct inode *inode, loff_t pos, unsigned len,
+		struct page *page, struct iomap *iomap)
+{
+	struct iomap_page *iop = iomap_page_create(inode, page);
+	loff_t block_size = i_blocksize(inode);
+	loff_t block_start = pos & ~(block_size - 1);
+	loff_t block_end = (pos + len + block_size - 1) & ~(block_size - 1);
+	unsigned from = offset_in_page(pos), to = from + len, poff, plen;
+	int status = 0;
+
+	if (PageUptodate(page))
+		return 0;
+
+	do {
+		iomap_adjust_read_range(inode, iop, &block_start,
+				block_end - block_start, &poff, &plen);
+		if (plen == 0)
+			break;
+
+		if ((from > poff && from < poff + plen) ||
+		    (to > poff && to < poff + plen)) {
+			status = iomap_read_page_sync(inode, block_start, page,
+					poff, plen, from, to, iomap);
+			if (status)
+				break;
+		}
+
+	} while ((block_start += plen) < block_end);
+
+	return status;
+}
+
+
+// Source: buffered-io.c
+// Lines 550-580

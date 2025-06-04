@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'cursor' at line 5\n2. Pointer 'stmt' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid mysqld_stmt_fetch(THD *thd, Prepared_statement *stmt, ulong num_rows) {\n  DBUG_TRACE;\n  thd->status_var.com_stmt_fetch++;\n\n  Server_side_cursor *cursor = stmt->cursor;\n  if (cursor == nullptr || !cursor->is_open()) {\n    my_error(ER_STMT_HAS_NO_OPEN_CURSOR, MYF(0), stmt->id);\n    return;\n  }\n\n  thd->stmt_arena = &stmt->m_arena;\n  Statement_backup stmt_backup;\n  stmt_backup.set_thd_to_ps(thd, stmt);\n\n  cursor->fetch(num_rows);\n\n  if (!cursor->is_open()) reset_stmt_params(stmt);\n\n  stmt_backup.restore_thd(thd, stmt);\n  thd->stmt_arena = thd;\n}\n\n\n// Source: sql_prepare.cc\n// Lines 1968-1988\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,24 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'data' at line 3
+2. Pointer 'e' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+pg_skip_alias_edge (struct graph_edge *e)
+{
+  struct pg_edata *data = (struct pg_edata *)e->data;
+  return (data != NULL && data->alias_ddrs.length () > 0);
+}
+
+
+// Source: tree-loop-distribution.c
+// Lines 2200-2204
+
+
+[ANSWER]
+MUST

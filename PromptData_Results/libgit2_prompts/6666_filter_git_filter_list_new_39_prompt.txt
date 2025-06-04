@@ -1,0 +1,32 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'src' at line 7
+2. Pointer 'repo' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_filter_list_new(
+	git_filter_list **out,
+	git_repository *repo,
+	git_filter_mode_t mode,
+	uint32_t flags)
+{
+	git_filter_source src = { 0 };
+	src.repo = repo;
+	src.path = NULL;
+	src.mode = mode;
+	src.options.flags = flags;
+	return filter_list_new(out, &src);
+}
+
+
+// Source: filter.c
+// Lines 496-508
+
+
+[ANSWER]
+MUST

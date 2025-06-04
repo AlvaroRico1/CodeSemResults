@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'info' at line 4\n2. Pointer 'dyn' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint Curl_dyn_vprintf(struct dynbuf *dyn, const char *format, va_list ap_save)\n{\n  int retcode;\n  struct asprintf info;\n  info.b = dyn;\n  info.fail = 0;\n\n  retcode = dprintf_formatf(&info, alloc_addbyter, format, ap_save);\n  if((-1 == retcode) || info.fail) {\n    Curl_dyn_free(info.b);\n    return 1;\n  }\n  return 0;\n}\n\n\n// Source: mprintf.c\n// Lines 1058-1071\n",
+  "ANSWER": "MUST"
+}

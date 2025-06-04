@@ -1,0 +1,47 @@
+int repo_get_oid_mb(struct repository *r,
+		    const char *name,
+		    struct object_id *oid)
+{
+	struct commit *one, *two;
+	struct commit_list *mbs;
+	struct object_id oid_tmp;
+	const char *dots;
+	int st;
+
+	dots = strstr(name, "...");
+	if (!dots)
+		return repo_get_oid(r, name, oid);
+	if (dots == name)
+		st = repo_get_oid(r, "HEAD", &oid_tmp);
+	else {
+		struct strbuf sb;
+		strbuf_init(&sb, dots - name);
+		strbuf_add(&sb, name, dots - name);
+		st = repo_get_oid_committish(r, sb.buf, &oid_tmp);
+		strbuf_release(&sb);
+	}
+	if (st)
+		return st;
+	one = lookup_commit_reference_gently(r, &oid_tmp, 0);
+	if (!one)
+		return -1;
+
+	if (repo_get_oid_committish(r, dots[3] ? (dots + 3) : "HEAD", &oid_tmp))
+		return -1;
+	two = lookup_commit_reference_gently(r, &oid_tmp, 0);
+	if (!two)
+		return -1;
+	mbs = repo_get_merge_bases(r, one, two);
+	if (!mbs || mbs->next)
+		st = -1;
+	else {
+		st = 0;
+		oidcpy(oid, &mbs->item->object.oid);
+	}
+	free_commit_list(mbs);
+	return st;
+}
+
+
+// Source: object-name.c
+// Lines 1350-1392

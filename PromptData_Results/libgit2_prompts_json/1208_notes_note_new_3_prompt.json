@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'out' at line 2\n2. Pointer 'note' at line 7\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int note_new(\n\tgit_note **out,\n\tgit_oid *note_oid,\n\tgit_commit *commit,\n\tgit_blob *blob)\n{\n\tgit_note *note = NULL;\n\tgit_object_size_t blobsize;\n\n\tnote = git__malloc(sizeof(git_note));\n\tGIT_ERROR_CHECK_ALLOC(note);\n\n\tgit_oid_cpy(&note->id, note_oid);\n\n\tif (git_signature_dup(&note->author, git_commit_author(commit)) < 0 ||\n\t\tgit_signature_dup(&note->committer, git_commit_committer(commit)) < 0)\n\t\treturn -1;\n\n\tblobsize = git_blob_rawsize(blob);\n\tGIT_ERROR_CHECK_BLOBSIZE(blobsize);\n\n\tnote->message = git__strndup(git_blob_rawcontent(blob), (size_t)blobsize);\n\tGIT_ERROR_CHECK_ALLOC(note->message);\n\n\t*out = note;\n\treturn 0;\n}\n\n\n// Source: notes.c\n// Lines 316-342\n",
+  "ANSWER": "MUST"
+}

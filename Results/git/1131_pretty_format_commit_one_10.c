@@ -1,0 +1,62 @@
+static size_t format_commit_one(struct strbuf *sb, /* in UTF-8 */
+				const char *placeholder,
+				void *context)
+{
+	struct format_commit_context *c = context;
+	const struct commit *commit = c->commit;
+	const char *msg = c->message;
+	struct commit_list *p;
+	const char *arg, *eol;
+	size_t res;
+	char **slot;
+
+	/* these are independent of the commit */
+	res = strbuf_expand_literal_cb(sb, placeholder, NULL);
+	if (res)
+		return res;
+
+	switch (placeholder[0]) {
+	case 'C':
+		if (starts_with(placeholder + 1, "(auto)")) {
+			c->auto_color = want_color(c->pretty_ctx->color);
+			if (c->auto_color && sb->len)
+				strbuf_addstr(sb, GIT_COLOR_RESET);
+			return 7; /* consumed 7 bytes, "C(auto)" */
+		} else {
+			int ret = parse_color(sb, placeholder, c);
+			if (ret)
+				c->auto_color = 0;
+			/*
+			 * Otherwise, we decided to treat %C<unknown>
+			 * as a literal string, and the previous
+			 * %C(auto) is still valid.
+			 */
+			return ret;
+		}
+	case 'w':
+		if (placeholder[1] == '(') {
+			unsigned long width = 0, indent1 = 0, indent2 = 0;
+			char *next;
+			const char *start = placeholder + 2;
+			const char *end = strchr(start, ')');
+			if (!end)
+				return 0;
+			if (end > start) {
+				width = strtoul(start, &next, 10);
+				if (*next == ',') {
+					indent1 = strtoul(next + 1, &next, 10);
+					if (*next == ',') {
+						indent2 = strtoul(next + 1,
+								 &next, 10);
+					}
+				}
+				if (*next != ')')
+					return 0;
+			}
+			rewrap_message_tail(sb, c, width, indent1, indent2);
+			return end - placeholder + 1;
+		} else
+
+
+// Source: pretty.c
+// Lines 1245-1302

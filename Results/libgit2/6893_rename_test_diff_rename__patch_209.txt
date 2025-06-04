@@ -1,0 +1,1 @@
+patch,libgit2/tests/libgit2/diff/rename.c,9,expected,libgit2/tests/libgit2/diff/rename.c,12,0

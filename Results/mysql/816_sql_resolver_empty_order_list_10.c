@@ -1,0 +1,44 @@
+void Query_block::empty_order_list(Query_block *sl) {
+  if (m_windows.elements != 0) {
+    /*
+      The next lines doing cleanup of ORDER elements expect the
+      query block's ORDER BY items to be the last part of fields and
+      base_ref_items, as they just chop the lists' end. But if there is a
+      window, that end is actually the PARTITION BY and ORDER BY clause of the
+      window, so do not chop then: leave the items in place.
+    */
+    order_list.clear();
+    return;
+  }
+  for (ORDER *o = order_list.first; o != nullptr; o = o->next) {
+    /*
+      Do not remove an order_item of type Item_view_ref. Refer to
+      the comments in Item_cond::fix_fields on the removal of
+      Item_view_ref type.
+    */
+    if (o->is_item_original() &&
+        (!o->item[0]->has_subquery() ||
+         !WalkItem(o->item[0], enum_walk::PREFIX, [](Item *inner_item) {
+           if (inner_item->type() == Item::REF_ITEM &&
+               down_cast<Item_ref *>(inner_item)->ref_type() ==
+                   Item_ref::VIEW_REF) {
+             return true;
+           }
+           return false;
+         }))) {
+      Item::Cleanup_after_removal_context ctx(sl);
+      (*o->item)->walk(&Item::clean_up_after_removal,
+                       enum_walk::SUBQUERY_POSTFIX,
+                       pointer_cast<uchar *>(&ctx));
+    }
+  }
+  order_list.clear();
+  while (hidden_order_field_count-- > 0) {
+    fields.pop_front();
+    base_ref_items[fields.size()] = nullptr;
+  }
+}
+
+
+// Source: sql_resolver.cc
+// Lines 4141-4180

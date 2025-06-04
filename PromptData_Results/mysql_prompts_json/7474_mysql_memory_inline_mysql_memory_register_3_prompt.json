@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'count' at line 3\n2. Pointer 'info' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic inline void inline_mysql_memory_register(\n#ifdef HAVE_PSI_MEMORY_INTERFACE\n    const char *category, PSI_memory_info *info, int count)\n#else\n    const char *category MY_ATTRIBUTE((unused)),\n    void *info MY_ATTRIBUTE((unused)), int count MY_ATTRIBUTE((unused)))\n#endif\n{\n#ifdef HAVE_PSI_MEMORY_INTERFACE\n  PSI_MEMORY_CALL(register_memory)(category, info, count);\n#endif\n}\n\n/** @} (end of group psi_api_memory) */\n\n\n// Source: mysql_memory.h\n// Lines 60-73\n",
+  "ANSWER": "MUST-NOT"
+}

@@ -1,0 +1,1 @@
+errordoc,h2o/lib/handler/configurator/errordoc.c,49,self,h2o/lib/handler/configurator/errordoc.c,3,1

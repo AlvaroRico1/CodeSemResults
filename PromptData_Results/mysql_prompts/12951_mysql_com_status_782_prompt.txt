@@ -1,0 +1,45 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'status_str' at line 3
+2. Pointer 'cur' at line 20
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int com_status(String *buffer MY_ATTRIBUTE((unused)),
+                      char *line MY_ATTRIBUTE((unused))) {
+  const char *status_str;
+  char buff[40];
+  ulonglong id;
+  MYSQL_RES *result = nullptr;
+
+  if (mysql_real_query_for_lazy(
+          STRING_WITH_LEN("select DATABASE(), USER() limit 1")))
+    return 0;
+
+  tee_puts("--------------", stdout);
+  usage(1); /* Print version */
+  tee_fprintf(stdout, "\nConnection id:\t\t%lu\n", mysql_thread_id(&mysql));
+  /*
+    Don't remove "limit 1",
+    it is protection againts SQL_SELECT_LIMIT=0
+  */
+  if (!mysql_store_result_for_lazy(&result)) {
+    MYSQL_ROW cur = mysql_fetch_row(result);
+    if (cur) {
+      tee_fprintf(stdout, "Current database:\t%s\n", cur[0] ? cur[0] : "");
+      tee_fprintf(stdout, "Current user:\t\t%s\n", cur[1]);
+    }
+    mysql_free_result(result);
+  }
+
+
+// Source: mysql.cc
+// Lines 4731-4756
+
+
+[ANSWER]
+MUST-NOT

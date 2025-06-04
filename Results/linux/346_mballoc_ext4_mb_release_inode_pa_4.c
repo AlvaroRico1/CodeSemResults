@@ -1,0 +1,56 @@
+ext4_mb_release_inode_pa(struct ext4_buddy *e4b, struct buffer_head *bitmap_bh,
+			struct ext4_prealloc_space *pa)
+{
+	struct super_block *sb = e4b->bd_sb;
+	struct ext4_sb_info *sbi = EXT4_SB(sb);
+	unsigned int end;
+	unsigned int next;
+	ext4_group_t group;
+	ext4_grpblk_t bit;
+	unsigned long long grp_blk_start;
+	int free = 0;
+
+	BUG_ON(pa->pa_deleted == 0);
+	ext4_get_group_no_and_offset(sb, pa->pa_pstart, &group, &bit);
+	grp_blk_start = pa->pa_pstart - EXT4_C2B(sbi, bit);
+	BUG_ON(group != e4b->bd_group && pa->pa_len != 0);
+	end = bit + pa->pa_len;
+
+	while (bit < end) {
+		bit = mb_find_next_zero_bit(bitmap_bh->b_data, end, bit);
+		if (bit >= end)
+			break;
+		next = mb_find_next_bit(bitmap_bh->b_data, end, bit);
+		mb_debug(1, "    free preallocated %u/%u in group %u\n",
+			 (unsigned) ext4_group_first_block_no(sb, group) + bit,
+			 (unsigned) next - bit, (unsigned) group);
+		free += next - bit;
+
+		trace_ext4_mballoc_discard(sb, NULL, group, bit, next - bit);
+		trace_ext4_mb_release_inode_pa(pa, (grp_blk_start +
+						    EXT4_C2B(sbi, bit)),
+					       next - bit);
+		mb_free_blocks(pa->pa_inode, e4b, bit, next - bit);
+		bit = next + 1;
+	}
+	if (free != pa->pa_free) {
+		ext4_msg(e4b->bd_sb, KERN_CRIT,
+			 "pa %p: logic %lu, phys. %lu, len %lu",
+			 pa, (unsigned long) pa->pa_lstart,
+			 (unsigned long) pa->pa_pstart,
+			 (unsigned long) pa->pa_len);
+		ext4_grp_locked_error(sb, group, 0, 0, "free %u, pa_free %u",
+					free, pa->pa_free);
+		/*
+		 * pa is already deleted so we use the value obtained
+		 * from the bitmap and continue.
+		 */
+	}
+	atomic_add(free, &sbi->s_mb_discarded);
+
+	return 0;
+}
+
+
+// Source: mballoc.c
+// Lines 3796-3847

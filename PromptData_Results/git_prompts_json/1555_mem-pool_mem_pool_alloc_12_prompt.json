@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'p' at line 3\n2. Pointer 'pool' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid *mem_pool_alloc(struct mem_pool *pool, size_t len)\n{\n\tstruct mp_block *p = NULL;\n\tvoid *r;\n\n\t/* round up to a 'uintmax_t' alignment */\n\tif (len & (sizeof(uintmax_t) - 1))\n\t\tlen += sizeof(uintmax_t) - (len & (sizeof(uintmax_t) - 1));\n\n\tif (pool->mp_block &&\n\t    pool->mp_block->end - pool->mp_block->next_free >= len)\n\t\tp = pool->mp_block;\n\n\tif (!p) {\n\t\tif (len >= (pool->block_alloc / 2))\n\t\t\treturn mem_pool_alloc_block(pool, len, pool->mp_block);\n\n\t\tp = mem_pool_alloc_block(pool, pool->block_alloc, NULL);\n\t}\n\n\tr = p->next_free;\n\tp->next_free += len;\n\treturn r;\n}\n\n\n// Source: mem-pool.c\n// Lines 67-90\n",
+  "ANSWER": "MUST"
+}

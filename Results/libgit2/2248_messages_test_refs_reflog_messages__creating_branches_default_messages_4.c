@@ -1,0 +1,40 @@
+void test_refs_reflog_messages__creating_branches_default_messages(void)
+{
+	git_str buf = GIT_STR_INIT;
+	git_annotated_commit *annotated;
+	git_object *obj;
+	git_commit *target;
+	git_reference *branch1, *branch2;
+
+	cl_git_pass(git_revparse_single(&obj, g_repo, "e90810b8df3"));
+	cl_git_pass(git_commit_lookup(&target, g_repo, git_object_id(obj)));
+	git_object_free(obj);
+
+	cl_git_pass(git_branch_create(&branch1, g_repo, NEW_BRANCH_NAME, target, false));
+
+	cl_git_pass(git_str_printf(&buf, "branch: Created from %s", git_oid_tostr_s(git_commit_id(target))));
+	cl_reflog_check_entry(g_repo, "refs/heads/" NEW_BRANCH_NAME, 0,
+		GIT_OID_HEX_ZERO,
+		git_oid_tostr_s(git_commit_id(target)),
+		g_email, git_str_cstr(&buf));
+
+	cl_git_pass(git_reference_remove(g_repo, "refs/heads/" NEW_BRANCH_NAME));
+
+	cl_git_pass(git_annotated_commit_from_revspec(&annotated, g_repo, "e90810b8df3"));
+	cl_git_pass(git_branch_create_from_annotated(&branch2, g_repo, NEW_BRANCH_NAME, annotated, true));
+
+	cl_reflog_check_entry(g_repo, "refs/heads/" NEW_BRANCH_NAME, 0,
+		GIT_OID_HEX_ZERO,
+		git_oid_tostr_s(git_commit_id(target)),
+		g_email, "branch: Created from e90810b8df3");
+
+	git_annotated_commit_free(annotated);
+	git_str_dispose(&buf);
+	git_commit_free(target);
+	git_reference_free(branch1);
+	git_reference_free(branch2);
+}
+
+
+// Source: messages.c
+// Lines 339-374

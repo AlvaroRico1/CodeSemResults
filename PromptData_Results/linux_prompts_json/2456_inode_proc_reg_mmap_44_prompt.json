@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'mmap' at line 6\n2. Pointer 'pde' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int proc_reg_mmap(struct file *file, struct vm_area_struct *vma)\n{\n\tstruct proc_dir_entry *pde = PDE(file_inode(file));\n\tint rv = -EIO;\n\tif (use_pde(pde)) {\n\t\ttypeof_member(struct file_operations, mmap) mmap;\n\n\t\tmmap = pde->proc_fops->mmap;\n\t\tif (mmap)\n\t\t\trv = mmap(file, vma);\n\t\tunuse_pde(pde);\n\t}\n\n\n// Source: inode.c\n// Lines 291-302\n",
+  "ANSWER": "MUST"
+}

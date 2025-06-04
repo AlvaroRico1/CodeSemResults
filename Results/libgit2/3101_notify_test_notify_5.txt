@@ -1,0 +1,1 @@
+expected_diffed_files_count,libgit2/tests/libgit2/diff/notify.c,5,diff,libgit2/tests/libgit2/diff/notify.c,8,0

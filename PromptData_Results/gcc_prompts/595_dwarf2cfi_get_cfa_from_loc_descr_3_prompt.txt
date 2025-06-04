@@ -1,0 +1,120 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ptr' at line 3
+2. Pointer 'loc' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+get_cfa_from_loc_descr (dw_cfa_location *cfa, struct dw_loc_descr_node *loc)
+{
+  struct dw_loc_descr_node *ptr;
+  cfa->offset = 0;
+  cfa->base_offset = 0;
+  cfa->indirect = 0;
+  cfa->reg = -1;
+
+  for (ptr = loc; ptr != NULL; ptr = ptr->dw_loc_next)
+    {
+      enum dwarf_location_atom op = ptr->dw_loc_opc;
+
+      switch (op)
+	{
+	case DW_OP_reg0:
+	case DW_OP_reg1:
+	case DW_OP_reg2:
+	case DW_OP_reg3:
+	case DW_OP_reg4:
+	case DW_OP_reg5:
+	case DW_OP_reg6:
+	case DW_OP_reg7:
+	case DW_OP_reg8:
+	case DW_OP_reg9:
+	case DW_OP_reg10:
+	case DW_OP_reg11:
+	case DW_OP_reg12:
+	case DW_OP_reg13:
+	case DW_OP_reg14:
+	case DW_OP_reg15:
+	case DW_OP_reg16:
+	case DW_OP_reg17:
+	case DW_OP_reg18:
+	case DW_OP_reg19:
+	case DW_OP_reg20:
+	case DW_OP_reg21:
+	case DW_OP_reg22:
+	case DW_OP_reg23:
+	case DW_OP_reg24:
+	case DW_OP_reg25:
+	case DW_OP_reg26:
+	case DW_OP_reg27:
+	case DW_OP_reg28:
+	case DW_OP_reg29:
+	case DW_OP_reg30:
+	case DW_OP_reg31:
+	  cfa->reg = op - DW_OP_reg0;
+	  break;
+	case DW_OP_regx:
+	  cfa->reg = ptr->dw_loc_oprnd1.v.val_int;
+	  break;
+	case DW_OP_breg0:
+	case DW_OP_breg1:
+	case DW_OP_breg2:
+	case DW_OP_breg3:
+	case DW_OP_breg4:
+	case DW_OP_breg5:
+	case DW_OP_breg6:
+	case DW_OP_breg7:
+	case DW_OP_breg8:
+	case DW_OP_breg9:
+	case DW_OP_breg10:
+	case DW_OP_breg11:
+	case DW_OP_breg12:
+	case DW_OP_breg13:
+	case DW_OP_breg14:
+	case DW_OP_breg15:
+	case DW_OP_breg16:
+	case DW_OP_breg17:
+	case DW_OP_breg18:
+	case DW_OP_breg19:
+	case DW_OP_breg20:
+	case DW_OP_breg21:
+	case DW_OP_breg22:
+	case DW_OP_breg23:
+	case DW_OP_breg24:
+	case DW_OP_breg25:
+	case DW_OP_breg26:
+	case DW_OP_breg27:
+	case DW_OP_breg28:
+	case DW_OP_breg29:
+	case DW_OP_breg30:
+	case DW_OP_breg31:
+	  cfa->reg = op - DW_OP_breg0;
+	  cfa->base_offset = ptr->dw_loc_oprnd1.v.val_int;
+	  break;
+	case DW_OP_bregx:
+	  cfa->reg = ptr->dw_loc_oprnd1.v.val_int;
+	  cfa->base_offset = ptr->dw_loc_oprnd2.v.val_int;
+	  break;
+	case DW_OP_deref:
+	  cfa->indirect = 1;
+	  break;
+	case DW_OP_plus_uconst:
+	  cfa->offset = ptr->dw_loc_oprnd1.v.val_unsigned;
+	  break;
+	default:
+	  gcc_unreachable ();
+	}
+    }
+}
+
+
+// Source: dwarf2cfi.c
+// Lines 535-635
+
+
+[ANSWER]
+MUST

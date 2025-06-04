@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'item' at line 4
+2. Pointer 'data' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+cmd_save_buffer_done(__unused struct client *c, const char *path, int error,
+    __unused int closed, __unused struct evbuffer *buffer, void *data)
+{
+	struct cmdq_item	*item = data;
+
+	if (!closed)
+		return;
+
+	if (error != 0)
+		cmdq_error(item, "%s: %s", path, strerror(error));
+	cmdq_continue(item);
+}
+
+
+// Source: cmd-save-buffer.c
+// Lines 59-70
+
+
+[ANSWER]
+MUST

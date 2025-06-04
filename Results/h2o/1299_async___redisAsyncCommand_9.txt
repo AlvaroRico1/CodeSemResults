@@ -1,0 +1,1 @@
+cb,h2o/deps/hiredis/async.c,3,privdata,h2o/deps/hiredis/async.c,1,1

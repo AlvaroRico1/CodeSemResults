@@ -1,0 +1,1 @@
+info,gcc/gcc/ipa-fnsummary.c,44,stmt,gcc/gcc/ipa-fnsummary.c,1,1

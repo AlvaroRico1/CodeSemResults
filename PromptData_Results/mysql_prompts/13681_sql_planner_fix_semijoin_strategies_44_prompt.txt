@@ -1,0 +1,139 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'sjm_nest' at line 23
+2. Pointer 'pos' at line 13
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool Optimize_table_order::fix_semijoin_strategies() {
+  table_map remaining_tables = 0;
+  table_map handled_tables = 0;
+
+  DBUG_TRACE;
+
+  if (join->query_block->sj_nests.empty()) return false;
+
+  Opt_trace_context *const trace = &thd->opt_trace;
+
+  for (uint tableno = join->tables - 1; tableno != join->const_tables - 1;
+       tableno--) {
+    POSITION *const pos = join->best_positions + tableno;
+
+    if ((handled_tables & pos->table->table_ref->map()) ||
+        pos->sj_strategy == SJ_OPT_NONE) {
+      remaining_tables |= pos->table->table_ref->map();
+      continue;
+    }
+
+    uint first = 0;
+    if (pos->sj_strategy == SJ_OPT_MATERIALIZE_LOOKUP) {
+      TABLE_LIST *const sjm_nest = pos->table->emb_sj_nest;
+      const uint table_count = my_count_bits(sjm_nest->sj_inner_tables);
+      /*
+        This memcpy() copies a partial QEP produced by
+        optimize_semijoin_nests_for_materialization() (source) into the final
+        top-level QEP (target), in order to re-use the source plan for
+        to-be-materialized inner tables.
+        It is however possible that the source QEP had picked
+        some semijoin strategy (noted SJY), different from
+        materialization. The target QEP rules (it has seen more tables), but
+        this memcpy() is going to copy the source stale strategy SJY,
+        wrongly. Which is why sj_strategy of each table of the
+        duplicate-generating range then becomes temporarily unreliable. It is
+        fixed for the first table of that range right after the memcpy(), and
+        fixed for the rest of that range at the end of this iteration by
+        setting it to SJ_OPT_NONE). But until then, pos->sj_strategy should
+        not be read.
+      */
+      memcpy(pos - table_count + 1, sjm_nest->nested_join->sjm.positions,
+             sizeof(POSITION) * table_count);
+      first = tableno - table_count + 1;
+      join->best_positions[first].n_sj_tables = table_count;
+      join->best_positions[first].sj_strategy = SJ_OPT_MATERIALIZE_LOOKUP;
+
+      Opt_trace_object trace_final_strategy(trace);
+      trace_final_strategy.add_alnum("final_semijoin_strategy",
+                                     "MaterializeLookup");
+    } else if (pos->sj_strategy == SJ_OPT_MATERIALIZE_SCAN) {
+      const uint last_inner = pos->sjm_scan_last_inner;
+      TABLE_LIST *const sjm_nest =
+          (join->best_positions + last_inner)->table->emb_sj_nest;
+      const uint table_count = my_count_bits(sjm_nest->sj_inner_tables);
+      first = last_inner - table_count + 1;
+      assert((join->best_positions + first)->table->emb_sj_nest == sjm_nest);
+      memcpy(join->best_positions + first,  // stale semijoin strategy here too
+             sjm_nest->nested_join->sjm.positions,
+             sizeof(POSITION) * table_count);
+      join->best_positions[first].sj_strategy = SJ_OPT_MATERIALIZE_SCAN;
+      join->best_positions[first].n_sj_tables = table_count;
+
+      Opt_trace_object trace_final_strategy(trace);
+      trace_final_strategy.add_alnum("final_semijoin_strategy",
+                                     "MaterializeScan");
+      // Recalculate final access paths for this semi-join strategy
+      double rowcount, cost;
+      semijoin_mat_scan_access_paths(last_inner, tableno, remaining_tables,
+                                     sjm_nest, &rowcount, &cost);
+
+    } else if (pos->sj_strategy == SJ_OPT_FIRST_MATCH) {
+      first = pos->first_firstmatch_table;
+
+      Opt_trace_object trace_final_strategy(trace);
+      trace_final_strategy.add_alnum("final_semijoin_strategy", "FirstMatch");
+
+      // Recalculate final access paths for this semi-join strategy
+      double rowcount, cost;
+      (void)semijoin_firstmatch_loosescan_access_paths(
+          first, tableno, remaining_tables, false, &rowcount, &cost);
+
+      if (pos->table->emb_sj_nest->is_aj_nest()) {
+        /*
+          Antijoin doesn't use the execution logic of FirstMatch. So we
+          won't set it up; and we won't either have the incompatibilities of
+          FirstMatch with outer join. Declare that we don't use it:
+        */
+        pos->sj_strategy = SJ_OPT_NONE;
+      } else {
+        join->best_positions[first].sj_strategy = SJ_OPT_FIRST_MATCH;
+        join->best_positions[first].n_sj_tables = tableno - first + 1;
+      }
+    } else if (pos->sj_strategy == SJ_OPT_LOOSE_SCAN) {
+      first = pos->first_loosescan_table;
+
+      Opt_trace_object trace_final_strategy(trace);
+      trace_final_strategy.add_alnum("final_semijoin_strategy", "LooseScan");
+
+      // Recalculate final access paths for this semi-join strategy
+      double rowcount, cost;
+      (void)semijoin_firstmatch_loosescan_access_paths(
+          first, tableno, remaining_tables, true, &rowcount, &cost);
+
+      POSITION *const first_pos = join->best_positions + first;
+      first_pos->sj_strategy = SJ_OPT_LOOSE_SCAN;
+      first_pos->n_sj_tables =
+          my_count_bits(first_pos->table->emb_sj_nest->sj_inner_tables);
+    } else if (pos->sj_strategy == SJ_OPT_DUPS_WEEDOUT) {
+      /*
+        Duplicate Weedout starting at pos->first_dupsweedout_table, ending at
+        this table.
+      */
+      first = pos->first_dupsweedout_table;
+      join->best_positions[first].sj_strategy = SJ_OPT_DUPS_WEEDOUT;
+      join->best_positions[first].n_sj_tables = tableno - first + 1;
+
+      Opt_trace_object trace_final_strategy(trace);
+      trace_final_strategy.add_alnum("final_semijoin_strategy",
+                                     "DuplicateWeedout");
+    }
+
+
+// Source: sql_planner.cc
+// Lines 3328-3447
+
+
+[ANSWER]
+MUST

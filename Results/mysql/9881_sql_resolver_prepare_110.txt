@@ -1,0 +1,1 @@
+item_sum,mysql/sql/sql_resolver.cc,301,end,mysql/sql/sql_resolver.cc,300,1

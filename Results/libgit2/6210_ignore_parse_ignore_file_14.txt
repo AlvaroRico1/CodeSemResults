@@ -1,0 +1,1 @@
+scan,libgit2/src/libgit2/ignore.c,6,valid_rule,libgit2/src/libgit2/ignore.c,26,2

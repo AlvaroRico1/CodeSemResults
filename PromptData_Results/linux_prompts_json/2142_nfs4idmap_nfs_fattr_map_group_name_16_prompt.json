@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'group' at line 3\n2. Pointer 'fattr' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic bool nfs_fattr_map_group_name(struct nfs_server *server, struct nfs_fattr *fattr)\n{\n\tstruct nfs4_string *group = fattr->group_name;\n\tkgid_t gid;\n\n\tif (!(fattr->valid & NFS_ATTR_FATTR_GROUP_NAME))\n\t\treturn false;\n\tif (nfs_map_group_to_gid(server, group->data, group->len, &gid) == 0) {\n\t\tfattr->gid = gid;\n\t\tfattr->valid |= NFS_ATTR_FATTR_GROUP;\n\t}\n\treturn true;\n}\n\n\n// Source: nfs4idmap.c\n// Lines 122-134\n",
+  "ANSWER": "MUST"
+}

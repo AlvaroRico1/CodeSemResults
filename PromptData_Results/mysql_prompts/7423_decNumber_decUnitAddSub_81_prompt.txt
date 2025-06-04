@@ -1,0 +1,56 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'hold' at line 34
+2. Pointer 'c' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static Int decUnitAddSub(const Unit *a, Int alength,
+                         const Unit *b, Int blength, Int bshift,
+                         Unit *c, Int m) {
+  const Unit *alsu=a;              /* A lsu [need to remember it]  */
+  Unit *clsu=c;                    /* C ditto  */
+  Unit *minC;                      /* low water mark for C  */
+  Unit *maxC;                      /* high water mark for C  */
+  eInt carry=0;                    /* carry integer (could be Long)  */
+  Int  add;                        /* work  */
+  #if DECDPUN<=4                   /* myriadal, millenary, etc.  */
+  Int  est;                        /* estimated quotient  */
+  #endif
+
+  #if DECTRACE
+  if (alength<1 || blength<1)
+    printf("decUnitAddSub: alen blen m %ld %ld [%ld]\n", alength, blength, m);
+  #endif
+
+  maxC=c+alength;                  /* A is usually the longer  */
+  minC=c+blength;                  /* .. and B the shorter  */
+  if (bshift!=0) {                 /* B is shifted; low As copy across  */
+    minC+=bshift;
+    /* if in place [common], skip copy unless there's a gap [rare]  */
+    if (a==c && bshift<=alength) {
+      c+=bshift;
+      a+=bshift;
+      }
+     else for (; c<clsu+bshift; a++, c++) {  /* copy needed  */
+      if (a<alsu+alength) *c=*a;
+       else *c=0;
+      }
+    }
+  if (minC>maxC) { /* swap  */
+    Unit *hold=minC;
+    minC=maxC;
+    maxC=hold;
+    }
+
+
+// Source: decNumber.cpp
+// Lines 6383-6419
+
+
+[ANSWER]
+MUST

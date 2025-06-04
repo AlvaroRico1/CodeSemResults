@@ -1,0 +1,52 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'xn' at line 28
+2. Pointer 'slot' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+detect_field_duplicates_hash (tree fieldlist,
+			      hash_table<nofree_ptr_hash <tree_node> > *htab)
+{
+  tree x, y;
+  tree_node **slot;
+
+  for (x = fieldlist; x ; x = DECL_CHAIN (x))
+    if ((y = DECL_NAME (x)) != NULL_TREE)
+      {
+	slot = htab->find_slot (y, INSERT);
+	if (*slot)
+	  {
+	    error ("duplicate member %q+D", x);
+	    DECL_NAME (x) = NULL_TREE;
+	  }
+	*slot = y;
+      }
+    else if (RECORD_OR_UNION_TYPE_P (TREE_TYPE (x)))
+      {
+	detect_field_duplicates_hash (TYPE_FIELDS (TREE_TYPE (x)), htab);
+
+	/* When using -fplan9-extensions, an anonymous field whose
+	   name is a typedef can duplicate a field name.  */
+	if (flag_plan9_extensions
+	    && TYPE_NAME (TREE_TYPE (x)) != NULL_TREE
+	    && TREE_CODE (TYPE_NAME (TREE_TYPE (x))) == TYPE_DECL)
+	  {
+	    tree xn = DECL_NAME (TYPE_NAME (TREE_TYPE (x)));
+	    slot = htab->find_slot (xn, INSERT);
+	    if (*slot)
+	      error ("duplicate member %q+D", TYPE_NAME (TREE_TYPE (x)));
+	    *slot = xn;
+	  }
+
+
+// Source: c-decl.c
+// Lines 8173-8205
+
+
+[ANSWER]
+MUST-NOT

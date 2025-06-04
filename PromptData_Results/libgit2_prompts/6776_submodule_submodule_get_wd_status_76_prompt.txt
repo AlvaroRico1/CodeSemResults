@@ -1,0 +1,97 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'sm_head' at line 10
+2. Pointer 'index' at line 11
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void submodule_get_wd_status(
+	unsigned int *status,
+	git_submodule *sm,
+	git_repository *sm_repo,
+	git_submodule_ignore_t ign)
+{
+	const git_oid *index_oid = git_submodule_index_id(sm);
+	const git_oid *wd_oid =
+		(sm->flags & GIT_SUBMODULE_STATUS__WD_OID_VALID) ? &sm->wd_oid : NULL;
+	git_tree *sm_head = NULL;
+	git_index *index = NULL;
+	git_diff_options opt = GIT_DIFF_OPTIONS_INIT;
+	git_diff *diff;
+
+	*status = *status & ~GIT_SUBMODULE_STATUS__WD_FLAGS;
+
+	if (!index_oid) {
+		if (wd_oid)
+			*status |= GIT_SUBMODULE_STATUS_WD_ADDED;
+	}
+	else if (!wd_oid) {
+		if ((sm->flags & GIT_SUBMODULE_STATUS__WD_SCANNED) != 0 &&
+			(sm->flags & GIT_SUBMODULE_STATUS_IN_WD) == 0)
+			*status |= GIT_SUBMODULE_STATUS_WD_UNINITIALIZED;
+		else
+			*status |= GIT_SUBMODULE_STATUS_WD_DELETED;
+	}
+	else if (!git_oid_equal(index_oid, wd_oid))
+		*status |= GIT_SUBMODULE_STATUS_WD_MODIFIED;
+
+	/* if we have no repo, then we're done */
+	if (!sm_repo)
+		return;
+
+	/* the diffs below could be optimized with an early termination
+	 * option to the git_diff functions, but for now this is sufficient
+	 * (and certainly no worse that what core git does).
+	 */
+
+	if (ign == GIT_SUBMODULE_IGNORE_NONE)
+		opt.flags |= GIT_DIFF_INCLUDE_UNTRACKED;
+
+	(void)git_repository_index__weakptr(&index, sm_repo);
+
+	/* if we don't have an unborn head, check diff with index */
+	if (git_repository_head_tree(&sm_head, sm_repo) < 0)
+		git_error_clear();
+	else {
+		/* perform head to index diff on submodule */
+		if (git_diff_tree_to_index(&diff, sm_repo, sm_head, index, &opt) < 0)
+			git_error_clear();
+		else {
+			if (git_diff_num_deltas(diff) > 0)
+				*status |= GIT_SUBMODULE_STATUS_WD_INDEX_MODIFIED;
+			git_diff_free(diff);
+			diff = NULL;
+		}
+
+		git_tree_free(sm_head);
+	}
+
+	/* perform index-to-workdir diff on submodule */
+	if (git_diff_index_to_workdir(&diff, sm_repo, index, &opt) < 0)
+		git_error_clear();
+	else {
+		size_t untracked =
+			git_diff_num_deltas_of_type(diff, GIT_DELTA_UNTRACKED);
+
+		if (untracked > 0)
+			*status |= GIT_SUBMODULE_STATUS_WD_UNTRACKED;
+
+		if (git_diff_num_deltas(diff) != untracked)
+			*status |= GIT_SUBMODULE_STATUS_WD_WD_MODIFIED;
+
+		git_diff_free(diff);
+		diff = NULL;
+	}
+}
+
+
+// Source: submodule.c
+// Lines 2303-2380
+
+
+[ANSWER]
+MAY

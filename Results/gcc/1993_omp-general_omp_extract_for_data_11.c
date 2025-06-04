@@ -1,0 +1,318 @@
+omp_extract_for_data (gomp_for *for_stmt, struct omp_for_data *fd,
+		      struct omp_for_data_loop *loops)
+{
+  tree t, var, *collapse_iter, *collapse_count;
+  tree count = NULL_TREE, iter_type = long_integer_type_node;
+  struct omp_for_data_loop *loop;
+  int i;
+  struct omp_for_data_loop dummy_loop;
+  location_t loc = gimple_location (for_stmt);
+  bool simd = gimple_omp_for_kind (for_stmt) == GF_OMP_FOR_KIND_SIMD;
+  bool distribute = gimple_omp_for_kind (for_stmt)
+		    == GF_OMP_FOR_KIND_DISTRIBUTE;
+  bool taskloop = gimple_omp_for_kind (for_stmt)
+		  == GF_OMP_FOR_KIND_TASKLOOP;
+  tree iterv, countv;
+
+  fd->for_stmt = for_stmt;
+  fd->pre = NULL;
+  fd->have_nowait = distribute || simd;
+  fd->have_ordered = false;
+  fd->have_reductemp = false;
+  fd->have_pointer_condtemp = false;
+  fd->have_scantemp = false;
+  fd->have_nonctrl_scantemp = false;
+  fd->lastprivate_conditional = 0;
+  fd->tiling = NULL_TREE;
+  fd->collapse = 1;
+  fd->ordered = 0;
+  fd->sched_kind = OMP_CLAUSE_SCHEDULE_STATIC;
+  fd->sched_modifiers = 0;
+  fd->chunk_size = NULL_TREE;
+  fd->simd_schedule = false;
+  collapse_iter = NULL;
+  collapse_count = NULL;
+
+  for (t = gimple_omp_for_clauses (for_stmt); t ; t = OMP_CLAUSE_CHAIN (t))
+    switch (OMP_CLAUSE_CODE (t))
+      {
+      case OMP_CLAUSE_NOWAIT:
+	fd->have_nowait = true;
+	break;
+      case OMP_CLAUSE_ORDERED:
+	fd->have_ordered = true;
+	if (OMP_CLAUSE_ORDERED_EXPR (t))
+	  fd->ordered = tree_to_shwi (OMP_CLAUSE_ORDERED_EXPR (t));
+	break;
+      case OMP_CLAUSE_SCHEDULE:
+	gcc_assert (!distribute && !taskloop);
+	fd->sched_kind
+	  = (enum omp_clause_schedule_kind)
+	    (OMP_CLAUSE_SCHEDULE_KIND (t) & OMP_CLAUSE_SCHEDULE_MASK);
+	fd->sched_modifiers = (OMP_CLAUSE_SCHEDULE_KIND (t)
+			       & ~OMP_CLAUSE_SCHEDULE_MASK);
+	fd->chunk_size = OMP_CLAUSE_SCHEDULE_CHUNK_EXPR (t);
+	fd->simd_schedule = OMP_CLAUSE_SCHEDULE_SIMD (t);
+	break;
+      case OMP_CLAUSE_DIST_SCHEDULE:
+	gcc_assert (distribute);
+	fd->chunk_size = OMP_CLAUSE_DIST_SCHEDULE_CHUNK_EXPR (t);
+	break;
+      case OMP_CLAUSE_COLLAPSE:
+	fd->collapse = tree_to_shwi (OMP_CLAUSE_COLLAPSE_EXPR (t));
+	if (fd->collapse > 1)
+	  {
+	    collapse_iter = &OMP_CLAUSE_COLLAPSE_ITERVAR (t);
+	    collapse_count = &OMP_CLAUSE_COLLAPSE_COUNT (t);
+	  }
+	break;
+      case OMP_CLAUSE_TILE:
+	fd->tiling = OMP_CLAUSE_TILE_LIST (t);
+	fd->collapse = list_length (fd->tiling);
+	gcc_assert (fd->collapse);
+	collapse_iter = &OMP_CLAUSE_TILE_ITERVAR (t);
+	collapse_count = &OMP_CLAUSE_TILE_COUNT (t);
+	break;
+      case OMP_CLAUSE__REDUCTEMP_:
+	fd->have_reductemp = true;
+	break;
+      case OMP_CLAUSE_LASTPRIVATE:
+	if (OMP_CLAUSE_LASTPRIVATE_CONDITIONAL (t))
+	  fd->lastprivate_conditional++;
+	break;
+      case OMP_CLAUSE__CONDTEMP_:
+	if (POINTER_TYPE_P (TREE_TYPE (OMP_CLAUSE_DECL (t))))
+	  fd->have_pointer_condtemp = true;
+	break;
+      case OMP_CLAUSE__SCANTEMP_:
+	fd->have_scantemp = true;
+	if (!OMP_CLAUSE__SCANTEMP__ALLOC (t)
+	    && !OMP_CLAUSE__SCANTEMP__CONTROL (t))
+	  fd->have_nonctrl_scantemp = true;
+	break;
+      default:
+	break;
+      }
+
+  if (fd->collapse > 1 || fd->tiling)
+    fd->loops = loops;
+  else
+    fd->loops = &fd->loop;
+
+  if (fd->ordered && fd->collapse == 1 && loops != NULL)
+    {
+      fd->loops = loops;
+      iterv = NULL_TREE;
+      countv = NULL_TREE;
+      collapse_iter = &iterv;
+      collapse_count = &countv;
+    }
+
+  /* FIXME: for now map schedule(auto) to schedule(static).
+     There should be analysis to determine whether all iterations
+     are approximately the same amount of work (then schedule(static)
+     is best) or if it varies (then schedule(dynamic,N) is better).  */
+  if (fd->sched_kind == OMP_CLAUSE_SCHEDULE_AUTO)
+    {
+      fd->sched_kind = OMP_CLAUSE_SCHEDULE_STATIC;
+      gcc_assert (fd->chunk_size == NULL);
+    }
+  gcc_assert ((fd->collapse == 1 && !fd->tiling) || collapse_iter != NULL);
+  if (taskloop)
+    fd->sched_kind = OMP_CLAUSE_SCHEDULE_RUNTIME;
+  if (fd->sched_kind == OMP_CLAUSE_SCHEDULE_RUNTIME)
+    gcc_assert (fd->chunk_size == NULL);
+  else if (fd->chunk_size == NULL)
+    {
+      /* We only need to compute a default chunk size for ordered
+	 static loops and dynamic loops.  */
+      if (fd->sched_kind != OMP_CLAUSE_SCHEDULE_STATIC
+	  || fd->have_ordered)
+	fd->chunk_size = (fd->sched_kind == OMP_CLAUSE_SCHEDULE_STATIC)
+			 ? integer_zero_node : integer_one_node;
+    }
+
+  int cnt = fd->ordered ? fd->ordered : fd->collapse;
+  for (i = 0; i < cnt; i++)
+    {
+      if (i == 0
+	  && fd->collapse == 1
+	  && !fd->tiling
+	  && (fd->ordered == 0 || loops == NULL))
+	loop = &fd->loop;
+      else if (loops != NULL)
+	loop = loops + i;
+      else
+	loop = &dummy_loop;
+
+      loop->v = gimple_omp_for_index (for_stmt, i);
+      gcc_assert (SSA_VAR_P (loop->v));
+      gcc_assert (TREE_CODE (TREE_TYPE (loop->v)) == INTEGER_TYPE
+		  || TREE_CODE (TREE_TYPE (loop->v)) == POINTER_TYPE);
+      var = TREE_CODE (loop->v) == SSA_NAME ? SSA_NAME_VAR (loop->v) : loop->v;
+      loop->n1 = gimple_omp_for_initial (for_stmt, i);
+
+      loop->cond_code = gimple_omp_for_cond (for_stmt, i);
+      loop->n2 = gimple_omp_for_final (for_stmt, i);
+      gcc_assert (loop->cond_code != NE_EXPR
+		  || (gimple_omp_for_kind (for_stmt)
+		      != GF_OMP_FOR_KIND_OACC_LOOP));
+
+      t = gimple_omp_for_incr (for_stmt, i);
+      gcc_assert (TREE_OPERAND (t, 0) == var);
+      loop->step = omp_get_for_step_from_incr (loc, t);
+
+      omp_adjust_for_condition (loc, &loop->cond_code, &loop->n2, loop->v,
+				loop->step);
+
+      if (simd
+	  || (fd->sched_kind == OMP_CLAUSE_SCHEDULE_STATIC
+	      && !fd->have_ordered))
+	{
+	  if (fd->collapse == 1 && !fd->tiling)
+	    iter_type = TREE_TYPE (loop->v);
+	  else if (i == 0
+		   || TYPE_PRECISION (iter_type)
+		      < TYPE_PRECISION (TREE_TYPE (loop->v)))
+	    iter_type
+	      = build_nonstandard_integer_type
+		  (TYPE_PRECISION (TREE_TYPE (loop->v)), 1);
+	}
+      else if (iter_type != long_long_unsigned_type_node)
+	{
+	  if (POINTER_TYPE_P (TREE_TYPE (loop->v)))
+	    iter_type = long_long_unsigned_type_node;
+	  else if (TYPE_UNSIGNED (TREE_TYPE (loop->v))
+		   && TYPE_PRECISION (TREE_TYPE (loop->v))
+		      >= TYPE_PRECISION (iter_type))
+	    {
+	      tree n;
+
+	      if (loop->cond_code == LT_EXPR)
+		n = fold_build2_loc (loc, PLUS_EXPR, TREE_TYPE (loop->v),
+				     loop->n2, loop->step);
+	      else
+		n = loop->n1;
+	      if (TREE_CODE (n) != INTEGER_CST
+		  || tree_int_cst_lt (TYPE_MAX_VALUE (iter_type), n))
+		iter_type = long_long_unsigned_type_node;
+	    }
+	  else if (TYPE_PRECISION (TREE_TYPE (loop->v))
+		   > TYPE_PRECISION (iter_type))
+	    {
+	      tree n1, n2;
+
+	      if (loop->cond_code == LT_EXPR)
+		{
+		  n1 = loop->n1;
+		  n2 = fold_build2_loc (loc, PLUS_EXPR, TREE_TYPE (loop->v),
+					loop->n2, loop->step);
+		}
+	      else
+		{
+		  n1 = fold_build2_loc (loc, MINUS_EXPR, TREE_TYPE (loop->v),
+					loop->n2, loop->step);
+		  n2 = loop->n1;
+		}
+	      if (TREE_CODE (n1) != INTEGER_CST
+		  || TREE_CODE (n2) != INTEGER_CST
+		  || !tree_int_cst_lt (TYPE_MIN_VALUE (iter_type), n1)
+		  || !tree_int_cst_lt (n2, TYPE_MAX_VALUE (iter_type)))
+		iter_type = long_long_unsigned_type_node;
+	    }
+	}
+
+      if (i >= fd->collapse)
+	continue;
+
+      if (collapse_count && *collapse_count == NULL)
+	{
+	  t = fold_binary (loop->cond_code, boolean_type_node,
+			   fold_convert (TREE_TYPE (loop->v), loop->n1),
+			   fold_convert (TREE_TYPE (loop->v), loop->n2));
+	  if (t && integer_zerop (t))
+	    count = build_zero_cst (long_long_unsigned_type_node);
+	  else if ((i == 0 || count != NULL_TREE)
+		   && TREE_CODE (TREE_TYPE (loop->v)) == INTEGER_TYPE
+		   && TREE_CONSTANT (loop->n1)
+		   && TREE_CONSTANT (loop->n2)
+		   && TREE_CODE (loop->step) == INTEGER_CST)
+	    {
+	      tree itype = TREE_TYPE (loop->v);
+
+	      if (POINTER_TYPE_P (itype))
+		itype = signed_type_for (itype);
+	      t = build_int_cst (itype, (loop->cond_code == LT_EXPR ? -1 : 1));
+	      t = fold_build2_loc (loc, PLUS_EXPR, itype,
+				   fold_convert_loc (loc, itype, loop->step),
+				   t);
+	      t = fold_build2_loc (loc, PLUS_EXPR, itype, t,
+				   fold_convert_loc (loc, itype, loop->n2));
+	      t = fold_build2_loc (loc, MINUS_EXPR, itype, t,
+				   fold_convert_loc (loc, itype, loop->n1));
+	      if (TYPE_UNSIGNED (itype) && loop->cond_code == GT_EXPR)
+		{
+		  tree step = fold_convert_loc (loc, itype, loop->step);
+		  t = fold_build2_loc (loc, TRUNC_DIV_EXPR, itype,
+				       fold_build1_loc (loc, NEGATE_EXPR,
+							itype, t),
+				       fold_build1_loc (loc, NEGATE_EXPR,
+							itype, step));
+		}
+	      else
+		t = fold_build2_loc (loc, TRUNC_DIV_EXPR, itype, t,
+				     fold_convert_loc (loc, itype,
+						       loop->step));
+	      t = fold_convert_loc (loc, long_long_unsigned_type_node, t);
+	      if (count != NULL_TREE)
+		count = fold_build2_loc (loc, MULT_EXPR,
+					 long_long_unsigned_type_node,
+					 count, t);
+	      else
+		count = t;
+	      if (TREE_CODE (count) != INTEGER_CST)
+		count = NULL_TREE;
+	    }
+	  else if (count && !integer_zerop (count))
+	    count = NULL_TREE;
+	}
+    }
+
+  if (count
+      && !simd
+      && (fd->sched_kind != OMP_CLAUSE_SCHEDULE_STATIC
+	  || fd->have_ordered))
+    {
+      if (!tree_int_cst_lt (count, TYPE_MAX_VALUE (long_integer_type_node)))
+	iter_type = long_long_unsigned_type_node;
+      else
+	iter_type = long_integer_type_node;
+    }
+  else if (collapse_iter && *collapse_iter != NULL)
+    iter_type = TREE_TYPE (*collapse_iter);
+  fd->iter_type = iter_type;
+  if (collapse_iter && *collapse_iter == NULL)
+    *collapse_iter = create_tmp_var (iter_type, ".iter");
+  if (collapse_count && *collapse_count == NULL)
+    {
+      if (count)
+	*collapse_count = fold_convert_loc (loc, iter_type, count);
+      else
+	*collapse_count = create_tmp_var (iter_type, ".count");
+    }
+
+  if (fd->collapse > 1 || fd->tiling || (fd->ordered && loops))
+    {
+      fd->loop.v = *collapse_iter;
+      fd->loop.n1 = build_int_cst (TREE_TYPE (fd->loop.v), 0);
+      fd->loop.n2 = *collapse_count;
+      fd->loop.step = build_int_cst (TREE_TYPE (fd->loop.v), 1);
+      fd->loop.cond_code = LT_EXPR;
+    }
+  else if (loops)
+    loops[0] = fd->loop;
+}
+
+
+// Source: omp-general.c
+// Lines 180-493

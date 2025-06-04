@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'd' at line 4\n2. Pointer 'child' at line 8\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nfs_rmdir_helper(const char *path)\n{\n\tDIR *dir;\n\tstruct dirent *d;\n\n\tcl_assert_(dir = opendir(path), \"Could not open dir\");\n\twhile ((d = (errno = 0, readdir(dir))) != NULL) {\n\t\tchar *child;\n\n\t\tif (!strcmp(d->d_name, \".\") || !strcmp(d->d_name, \"..\"))\n\t\t\tcontinue;\n\n\t\tchild = joinpath(path, d->d_name, -1);\n\t\tfs_rm(child);\n\t\tfree(child);\n\t}\n\n\n// Source: fs.h\n// Lines 472-487\n",
+  "ANSWER": "MUST-NOT"
+}

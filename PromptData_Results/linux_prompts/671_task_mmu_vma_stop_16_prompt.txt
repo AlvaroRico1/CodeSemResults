@@ -1,0 +1,27 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'mm' at line 3
+2. Pointer 'priv' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void vma_stop(struct proc_maps_private *priv)
+{
+	struct mm_struct *mm = priv->mm;
+
+	release_task_mempolicy(priv);
+	up_read(&mm->mmap_sem);
+	mmput(mm);
+}
+
+
+// Source: task_mmu.c
+// Lines 126-133
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'size' at line 5\n2. Pointer 'type' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void write_note_to_worktree(const struct object_id *obj,\n\t\t\t\t   const struct object_id *note)\n{\n\tenum object_type type;\n\tunsigned long size;\n\tvoid *buf = read_object_file(note, &type, &size);\n\n\tif (!buf)\n\t\tdie(\"cannot read note %s for object %s\",\n\t\t    oid_to_hex(note), oid_to_hex(obj));\n\tif (type != OBJ_BLOB)\n\t\tdie(\"blob expected in note %s for object %s\",\n\t\t    oid_to_hex(note), oid_to_hex(obj));\n\twrite_buf_to_worktree(obj, buf, size);\n\tfree(buf);\n}\n\n\n// Source: notes-merge.c\n// Lines 325-340\n",
+  "ANSWER": "MAY"
+}

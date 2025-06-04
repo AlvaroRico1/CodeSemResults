@@ -1,0 +1,107 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'values' at line 11
+2. Pointer 'names' at line 9
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int sel_make_bools(struct selinux_fs_info *fsi)
+{
+	int i, ret;
+	ssize_t len;
+	struct dentry *dentry = NULL;
+	struct dentry *dir = fsi->bool_dir;
+	struct inode *inode = NULL;
+	struct inode_security_struct *isec;
+	char **names = NULL, *page;
+	int num;
+	int *values = NULL;
+	u32 sid;
+
+	/* remove any existing files */
+	for (i = 0; i < fsi->bool_num; i++)
+		kfree(fsi->bool_pending_names[i]);
+	kfree(fsi->bool_pending_names);
+	kfree(fsi->bool_pending_values);
+	fsi->bool_num = 0;
+	fsi->bool_pending_names = NULL;
+	fsi->bool_pending_values = NULL;
+
+	sel_remove_entries(dir);
+
+	ret = -ENOMEM;
+	page = (char *)get_zeroed_page(GFP_KERNEL);
+	if (!page)
+		goto out;
+
+	ret = security_get_bools(fsi->state, &num, &names, &values);
+	if (ret)
+		goto out;
+
+	for (i = 0; i < num; i++) {
+		ret = -ENOMEM;
+		dentry = d_alloc_name(dir, names[i]);
+		if (!dentry)
+			goto out;
+
+		ret = -ENOMEM;
+		inode = sel_make_inode(dir->d_sb, S_IFREG | S_IRUGO | S_IWUSR);
+		if (!inode) {
+			dput(dentry);
+			goto out;
+		}
+
+		ret = -ENAMETOOLONG;
+		len = snprintf(page, PAGE_SIZE, "/%s/%s", BOOL_DIR_NAME, names[i]);
+		if (len >= PAGE_SIZE) {
+			dput(dentry);
+			iput(inode);
+			goto out;
+		}
+
+		isec = selinux_inode(inode);
+		ret = security_genfs_sid(fsi->state, "selinuxfs", page,
+					 SECCLASS_FILE, &sid);
+		if (ret) {
+			pr_warn_ratelimited("SELinux: no sid found, defaulting to security isid for %s\n",
+					   page);
+			sid = SECINITSID_SECURITY;
+		}
+
+		isec->sid = sid;
+		isec->initialized = LABEL_INITIALIZED;
+		inode->i_fop = &sel_bool_ops;
+		inode->i_ino = i|SEL_BOOL_INO_OFFSET;
+		d_add(dentry, inode);
+	}
+	fsi->bool_num = num;
+	fsi->bool_pending_names = names;
+	fsi->bool_pending_values = values;
+
+	free_page((unsigned long)page);
+	return 0;
+out:
+	free_page((unsigned long)page);
+
+	if (names) {
+		for (i = 0; i < num; i++)
+			kfree(names[i]);
+		kfree(names);
+	}
+	kfree(values);
+	sel_remove_entries(dir);
+
+	return ret;
+}
+
+
+// Source: selinuxfs.c
+// Lines 1326-1413
+
+
+[ANSWER]
+MAY

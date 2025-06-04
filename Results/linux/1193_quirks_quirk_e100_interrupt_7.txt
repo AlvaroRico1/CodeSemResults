@@ -1,0 +1,1 @@
+pmcsr,linux/drivers/pci/quirks.c,3,command,linux/drivers/pci/quirks.c,3,2

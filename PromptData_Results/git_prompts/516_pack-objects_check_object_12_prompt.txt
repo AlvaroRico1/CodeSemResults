@@ -1,0 +1,156 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'in_pack_size' at line 18
+2. Pointer 'w_curs' at line 9
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void check_object(struct object_entry *entry, uint32_t object_index)
+{
+	unsigned long canonical_size;
+	enum object_type type;
+	struct object_info oi = {.typep = &type, .sizep = &canonical_size};
+
+	if (IN_PACK(entry)) {
+		struct packed_git *p = IN_PACK(entry);
+		struct pack_window *w_curs = NULL;
+		int have_base = 0;
+		struct object_id base_ref;
+		struct object_entry *base_entry;
+		unsigned long used, used_0;
+		unsigned long avail;
+		off_t ofs;
+		unsigned char *buf, c;
+		enum object_type type;
+		unsigned long in_pack_size;
+
+		buf = use_pack(p, &w_curs, entry->in_pack_offset, &avail);
+
+		/*
+		 * We want in_pack_type even if we do not reuse delta
+		 * since non-delta representations could still be reused.
+		 */
+		used = unpack_object_header_buffer(buf, avail,
+						   &type,
+						   &in_pack_size);
+		if (used == 0)
+			goto give_up;
+
+		if (type < 0)
+			BUG("invalid type %d", type);
+		entry->in_pack_type = type;
+
+		/*
+		 * Determine if this is a delta and if so whether we can
+		 * reuse it or not.  Otherwise let's find out as cheaply as
+		 * possible what the actual type and size for this object is.
+		 */
+		switch (entry->in_pack_type) {
+		default:
+			/* Not a delta hence we've already got all we need. */
+			oe_set_type(entry, entry->in_pack_type);
+			SET_SIZE(entry, in_pack_size);
+			entry->in_pack_header_size = used;
+			if (oe_type(entry) < OBJ_COMMIT || oe_type(entry) > OBJ_BLOB)
+				goto give_up;
+			unuse_pack(&w_curs);
+			return;
+		case OBJ_REF_DELTA:
+			if (reuse_delta && !entry->preferred_base) {
+				oidread(&base_ref,
+					use_pack(p, &w_curs,
+						 entry->in_pack_offset + used,
+						 NULL));
+				have_base = 1;
+			}
+			entry->in_pack_header_size = used + the_hash_algo->rawsz;
+			break;
+		case OBJ_OFS_DELTA:
+			buf = use_pack(p, &w_curs,
+				       entry->in_pack_offset + used, NULL);
+			used_0 = 0;
+			c = buf[used_0++];
+			ofs = c & 127;
+			while (c & 128) {
+				ofs += 1;
+				if (!ofs || MSB(ofs, 7)) {
+					error(_("delta base offset overflow in pack for %s"),
+					      oid_to_hex(&entry->idx.oid));
+					goto give_up;
+				}
+				c = buf[used_0++];
+				ofs = (ofs << 7) + (c & 127);
+			}
+			ofs = entry->in_pack_offset - ofs;
+			if (ofs <= 0 || ofs >= entry->in_pack_offset) {
+				error(_("delta base offset out of bound for %s"),
+				      oid_to_hex(&entry->idx.oid));
+				goto give_up;
+			}
+			if (reuse_delta && !entry->preferred_base) {
+				uint32_t pos;
+				if (offset_to_pack_pos(p, ofs, &pos) < 0)
+					goto give_up;
+				if (!nth_packed_object_id(&base_ref, p,
+							  pack_pos_to_index(p, pos)))
+					have_base = 1;
+			}
+			entry->in_pack_header_size = used + used_0;
+			break;
+		}
+
+		if (have_base &&
+		    can_reuse_delta(&base_ref, entry, &base_entry)) {
+			oe_set_type(entry, entry->in_pack_type);
+			SET_SIZE(entry, in_pack_size); /* delta size */
+			SET_DELTA_SIZE(entry, in_pack_size);
+
+			if (base_entry) {
+				SET_DELTA(entry, base_entry);
+				entry->delta_sibling_idx = base_entry->delta_child_idx;
+				SET_DELTA_CHILD(base_entry, entry);
+			} else {
+				SET_DELTA_EXT(entry, &base_ref);
+			}
+
+			unuse_pack(&w_curs);
+			return;
+		}
+
+		if (oe_type(entry)) {
+			off_t delta_pos;
+
+			/*
+			 * This must be a delta and we already know what the
+			 * final object type is.  Let's extract the actual
+			 * object size from the delta header.
+			 */
+			delta_pos = entry->in_pack_offset + entry->in_pack_header_size;
+			canonical_size = get_size_from_delta(p, &w_curs, delta_pos);
+			if (canonical_size == 0)
+				goto give_up;
+			SET_SIZE(entry, canonical_size);
+			unuse_pack(&w_curs);
+			return;
+		}
+
+		/*
+		 * No choice but to fall back to the recursive delta walk
+		 * with oid_object_info() to find about the object type
+		 * at this point...
+		 */
+		give_up:
+		unuse_pack(&w_curs);
+	}
+
+
+// Source: pack-objects.c
+// Lines 1915-2051
+
+
+[ANSWER]
+MAY

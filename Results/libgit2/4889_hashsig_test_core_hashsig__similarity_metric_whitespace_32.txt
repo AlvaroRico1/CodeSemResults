@@ -1,0 +1,1 @@
+spaced,libgit2/tests/libgit2/core/hashsig.c,20,opt,libgit2/tests/libgit2/core/hashsig.c,6,0

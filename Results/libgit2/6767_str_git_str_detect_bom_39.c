@@ -1,0 +1,53 @@
+int git_str_detect_bom(git_str_bom_t *bom, const git_str *buf)
+{
+	const char *ptr;
+	size_t len;
+
+	*bom = GIT_STR_BOM_NONE;
+	/* need at least 2 bytes to look for any BOM */
+	if (buf->size < 2)
+		return 0;
+
+	ptr = buf->ptr;
+	len = buf->size;
+
+	switch (*ptr++) {
+	case 0:
+		if (len >= 4 && ptr[0] == 0 && ptr[1] == '\xFE' && ptr[2] == '\xFF') {
+			*bom = GIT_STR_BOM_UTF32_BE;
+			return 4;
+		}
+		break;
+	case '\xEF':
+		if (len >= 3 && ptr[0] == '\xBB' && ptr[1] == '\xBF') {
+			*bom = GIT_STR_BOM_UTF8;
+			return 3;
+		}
+		break;
+	case '\xFE':
+		if (*ptr == '\xFF') {
+			*bom = GIT_STR_BOM_UTF16_BE;
+			return 2;
+		}
+		break;
+	case '\xFF':
+		if (*ptr != '\xFE')
+			break;
+		if (len >= 4 && ptr[1] == 0 && ptr[2] == 0) {
+			*bom = GIT_STR_BOM_UTF32_LE;
+			return 4;
+		} else {
+			*bom = GIT_STR_BOM_UTF16_LE;
+			return 2;
+		}
+		break;
+	default:
+		break;
+	}
+
+	return 0;
+}
+
+
+// Source: str.c
+// Lines 1274-1322

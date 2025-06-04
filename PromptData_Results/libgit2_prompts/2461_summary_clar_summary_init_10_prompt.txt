@@ -1,0 +1,37 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'filename' at line 1
+2. Pointer 'fp' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+struct clar_summary *clar_summary_init(const char *filename)
+{
+	struct clar_summary *summary;
+	FILE *fp;
+
+	if ((fp = fopen(filename, "w")) == NULL)
+		return NULL;
+
+	if ((summary = malloc(sizeof(struct clar_summary))) == NULL) {
+		fclose(fp);
+		return NULL;
+	}
+
+	summary->filename = filename;
+	summary->fp = fp;
+
+	return summary;
+}
+
+
+// Source: summary.h
+// Lines 61-78
+
+
+[ANSWER]
+MUST-NOT

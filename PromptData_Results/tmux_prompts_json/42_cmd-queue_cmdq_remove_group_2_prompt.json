@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'this' at line 3\n2. Pointer 'next' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ncmdq_remove_group(struct cmdq_item *item)\n{\n\tstruct cmdq_item\t*this, *next;\n\n\tif (item->group == 0)\n\t\treturn;\n\tthis = TAILQ_NEXT(item, entry);\n\twhile (this != NULL) {\n\t\tnext = TAILQ_NEXT(this, entry);\n\t\tif (this->group == item->group)\n\t\t\tcmdq_remove(this);\n\t\tthis = next;\n\t}\n}\n\n\n// Source: cmd-queue.c\n// Lines 466-479\n",
+  "ANSWER": "MUST"
+}

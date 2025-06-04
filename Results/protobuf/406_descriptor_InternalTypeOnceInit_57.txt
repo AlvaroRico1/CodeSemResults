@@ -1,0 +1,1 @@
+lazy_default_value_enum_name,protobuf/src/google/protobuf/descriptor.cc,5,lazy_type_name,protobuf/src/google/protobuf/descriptor.cc,4,1

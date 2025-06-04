@@ -1,0 +1,23 @@
+static struct st_h2o_httpclient__h3_conn_t *find_connection(h2o_httpclient_connection_pool_t *pool, h2o_url_t *origin)
+{
+    int should_check_target = h2o_socketpool_is_global(pool->socketpool);
+
+    /* FIXME:
+     * - check connection state(e.g., max_concurrent_streams, if received GOAWAY)
+     * - use hashmap
+     */
+    for (h2o_linklist_t *l = pool->http3.conns.next; l != &pool->http3.conns; l = l->next) {
+        struct st_h2o_httpclient__h3_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_httpclient__h3_conn_t, link, l);
+        if (should_check_target && !(conn->server.origin_url.scheme == origin->scheme &&
+                                     h2o_memis(conn->server.origin_url.authority.base, conn->server.origin_url.authority.len,
+                                               origin->authority.base, origin->authority.len)))
+            continue;
+        return conn;
+    }
+
+    return NULL;
+}
+
+
+// Source: http3client.c
+// Lines 179-197

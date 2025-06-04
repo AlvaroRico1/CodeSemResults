@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'config' at line 1\n2. Pointer 'r' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic struct promisor_remote *promisor_remote_new(struct promisor_remote_config *config,\n\t\t\t\t\t\t   const char *remote_name)\n{\n\tstruct promisor_remote *r;\n\n\tif (*remote_name == '/') {\n\t\twarning(_(\"promisor remote name cannot begin with '/': %s\"),\n\t\t\tremote_name);\n\t\treturn NULL;\n\t}\n\n\tFLEX_ALLOC_STR(r, name, remote_name);\n\n\t*config->promisors_tail = r;\n\tconfig->promisors_tail = &r->next;\n\n\treturn r;\n}\n\n\n// Source: promisor-remote.c\n// Lines 48-65\n",
+  "ANSWER": "MUST"
+}

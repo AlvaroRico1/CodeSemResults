@@ -1,0 +1,60 @@
+verify_expr_location_1 (tree *tp, int *walk_subtrees, void *data)
+{
+  hash_set<tree> *blocks = (hash_set<tree> *) data;
+  tree t = *tp;
+
+  /* ???  This doesn't really belong here but there's no good place to
+     stick this remainder of old verify_expr.  */
+  /* ???  This barfs on debug stmts which contain binds to vars with
+     different function context.  */
+#if 0
+  if (VAR_P (t)
+      || TREE_CODE (t) == PARM_DECL
+      || TREE_CODE (t) == RESULT_DECL)
+    {
+      tree context = decl_function_context (t);
+      if (context != cfun->decl
+	  && !SCOPE_FILE_SCOPE_P (context)
+	  && !TREE_STATIC (t)
+	  && !DECL_EXTERNAL (t))
+	{
+	  error ("local declaration from a different function");
+	  return t;
+	}
+    }
+#endif
+
+  if (VAR_P (t) && DECL_HAS_DEBUG_EXPR_P (t))
+    {
+      tree x = DECL_DEBUG_EXPR (t);
+      tree addr = walk_tree (&x, verify_expr_no_block, NULL, NULL);
+      if (addr)
+	return addr;
+    }
+  if ((VAR_P (t)
+       || TREE_CODE (t) == PARM_DECL
+       || TREE_CODE (t) == RESULT_DECL)
+      && DECL_HAS_VALUE_EXPR_P (t))
+    {
+      tree x = DECL_VALUE_EXPR (t);
+      tree addr = walk_tree (&x, verify_expr_no_block, NULL, NULL);
+      if (addr)
+	return addr;
+    }
+
+  if (!EXPR_P (t))
+    {
+      *walk_subtrees = false;
+      return NULL;
+    }
+
+  location_t loc = EXPR_LOCATION (t);
+  if (verify_location (blocks, loc))
+    return t;
+
+  return NULL;
+}
+
+
+// Source: tree-cfg.c
+// Lines 5256-5311

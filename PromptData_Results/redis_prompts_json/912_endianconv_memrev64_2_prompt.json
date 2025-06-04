@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'x' at line 2\n2. Pointer 'p' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid memrev64(void *p) {\n    unsigned char *x = p, t;\n\n    t = x[0];\n    x[0] = x[7];\n    x[7] = t;\n    t = x[1];\n    x[1] = x[6];\n    x[6] = t;\n    t = x[2];\n    x[2] = x[5];\n    x[5] = t;\n    t = x[3];\n    x[3] = x[4];\n    x[4] = t;\n}\n\n\n// Source: endianconv.c\n// Lines 72-87\n",
+  "ANSWER": "MUST"
+}

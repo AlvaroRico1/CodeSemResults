@@ -1,0 +1,36 @@
+static void adjust_conn_linkedlist(h2o_httpclient_connection_pool_t *connpool, struct st_h2o_http2client_conn_t *conn, int forward)
+{
+    if (connpool == NULL) {
+        assert(!h2o_linklist_is_linked(&conn->super.link));
+        return;
+    }
+    if (!h2o_linklist_is_linked(&conn->super.link))
+        return;
+
+    double ratio = (double)conn->super.num_streams / h2o_httpclient__h2_get_max_concurrent_streams(&conn->super);
+
+    /* adjust connection linked list */
+    h2o_linklist_t *node = forward ? conn->super.link.next : conn->super.link.prev;
+    while (node != &connpool->http2.conns) {
+        struct st_h2o_http2client_conn_t *cur = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http2client_conn_t, super.link, node);
+        double cur_ratio = (double)cur->super.num_streams / h2o_httpclient__h2_get_max_concurrent_streams(&cur->super);
+        if (forward ? (ratio <= cur_ratio) : (ratio >= cur_ratio))
+            break;
+        node = forward ? node->next : node->prev;
+    }
+    if (forward) {
+        if (node == conn->super.link.next)
+            return;
+    } else {
+        if (node == conn->super.link.prev)
+            return;
+        if (node != &connpool->http2.conns)
+            node = node->next; /* do `insert after` rather than `insert before` */
+    }
+    h2o_linklist_unlink(&conn->super.link);
+    h2o_linklist_insert(node, &conn->super.link);
+}
+
+
+// Source: http2client.c
+// Lines 165-196

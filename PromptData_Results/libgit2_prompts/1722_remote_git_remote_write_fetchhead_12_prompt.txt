@@ -1,0 +1,83 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'head_ref' at line 3
+2. Pointer 'fetchhead_ref' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int git_remote_write_fetchhead(git_remote *remote, git_refspec *spec, git_vector *update_heads)
+{
+	git_reference *head_ref = NULL;
+	git_fetchhead_ref *fetchhead_ref;
+	git_remote_head *remote_ref, *merge_remote_ref;
+	git_vector fetchhead_refs;
+	bool include_all_fetchheads;
+	unsigned int i = 0;
+	int error = 0;
+
+	GIT_ASSERT_ARG(remote);
+
+	/* no heads, nothing to do */
+	if (update_heads->length == 0)
+		return 0;
+
+	if (git_vector_init(&fetchhead_refs, update_heads->length, git_fetchhead_ref_cmp) < 0)
+		return -1;
+
+	/* Iff refspec is * (but not subdir slash star), include tags */
+	include_all_fetchheads = (strcmp(GIT_REFS_HEADS_DIR "*", git_refspec_src(spec)) == 0);
+
+	/* Determine what to merge: if refspec was a wildcard, just use HEAD */
+	if (git_refspec_is_wildcard(spec)) {
+		if ((error = git_reference_lookup(&head_ref, remote->repo, GIT_HEAD_FILE)) < 0 ||
+			(error = remote_head_for_ref(&merge_remote_ref, remote, spec, update_heads, head_ref)) < 0)
+				goto cleanup;
+	} else {
+		/* If we're fetching a single refspec, that's the only thing that should be in FETCH_HEAD. */
+		if ((error = remote_head_for_fetchspec_src(&merge_remote_ref, update_heads, git_refspec_src(spec))) < 0)
+			goto cleanup;
+	}
+
+	/* Create the FETCH_HEAD file */
+	git_vector_foreach(update_heads, i, remote_ref) {
+		int merge_this_fetchhead = (merge_remote_ref == remote_ref);
+
+		if (!include_all_fetchheads &&
+			!git_refspec_src_matches(spec, remote_ref->name) &&
+			!merge_this_fetchhead)
+			continue;
+
+		if (git_fetchhead_ref_create(&fetchhead_ref,
+			&remote_ref->oid,
+			merge_this_fetchhead,
+			remote_ref->name,
+			git_remote_url(remote)) < 0)
+			goto cleanup;
+
+		if (git_vector_insert(&fetchhead_refs, fetchhead_ref) < 0)
+			goto cleanup;
+	}
+
+	git_fetchhead_write(remote->repo, &fetchhead_refs);
+
+cleanup:
+	for (i = 0; i < fetchhead_refs.length; ++i)
+		git_fetchhead_ref_free(fetchhead_refs.contents[i]);
+
+	git_vector_free(&fetchhead_refs);
+	git_reference_free(head_ref);
+
+	return error;
+}
+
+
+// Source: remote.c
+// Lines 1512-1575
+
+
+[ANSWER]
+MAY

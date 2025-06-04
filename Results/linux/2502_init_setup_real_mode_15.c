@@ -1,0 +1,48 @@
+static void __init setup_real_mode(void)
+{
+	u16 real_mode_seg;
+	const u32 *rel;
+	u32 count;
+	unsigned char *base;
+	unsigned long phys_base;
+	struct trampoline_header *trampoline_header;
+	size_t size = PAGE_ALIGN(real_mode_blob_end - real_mode_blob);
+#ifdef CONFIG_X86_64
+	u64 *trampoline_pgd;
+	u64 efer;
+#endif
+
+	base = (unsigned char *)real_mode_header;
+
+	/*
+	 * If SME is active, the trampoline area will need to be in
+	 * decrypted memory in order to bring up other processors
+	 * successfully. This is not needed for SEV.
+	 */
+	if (sme_active())
+		set_memory_decrypted((unsigned long)base, size >> PAGE_SHIFT);
+
+	memcpy(base, real_mode_blob, size);
+
+	phys_base = __pa(base);
+	real_mode_seg = phys_base >> 4;
+
+	rel = (u32 *) real_mode_relocs;
+
+	/* 16-bit segment relocations. */
+	count = *rel++;
+	while (count--) {
+		u16 *seg = (u16 *) (base + *rel++);
+		*seg = real_mode_seg;
+	}
+
+	/* 32-bit linear relocations. */
+	count = *rel++;
+	while (count--) {
+		u32 *ptr = (u32 *) (base + *rel++);
+		*ptr += phys_base;
+	}
+
+
+// Source: init.c
+// Lines 39-82

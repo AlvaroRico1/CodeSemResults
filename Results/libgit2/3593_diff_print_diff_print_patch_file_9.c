@@ -1,0 +1,44 @@
+static int diff_print_patch_file(
+	const git_diff_delta *delta, float progress, void *data)
+{
+	int error;
+	diff_print_info *pi = data;
+	const char *oldpfx =
+		pi->old_prefix ? pi->old_prefix : DIFF_OLD_PREFIX_DEFAULT;
+	const char *newpfx =
+		pi->new_prefix ? pi->new_prefix : DIFF_NEW_PREFIX_DEFAULT;
+
+	bool binary = (delta->flags & GIT_DIFF_FLAG_BINARY) ||
+		(pi->flags & GIT_DIFF_FORCE_BINARY);
+	bool show_binary = !!(pi->flags & GIT_DIFF_SHOW_BINARY);
+	int id_strlen = pi->id_strlen;
+	bool print_index = (pi->format != GIT_DIFF_FORMAT_PATCH_ID);
+
+	if (binary && show_binary)
+		id_strlen = delta->old_file.id_abbrev ? delta->old_file.id_abbrev :
+			delta->new_file.id_abbrev;
+
+	GIT_UNUSED(progress);
+
+	if (S_ISDIR(delta->new_file.mode) ||
+	    delta->status == GIT_DELTA_UNMODIFIED ||
+	    delta->status == GIT_DELTA_IGNORED ||
+	    delta->status == GIT_DELTA_UNREADABLE ||
+	    (delta->status == GIT_DELTA_UNTRACKED &&
+		 (pi->flags & GIT_DIFF_SHOW_UNTRACKED_CONTENT) == 0))
+		return 0;
+
+	if ((error = git_diff_delta__format_file_header(pi->buf, delta, oldpfx, newpfx,
+							id_strlen, print_index)) < 0)
+		return error;
+
+	pi->line.origin      = GIT_DIFF_LINE_FILE_HDR;
+	pi->line.content     = git_str_cstr(pi->buf);
+	pi->line.content_len = git_str_len(pi->buf);
+
+	return pi->print_cb(delta, NULL, &pi->line, pi->payload);
+}
+
+
+// Source: diff_print.c
+// Lines 558-597

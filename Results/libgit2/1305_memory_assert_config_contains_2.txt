@@ -1,0 +1,1 @@
+name,libgit2/tests/libgit2/config/memory.c,2,entry,libgit2/tests/libgit2/config/memory.c,4,0

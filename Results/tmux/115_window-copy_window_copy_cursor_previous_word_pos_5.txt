@@ -1,0 +1,1 @@
+py,tmux/window-copy.c,7,px,tmux/window-copy.c,7,2

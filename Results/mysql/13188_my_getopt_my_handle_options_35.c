@@ -1,0 +1,232 @@
+int my_handle_options(int *argc, char ***argv, const struct my_option *longopts,
+                      my_get_one_option get_one_option,
+                      const char **command_list, bool ignore_unknown_option) {
+  uint argvpos = 0, length;
+  bool end_of_options = false, must_be_var, set_maximum_value, option_is_loose;
+  char **pos, **pos_end, *optend, *opt_str, key_name[FN_REFLEN];
+  char **arg_sep = nullptr, **persist_arg_sep = nullptr;
+  const struct my_option *optp;
+  void *value;
+  bool is_cmdline_arg = true, is_persist_arg = true;
+  int opt_found;
+
+  /* handle_options() assumes arg0 (program name) always exists */
+  assert(argc && *argc >= 1);
+  assert(argv && *argv);
+  (*argc)--; /* Skip the program name */
+  (*argv)++; /*      --- || ----      */
+  init_variables(longopts, init_one_value);
+
+  /*
+    Search for args_separator, if found, then the first part of the
+    arguments are loaded from configs
+  */
+  for (pos = *argv, pos_end = pos + *argc; pos != pos_end; pos++) {
+    if (my_getopt_is_args_separator(*pos)) {
+      arg_sep = pos;
+      is_cmdline_arg = false;
+      break;
+    }
+  }
+  /* search for persist_args_separator */
+  if (arg_sep) {
+    for (pos = arg_sep, pos_end = (*argv + *argc); pos != pos_end; pos++) {
+      if (my_getopt_is_ro_persist_args_separator(*pos)) {
+        persist_arg_sep = pos;
+        is_persist_arg = false;
+        break;
+      }
+    }
+  }
+  if (arg_sep) {
+    /*
+      All options which are between arg_sep and persist_arg_sep are
+      command line options, thus update the variables_hash with these
+      options. If persist_arg_sep is NULL then it means there are no
+      read only persist options, what follows is only command line options.
+    */
+    pos = arg_sep + 1;
+    while (*pos && pos != persist_arg_sep) {
+      update_variable_source((const char *)*pos, nullptr);
+      ++pos;
+    }
+  }
+  if (persist_arg_sep) {
+    /*
+      All options which are between after persist_arg_sep are
+      read from persistent file, thus update the variables_hash with
+      these options with path set to "$datadir/mysqld-auto.cnf".
+    */
+    pos = persist_arg_sep + 1;
+    char persist_dir[FN_REFLEN] = {0};
+    fn_format(persist_dir, MYSQL_PERSIST_CONFIG_NAME, datadir_buffer, ".cnf",
+              MY_UNPACK_FILENAME | MY_SAFE_PATH | MY_RELATIVE_PATH);
+    while (pos && *pos) {
+      update_variable_source((const char *)*pos, persist_dir);
+      ++pos;
+    }
+  }
+  for (pos = *argv, pos_end = pos + *argc; pos != pos_end; pos++) {
+    char **first = pos;
+    char *cur_arg = *pos;
+    opt_found = false;
+    if (!is_cmdline_arg && (my_getopt_is_args_separator(cur_arg))) {
+      is_cmdline_arg = true;
+
+      /* save the separator too if skip unkown options  */
+      if (my_getopt_skip_unknown)
+        (*argv)[argvpos++] = cur_arg;
+      else
+        (*argc)--;
+      continue;
+    }
+    /* skip persist args separator */
+    if (!is_persist_arg && my_getopt_is_ro_persist_args_separator(cur_arg)) {
+      is_persist_arg = true;
+      if (my_getopt_skip_unknown)
+        (*argv)[argvpos++] = cur_arg;
+      else
+        (*argc)--;
+      continue;
+    }
+    if (cur_arg[0] == '-' && cur_arg[1] && !end_of_options) /* must be opt */
+    {
+      char *argument = nullptr;
+      must_be_var = false;
+      set_maximum_value = false;
+      option_is_loose = false;
+
+      cur_arg++;           /* skip '-' */
+      if (*cur_arg == '-') /* check for long option, */
+      {
+        if (!*++cur_arg) /* skip the double dash */
+        {
+          /* '--' means end of options, look no further */
+          end_of_options = true;
+          (*argc)--;
+          continue;
+        }
+        opt_str = check_struct_option(cur_arg, key_name);
+        optend = const_cast<char *>(strcend(opt_str, '='));
+        length = (uint)(optend - opt_str);
+        if (*optend == '=')
+          optend++;
+        else
+          optend = nullptr;
+
+        /*
+         * For component system variables key_name is the component name and
+         * opt_str is the variable_name. For structured system variables
+         * opt_str will have key_cache_**** and key_name is the variable
+         * instance name And for all other variable key_name will be 0.
+         */
+        if (*key_name) {
+          std::string tmp_name(opt_str, 0, length);
+
+          if (!is_key_cache_variable_suffix(tmp_name.c_str())) {
+            opt_str = cur_arg;
+            length = (uint)((optend - opt_str) - 1);
+          }
+        }
+        /*
+          Find first the right option. Return error in case of an ambiguous,
+          or unknown option
+        */
+        optp = longopts;
+        if (!(opt_found = findopt(opt_str, length, &optp))) {
+          /*
+            Didn't find any matching option. Let's see if someone called
+            option with a special option prefix
+          */
+          if (!must_be_var) {
+            if (optend)
+              must_be_var = true; /* option is followed by an argument */
+            for (int i = 0; special_opt_prefix[i]; i++) {
+              if (!getopt_compare_strings(special_opt_prefix[i], opt_str,
+                                          special_opt_prefix_lengths[i]) &&
+                  (opt_str[special_opt_prefix_lengths[i]] == '-' ||
+                   opt_str[special_opt_prefix_lengths[i]] == '_')) {
+                /*
+                  We were called with a special prefix, we can reuse opt_found
+                */
+                opt_str += special_opt_prefix_lengths[i] + 1;
+                length -= special_opt_prefix_lengths[i] + 1;
+                if (i == OPT_LOOSE) option_is_loose = true;
+                if ((opt_found = findopt(opt_str, length, &optp))) {
+                  switch (i) {
+                    case OPT_SKIP:
+                    case OPT_DISABLE: /* fall through */
+                      /*
+                        double negation is actually enable again,
+                        for example: --skip-option=0 -> option = true
+                      */
+                      optend = (optend && *optend == '0' && !(*(optend + 1)))
+                                   ? enabled_my_option
+                                   : disabled_my_option;
+                      break;
+                    case OPT_ENABLE:
+                      optend = (optend && *optend == '0' && !(*(optend + 1)))
+                                   ? disabled_my_option
+                                   : enabled_my_option;
+                      break;
+                    case OPT_MAXIMUM:
+                      set_maximum_value = true;
+                      must_be_var = true;
+                      break;
+                  }
+                  break; /* break from the inner loop, main loop continues */
+                }
+                i = -1; /* restart the loop */
+              }
+            }
+          }
+          if (!opt_found) {
+            if (my_getopt_skip_unknown) {
+              /* Preserve all the components of this unknown option. */
+              do {
+                (*argv)[argvpos++] = *first++;
+              } while (first <= pos);
+              continue;
+            }
+            if (must_be_var) {
+              if (my_getopt_print_errors)
+                my_getopt_error_reporter(
+                    option_is_loose ? WARNING_LEVEL : ERROR_LEVEL,
+                    EE_UNKNOWN_VARIABLE, cur_arg);
+              if (!option_is_loose) return EXIT_UNKNOWN_VARIABLE;
+            } else {
+              if (my_getopt_print_errors)
+                my_getopt_error_reporter(
+                    option_is_loose ? WARNING_LEVEL : ERROR_LEVEL,
+                    EE_UNKNOWN_OPTION, cur_arg);
+              if (!(option_is_loose || ignore_unknown_option))
+                return EXIT_UNKNOWN_OPTION;
+            }
+            if (option_is_loose || ignore_unknown_option) {
+              (*argc)--;
+              continue;
+            }
+          }
+        }
+        if ((optp->var_type & GET_TYPE_MASK) == GET_DISABLED) {
+          if (my_getopt_print_errors)
+            my_message_local(option_is_loose ? WARNING_LEVEL : ERROR_LEVEL,
+                             EE_USING_DISABLED_OPTION, my_progname, opt_str);
+          if (option_is_loose) {
+            (*argc)--;
+            continue;
+          }
+          return EXIT_OPTION_DISABLED;
+        }
+        {
+          int error = 0;
+          value =
+              optp->var_type & GET_ASK_ADDR
+                  ? (*getopt_get_addr)(key_name, strlen(key_name), optp, &error)
+                  : optp->value;
+          if (error) return error;
+        }
+
+
+// Source: my_getopt.cc
+// Lines 241-468

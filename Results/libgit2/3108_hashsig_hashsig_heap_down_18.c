@@ -1,0 +1,28 @@
+static void hashsig_heap_down(hashsig_heap *h, int el)
+{
+	hashsig_t v, lv, rv;
+
+	/* 'el < h->size / 2' tests if el is bottom row of heap */
+
+	while (el < h->size / 2) {
+		int lel = HEAP_LCHILD_OF(el), rel = HEAP_RCHILD_OF(el), swapel;
+
+		v  = h->values[el];
+		lv = h->values[lel];
+		rv = h->values[rel];
+
+		if (h->cmp(&v, &lv, NULL) < 0 && h->cmp(&v, &rv, NULL) < 0)
+			break;
+
+		swapel = (h->cmp(&lv, &rv, NULL) < 0) ? lel : rel;
+
+		h->values[el] = h->values[swapel];
+		h->values[swapel] = v;
+
+		el = swapel;
+	}
+}
+
+
+// Source: hashsig.c
+// Lines 83-106

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'bl' at line 2\n2. Pointer 'fs' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void markupval (FuncState *fs, int level) {\n  BlockCnt *bl = fs->bl;\n  while (bl && bl->nactvar > level) bl = bl->previous;\n  if (bl) bl->upval = 1;\n}\n\n\n// Source: lparser.c\n// Lines 217-221\n",
+  "ANSWER": "MUST"
+}

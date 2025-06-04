@@ -1,0 +1,55 @@
+static int packfile_unpack_compressed(
+	git_rawobj *obj,
+	struct git_pack_file *p,
+	git_mwindow **mwindow,
+	off64_t *position,
+	size_t size,
+	git_object_t type)
+{
+	git_zstream zstream = GIT_ZSTREAM_INIT;
+	size_t buffer_len, total = 0;
+	char *data = NULL;
+	int error;
+
+	GIT_ERROR_CHECK_ALLOC_ADD(&buffer_len, size, 1);
+	data = git__calloc(1, buffer_len);
+	GIT_ERROR_CHECK_ALLOC(data);
+
+	if ((error = git_zstream_init(&zstream, GIT_ZSTREAM_INFLATE)) < 0) {
+		git_error_set(GIT_ERROR_ZLIB, "failed to init zlib stream on unpack");
+		goto out;
+	}
+
+	do {
+		size_t bytes = buffer_len - total;
+		unsigned int window_len, consumed;
+		unsigned char *in;
+
+		if ((in = pack_window_open(p, mwindow, *position, &window_len)) == NULL) {
+			error = -1;
+			goto out;
+		}
+
+		if ((error = git_zstream_set_input(&zstream, in, window_len)) < 0 ||
+		    (error = git_zstream_get_output_chunk(data + total, &bytes, &zstream)) < 0) {
+			git_mwindow_close(mwindow);
+			goto out;
+		}
+
+		git_mwindow_close(mwindow);
+
+		consumed = window_len - (unsigned int)zstream.in_len;
+
+		if (!bytes && !consumed) {
+			git_error_set(GIT_ERROR_ZLIB, "error inflating zlib stream");
+			error = -1;
+			goto out;
+		}
+
+		*position += consumed;
+		total += bytes;
+	} while (!git_zstream_eos(&zstream));
+
+
+// Source: pack.c
+// Lines 887-937

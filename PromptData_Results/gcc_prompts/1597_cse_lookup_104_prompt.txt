@@ -1,0 +1,30 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'p' at line 3
+2. Pointer 'p' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+lookup (rtx x, unsigned int hash, machine_mode mode)
+{
+  struct table_elt *p;
+
+  for (p = table[hash]; p; p = p->next_same_hash)
+    if (mode == p->mode && ((x == p->exp && REG_P (x))
+			    || exp_equiv_p (x, p->exp, !REG_P (x), false)))
+      return p;
+
+  return 0;
+}
+
+
+// Source: cse.c
+// Lines 1460-1470
+
+
+[ANSWER]
+MUST

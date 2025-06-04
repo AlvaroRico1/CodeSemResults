@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'name' at line 4
+2. Pointer 'error' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int custom_transport_remote_create(
+	git_remote **out,
+	git_repository *repo,
+	const char *name,
+	const char *url,
+	void *payload)
+{
+	int error;
+
+	GIT_UNUSED(payload);
+
+	if ((error = git_remote_create(out, repo, name, url)) < 0)
+		return error;
+
+	return 0;
+}
+
+
+// Source: transport.c
+// Lines 18-33
+
+
+[ANSWER]
+MUST-NOT

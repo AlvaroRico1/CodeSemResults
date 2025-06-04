@@ -1,0 +1,1 @@
+buffer,gcc/gcc/input.c,3,len,gcc/gcc/input.c,4,0

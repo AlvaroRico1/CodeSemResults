@@ -1,0 +1,26 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'req' at line 3
+2. Pointer 'qs' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void on_send_shift(quicly_stream_t *qs, size_t delta)
+{
+    struct st_h2o_http3client_req_t *req = qs->data;
+
+    assert(req != NULL);
+    h2o_buffer_consume(&req->sendbuf, delta);
+}
+
+
+// Source: http3client.c
+// Lines 581-587
+
+
+[ANSWER]
+MUST

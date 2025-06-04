@@ -1,0 +1,1 @@
+protectHFS,libgit2/src/libgit2/path.c,5,protectNTFS,libgit2/src/libgit2/path.c,5,2

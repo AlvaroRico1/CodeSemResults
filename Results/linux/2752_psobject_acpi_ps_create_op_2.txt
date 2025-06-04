@@ -1,0 +1,1 @@
+op,linux/drivers/acpi/acpica/psobject.c,5,named_op,linux/drivers/acpi/acpica/psobject.c,6,2

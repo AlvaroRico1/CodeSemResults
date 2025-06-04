@@ -1,0 +1,27 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 's' at line 1
+2. Pointer 'flp' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void gkc_free(struct gkc_summary *s, struct gkc_tuple *p)
+{
+    struct freelist *flp = (void *)p;
+    s->alloced--;
+
+    flp->next = s->fl;
+    s->fl = flp;
+}
+
+
+// Source: gkc.c
+// Lines 194-201
+
+
+[ANSWER]
+MUST

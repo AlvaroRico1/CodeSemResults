@@ -1,0 +1,1 @@
+matched_pathspec,libgit2/tests/libgit2/diff/notify.c,4,found,libgit2/tests/libgit2/diff/notify.c,7,0

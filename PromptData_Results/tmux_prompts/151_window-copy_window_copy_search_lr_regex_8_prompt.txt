@@ -1,0 +1,82 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ppx' at line 1
+2. Pointer 'foundx' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+window_copy_search_lr_regex(struct grid *gd, u_int *ppx, u_int *psx, u_int py,
+    u_int first, u_int last, regex_t *reg)
+{
+	int			eflags = 0;
+	u_int			endline, foundx, foundy, len, pywrap, size = 1;
+	char		       *buf;
+	regmatch_t		regmatch;
+	struct grid_line       *gl;
+
+	/*
+	 * This can happen during search if the last match was the last
+	 * character on a line.
+	 */
+	if (first >= last)
+		return (0);
+
+	/* Set flags for regex search. */
+	if (first != 0)
+		eflags |= REG_NOTBOL;
+
+	/* Need to look at the entire string. */
+	buf = xmalloc(size);
+	buf[0] = '\0';
+	buf = window_copy_stringify(gd, py, first, gd->sx, buf, &size);
+	len = gd->sx - first;
+	endline = gd->hsize + gd->sy - 1;
+	pywrap = py;
+	while (buf != NULL && pywrap <= endline) {
+		gl = grid_get_line(gd, pywrap);
+		if (~gl->flags & GRID_LINE_WRAPPED)
+			break;
+		pywrap++;
+		buf = window_copy_stringify(gd, pywrap, 0, gd->sx, buf, &size);
+		len += gd->sx;
+	}
+
+	if (regexec(reg, buf, 1, &regmatch, eflags) == 0 &&
+	    regmatch.rm_so != regmatch.rm_eo) {
+		foundx = first;
+		foundy = py;
+		window_copy_cstrtocellpos(gd, len, &foundx, &foundy,
+		    buf + regmatch.rm_so);
+		if (foundy == py && foundx < last) {
+			*ppx = foundx;
+			len -= foundx - first;
+			window_copy_cstrtocellpos(gd, len, &foundx, &foundy,
+			    buf + regmatch.rm_eo);
+			*psx = foundx;
+			while (foundy > py) {
+				*psx += gd->sx;
+				foundy--;
+			}
+			*psx -= *ppx;
+			free(buf);
+			return (1);
+		}
+	}
+
+	free(buf);
+	*ppx = 0;
+	*psx = 0;
+	return (0);
+}
+
+
+// Source: window-copy.c
+// Lines 3018-3080
+
+
+[ANSWER]
+MAY

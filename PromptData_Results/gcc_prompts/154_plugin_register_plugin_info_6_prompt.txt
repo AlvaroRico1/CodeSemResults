@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'plugin' at line 5
+2. Pointer 'slot' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+register_plugin_info (const char* name, struct plugin_info *info)
+{
+  void **slot = htab_find_slot_with_hash (plugin_name_args_tab, name,
+					  htab_hash_string (name), NO_INSERT);
+  struct plugin_name_args *plugin;
+
+  if (slot == NULL)
+    {
+      error ("unable to register info for plugin %qs - plugin name not found",
+	     name);
+      return;
+    }
+  plugin = (struct plugin_name_args *) *slot;
+  plugin->version = info->version;
+  plugin->help = info->help;
+}
+
+
+// Source: plugin.c
+// Lines 368-383
+
+
+[ANSWER]
+MUST

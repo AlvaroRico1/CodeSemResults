@@ -1,0 +1,1 @@
+sha1,libgit2/tests/libgit2/diff/rename.c,3,sha2,libgit2/tests/libgit2/diff/rename.c,4,0

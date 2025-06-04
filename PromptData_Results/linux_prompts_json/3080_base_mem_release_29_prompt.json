@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'mm' at line 3\n2. Pointer 'file' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int mem_release(struct inode *inode, struct file *file)\n{\n\tstruct mm_struct *mm = file->private_data;\n\tif (mm)\n\t\tmmdrop(mm);\n\treturn 0;\n}\n\n\n// Source: base.c\n// Lines 899-905\n",
+  "ANSWER": "MUST"
+}

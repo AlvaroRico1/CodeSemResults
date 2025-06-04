@@ -1,0 +1,1 @@
+name,tmux/paste.c,1,pb,tmux/paste.c,3,1

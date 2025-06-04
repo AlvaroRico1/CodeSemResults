@@ -1,0 +1,91 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'set' at line None
+2. Pointer 'o' at line 45
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+size_t rdbSaveStreamConsumers(rio *rdb, streamCG *cg) {
+    ssize_t n, nwritten = 0;
+
+    /* Number of consumers in this consumer group. */
+    if ((n = rdbSaveLen(rdb,raxSize(cg->consumers))) == -1) return -1;
+    nwritten += n;
+
+    /* Save each consumer. */
+    raxIterator ri;
+    raxStart(&ri,cg->consumers);
+    raxSeek(&ri,"^",NULL,0);
+    while(raxNext(&ri)) {
+        streamConsumer *consumer = ri.data;
+
+        /* Consumer name. */
+        if ((n = rdbSaveRawString(rdb,ri.key,ri.key_len)) == -1) {
+            raxStop(&ri);
+            return -1;
+        }
+        nwritten += n;
+
+        /* Last seen time. */
+        if ((n = rdbSaveMillisecondTime(rdb,consumer->seen_time)) == -1) {
+            raxStop(&ri);
+            return -1;
+        }
+        nwritten += n;
+
+        /* Consumer PEL, without the ACKs (see last parameter of the function
+         * passed with value of 0), at loading time we'll lookup the ID
+         * in the consumer group global PEL and will put a reference in the
+         * consumer local PEL. */
+        if ((n = rdbSaveStreamPEL(rdb,consumer->pel,0)) == -1) {
+            raxStop(&ri);
+            return -1;
+        }
+        nwritten += n;
+    }
+    raxStop(&ri);
+    return nwritten;
+}
+
+/* Save a Redis object.
+ * Returns -1 on error, number of bytes written on success. */
+ssize_t rdbSaveObject(rio *rdb, robj *o, robj *key) {
+    ssize_t n = 0, nwritten = 0;
+
+    if (o->type == OBJ_STRING) {
+        /* Save a string value */
+        if ((n = rdbSaveStringObject(rdb,o)) == -1) return -1;
+        nwritten += n;
+    } else if (o->type == OBJ_LIST) {
+        /* Save a list value */
+        if (o->encoding == OBJ_ENCODING_QUICKLIST) {
+            quicklist *ql = o->ptr;
+            quicklistNode *node = ql->head;
+
+            if ((n = rdbSaveLen(rdb,ql->len)) == -1) return -1;
+            nwritten += n;
+
+            while(node) {
+                if (quicklistNodeIsCompressed(node)) {
+                    void *data;
+                    size_t compress_len = quicklistGetLzf(node, &data);
+                    if ((n = rdbSaveLzfBlob(rdb,data,compress_len,node->sz)) == -1) return -1;
+                    nwritten += n;
+                } else {
+                    if ((n = rdbSaveRawString(rdb,node->zl,node->sz)) == -1) return -1;
+                    nwritten += n;
+                }
+                node = node->next;
+            }
+
+
+// Source: rdb.c
+// Lines 762-833
+
+
+[ANSWER]
+MUST

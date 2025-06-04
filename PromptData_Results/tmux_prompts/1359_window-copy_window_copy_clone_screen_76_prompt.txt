@@ -1,0 +1,77 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'wy' at line 6
+2. Pointer 'wx' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+window_copy_clone_screen(struct screen *src, struct screen *hint, u_int *cx,
+    u_int *cy, int trim)
+{
+	struct screen		*dst;
+	const struct grid_line	*gl;
+	u_int			 sy, wx, wy;
+	int			 reflow;
+
+	dst = xcalloc(1, sizeof *dst);
+
+	sy = screen_hsize(src) + screen_size_y(src);
+	if (trim) {
+		while (sy > screen_hsize(src)) {
+			gl = grid_peek_line(src->grid, sy - 1);
+			if (gl->cellused != 0)
+				break;
+			sy--;
+		}
+	}
+	log_debug("%s: target screen is %ux%u, source %ux%u", __func__,
+	    screen_size_x(src), sy, screen_size_x(hint),
+	    screen_hsize(src) + screen_size_y(src));
+	screen_init(dst, screen_size_x(src), sy, screen_hlimit(src));
+
+	/*
+	 * Ensure history is on for the backing grid so lines are not deleted
+	 * during resizing.
+	 */
+	dst->grid->flags |= GRID_HISTORY;
+	grid_duplicate_lines(dst->grid, 0, src->grid, 0, sy);
+
+	dst->grid->sy = sy - screen_hsize(src);
+	dst->grid->hsize = screen_hsize(src);
+	dst->grid->hscrolled = src->grid->hscrolled;
+	if (src->cy > dst->grid->sy - 1) {
+		dst->cx = 0;
+		dst->cy = dst->grid->sy - 1;
+	} else {
+		dst->cx = src->cx;
+		dst->cy = src->cy;
+	}
+
+	if (cx != NULL && cy != NULL) {
+		*cx = dst->cx;
+		*cy = screen_hsize(dst) + dst->cy;
+		reflow = (screen_size_x(hint) != screen_size_x(dst));
+	}
+	else
+		reflow = 0;
+	if (reflow)
+		grid_wrap_position(dst->grid, *cx, *cy, &wx, &wy);
+	screen_resize_cursor(dst, screen_size_x(hint), screen_size_y(hint), 1,
+	    0, 0);
+	if (reflow)
+		grid_unwrap_position(dst->grid, cx, cy, wx, wy);
+
+	return (dst);
+}
+
+
+// Source: window-copy.c
+// Lines 327-384
+
+
+[ANSWER]
+MAY

@@ -1,0 +1,1 @@
+bufp,mysql/client/mysql.cc,16,result,mysql/client/mysql.cc,4,0

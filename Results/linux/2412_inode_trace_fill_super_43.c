@@ -1,0 +1,36 @@
+static int trace_fill_super(struct super_block *sb, void *data, int silent)
+{
+	static const struct tree_descr trace_files[] = {{""}};
+	struct tracefs_fs_info *fsi;
+	int err;
+
+	fsi = kzalloc(sizeof(struct tracefs_fs_info), GFP_KERNEL);
+	sb->s_fs_info = fsi;
+	if (!fsi) {
+		err = -ENOMEM;
+		goto fail;
+	}
+
+	err = tracefs_parse_options(data, &fsi->mount_opts);
+	if (err)
+		goto fail;
+
+	err  =  simple_fill_super(sb, TRACEFS_MAGIC, trace_files);
+	if (err)
+		goto fail;
+
+	sb->s_op = &tracefs_super_operations;
+
+	tracefs_apply_options(sb);
+
+	return 0;
+
+fail:
+	kfree(fsi);
+	sb->s_fs_info = NULL;
+	return err;
+}
+
+
+// Source: inode.c
+// Lines 263-294

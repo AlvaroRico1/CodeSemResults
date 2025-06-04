@@ -1,0 +1,42 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tmp' at line 5
+2. Pointer 'next' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+nfs_page_group_destroy(struct kref *kref)
+{
+	struct nfs_page *req = container_of(kref, struct nfs_page, wb_kref);
+	struct nfs_page *head = req->wb_head;
+	struct nfs_page *tmp, *next;
+
+	if (!nfs_page_group_sync_on_bit(req, PG_TEARDOWN))
+		goto out;
+
+	tmp = req;
+	do {
+		next = tmp->wb_this_page;
+		/* unlink and free */
+		tmp->wb_this_page = tmp;
+		tmp->wb_head = tmp;
+		nfs_free_request(tmp);
+		tmp = next;
+	} while (tmp != req);
+out:
+	/* subrequests must release the ref on the head request */
+	if (head != req)
+		nfs_release_request(head);
+}
+
+
+// Source: pagelist.c
+// Lines 275-297
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,76 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'size' at line 11
+2. Pointer 'filename' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int write_archive_entry(const struct object_id *oid, const char *base,
+		int baselen, const char *filename, unsigned mode,
+		void *context)
+{
+	static struct strbuf path = STRBUF_INIT;
+	struct archiver_context *c = context;
+	struct archiver_args *args = c->args;
+	write_archive_entry_fn_t write_entry = c->write_entry;
+	int err;
+	const char *path_without_prefix;
+	unsigned long size;
+	void *buffer;
+	enum object_type type;
+
+	args->convert = 0;
+	strbuf_reset(&path);
+	strbuf_grow(&path, PATH_MAX);
+	strbuf_add(&path, args->base, args->baselen);
+	strbuf_add(&path, base, baselen);
+	strbuf_addstr(&path, filename);
+	if (S_ISDIR(mode) || S_ISGITLINK(mode))
+		strbuf_addch(&path, '/');
+	path_without_prefix = path.buf + args->baselen;
+
+	if (!S_ISDIR(mode)) {
+		const struct attr_check *check;
+		check = get_archive_attrs(args->repo->index, path_without_prefix);
+		if (check_attr_export_ignore(check))
+			return 0;
+		args->convert = check_attr_export_subst(check);
+	}
+
+	if (S_ISDIR(mode) || S_ISGITLINK(mode)) {
+		if (args->verbose)
+			fprintf(stderr, "%.*s\n", (int)path.len, path.buf);
+		err = write_entry(args, oid, path.buf, path.len, mode, NULL, 0);
+		if (err)
+			return err;
+		return (S_ISDIR(mode) ? READ_TREE_RECURSIVE : 0);
+	}
+
+	if (args->verbose)
+		fprintf(stderr, "%.*s\n", (int)path.len, path.buf);
+
+	/* Stream it? */
+	if (S_ISREG(mode) && !args->convert &&
+	    oid_object_info(args->repo, oid, &size) == OBJ_BLOB &&
+	    size > big_file_threshold)
+		return write_entry(args, oid, path.buf, path.len, mode, NULL, size);
+
+	buffer = object_file_to_archive(args, path.buf, oid, mode, &type, &size);
+	if (!buffer)
+		return error(_("cannot read %s"), oid_to_hex(oid));
+	err = write_entry(args, oid, path.buf, path.len, mode, buffer, size);
+	free(buffer);
+	return err;
+}
+
+
+// Source: archive.c
+// Lines 136-192
+
+
+[ANSWER]
+MAY

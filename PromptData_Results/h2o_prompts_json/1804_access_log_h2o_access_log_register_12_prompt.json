@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'self' at line 3\n2. Pointer 'fh' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nh2o_logger_t *h2o_access_log_register(h2o_pathconf_t *pathconf, h2o_access_log_filehandle_t *fh)\n{\n    struct st_h2o_access_logger_t *self = (void *)h2o_create_logger(pathconf, sizeof(*self));\n\n    self->super.dispose = dispose;\n    self->super.log_access = log_access;\n    self->fh = fh;\n    h2o_mem_addref_shared(fh);\n\n    return &self->super;\n}\n\n\n// Source: access_log.c\n// Lines 167-177\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,74 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'self' at line 3
+2. Pointer 'cmd' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int register_errordoc(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *hash)
+{
+    struct errordoc_configurator_t *self = (void *)cmd->configurator;
+    yoml_t **url_node, **status_nodes;
+    size_t i, j, num_status;
+
+    /* extract the nodes to handle */
+    if (h2o_configurator_parse_mapping(cmd, hash, "url:s,status:*", NULL, &url_node, &status_nodes) != 0)
+        return -1;
+    switch ((*status_nodes)->type) {
+    case YOML_TYPE_SCALAR:
+        num_status = 1;
+        break;
+    case YOML_TYPE_SEQUENCE:
+        if ((*status_nodes)->data.sequence.size == 0) {
+            h2o_configurator_errprintf(cmd, *status_nodes, "status cannot be an empty sequence");
+            return -1;
+        }
+        num_status = (*status_nodes)->data.sequence.size;
+        status_nodes = (*status_nodes)->data.sequence.elements;
+        break;
+    default:
+        h2o_configurator_errprintf(cmd, *status_nodes, "status must be a 3-digit scalar or a sequence of 3-digit scalars");
+        return -1;
+    }
+
+    /* convert list of status_nodes (in string) to list of 3-digit codes */
+    int *status_codes = alloca(sizeof(*status_codes) * num_status);
+    for (i = 0; i != num_status; ++i) {
+        if (h2o_configurator_scanf(cmd, status_nodes[i], "%d", &status_codes[i]) != 0)
+            return -1;
+        if (!(400 <= status_codes[i] && status_codes[i] <= 599)) {
+            h2o_configurator_errprintf(cmd, status_nodes[i], "status must be within range of 400 to 599");
+            return -1;
+        }
+        /* check the scanned status hasn't already appeared */
+        for (j = 0; j != i; ++j) {
+            if (status_codes[j] == status_codes[i]) {
+                h2o_configurator_errprintf(cmd, status_nodes[i], "status %d appears multiple times", status_codes[i]);
+                return -1;
+            }
+        }
+    }
+
+    h2o_iovec_t url = h2o_strdup(&self->pool, (*url_node)->data.scalar, SIZE_MAX);
+    for (i = 0; i != num_status; ++i) {
+        /* register */
+        h2o_vector_reserve(&self->pool, self->vars, self->vars->size + 1);
+        h2o_errordoc_t *errordoc = self->vars->entries + self->vars->size++;
+        errordoc->status = status_codes[i];
+        errordoc->url = url;
+    }
+
+    return 0;
+}
+
+
+// Source: errordoc.c
+// Lines 31-85
+
+
+[ANSWER]
+MUST

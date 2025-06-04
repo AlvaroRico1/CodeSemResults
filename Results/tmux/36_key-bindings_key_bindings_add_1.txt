@@ -1,0 +1,1 @@
+bd,tmux/key-bindings.c,5,cmdlist,tmux/key-bindings.c,2,1

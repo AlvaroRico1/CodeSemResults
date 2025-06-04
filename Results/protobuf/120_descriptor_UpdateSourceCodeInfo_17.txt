@@ -1,0 +1,1 @@
+pathv,protobuf/src/google/protobuf/descriptor.cc,22,rit,protobuf/src/google/protobuf/descriptor.cc,82,2

@@ -1,0 +1,39 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'end' at line 16
+2. Pointer 'mysql' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void mysql_close_free_options(MYSQL *mysql) {
+  DBUG_TRACE;
+
+  my_free(mysql->options.user);
+  my_free(mysql->options.host);
+  my_free(mysql->options.password);
+  my_free(mysql->options.unix_socket);
+  my_free(mysql->options.db);
+  my_free(mysql->options.my_cnf_file);
+  my_free(mysql->options.my_cnf_group);
+  my_free(mysql->options.charset_dir);
+  my_free(mysql->options.charset_name);
+  my_free(mysql->options.bind_address);
+  if (mysql->options.init_commands) {
+    char **ptr = mysql->options.init_commands->begin();
+    char **end = mysql->options.init_commands->end();
+    for (; ptr < end; ptr++) my_free(*ptr);
+    mysql->options.init_commands->~Init_commands_array();
+    my_free(mysql->options.init_commands);
+  }
+
+
+// Source: client.cc
+// Lines 6871-6890
+
+
+[ANSWER]
+MUST-NOT

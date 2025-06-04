@@ -1,0 +1,44 @@
+tty_cmd_linefeed(struct tty *tty, const struct tty_ctx *ctx)
+{
+	struct client	*c = tty->client;
+
+	if (ctx->ocy != ctx->orlower)
+		return;
+
+	if (ctx->bigger ||
+	    (!tty_full_width(tty, ctx) && !tty_use_margin(tty)) ||
+	    tty_fake_bce(tty, &ctx->defaults, 8) ||
+	    !tty_term_has(tty->term, TTYC_CSR) ||
+	    ctx->sx == 1 ||
+	    ctx->sy == 1 ||
+	    c->overlay_check != NULL) {
+		tty_redraw_region(tty, ctx);
+		return;
+	}
+
+	tty_default_attributes(tty, &ctx->defaults, ctx->palette, ctx->bg);
+
+	tty_region_pane(tty, ctx, ctx->orupper, ctx->orlower);
+	tty_margin_pane(tty, ctx);
+
+	/*
+	 * If we want to wrap a pane while using margins, the cursor needs to
+	 * be exactly on the right of the region. If the cursor is entirely off
+	 * the edge - move it back to the right. Some terminals are funny about
+	 * this and insert extra spaces, so only use the right if margins are
+	 * enabled.
+	 */
+	if (ctx->xoff + ctx->ocx > tty->rright) {
+		if (!tty_use_margin(tty))
+			tty_cursor(tty, 0, ctx->yoff + ctx->ocy);
+		else
+			tty_cursor(tty, tty->rright, ctx->yoff + ctx->ocy);
+	} else
+		tty_cursor_pane(tty, ctx, ctx->ocx, ctx->ocy);
+
+	tty_putc(tty, '\n');
+}
+
+
+// Source: tty.c
+// Lines 1755-1794

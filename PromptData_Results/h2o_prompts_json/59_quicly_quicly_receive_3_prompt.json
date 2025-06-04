@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'aead' at line 7\n2. Pointer 'conn' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint quicly_receive(quicly_conn_t *conn, struct sockaddr *dest_addr, struct sockaddr *src_addr, quicly_decoded_packet_t *packet)\n{\n    ptls_cipher_context_t *header_protection;\n    struct {\n        int (*cb)(void *, uint64_t, quicly_decoded_packet_t *, size_t, size_t *);\n        void *ctx;\n    } aead;\n\n\n// Source: quicly.c\n// Lines 5792-5798\n",
+  "ANSWER": "MUST"
+}

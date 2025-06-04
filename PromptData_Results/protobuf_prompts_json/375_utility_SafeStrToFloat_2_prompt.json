@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'str' at line 1\n2. Pointer 'double_value' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nbool SafeStrToFloat(StringPiece str, float* value) {\n  double double_value;\n  if (!safe_strtod(str, &double_value)) {\n    return false;\n  }\n\n  if (std::isinf(double_value) || std::isnan(double_value)) return false;\n\n  // Fail if the value is not representable in float.\n  if (double_value > std::numeric_limits<float>::max() ||\n      double_value < -std::numeric_limits<float>::max()) {\n    return false;\n  }\n\n  *value = static_cast<float>(double_value);\n  return true;\n}\n\n\n// Source: utility.cc\n// Lines 395-411\n",
+  "ANSWER": "MAY"
+}

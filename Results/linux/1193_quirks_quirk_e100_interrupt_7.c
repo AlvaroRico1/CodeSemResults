@@ -1,0 +1,67 @@
+static void quirk_e100_interrupt(struct pci_dev *dev)
+{
+	u16 command, pmcsr;
+	u8 __iomem *csr;
+	u8 cmd_hi;
+
+	switch (dev->device) {
+	/* PCI IDs taken from drivers/net/e100.c */
+	case 0x1029:
+	case 0x1030 ... 0x1034:
+	case 0x1038 ... 0x103E:
+	case 0x1050 ... 0x1057:
+	case 0x1059:
+	case 0x1064 ... 0x106B:
+	case 0x1091 ... 0x1095:
+	case 0x1209:
+	case 0x1229:
+	case 0x2449:
+	case 0x2459:
+	case 0x245D:
+	case 0x27DC:
+		break;
+	default:
+		return;
+	}
+
+	/*
+	 * Some firmware hands off the e100 with interrupts enabled,
+	 * which can cause a flood of interrupts if packets are
+	 * received before the driver attaches to the device.  So
+	 * disable all e100 interrupts here.  The driver will
+	 * re-enable them when it's ready.
+	 */
+	pci_read_config_word(dev, PCI_COMMAND, &command);
+
+	if (!(command & PCI_COMMAND_MEMORY) || !pci_resource_start(dev, 0))
+		return;
+
+	/*
+	 * Check that the device is in the D0 power state. If it's not,
+	 * there is no point to look any further.
+	 */
+	if (dev->pm_cap) {
+		pci_read_config_word(dev, dev->pm_cap + PCI_PM_CTRL, &pmcsr);
+		if ((pmcsr & PCI_PM_CTRL_STATE_MASK) != PCI_D0)
+			return;
+	}
+
+	/* Convert from PCI bus to resource space.  */
+	csr = ioremap(pci_resource_start(dev, 0), 8);
+	if (!csr) {
+		pci_warn(dev, "Can't map e100 registers\n");
+		return;
+	}
+
+	cmd_hi = readb(csr + 3);
+	if (cmd_hi == 0) {
+		pci_warn(dev, "Firmware left e100 interrupts enabled; disabling\n");
+		writeb(1, csr + 3);
+	}
+
+	iounmap(csr);
+}
+
+
+// Source: quirks.c
+// Lines 2157-2219

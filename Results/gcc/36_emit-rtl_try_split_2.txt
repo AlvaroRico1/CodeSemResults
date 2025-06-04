@@ -1,0 +1,1 @@
+call_insn,gcc/gcc/emit-rtl.c,9,insn,gcc/gcc/emit-rtl.c,7,1

@@ -1,0 +1,1 @@
+old_tree,libgit2/tests/libgit2/diff/rename.c,5,delta,libgit2/tests/libgit2/diff/rename.c,10,0

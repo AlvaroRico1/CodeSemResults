@@ -1,0 +1,31 @@
+static void do_emit_writereq(struct st_h2o_http2client_conn_t *conn)
+{
+    assert(conn->output.buf_in_flight == NULL);
+
+    /* emit DATA frames */
+    h2o_linklist_t *node = conn->output.sending_streams.next;
+    h2o_linklist_t *first = node;
+    while (node != &conn->output.sending_streams) {
+        h2o_linklist_t *next = node->next;
+        struct st_h2o_http2client_stream_t *stream =
+            H2O_STRUCT_FROM_MEMBER(struct st_h2o_http2client_stream_t, output.sending_link, node);
+        h2o_linklist_unlink(node);
+
+        size_t bytes_emitted = 0;
+        if (stream->output.buf != NULL && stream->output.buf->size != 0)
+            bytes_emitted = stream_emit_pending_data(stream);
+
+        if (stream->output.buf != NULL && stream->output.buf->size == 0) {
+            h2o_linklist_insert(&conn->output.sent_streams, node);
+        } else if (h2o_http2_window_get_avail(&stream->output.window) > 0) {
+            h2o_linklist_insert(&conn->output.sending_streams, node); /* move to the tail to rotate buffers */
+        }
+
+        if (next == first)
+            break;
+        node = next;
+    }
+
+
+// Source: http2client.c
+// Lines 1163-1189

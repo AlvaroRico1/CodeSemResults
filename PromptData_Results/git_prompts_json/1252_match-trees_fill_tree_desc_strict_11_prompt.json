@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'size' at line 6\n2. Pointer 'type' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void *fill_tree_desc_strict(struct tree_desc *desc,\n\t\t\t\t   const struct object_id *hash)\n{\n\tvoid *buffer;\n\tenum object_type type;\n\tunsigned long size;\n\n\tbuffer = read_object_file(hash, &type, &size);\n\tif (!buffer)\n\t\tdie(\"unable to read tree (%s)\", oid_to_hex(hash));\n\tif (type != OBJ_TREE)\n\t\tdie(\"%s is not a tree\", oid_to_hex(hash));\n\tinit_tree_desc(desc, buffer, size);\n\treturn buffer;\n}\n\n\n// Source: match-trees.c\n// Lines 51-65\n",
+  "ANSWER": "MAY"
+}

@@ -1,0 +1,30 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'iter' at line 3
+2. Pointer '_iter' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void multivar_iter_free(git_config_iterator *_iter)
+{
+	multivar_iter *iter = (multivar_iter *) _iter;
+
+	iter->iter->free(iter->iter);
+
+	git__free(iter->name);
+	if (iter->have_regex)
+		git_regexp_dispose(&iter->regex);
+	git__free(iter);
+}
+
+
+// Source: config.c
+// Lines 1046-1056
+
+
+[ANSWER]
+MUST

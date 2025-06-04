@@ -1,0 +1,51 @@
+bool Sql_cmd_create_table::prepare(THD *thd) {
+  LEX *const lex = thd->lex;
+  Query_block *query_block = lex->query_block;
+  TABLE_LIST *create_table = lex->query_tables;
+  DBUG_TRACE;
+
+  if (create_table_precheck(thd, query_expression_tables, create_table))
+    return true;
+
+  if (!query_block->fields.empty()) {
+    /* Base table and temporary table are not in the same name space. */
+    if (!(lex->create_info->options & HA_LEX_CREATE_TMP_TABLE))
+      create_table->open_type = OT_BASE_ONLY;
+
+    if (open_tables_for_query(thd, lex->query_tables,
+                              MYSQL_OPEN_FORCE_SHARED_MDL))
+      return true;
+
+    query_block->context.resolve_in_select_list = true;
+
+    Prepared_stmt_arena_holder ps_arena_holder(thd);
+
+    Query_result *result = new (thd->mem_root)
+        Query_result_create(create_table, &query_block->fields, lex->duplicates,
+                            query_expression_tables);
+    if (result == nullptr) return true;
+
+    bool link_to_local;
+    lex->unlink_first_table(&link_to_local);
+    bool res = select_like_stmt_test(thd, result, SELECT_NO_UNLOCK);
+    lex->link_first_table_back(create_table, link_to_local);
+    if (res) return true;
+  } else {
+    /*
+      Check that the source table exist, and also record
+      its metadata version. Even though not strictly necessary,
+      we validate metadata of all CREATE TABLE statements,
+      which keeps metadata validation code simple.
+    */
+    if (open_tables_for_query(thd, lex->query_tables,
+                              MYSQL_OPEN_FORCE_SHARED_MDL))
+      return true;
+  }
+
+  set_prepared();
+  return false;
+}
+
+
+// Source: sql_prepare.cc
+// Lines 1123-1169

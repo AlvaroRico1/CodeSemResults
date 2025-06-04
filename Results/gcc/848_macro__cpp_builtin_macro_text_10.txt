@@ -1,0 +1,1 @@
+str,gcc/libcpp/macro.c,37,buf,gcc/libcpp/macro.c,39,0

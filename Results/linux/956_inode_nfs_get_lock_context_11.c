@@ -1,0 +1,34 @@
+struct nfs_lock_context *nfs_get_lock_context(struct nfs_open_context *ctx)
+{
+	struct nfs_lock_context *res, *new = NULL;
+	struct inode *inode = d_inode(ctx->dentry);
+
+	rcu_read_lock();
+	res = __nfs_find_lock_context(ctx);
+	rcu_read_unlock();
+	if (res == NULL) {
+		new = kmalloc(sizeof(*new), GFP_KERNEL);
+		if (new == NULL)
+			return ERR_PTR(-ENOMEM);
+		nfs_init_lock_context(new);
+		spin_lock(&inode->i_lock);
+		res = __nfs_find_lock_context(ctx);
+		if (res == NULL) {
+			new->open_context = get_nfs_open_context(ctx);
+			if (new->open_context) {
+				list_add_tail_rcu(&new->list,
+						&ctx->lock_context.list);
+				res = new;
+				new = NULL;
+			} else
+				res = ERR_PTR(-EBADF);
+		}
+		spin_unlock(&inode->i_lock);
+		kfree(new);
+	}
+	return res;
+}
+
+
+// Source: inode.c
+// Lines 875-904

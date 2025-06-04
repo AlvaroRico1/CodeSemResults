@@ -1,0 +1,1 @@
+head_tree,libgit2/src/libgit2/stash.c,3,index_diff,libgit2/src/libgit2/stash.c,4,2

@@ -1,0 +1,218 @@
+pex_run_in_environment (struct pex_obj *obj, int flags, const char *executable,
+       	                char * const * argv, char * const * env,
+                        const char *orig_outname, const char *errname,
+                  	int *err)
+{
+  const char *errmsg;
+  int in, out, errdes;
+  char *outname;
+  int outname_allocated;
+  int p[2];
+  int toclose;
+  pid_t pid;
+
+  in = -1;
+  out = -1;
+  errdes = -1;
+  outname = (char *) orig_outname;
+  outname_allocated = 0;
+
+  /* If the user called pex_input_file, close the file now.  */
+  if (obj->input_file)
+    {
+      if (fclose (obj->input_file) == EOF)
+        {
+          errmsg = "closing pipeline input file";
+          goto error_exit;
+        }
+      obj->input_file = NULL;
+    }
+
+  /* Set IN.  */
+
+  if (obj->next_input_name != NULL)
+    {
+      /* We have to make sure that the previous process has completed
+	 before we try to read the file.  */
+      if (!pex_get_status_and_time (obj, 0, &errmsg, err))
+	goto error_exit;
+
+      in = obj->funcs->open_read (obj, obj->next_input_name,
+				  (flags & PEX_BINARY_INPUT) != 0);
+      if (in < 0)
+	{
+	  *err = errno;
+	  errmsg = "open temporary file";
+	  goto error_exit;
+	}
+      if (obj->next_input_name_allocated)
+	{
+	  free (obj->next_input_name);
+	  obj->next_input_name_allocated = 0;
+	}
+      obj->next_input_name = NULL;
+    }
+  else
+    {
+      in = obj->next_input;
+      if (in < 0)
+	{
+	  *err = 0;
+	  errmsg = "pipeline already complete";
+	  goto error_exit;
+	}
+    }
+
+  /* Set OUT and OBJ->NEXT_INPUT/OBJ->NEXT_INPUT_NAME.  */
+
+  if ((flags & PEX_LAST) != 0)
+    {
+      if (outname == NULL)
+	out = STDOUT_FILE_NO;
+      else if ((flags & PEX_SUFFIX) != 0)
+	{
+	  outname = concat (obj->tempbase, outname, NULL);
+	  outname_allocated = 1;
+	}
+      obj->next_input = -1;
+    }
+  else if ((obj->flags & PEX_USE_PIPES) == 0)
+    {
+      outname = temp_file (obj, flags, outname);
+      if (! outname)
+        {
+          *err = 0;
+          errmsg = "could not create temporary file";
+          goto error_exit;
+        }
+
+      if (outname != orig_outname)
+        outname_allocated = 1;
+
+      if ((obj->flags & PEX_SAVE_TEMPS) == 0)
+	{
+	  pex_add_remove (obj, outname, outname_allocated);
+	  outname_allocated = 0;
+	}
+
+      /* Hand off ownership of outname to the next stage.  */
+      obj->next_input_name = outname;
+      obj->next_input_name_allocated = outname_allocated;
+      outname_allocated = 0;
+    }
+  else
+    {
+      if (obj->funcs->pipe (obj, p, (flags & PEX_BINARY_OUTPUT) != 0) < 0)
+	{
+	  *err = errno;
+	  errmsg = "pipe";
+	  goto error_exit;
+	}
+
+      out = p[WRITE_PORT];
+      obj->next_input = p[READ_PORT];
+    }
+
+  if (out < 0)
+    {
+      out = obj->funcs->open_write (obj, outname,
+				    (flags & PEX_BINARY_OUTPUT) != 0,
+				    (flags & PEX_STDOUT_APPEND) != 0);
+      if (out < 0)
+	{
+	  *err = errno;
+	  errmsg = "open temporary output file";
+	  goto error_exit;
+	}
+    }
+
+  if (outname_allocated)
+    {
+      free (outname);
+      outname_allocated = 0;
+    }
+
+  /* Set ERRDES.  */
+
+  if (errname != NULL && (flags & PEX_STDERR_TO_PIPE) != 0)
+    {
+      *err = 0;
+      errmsg = "both ERRNAME and PEX_STDERR_TO_PIPE specified.";
+      goto error_exit;
+    }
+
+  if (obj->stderr_pipe != -1)
+    {
+      *err = 0;
+      errmsg = "PEX_STDERR_TO_PIPE used in the middle of pipeline";
+      goto error_exit;
+    }
+
+  if (errname == NULL)
+    {
+      if (flags & PEX_STDERR_TO_PIPE)
+	{
+	  if (obj->funcs->pipe (obj, p, (flags & PEX_BINARY_ERROR) != 0) < 0)
+	    {
+	      *err = errno;
+	      errmsg = "pipe";
+	      goto error_exit;
+	    }
+	  
+	  errdes = p[WRITE_PORT];
+	  obj->stderr_pipe = p[READ_PORT];	  
+	}
+      else
+	{
+	  errdes = STDERR_FILE_NO;
+	}
+    }
+  else
+    {
+      errdes = obj->funcs->open_write (obj, errname,
+				       (flags & PEX_BINARY_ERROR) != 0,
+				       (flags & PEX_STDERR_APPEND) != 0);
+      if (errdes < 0)
+	{
+	  *err = errno;
+	  errmsg = "open error file";
+	  goto error_exit;
+	}
+    }
+
+  /* If we are using pipes, the child process has to close the next
+     input pipe.  */
+
+  if ((obj->flags & PEX_USE_PIPES) == 0)
+    toclose = -1;
+  else
+    toclose = obj->next_input;
+
+  /* Run the program.  */
+
+  pid = obj->funcs->exec_child (obj, flags, executable, argv, env,
+				in, out, errdes, toclose, &errmsg, err);
+  if (pid < 0)
+    goto error_exit;
+
+  ++obj->count;
+  obj->children = XRESIZEVEC (pid_t, obj->children, obj->count);
+  obj->children[obj->count - 1] = pid;
+
+  return NULL;
+
+ error_exit:
+  if (in >= 0 && in != STDIN_FILE_NO)
+    obj->funcs->close (obj, in);
+  if (out >= 0 && out != STDOUT_FILE_NO)
+    obj->funcs->close (obj, out);
+  if (errdes >= 0 && errdes != STDERR_FILE_NO)
+    obj->funcs->close (obj, errdes);
+  if (outname_allocated)
+    free (outname);
+  return errmsg;
+}
+
+
+// Source: pex-common.c
+// Lines 152-365

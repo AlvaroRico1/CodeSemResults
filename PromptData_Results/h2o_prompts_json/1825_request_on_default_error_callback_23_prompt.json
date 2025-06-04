@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'req' at line 3\n2. Pointer 'data' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void on_default_error_callback(void *data, h2o_iovec_t prefix, h2o_iovec_t msg)\n{\n    h2o_req_t *req = (void *)data;\n    if (req->error_logs == NULL)\n        h2o_buffer_init(&req->error_logs, &h2o_socket_buffer_prototype);\n    h2o_buffer_append(&req->error_logs, prefix.base, prefix.len);\n    h2o_buffer_append(&req->error_logs, msg.base, msg.len);\n\n    if (req->pathconf->error_log.emit_request_errors) {\n        h2o_write_error_log(prefix, msg);\n    }\n}\n\n\n// Source: request.c\n// Lines 242-253\n",
+  "ANSWER": "MUST"
+}

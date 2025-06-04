@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'to' at line 5\n2. Pointer 'pos' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void read_binary_datetime(MYSQL_TIME *tm, uchar **pos) {\n  uint length = net_field_length(pos);\n\n  if (length) {\n    uchar *to = *pos;\n\n    tm->neg = false;\n    tm->year = (uint)sint2korr(to);\n    tm->month = (uint)to[2];\n    tm->day = (uint)to[3];\n\n    if (length > 4) {\n      tm->hour = (uint)to[4];\n      tm->minute = (uint)to[5];\n      tm->second = (uint)to[6];\n    } else\n      tm->hour = tm->minute = tm->second = 0;\n    tm->second_part = (length > 7) ? (ulong)sint4korr(to + 7) : 0;\n    tm->time_type = MYSQL_TIMESTAMP_DATETIME;\n\n    *pos += length;\n  } else\n\n\n// Source: libmysql.cc\n// Lines 2641-2662\n",
+  "ANSWER": "MUST-NOT"
+}

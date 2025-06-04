@@ -1,0 +1,1 @@
+entry,libgit2/src/libgit2/index.c,9,entry_ptr,libgit2/src/libgit2/index.c,3,1

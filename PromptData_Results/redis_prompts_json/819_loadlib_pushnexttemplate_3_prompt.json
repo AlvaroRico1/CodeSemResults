@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'l' at line 2\n2. Pointer 'path' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic const char *pushnexttemplate (lua_State *L, const char *path) {\n  const char *l;\n  while (*path == *LUA_PATHSEP) path++;  /* skip separators */\n  if (*path == '\\0') return NULL;  /* no more templates */\n  l = strchr(path, *LUA_PATHSEP);  /* find next separator */\n  if (l == NULL) l = path + strlen(path);\n  lua_pushlstring(L, path, l - path);  /* template */\n  return l;\n}\n\n\n// Source: loadlib.c\n// Lines 340-348\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,369 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'cp' at line 36
+2. Pointer 'expanded' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+format_draw(struct screen_write_ctx *octx, const struct grid_cell *base,
+    u_int available, const char *expanded, struct style_ranges *srs)
+{
+	enum { LEFT,
+	       CENTRE,
+	       RIGHT,
+	       ABSOLUTE_CENTRE,
+	       LIST,
+	       LIST_LEFT,
+	       LIST_RIGHT,
+	       AFTER,
+	       TOTAL } current = LEFT, last = LEFT;
+	const char	        *names[] = { "LEFT",
+					     "CENTRE",
+					     "RIGHT",
+					     "ABSOLUTE_CENTRE",
+					     "LIST",
+					     "LIST_LEFT",
+					     "LIST_RIGHT",
+					     "AFTER" };
+	size_t			 size = strlen(expanded);
+	struct screen		*os = octx->s, s[TOTAL];
+	struct screen_write_ctx	 ctx[TOTAL];
+	u_int			 ocx = os->cx, ocy = os->cy, n, i, width[TOTAL];
+	u_int			 map[] = { LEFT,
+					   LEFT,
+					   CENTRE,
+					   RIGHT,
+					   ABSOLUTE_CENTRE };
+	int			 focus_start = -1, focus_end = -1;
+	int			 list_state = -1, fill = -1, even;
+	enum style_align	 list_align = STYLE_ALIGN_DEFAULT;
+	struct grid_cell	 gc, current_default;
+	struct style		 sy, saved_sy;
+	struct utf8_data	*ud = &sy.gc.data;
+	const char		*cp, *end;
+	enum utf8_state		 more;
+	char			*tmp;
+	struct format_range	*fr = NULL, *fr1;
+	struct format_ranges	 frs;
+	struct style_range	*sr;
+
+	memcpy(&current_default, base, sizeof current_default);
+	style_set(&sy, &current_default);
+	TAILQ_INIT(&frs);
+	log_debug("%s: %s", __func__, expanded);
+
+	/*
+	 * We build three screens for left, right, centre alignment, one for
+	 * the list, one for anything after the list and two for the list left
+	 * and right markers.
+	 */
+	for (i = 0; i < TOTAL; i++) {
+		screen_init(&s[i], size, 1, 0);
+		screen_write_start(&ctx[i], &s[i]);
+		screen_write_clearendofline(&ctx[i], current_default.bg);
+		width[i] = 0;
+	}
+
+	/*
+	 * Walk the string and add to the corresponding screens,
+	 * parsing styles as we go.
+	 */
+	cp = expanded;
+	while (*cp != '\0') {
+		/* Handle sequences of #. */
+		if (cp[0] == '#' && cp[1] != '[' && cp[1] != '\0') {
+			for (n = 1; cp[n] == '#'; n++)
+				 /* nothing */;
+			even = ((n % 2) == 0);
+			if (cp[n] != '[') {
+				cp += n;
+				if (even)
+					n = (n / 2);
+				else
+					n = (n / 2) + 1;
+				width[current] += n;
+				format_draw_many(&ctx[current], &sy, '#', n);
+				continue;
+			}
+			if (even)
+				cp += (n + 1);
+			else
+				cp += (n - 1);
+			if (sy.ignore)
+				continue;
+			format_draw_many(&ctx[current], &sy, '#', n / 2);
+			width[current] += (n / 2);
+			if (even) {
+				utf8_set(ud, '[');
+				screen_write_cell(&ctx[current], &sy.gc);
+				width[current]++;
+			}
+			continue;
+		}
+
+		/* Is this not a style? */
+		if (cp[0] != '#' || cp[1] != '[' || sy.ignore) {
+			/* See if this is a UTF-8 character. */
+			if ((more = utf8_open(ud, *cp)) == UTF8_MORE) {
+				while (*++cp != '\0' && more == UTF8_MORE)
+					more = utf8_append(ud, *cp);
+				if (more != UTF8_DONE)
+					cp -= ud->have;
+			}
+
+			/* Not a UTF-8 character - ASCII or not valid. */
+			if (more != UTF8_DONE) {
+				if (*cp < 0x20 || *cp > 0x7e) {
+					/* Ignore nonprintable characters. */
+					cp++;
+					continue;
+				}
+				utf8_set(ud, *cp);
+				cp++;
+			}
+
+			/* Draw the cell to the current screen. */
+			screen_write_cell(&ctx[current], &sy.gc);
+			width[current] += ud->width;
+			continue;
+		}
+
+		/* This is a style. Work out where the end is and parse it. */
+		end = format_skip(cp + 2, "]");
+		if (end == NULL) {
+			log_debug("%s: no terminating ] at '%s'", __func__,
+			    cp + 2);
+			TAILQ_FOREACH_SAFE(fr, &frs, entry, fr1)
+			    format_free_range(&frs, fr);
+			goto out;
+		}
+		tmp = xstrndup(cp + 2, end - (cp + 2));
+		style_copy(&saved_sy, &sy);
+		if (style_parse(&sy, &current_default, tmp) != 0) {
+			log_debug("%s: invalid style '%s'", __func__, tmp);
+			free(tmp);
+			cp = end + 1;
+			continue;
+		}
+		log_debug("%s: style '%s' -> '%s'", __func__, tmp,
+		    style_tostring(&sy));
+		free(tmp);
+
+		/* If this style has a fill colour, store it for later. */
+		if (sy.fill != 8)
+			fill = sy.fill;
+
+		/* If this style pushed or popped the default, update it. */
+		if (sy.default_type == STYLE_DEFAULT_PUSH) {
+			memcpy(&current_default, &saved_sy.gc,
+			    sizeof current_default);
+			sy.default_type = STYLE_DEFAULT_BASE;
+		} else if (sy.default_type == STYLE_DEFAULT_POP) {
+			memcpy(&current_default, base, sizeof current_default);
+			sy.default_type = STYLE_DEFAULT_BASE;
+		}
+
+		/* Check the list state. */
+		switch (sy.list) {
+		case STYLE_LIST_ON:
+			/*
+			 * Entering the list, exiting a marker, or exiting the
+			 * focus.
+			 */
+			if (list_state != 0) {
+				if (fr != NULL) { /* abort any region */
+					free(fr);
+					fr = NULL;
+				}
+				list_state = 0;
+				list_align = sy.align;
+			}
+
+			/* End the focus if started. */
+			if (focus_start != -1 && focus_end == -1)
+				focus_end = s[LIST].cx;
+
+			current = LIST;
+			break;
+		case STYLE_LIST_FOCUS:
+			/* Entering the focus. */
+			if (list_state != 0) /* not inside the list */
+				break;
+			if (focus_start == -1) /* focus already started */
+				focus_start = s[LIST].cx;
+			break;
+		case STYLE_LIST_OFF:
+			/* Exiting or outside the list. */
+			if (list_state == 0) {
+				if (fr != NULL) { /* abort any region */
+					free(fr);
+					fr = NULL;
+				}
+				if (focus_start != -1 && focus_end == -1)
+					focus_end = s[LIST].cx;
+
+				map[list_align] = AFTER;
+				if (list_align == STYLE_ALIGN_LEFT)
+					map[STYLE_ALIGN_DEFAULT] = AFTER;
+				list_state = 1;
+			}
+			current = map[sy.align];
+			break;
+		case STYLE_LIST_LEFT_MARKER:
+			/* Entering left marker. */
+			if (list_state != 0) /* not inside the list */
+				break;
+			if (s[LIST_LEFT].cx != 0) /* already have marker */
+				break;
+			if (fr != NULL) { /* abort any region */
+				free(fr);
+				fr = NULL;
+			}
+			if (focus_start != -1 && focus_end == -1)
+				focus_start = focus_end = -1;
+			current = LIST_LEFT;
+			break;
+		case STYLE_LIST_RIGHT_MARKER:
+			/* Entering right marker. */
+			if (list_state != 0) /* not inside the list */
+				break;
+			if (s[LIST_RIGHT].cx != 0) /* already have marker */
+				break;
+			if (fr != NULL) { /* abort any region */
+				free(fr);
+				fr = NULL;
+			}
+			if (focus_start != -1 && focus_end == -1)
+				focus_start = focus_end = -1;
+			current = LIST_RIGHT;
+			break;
+		}
+		if (current != last) {
+			log_debug("%s: change %s -> %s", __func__,
+			    names[last], names[current]);
+			last = current;
+		}
+
+		/*
+		 * Check if the range style has changed and if so end the
+		 * current range and start a new one if needed.
+		 */
+		if (srs != NULL) {
+			if (fr != NULL && !format_is_type(fr, &sy)) {
+				if (s[current].cx != fr->start) {
+					fr->end = s[current].cx + 1;
+					TAILQ_INSERT_TAIL(&frs, fr, entry);
+				} else
+					free(fr);
+				fr = NULL;
+			}
+			if (fr == NULL && sy.range_type != STYLE_RANGE_NONE) {
+				fr = xcalloc(1, sizeof *fr);
+				fr->index = current;
+
+				fr->s = &s[current];
+				fr->start = s[current].cx;
+
+				fr->type = sy.range_type;
+				fr->argument = sy.range_argument;
+			}
+		}
+
+		cp = end + 1;
+	}
+	free(fr);
+
+	for (i = 0; i < TOTAL; i++) {
+		screen_write_stop(&ctx[i]);
+		log_debug("%s: width %s is %u", __func__, names[i], width[i]);
+	}
+	if (focus_start != -1 && focus_end != -1)
+		log_debug("%s: focus %d-%d", __func__, focus_start, focus_end);
+	TAILQ_FOREACH(fr, &frs, entry) {
+		log_debug("%s: range %d|%u is %s %u-%u", __func__, fr->type,
+		    fr->argument, names[fr->index], fr->start, fr->end);
+	}
+
+	/* Clear the available area. */
+	if (fill != -1) {
+		memcpy(&gc, &grid_default_cell, sizeof gc);
+		gc.bg = fill;
+		for (i = 0; i < available; i++)
+			screen_write_putc(octx, &gc, ' ');
+	}
+
+	/*
+	 * Draw the screens. How they are arranged depends on where the list
+	 * appears.
+	 */
+	switch (list_align) {
+	case STYLE_ALIGN_DEFAULT:
+		/* No list. */
+		format_draw_none(octx, available, ocx, ocy, &s[LEFT],
+		    &s[CENTRE], &s[RIGHT], &s[ABSOLUTE_CENTRE], &frs);
+		break;
+	case STYLE_ALIGN_LEFT:
+		/* List is part of the left. */
+		format_draw_left(octx, available, ocx, ocy, &s[LEFT],
+		    &s[CENTRE], &s[RIGHT], &s[ABSOLUTE_CENTRE], &s[LIST],
+		    &s[LIST_LEFT], &s[LIST_RIGHT], &s[AFTER],
+		    focus_start, focus_end, &frs);
+		break;
+	case STYLE_ALIGN_CENTRE:
+		/* List is part of the centre. */
+		format_draw_centre(octx, available, ocx, ocy, &s[LEFT],
+		    &s[CENTRE], &s[RIGHT], &s[ABSOLUTE_CENTRE], &s[LIST],
+		    &s[LIST_LEFT], &s[LIST_RIGHT], &s[AFTER],
+		    focus_start, focus_end, &frs);
+		break;
+	case STYLE_ALIGN_RIGHT:
+		/* List is part of the right. */
+		format_draw_right(octx, available, ocx, ocy, &s[LEFT],
+		    &s[CENTRE], &s[RIGHT], &s[ABSOLUTE_CENTRE], &s[LIST],
+		    &s[LIST_LEFT], &s[LIST_RIGHT], &s[AFTER],
+		    focus_start, focus_end, &frs);
+		break;
+	case STYLE_ALIGN_ABSOLUTE_CENTRE:
+		/* List is in the centre of the entire horizontal space. */
+		format_draw_absolute_centre(octx, available, ocx, ocy, &s[LEFT],
+		    &s[CENTRE], &s[RIGHT], &s[ABSOLUTE_CENTRE], &s[LIST],
+		    &s[LIST_LEFT], &s[LIST_RIGHT], &s[AFTER],
+		    focus_start, focus_end, &frs);
+		break;
+	}
+
+	/* Create ranges to return. */
+	TAILQ_FOREACH_SAFE(fr, &frs, entry, fr1) {
+		sr = xcalloc(1, sizeof *sr);
+		sr->type = fr->type;
+		sr->argument = fr->argument;
+		sr->start = fr->start;
+		sr->end = fr->end;
+		TAILQ_INSERT_TAIL(srs, sr, entry);
+
+		log_debug("%s: range %d|%u at %u-%u", __func__, sr->type,
+		    sr->argument, sr->start, sr->end);
+
+		format_free_range(&frs, fr);
+	}
+
+out:
+	/* Free the screens. */
+	for (i = 0; i < TOTAL; i++)
+		screen_free(&s[i]);
+
+	/* Restore the original cursor position. */
+	screen_write_cursormove(octx, ocx, ocy, 0);
+}
+
+
+// Source: format-draw.c
+// Lines 679-1028
+
+
+[ANSWER]
+MUST

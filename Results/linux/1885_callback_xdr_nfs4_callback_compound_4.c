@@ -1,0 +1,68 @@
+static __be32 nfs4_callback_compound(struct svc_rqst *rqstp)
+{
+	struct cb_compound_hdr_arg hdr_arg = { 0 };
+	struct cb_compound_hdr_res hdr_res = { NULL };
+	struct xdr_stream xdr_in, xdr_out;
+	__be32 *p, status;
+	struct cb_process_state cps = {
+		.drc_status = 0,
+		.clp = NULL,
+		.net = SVC_NET(rqstp),
+	};
+	unsigned int nops = 0;
+
+	xdr_init_decode(&xdr_in, &rqstp->rq_arg,
+			rqstp->rq_arg.head[0].iov_base, NULL);
+
+	p = (__be32*)((char *)rqstp->rq_res.head[0].iov_base + rqstp->rq_res.head[0].iov_len);
+	xdr_init_encode(&xdr_out, &rqstp->rq_res, p, NULL);
+
+	status = decode_compound_hdr_arg(&xdr_in, &hdr_arg);
+	if (status == htonl(NFS4ERR_RESOURCE))
+		return rpc_garbage_args;
+
+	if (hdr_arg.minorversion == 0) {
+		cps.clp = nfs4_find_client_ident(SVC_NET(rqstp), hdr_arg.cb_ident);
+		if (!cps.clp || !check_gss_callback_principal(cps.clp, rqstp)) {
+			if (cps.clp)
+				nfs_put_client(cps.clp);
+			goto out_invalidcred;
+		}
+	}
+
+	cps.minorversion = hdr_arg.minorversion;
+	hdr_res.taglen = hdr_arg.taglen;
+	hdr_res.tag = hdr_arg.tag;
+	if (encode_compound_hdr_res(&xdr_out, &hdr_res) != 0) {
+		if (cps.clp)
+			nfs_put_client(cps.clp);
+		return rpc_system_err;
+	}
+	while (status == 0 && nops != hdr_arg.nops) {
+		status = process_op(nops, rqstp, &xdr_in,
+				    rqstp->rq_argp, &xdr_out, rqstp->rq_resp,
+				    &cps);
+		nops++;
+	}
+
+	/* Buffer overflow in decode_ops_hdr or encode_ops_hdr. Return
+	* resource error in cb_compound status without returning op */
+	if (unlikely(status == htonl(NFS4ERR_RESOURCE_HDR))) {
+		status = htonl(NFS4ERR_RESOURCE);
+		nops--;
+	}
+
+	*hdr_res.status = status;
+	*hdr_res.nops = htonl(nops);
+	nfs4_cb_free_slot(&cps);
+	nfs_put_client(cps.clp);
+	return rpc_success;
+
+out_invalidcred:
+	pr_warn_ratelimited("NFS: NFSv4 callback contains invalid cred\n");
+	return svc_return_autherr(rqstp, rpc_autherr_badcred);
+}
+
+
+// Source: callback_xdr.c
+// Lines 924-987

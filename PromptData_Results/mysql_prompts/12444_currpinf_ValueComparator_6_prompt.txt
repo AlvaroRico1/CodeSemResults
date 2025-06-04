@@ -1,0 +1,24 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'affix_2' at line 3
+2. Pointer 'val2' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+U_CALLCONV ValueComparator(UHashTok val1, UHashTok val2) {
+    const UnicodeString* affix_1 = (UnicodeString*)val1.pointer;
+    const UnicodeString* affix_2 = (UnicodeString*)val2.pointer;
+    return  *affix_1 == *affix_2;
+}
+
+
+// Source: currpinf.cpp
+// Lines 42-46
+
+
+[ANSWER]
+MUST

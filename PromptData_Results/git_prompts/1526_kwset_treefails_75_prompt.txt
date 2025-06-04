@@ -1,0 +1,50 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'link' at line 4
+2. Pointer 'fail' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+treefails (register struct tree const *tree, struct trie const *fail,
+	   struct trie *recourse)
+{
+  register struct tree *link;
+
+  if (!tree)
+    return;
+
+  treefails(tree->llink, fail, recourse);
+  treefails(tree->rlink, fail, recourse);
+
+  /* Find, in the chain of fails going back to the root, the first
+     node that has a descendant on the current label. */
+  while (fail)
+    {
+      link = fail->links;
+      while (link && tree->label != link->label)
+	if (tree->label < link->label)
+	  link = link->llink;
+	else
+	  link = link->rlink;
+      if (link)
+	{
+	  tree->trie->fail = link->trie;
+	  return;
+	}
+      fail = fail->fail;
+    }
+
+  tree->trie->fail = recourse;
+}
+
+
+// Source: kwset.c
+// Lines 303-333
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,91 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'querylen' at line 5
+2. Pointer 'newline' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int processInlineBuffer(client *c) {
+    char *newline;
+    int argc, j, linefeed_chars = 1;
+    sds *argv, aux;
+    size_t querylen;
+
+    /* Search for end of line */
+    newline = strchr(c->querybuf+c->qb_pos,'\n');
+
+    /* Nothing to do without a \r\n */
+    if (newline == NULL) {
+        if (sdslen(c->querybuf)-c->qb_pos > PROTO_INLINE_MAX_SIZE) {
+            addReplyError(c,"Protocol error: too big inline request");
+            setProtocolError("too big inline request",c);
+        }
+        return C_ERR;
+    }
+
+    /* Handle the \r\n case. */
+    if (newline != c->querybuf+c->qb_pos && *(newline-1) == '\r')
+        newline--, linefeed_chars++;
+
+    /* Split the input buffer up to the \r\n */
+    querylen = newline-(c->querybuf+c->qb_pos);
+    aux = sdsnewlen(c->querybuf+c->qb_pos,querylen);
+    argv = sdssplitargs(aux,&argc);
+    sdsfree(aux);
+    if (argv == NULL) {
+        addReplyError(c,"Protocol error: unbalanced quotes in request");
+        setProtocolError("unbalanced quotes in inline request",c);
+        return C_ERR;
+    }
+
+    /* Newline from slaves can be used to refresh the last ACK time.
+     * This is useful for a slave to ping back while loading a big
+     * RDB file. */
+    if (querylen == 0 && getClientType(c) == CLIENT_TYPE_SLAVE)
+        c->repl_ack_time = server.unixtime;
+
+    /* Masters should never send us inline protocol to run actual
+     * commands. If this happens, it is likely due to a bug in Redis where
+     * we got some desynchronization in the protocol, for example
+     * beause of a PSYNC gone bad.
+     *
+     * However the is an exception: masters may send us just a newline
+     * to keep the connection active. */
+    if (querylen != 0 && c->flags & CLIENT_MASTER) {
+        sdsfreesplitres(argv,argc);
+        serverLog(LL_WARNING,"WARNING: Receiving inline protocol from master, master stream corruption? Closing the master connection and discarding the cached master.");
+        setProtocolError("Master using the inline protocol. Desync?",c);
+        return C_ERR;
+    }
+
+    /* Move querybuffer position to the next query in the buffer. */
+    c->qb_pos += querylen+linefeed_chars;
+
+    /* Setup argv array on client structure */
+    if (argc) {
+        if (c->argv) zfree(c->argv);
+        c->argv = zmalloc(sizeof(robj*)*argc);
+        c->argv_len_sum = 0;
+    }
+
+    /* Create redis objects for all arguments. */
+    for (c->argc = 0, j = 0; j < argc; j++) {
+        c->argv[c->argc] = createObject(OBJ_STRING,argv[j]);
+        c->argc++;
+        c->argv_len_sum += sdslen(argv[j]);
+    }
+    zfree(argv);
+    return C_OK;
+}
+
+
+// Source: networking.c
+// Lines 1724-1795
+
+
+[ANSWER]
+MUST

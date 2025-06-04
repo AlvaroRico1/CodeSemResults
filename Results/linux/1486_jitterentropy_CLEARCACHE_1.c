@@ -1,0 +1,66 @@
+#define CLEARCACHE 100
+	for (i = 0; (TESTLOOPCOUNT + CLEARCACHE) > i; i++) {
+		__u64 time = 0;
+		__u64 time2 = 0;
+		__u64 delta = 0;
+		unsigned int lowdelta = 0;
+		int stuck;
+
+		/* Invoke core entropy collection logic */
+		jent_get_nstime(&time);
+		ec.prev_time = time;
+		jent_lfsr_time(&ec, time, 0);
+		jent_get_nstime(&time2);
+
+		/* test whether timer works */
+		if (!time || !time2)
+			return JENT_ENOTIME;
+		delta = time2 - time;
+		/*
+		 * test whether timer is fine grained enough to provide
+		 * delta even when called shortly after each other -- this
+		 * implies that we also have a high resolution timer
+		 */
+		if (!delta)
+			return JENT_ECOARSETIME;
+
+		stuck = jent_stuck(&ec, delta);
+
+		/*
+		 * up to here we did not modify any variable that will be
+		 * evaluated later, but we already performed some work. Thus we
+		 * already have had an impact on the caches, branch prediction,
+		 * etc. with the goal to clear it to get the worst case
+		 * measurements.
+		 */
+		if (CLEARCACHE > i)
+			continue;
+
+		if (stuck)
+			count_stuck++;
+
+		/* test whether we have an increasing timer */
+		if (!(time2 > time))
+			time_backwards++;
+
+		/* use 32 bit value to ensure compilation on 32 bit arches */
+		lowdelta = time2 - time;
+		if (!(lowdelta % 100))
+			count_mod++;
+
+		/*
+		 * ensure that we have a varying delta timer which is necessary
+		 * for the calculation of entropy -- perform this check
+		 * only after the first loop is executed as we need to prime
+		 * the old_data value
+		 */
+		if (delta > old_delta)
+			delta_sum += (delta - old_delta);
+		else
+			delta_sum += (old_delta - delta);
+		old_delta = delta;
+	}
+
+
+// Source: jitterentropy.c
+// Lines 549-610

@@ -1,0 +1,75 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'buffer' at line 6
+2. Pointer 'specs_p' at line 9
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+load_specs (const char *filename)
+{
+  int desc;
+  int readlen;
+  struct stat statbuf;
+  char *buffer;
+  char *buffer_p;
+  char *specs;
+  char *specs_p;
+
+  if (verbose_flag)
+    fnotice (stderr, "Reading specs from %s\n", filename);
+
+  /* Open and stat the file.  */
+  desc = open (filename, O_RDONLY, 0);
+  if (desc < 0)
+    {
+    failed:
+      /* This leaves DESC open, but the OS will save us.  */
+      fatal_error (input_location, "cannot read spec file %qs: %m", filename);
+    }
+
+  if (stat (filename, &statbuf) < 0)
+    goto failed;
+
+  /* Read contents of file into BUFFER.  */
+  buffer = XNEWVEC (char, statbuf.st_size + 1);
+  readlen = read (desc, buffer, (unsigned) statbuf.st_size);
+  if (readlen < 0)
+    goto failed;
+  buffer[readlen] = 0;
+  close (desc);
+
+  specs = XNEWVEC (char, readlen + 1);
+  specs_p = specs;
+  for (buffer_p = buffer; buffer_p && *buffer_p; buffer_p++)
+    {
+      int skip = 0;
+      char c = *buffer_p;
+      if (c == '\r')
+	{
+	  if (buffer_p > buffer && *(buffer_p - 1) == '\n')	/* \n\r */
+	    skip = 1;
+	  else if (*(buffer_p + 1) == '\n')			/* \r\n */
+	    skip = 1;
+	  else							/* \r */
+	    c = '\n';
+	}
+      if (! skip)
+	*specs_p++ = c;
+    }
+  *specs_p = '\0';
+
+  free (buffer);
+  return (specs);
+}
+
+
+// Source: gcc.c
+// Lines 2088-2143
+
+
+[ANSWER]
+MUST-NOT

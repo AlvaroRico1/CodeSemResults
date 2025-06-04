@@ -1,0 +1,1 @@
+ttyctx,tmux/screen-write.c,10,gc,tmux/screen-write.c,1,1

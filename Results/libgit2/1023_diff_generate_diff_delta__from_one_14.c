@@ -1,0 +1,73 @@
+static int diff_delta__from_one(
+	git_diff_generated *diff,
+	git_delta_t status,
+	const git_index_entry *oitem,
+	const git_index_entry *nitem)
+{
+	const git_index_entry *entry = nitem;
+	bool has_old = false;
+	git_diff_delta *delta;
+	const char *matched_pathspec;
+
+	GIT_ASSERT_ARG((oitem != NULL) ^ (nitem != NULL));
+
+	if (oitem) {
+		entry = oitem;
+		has_old = true;
+	}
+
+	if (DIFF_FLAG_IS_SET(diff, GIT_DIFF_REVERSE))
+		has_old = !has_old;
+
+	if ((entry->flags & GIT_INDEX_ENTRY_VALID) != 0)
+		return 0;
+
+	if (status == GIT_DELTA_IGNORED &&
+		DIFF_FLAG_ISNT_SET(diff, GIT_DIFF_INCLUDE_IGNORED))
+		return 0;
+
+	if (status == GIT_DELTA_UNTRACKED &&
+		DIFF_FLAG_ISNT_SET(diff, GIT_DIFF_INCLUDE_UNTRACKED))
+		return 0;
+
+	if (status == GIT_DELTA_UNREADABLE &&
+		DIFF_FLAG_ISNT_SET(diff, GIT_DIFF_INCLUDE_UNREADABLE))
+		return 0;
+
+	if (!diff_pathspec_match(&matched_pathspec, diff, entry))
+		return 0;
+
+	delta = diff_delta__alloc(diff, status, entry->path);
+	GIT_ERROR_CHECK_ALLOC(delta);
+
+	/* This fn is just for single-sided diffs */
+	GIT_ASSERT(status != GIT_DELTA_MODIFIED);
+	delta->nfiles = 1;
+
+	if (has_old) {
+		delta->old_file.mode = entry->mode;
+		delta->old_file.size = entry->file_size;
+		delta->old_file.flags |= GIT_DIFF_FLAG_EXISTS;
+		git_oid_cpy(&delta->old_file.id, &entry->id);
+		delta->old_file.id_abbrev = GIT_OID_HEXSZ;
+	} else /* ADDED, IGNORED, UNTRACKED */ {
+		delta->new_file.mode = entry->mode;
+		delta->new_file.size = entry->file_size;
+		delta->new_file.flags |= GIT_DIFF_FLAG_EXISTS;
+		git_oid_cpy(&delta->new_file.id, &entry->id);
+		delta->new_file.id_abbrev = GIT_OID_HEXSZ;
+	}
+
+	delta->old_file.flags |= GIT_DIFF_FLAG_VALID_ID;
+
+	if (has_old || !git_oid_is_zero(&delta->new_file.id))
+		delta->new_file.flags |= GIT_DIFF_FLAG_VALID_ID;
+
+	diff_delta__flag_known_sizes(delta);
+
+	return diff_insert_delta(diff, delta, matched_pathspec);
+}
+
+
+// Source: diff_generate.c
+// Lines 140-208

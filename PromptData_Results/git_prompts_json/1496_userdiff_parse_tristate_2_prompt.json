@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'namelen' at line None\n2. Pointer 'name' at line None\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int parse_tristate(int *b, const char *k, const char *v)\n{\n\tif (v && !strcasecmp(v, \"auto\"))\n\t\t*b = -1;\n\telse\n\t\t*b = git_config_bool(k, v);\n\treturn 0;\n}\n\n\n// Source: userdiff.c\n// Lines 323-330\n",
+  "ANSWER": "MAY"
+}

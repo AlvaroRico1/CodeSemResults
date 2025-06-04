@@ -1,0 +1,48 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'p' at line 9
+2. Pointer 'commit' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static enum get_oid_result get_parent(struct repository *r,
+				      const char *name, int len,
+				      struct object_id *result, int idx)
+{
+	struct object_id oid;
+	enum get_oid_result ret = get_oid_1(r, name, len, &oid,
+					    GET_OID_COMMITTISH);
+	struct commit *commit;
+	struct commit_list *p;
+
+	if (ret)
+		return ret;
+	commit = lookup_commit_reference(r, &oid);
+	if (parse_commit(commit))
+		return MISSING_OBJECT;
+	if (!idx) {
+		oidcpy(result, &commit->object.oid);
+		return FOUND;
+	}
+	p = commit->parents;
+	while (p) {
+		if (!--idx) {
+			oidcpy(result, &p->item->object.oid);
+			return FOUND;
+		}
+		p = p->next;
+	}
+	return MISSING_OBJECT;
+}
+
+
+// Source: object-name.c
+// Lines 928-956
+
+
+[ANSWER]
+MUST

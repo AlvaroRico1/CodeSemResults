@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'explicit' at line 4
+2. Pointer 'i' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+clar_test_run(void)
+{
+	size_t i;
+	struct clar_explicit *explicit;
+
+	if (_clar.explicit) {
+		for (explicit = _clar.explicit; explicit; explicit = explicit->next)
+			clar_run_suite(&_clar_suites[explicit->suite_idx], explicit->filter);
+	} else {
+		for (i = 0; i < _clar_suite_count; ++i)
+			clar_run_suite(&_clar_suites[i], NULL);
+	}
+
+	return _clar.total_errors;
+}
+
+
+// Source: clar.c
+// Lines 534-548
+
+
+[ANSWER]
+MUST-NOT

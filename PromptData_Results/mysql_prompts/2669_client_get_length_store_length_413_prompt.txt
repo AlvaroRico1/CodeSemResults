@@ -1,0 +1,28 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ptr' at line 4
+2. Pointer 'length' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static size_t get_length_store_length(size_t length) {
+/* as defined in net_store_length */
+#define MAX_VARIABLE_STRING_LENGTH 9
+  uchar length_buffer[MAX_VARIABLE_STRING_LENGTH], *ptr;
+
+  ptr = net_store_length(length_buffer, length);
+
+  return ptr - &length_buffer[0];
+}
+
+
+// Source: client.cc
+// Lines 3908-3916
+
+
+[ANSWER]
+MUST-NOT

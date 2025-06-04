@@ -1,0 +1,1 @@
+is_equal,libgit2/tests/clar/clar.c,12,offset,libgit2/tests/clar/clar.c,25,0

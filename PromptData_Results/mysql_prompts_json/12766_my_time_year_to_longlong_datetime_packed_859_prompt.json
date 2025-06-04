@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ymd' at line 2\n2. Pointer 'year' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nlonglong year_to_longlong_datetime_packed(long year) {\n  longlong ymd = ((year * 13) << 5);\n  return my_packed_time_make_int(ymd << 17);\n}\n\n\n// Source: my_time.cc\n// Lines 1897-1900\n",
+  "ANSWER": "MUST-NOT"
+}

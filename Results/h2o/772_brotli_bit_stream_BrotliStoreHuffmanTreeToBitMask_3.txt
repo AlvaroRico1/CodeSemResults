@@ -1,0 +1,1 @@
+huffman_tree,h2o/deps/brotli/c/enc/brotli_bit_stream.c,2,huffman_tree_extra_bits,h2o/deps/brotli/c/enc/brotli_bit_stream.c,3,2

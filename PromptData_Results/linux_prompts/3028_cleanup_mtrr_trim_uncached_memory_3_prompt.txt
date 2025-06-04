@@ -1,0 +1,130 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'base' at line 3
+2. Pointer 'type' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int __init mtrr_trim_uncached_memory(unsigned long end_pfn)
+{
+	unsigned long i, base, size, highest_pfn = 0, def, dummy;
+	mtrr_type type;
+	u64 total_trim_size;
+	/* extra one for all 0 */
+	int num[MTRR_NUM_TYPES + 1];
+
+	/*
+	 * Make sure we only trim uncachable memory on machines that
+	 * support the Intel MTRR architecture:
+	 */
+	if (!is_cpu(INTEL) || disable_mtrr_trim)
+		return 0;
+
+	rdmsr(MSR_MTRRdefType, def, dummy);
+	def &= 0xff;
+	if (def != MTRR_TYPE_UNCACHABLE)
+		return 0;
+
+	/* Get it and store it aside: */
+	memset(range_state, 0, sizeof(range_state));
+	for (i = 0; i < num_var_ranges; i++) {
+		mtrr_if->get(i, &base, &size, &type);
+		range_state[i].base_pfn = base;
+		range_state[i].size_pfn = size;
+		range_state[i].type = type;
+	}
+
+	/* Find highest cached pfn: */
+	for (i = 0; i < num_var_ranges; i++) {
+		type = range_state[i].type;
+		if (type != MTRR_TYPE_WRBACK)
+			continue;
+		base = range_state[i].base_pfn;
+		size = range_state[i].size_pfn;
+		if (highest_pfn < base + size)
+			highest_pfn = base + size;
+	}
+
+	/* kvm/qemu doesn't have mtrr set right, don't trim them all: */
+	if (!highest_pfn) {
+		pr_info("CPU MTRRs all blank - virtualized system.\n");
+		return 0;
+	}
+
+	/* Check entries number: */
+	memset(num, 0, sizeof(num));
+	for (i = 0; i < num_var_ranges; i++) {
+		type = range_state[i].type;
+		if (type >= MTRR_NUM_TYPES)
+			continue;
+		size = range_state[i].size_pfn;
+		if (!size)
+			type = MTRR_NUM_TYPES;
+		num[type]++;
+	}
+
+	/* No entry for WB? */
+	if (!num[MTRR_TYPE_WRBACK])
+		return 0;
+
+	/* Check if we only had WB and UC: */
+	if (num[MTRR_TYPE_WRBACK] + num[MTRR_TYPE_UNCACHABLE] !=
+		num_var_ranges - num[MTRR_NUM_TYPES])
+		return 0;
+
+	memset(range, 0, sizeof(range));
+	nr_range = 0;
+	if (mtrr_tom2) {
+		range[nr_range].start = (1ULL<<(32 - PAGE_SHIFT));
+		range[nr_range].end = mtrr_tom2 >> PAGE_SHIFT;
+		if (highest_pfn < range[nr_range].end)
+			highest_pfn = range[nr_range].end;
+		nr_range++;
+	}
+	nr_range = x86_get_mtrr_mem_range(range, nr_range, 0, 0);
+
+	/* Check the head: */
+	total_trim_size = 0;
+	if (range[0].start)
+		total_trim_size += real_trim_memory(0, range[0].start);
+
+	/* Check the holes: */
+	for (i = 0; i < nr_range - 1; i++) {
+		if (range[i].end < range[i+1].start)
+			total_trim_size += real_trim_memory(range[i].end,
+							    range[i+1].start);
+	}
+
+	/* Check the top: */
+	i = nr_range - 1;
+	if (range[i].end < end_pfn)
+		total_trim_size += real_trim_memory(range[i].end,
+							 end_pfn);
+
+	if (total_trim_size) {
+		pr_warn("WARNING: BIOS bug: CPU MTRRs don't cover all of memory, losing %lluMB of RAM.\n",
+			total_trim_size >> 20);
+
+		if (!changed_by_mtrr_cleanup)
+			WARN_ON(1);
+
+		pr_info("update e820 for mtrr\n");
+		e820__update_table_print();
+
+		return 1;
+	}
+
+	return 0;
+}
+
+
+// Source: cleanup.c
+// Lines 877-987
+
+
+[ANSWER]
+MAY

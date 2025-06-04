@@ -1,0 +1,1 @@
+bit_obstack,gcc/gcc/bitmap.c,1,map,gcc/gcc/bitmap.c,3,1

@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'line' at line 7
+2. Pointer 'column' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void SourceTreeDescriptorDatabase::ValidationErrorCollector::AddWarning(
+    const std::string& filename, const std::string& element_name,
+    const Message* descriptor, ErrorLocation location,
+    const std::string& message) {
+  if (owner_->error_collector_ == nullptr) return;
+
+  int line, column;
+  if (location == DescriptorPool::ErrorCollector::IMPORT) {
+    owner_->source_locations_.FindImport(descriptor, element_name, &line,
+                                         &column);
+  } else {
+    owner_->source_locations_.Find(descriptor, location, &line, &column);
+  }
+  owner_->error_collector_->AddWarning(filename, line, column, message);
+}
+
+
+// Source: importer.cc
+// Lines 202-216
+
+
+[ANSWER]
+MAY

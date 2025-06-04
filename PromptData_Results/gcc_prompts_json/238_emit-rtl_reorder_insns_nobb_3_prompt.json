@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'x' at line 5\n2. Pointer 'from' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nreorder_insns_nobb (rtx_insn *from, rtx_insn *to, rtx_insn *after)\n{\n  if (flag_checking)\n    {\n      for (rtx_insn *x = from; x != to; x = NEXT_INSN (x))\n\tgcc_assert (after != x);\n      gcc_assert (after != to);\n    }\n\n\n// Source: emit-rtl.c\n// Lines 4413-4420\n",
+  "ANSWER": "MUST"
+}

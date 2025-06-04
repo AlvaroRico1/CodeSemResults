@@ -1,0 +1,75 @@
+acpi_ns_repair_FDE(struct acpi_evaluate_info *info,
+		   union acpi_operand_object **return_object_ptr)
+{
+	union acpi_operand_object *return_object = *return_object_ptr;
+	union acpi_operand_object *buffer_object;
+	u8 *byte_buffer;
+	u32 *dword_buffer;
+	u32 i;
+
+	ACPI_FUNCTION_NAME(ns_repair_FDE);
+
+	switch (return_object->common.type) {
+	case ACPI_TYPE_BUFFER:
+
+		/* This is the expected type. Length should be (at least) 5 DWORDs */
+
+		if (return_object->buffer.length >= ACPI_FDE_DWORD_BUFFER_SIZE) {
+			return (AE_OK);
+		}
+
+		/* We can only repair if we have exactly 5 BYTEs */
+
+		if (return_object->buffer.length != ACPI_FDE_BYTE_BUFFER_SIZE) {
+			ACPI_WARN_PREDEFINED((AE_INFO,
+					      info->full_pathname,
+					      info->node_flags,
+					      "Incorrect return buffer length %u, expected %u",
+					      return_object->buffer.length,
+					      ACPI_FDE_DWORD_BUFFER_SIZE));
+
+			return (AE_AML_OPERAND_TYPE);
+		}
+
+		/* Create the new (larger) buffer object */
+
+		buffer_object =
+		    acpi_ut_create_buffer_object(ACPI_FDE_DWORD_BUFFER_SIZE);
+		if (!buffer_object) {
+			return (AE_NO_MEMORY);
+		}
+
+		/* Expand each byte to a DWORD */
+
+		byte_buffer = return_object->buffer.pointer;
+		dword_buffer = ACPI_CAST_PTR(u32,
+					     buffer_object->buffer.pointer);
+
+		for (i = 0; i < ACPI_FDE_FIELD_COUNT; i++) {
+			*dword_buffer = (u32) *byte_buffer;
+			dword_buffer++;
+			byte_buffer++;
+		}
+
+		ACPI_DEBUG_PRINT((ACPI_DB_REPAIR,
+				  "%s Expanded Byte Buffer to expected DWord Buffer\n",
+				  info->full_pathname));
+		break;
+
+	default:
+
+		return (AE_AML_OPERAND_TYPE);
+	}
+
+	/* Delete the original return object, return the new buffer object */
+
+	acpi_ut_remove_reference(return_object);
+	*return_object_ptr = buffer_object;
+
+	info->return_flags |= ACPI_OBJECT_REPAIRED;
+	return (AE_OK);
+}
+
+
+// Source: nsrepair2.c
+// Lines 248-318

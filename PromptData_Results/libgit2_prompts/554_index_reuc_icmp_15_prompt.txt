@@ -1,0 +1,26 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'info_a' at line 3
+2. Pointer 'a' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int reuc_icmp(const void *a, const void *b)
+{
+	const git_index_reuc_entry *info_a = a;
+	const git_index_reuc_entry *info_b = b;
+
+	return strcasecmp(info_a->path, info_b->path);
+}
+
+
+// Source: index.c
+// Lines 312-318
+
+
+[ANSWER]
+MUST

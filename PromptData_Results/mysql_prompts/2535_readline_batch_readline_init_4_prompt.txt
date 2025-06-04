@@ -1,0 +1,40 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'line_buff' at line 2
+2. Pointer 'file' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+LINE_BUFFER *batch_readline_init(ulong max_size, FILE *file) {
+  LINE_BUFFER *line_buff;
+
+#ifndef _WIN32
+  MY_STAT input_file_stat;
+  if (my_fstat(fileno(file), &input_file_stat) ||
+      MY_S_ISDIR(input_file_stat.st_mode) ||
+      MY_S_ISBLK(input_file_stat.st_mode))
+    return nullptr;
+#endif
+
+  if (!(line_buff =
+            (LINE_BUFFER *)my_malloc(PSI_NOT_INSTRUMENTED, sizeof(*line_buff),
+                                     MYF(MY_WME | MY_ZEROFILL))))
+    return nullptr;
+  if (init_line_buffer(line_buff, my_fileno(file), batch_io_size, max_size)) {
+    my_free(line_buff);
+    return nullptr;
+  }
+  return line_buff;
+}
+
+
+// Source: readline.cc
+// Lines 46-66
+
+
+[ANSWER]
+MUST-NOT

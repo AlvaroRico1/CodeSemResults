@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'data' at line 3\n2. Pointer 'calldata' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void nfs4_lock_release(void *calldata)\n{\n\tstruct nfs4_lockdata *data = calldata;\n\n\tdprintk(\"%s: begin!\\n\", __func__);\n\tnfs_free_seqid(data->arg.open_seqid);\n\tif (data->cancelled && data->rpc_status == 0) {\n\t\tstruct rpc_task *task;\n\t\ttask = nfs4_do_unlck(&data->fl, data->ctx, data->lsp,\n\t\t\t\tdata->arg.lock_seqid);\n\t\tif (!IS_ERR(task))\n\t\t\trpc_put_task_async(task);\n\t\tdprintk(\"%s: cancelling lock!\\n\", __func__);\n\t} else\n\t\tnfs_free_seqid(data->arg.lock_seqid);\n\tnfs4_put_lock_state(data->lsp);\n\tput_nfs_open_context(data->ctx);\n\tkfree(data);\n\tdprintk(\"%s: done!\\n\", __func__);\n}\n\n\n// Source: nfs4proc.c\n// Lines 6741-6760\n",
+  "ANSWER": "MUST"
+}

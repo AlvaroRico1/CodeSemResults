@@ -1,0 +1,1 @@
+options,mysql/sql-common/client.cc,5,cert_error,mysql/sql-common/client.cc,40,0

@@ -1,0 +1,1 @@
+ignore_case,libgit2/src/libgit2/ignore.c,5,valid_rule,libgit2/src/libgit2/ignore.c,26,2

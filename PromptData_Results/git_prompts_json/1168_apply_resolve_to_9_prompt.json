@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'size' at line 3\n2. Pointer 'type' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int resolve_to(struct image *image, const struct object_id *result_id)\n{\n\tunsigned long size;\n\tenum object_type type;\n\n\tclear_image(image);\n\n\timage->buf = read_object_file(result_id, &type, &size);\n\tif (!image->buf || type != OBJ_BLOB)\n\t\tdie(\"unable to read blob object %s\", oid_to_hex(result_id));\n\timage->len = size;\n\n\treturn 0;\n}\n\n\n// Source: apply.c\n// Lines 3471-3484\n",
+  "ANSWER": "MAY"
+}

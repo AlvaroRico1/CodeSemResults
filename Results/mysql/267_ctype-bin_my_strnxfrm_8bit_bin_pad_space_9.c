@@ -1,0 +1,79 @@
+static size_t my_strnxfrm_8bit_bin_pad_space(const CHARSET_INFO *cs, uchar *dst,
+                                             size_t dstlen, uint nweights,
+                                             const uchar *src, size_t srclen,
+                                             uint flags) {
+  srclen = std::min(srclen, dstlen);
+  srclen = std::min<size_t>(srclen, nweights);
+  if (dst != src && srclen > 0) memcpy(dst, src, srclen);
+  return my_strxfrm_pad(cs, dst, dst + srclen, dst + dstlen,
+                        static_cast<uint>(nweights - srclen), flags);
+}
+
+static size_t my_strnxfrm_8bit_bin_no_pad(const CHARSET_INFO *cs, uchar *dst,
+                                          size_t dstlen, uint nweights,
+                                          const uchar *src, size_t srclen,
+                                          uint flags) {
+  srclen = std::min(srclen, dstlen);
+  srclen = std::min<size_t>(srclen, nweights);
+  if (dst != src && srclen > 0) memcpy(dst, src, srclen);
+  if ((flags & MY_STRXFRM_PAD_TO_MAXLEN) && srclen < dstlen) {
+    cs->cset->fill(cs, pointer_cast<char *>(dst) + srclen, dstlen - srclen,
+                   cs->pad_char);
+    return dstlen;
+  }
+  return srclen;
+}
+
+static uint my_instr_bin(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
+                         const char *b, size_t b_length, const char *s,
+                         size_t s_length, my_match_t *match, uint nmatch) {
+  const uchar *str, *search, *end, *search_end;
+
+  if (s_length <= b_length) {
+    if (!s_length) {
+      if (nmatch) {
+        match->beg = 0;
+        match->end = 0;
+        match->mb_len = 0;
+      }
+      return 1; /* Empty string is always found */
+    }
+
+    str = (const uchar *)b;
+    search = (const uchar *)s;
+    end = (const uchar *)b + b_length - s_length + 1;
+    search_end = (const uchar *)s + s_length;
+
+  skip:
+    while (str != end) {
+      if ((*str++) == (*search)) {
+        const uchar *i, *j;
+
+        i = str;
+        j = search + 1;
+
+        while (j != search_end)
+          if ((*i++) != (*j++)) goto skip;
+
+        if (nmatch > 0) {
+          match[0].beg = 0;
+          match[0].end = (uint)(str - (const uchar *)b - 1);
+          match[0].mb_len = match[0].end;
+
+          if (nmatch > 1) {
+            match[1].beg = match[0].end;
+            match[1].end = (uint)(match[0].end + s_length);
+            match[1].mb_len = match[1].end - match[1].beg;
+          }
+        }
+        return 2;
+      }
+    }
+  }
+  return 0;
+}
+}  // extern "C"
+
+
+// Source: ctype-bin.cc
+// Lines 377-451

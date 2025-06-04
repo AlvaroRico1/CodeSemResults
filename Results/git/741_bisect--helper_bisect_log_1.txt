@@ -1,0 +1,1 @@
+p,git/builtin/bisect--helper.c,None,word_end,git/builtin/bisect--helper.c,None,0

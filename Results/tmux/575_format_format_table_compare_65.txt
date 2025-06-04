@@ -1,0 +1,1 @@
+entry,tmux/format.c,4,entry0,tmux/format.c,1,1

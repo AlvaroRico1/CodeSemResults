@@ -1,0 +1,66 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'buff' at line 4
+2. Pointer 'mpvio' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int send_change_user_packet(MCPVIO_EXT *mpvio, const uchar *data,
+                                   int data_len) {
+  MYSQL *mysql = mpvio->mysql;
+  char *buff, *end;
+  int res = 1;
+  size_t connect_attrs_len =
+      (mysql->server_capabilities & CLIENT_CONNECT_ATTRS &&
+       mysql->options.extension)
+          ? mysql->options.extension->connection_attributes_length
+          : 0;
+
+  buff = static_cast<char *>(
+      my_alloca(USERNAME_LENGTH + data_len + 1 + NAME_LEN + 2 + NAME_LEN +
+                connect_attrs_len + 9 /* for the length of the attrs */));
+
+  end = strmake(buff, mysql->user, USERNAME_LENGTH) + 1;
+
+  if (!data_len)
+    *end++ = 0;
+  else {
+    assert(data_len <= 255);
+    if (data_len > 255) {
+      set_mysql_error(mysql, CR_MALFORMED_PACKET, unknown_sqlstate);
+      goto error;
+    }
+    *end++ = data_len;
+    memcpy(end, data, data_len);
+    end += data_len;
+  }
+  end = strmake(end, mpvio->db ? mpvio->db : "", NAME_LEN) + 1;
+
+  if (mysql->server_capabilities & CLIENT_PROTOCOL_41) {
+    int2store((uchar *)end, (ushort)mysql->charset->number);
+    end += 2;
+  }
+
+  if (mysql->server_capabilities & CLIENT_PLUGIN_AUTH)
+    end = strmake(end, mpvio->plugin->name, NAME_LEN) + 1;
+
+  end = (char *)send_client_connect_attrs(mysql, (uchar *)end);
+
+  res = simple_command(mysql, COM_CHANGE_USER, (uchar *)buff,
+                       (ulong)(end - buff), 1);
+
+error:
+  return res;
+}
+
+
+// Source: client.cc
+// Lines 3962-4008
+
+
+[ANSWER]
+MUST-NOT

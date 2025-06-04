@@ -1,0 +1,24 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'pos' at line 3
+2. Pointer 'null_pos' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void store_param_null(NET *net MY_ATTRIBUTE((unused)), MYSQL_BIND *param,
+                             unsigned char *null_pos) {
+  uint pos = param->param_number;
+  null_pos[pos / 8] |= (uchar)(1 << (pos & 7));
+}
+
+
+// Source: bind_params.cc
+// Lines 245-249
+
+
+[ANSWER]
+MUST-NOT

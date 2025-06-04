@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'd' at line 5\n2. Pointer 'data' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int collect_diff_cb(long start_a, long count_a,\n\t\t\t   long start_b, long count_b,\n\t\t\t   void *data)\n{\n\tstruct collect_diff_cbdata *d = data;\n\n\tif (count_a >= 0)\n\t\trange_set_append(&d->diff->parent, start_a, start_a + count_a);\n\tif (count_b >= 0)\n\t\trange_set_append(&d->diff->target, start_b, start_b + count_b);\n\n\treturn 0;\n}\n\n\n// Source: line-log.c\n// Lines 315-327\n",
+  "ANSWER": "MUST"
+}

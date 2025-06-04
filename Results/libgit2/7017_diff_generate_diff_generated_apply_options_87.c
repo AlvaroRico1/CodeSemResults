@@ -1,0 +1,102 @@
+static int diff_generated_apply_options(
+	git_diff_generated *diff,
+	const git_diff_options *opts)
+{
+	git_config *cfg = NULL;
+	git_repository *repo = diff->base.repo;
+	git_pool *pool = &diff->base.pool;
+	int val;
+
+	if (opts) {
+		/* copy user options (except case sensitivity info from iterators) */
+		bool icase = DIFF_FLAG_IS_SET(diff, GIT_DIFF_IGNORE_CASE);
+		memcpy(&diff->base.opts, opts, sizeof(diff->base.opts));
+		DIFF_FLAG_SET(diff, GIT_DIFF_IGNORE_CASE, icase);
+
+		/* initialize pathspec from options */
+		if (git_pathspec__vinit(&diff->pathspec, &opts->pathspec, pool) < 0)
+			return -1;
+	}
+
+	/* flag INCLUDE_TYPECHANGE_TREES implies INCLUDE_TYPECHANGE */
+	if (DIFF_FLAG_IS_SET(diff, GIT_DIFF_INCLUDE_TYPECHANGE_TREES))
+		diff->base.opts.flags |= GIT_DIFF_INCLUDE_TYPECHANGE;
+
+	/* flag INCLUDE_UNTRACKED_CONTENT implies INCLUDE_UNTRACKED */
+	if (DIFF_FLAG_IS_SET(diff, GIT_DIFF_SHOW_UNTRACKED_CONTENT))
+		diff->base.opts.flags |= GIT_DIFF_INCLUDE_UNTRACKED;
+
+	/* load config values that affect diff behavior */
+	if ((val = git_repository_config_snapshot(&cfg, repo)) < 0)
+		return val;
+
+	if (!git_config__configmap_lookup(&val, cfg, GIT_CONFIGMAP_SYMLINKS) && val)
+		diff->diffcaps |= GIT_DIFFCAPS_HAS_SYMLINKS;
+
+	if (!git_config__configmap_lookup(&val, cfg, GIT_CONFIGMAP_IGNORESTAT) && val)
+		diff->diffcaps |= GIT_DIFFCAPS_IGNORE_STAT;
+
+	if ((diff->base.opts.flags & GIT_DIFF_IGNORE_FILEMODE) == 0 &&
+		!git_config__configmap_lookup(&val, cfg, GIT_CONFIGMAP_FILEMODE) && val)
+		diff->diffcaps |= GIT_DIFFCAPS_TRUST_MODE_BITS;
+
+	if (!git_config__configmap_lookup(&val, cfg, GIT_CONFIGMAP_TRUSTCTIME) && val)
+		diff->diffcaps |= GIT_DIFFCAPS_TRUST_CTIME;
+
+	/* Don't set GIT_DIFFCAPS_USE_DEV - compile time option in core git */
+
+	/* If not given explicit `opts`, check `diff.xyz` configs */
+	if (!opts) {
+		int context = git_config__get_int_force(cfg, "diff.context", 3);
+		diff->base.opts.context_lines = context >= 0 ? (uint32_t)context : 3;
+
+		/* add other defaults here */
+	}
+
+	/* Reverse src info if diff is reversed */
+	if (DIFF_FLAG_IS_SET(diff, GIT_DIFF_REVERSE)) {
+		git_iterator_t tmp_src = diff->base.old_src;
+		diff->base.old_src = diff->base.new_src;
+		diff->base.new_src = tmp_src;
+	}
+
+	/* Unset UPDATE_INDEX unless diffing workdir and index */
+	if (DIFF_FLAG_IS_SET(diff, GIT_DIFF_UPDATE_INDEX) &&
+		(!(diff->base.old_src == GIT_ITERATOR_WORKDIR ||
+		   diff->base.new_src == GIT_ITERATOR_WORKDIR) ||
+		 !(diff->base.old_src == GIT_ITERATOR_INDEX ||
+		   diff->base.new_src == GIT_ITERATOR_INDEX)))
+		diff->base.opts.flags &= ~GIT_DIFF_UPDATE_INDEX;
+
+	/* if ignore_submodules not explicitly set, check diff config */
+	if (diff->base.opts.ignore_submodules <= 0) {
+		 git_config_entry *entry;
+		git_config__lookup_entry(&entry, cfg, "diff.ignoresubmodules", true);
+
+		if (entry && git_submodule_parse_ignore(
+				&diff->base.opts.ignore_submodules, entry->value) < 0)
+			git_error_clear();
+		git_config_entry_free(entry);
+	}
+
+	/* if either prefix is not set, figure out appropriate value */
+	if (!diff->base.opts.old_prefix || !diff->base.opts.new_prefix) {
+		const char *use_old = DIFF_OLD_PREFIX_DEFAULT;
+		const char *use_new = DIFF_NEW_PREFIX_DEFAULT;
+
+		if (git_config__get_bool_force(cfg, "diff.noprefix", 0))
+			use_old = use_new = "";
+		else if (git_config__get_bool_force(cfg, "diff.mnemonicprefix", 0)) {
+			use_old = diff_mnemonic_prefix(diff->base.old_src, true);
+			use_new = diff_mnemonic_prefix(diff->base.new_src, false);
+		}
+
+		if (!diff->base.opts.old_prefix)
+			diff->base.opts.old_prefix = use_old;
+		if (!diff->base.opts.new_prefix)
+			diff->base.opts.new_prefix = use_new;
+	}
+
+
+// Source: diff_generate.c
+// Lines 468-565

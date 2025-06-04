@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'self' at line 3\n2. Pointer '_self' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)\n{\n    struct st_h2o_access_log_configurator_t *self = (void *)_self;\n    size_t i;\n\n    /* push the stack pointer */\n    ++self->handles;\n\n    /* link the handles */\n    memset(self->handles, 0, sizeof(*self->handles));\n    h2o_vector_reserve(NULL, self->handles, self->handles[-1].size + 1);\n    for (i = 0; i != self->handles[-1].size; ++i) {\n        h2o_access_log_filehandle_t *fh = self->handles[-1].entries[i];\n        self->handles[0].entries[self->handles[0].size++] = fh;\n        h2o_mem_addref_shared(fh);\n    }\n\n    return 0;\n}\n\n\n// Source: access_log.c\n// Lines 76-94\n",
+  "ANSWER": "MUST"
+}

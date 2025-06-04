@@ -1,0 +1,29 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'type_b' at line 4
+2. Pointer 'type_a' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool acpi_sleep_state_supported(u8 sleep_state)
+{
+	acpi_status status;
+	u8 type_a, type_b;
+
+	status = acpi_get_sleep_type_data(sleep_state, &type_a, &type_b);
+	return ACPI_SUCCESS(status) && (!acpi_gbl_reduced_hardware
+		|| (acpi_gbl_FADT.sleep_control.address
+			&& acpi_gbl_FADT.sleep_status.address));
+}
+
+
+// Source: sleep.c
+// Lines 80-89
+
+
+[ANSWER]
+MAY

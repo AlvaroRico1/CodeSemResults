@@ -1,0 +1,90 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'dreq' at line 8
+2. Pointer 'inode' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+ssize_t nfs_file_direct_write(struct kiocb *iocb, struct iov_iter *iter)
+{
+	ssize_t result = -EINVAL, requested;
+	size_t count;
+	struct file *file = iocb->ki_filp;
+	struct address_space *mapping = file->f_mapping;
+	struct inode *inode = mapping->host;
+	struct nfs_direct_req *dreq;
+	struct nfs_lock_context *l_ctx;
+	loff_t pos, end;
+
+	dfprintk(FILE, "NFS: direct write(%pD2, %zd@%Ld)\n",
+		file, iov_iter_count(iter), (long long) iocb->ki_pos);
+
+	result = generic_write_checks(iocb, iter);
+	if (result <= 0)
+		return result;
+	count = result;
+	nfs_add_stats(mapping->host, NFSIOS_DIRECTWRITTENBYTES, count);
+
+	pos = iocb->ki_pos;
+	end = (pos + iov_iter_count(iter) - 1) >> PAGE_SHIFT;
+
+	task_io_account_write(count);
+
+	result = -ENOMEM;
+	dreq = nfs_direct_req_alloc();
+	if (!dreq)
+		goto out;
+
+	dreq->inode = inode;
+	dreq->bytes_left = dreq->max_count = count;
+	dreq->io_start = pos;
+	dreq->ctx = get_nfs_open_context(nfs_file_open_context(iocb->ki_filp));
+	l_ctx = nfs_get_lock_context(dreq->ctx);
+	if (IS_ERR(l_ctx)) {
+		result = PTR_ERR(l_ctx);
+		goto out_release;
+	}
+	dreq->l_ctx = l_ctx;
+	if (!is_sync_kiocb(iocb))
+		dreq->iocb = iocb;
+
+	nfs_start_io_direct(inode);
+
+	requested = nfs_direct_write_schedule_iovec(dreq, iter, pos);
+
+	if (mapping->nrpages) {
+		invalidate_inode_pages2_range(mapping,
+					      pos >> PAGE_SHIFT, end);
+	}
+
+	nfs_end_io_direct(inode);
+
+	if (requested > 0) {
+		result = nfs_direct_wait(dreq);
+		if (result > 0) {
+			requested -= result;
+			iocb->ki_pos = pos + result;
+			/* XXX: should check the generic_write_sync retval */
+			generic_write_sync(iocb, result);
+		}
+		iov_iter_revert(iter, requested);
+	} else {
+		result = requested;
+	}
+out_release:
+	nfs_direct_req_release(dreq);
+out:
+	return result;
+}
+
+
+// Source: direct.c
+// Lines 989-1059
+
+
+[ANSWER]
+MUST

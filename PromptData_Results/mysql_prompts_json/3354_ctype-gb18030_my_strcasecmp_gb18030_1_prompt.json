@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 's' at line 1\n2. Pointer 't' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int my_strcasecmp_gb18030(const CHARSET_INFO *cs, const char *s,\n                                 const char *t) {\n  size_t s_length = strlen(s);\n  size_t t_length = strlen(t);\n  int res = my_strnncoll_gb18030_internal(cs, (const uchar **)&s, s_length,\n                                          (const uchar **)&t, t_length);\n\n  return res ? res : (int)(s_length - t_length);\n}\n}  // extern \"C\"\n\n\n// Source: ctype-gb18030.cc\n// Lines 20109-20118\n",
+  "ANSWER": "MAY"
+}

@@ -1,0 +1,36 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ahead' at line 4
+2. Pointer 'behind' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_revwalk_mergebase__two_way_merge(void)
+{
+	git_oid one, two;
+	size_t ahead, behind;
+
+	cl_git_pass(git_oid_fromstr(&one, "9b219343610c88a1187c996d0dc58330b55cee28"));
+	cl_git_pass(git_oid_fromstr(&two, "a953a018c5b10b20c86e69fef55ebc8ad4c5a417"));
+	cl_git_pass(git_graph_ahead_behind(&ahead, &behind, _repo2, &one, &two));
+
+	cl_assert_equal_sz(ahead,  8);
+	cl_assert_equal_sz(behind,  2);
+
+	cl_git_pass(git_graph_ahead_behind(&ahead, &behind, _repo2, &two, &one));
+
+	cl_assert_equal_sz(ahead,  2);
+	cl_assert_equal_sz(behind,  8);
+}
+
+
+// Source: mergebase.c
+// Lines 89-105
+
+
+[ANSWER]
+MAY

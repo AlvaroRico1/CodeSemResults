@@ -1,0 +1,1 @@
+dword_buffer,linux/drivers/acpi/acpica/nsconvert.c,7,elements,linux/drivers/acpi/acpica/nsconvert.c,6,2

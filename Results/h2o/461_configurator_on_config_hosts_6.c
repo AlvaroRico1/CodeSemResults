@@ -1,0 +1,48 @@
+static int on_config_hosts(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    size_t i;
+
+    if (node->data.mapping.size == 0) {
+        h2o_configurator_errprintf(cmd, node, "the mapping cannot be empty");
+        return -1;
+    }
+
+    for (i = 0; i != node->data.mapping.size; ++i) {
+        yoml_t *key = node->data.mapping.elements[i].key;
+        yoml_t *value = node->data.mapping.elements[i].value;
+        h2o_iovec_t hostname;
+        uint16_t port;
+        if (key->type != YOML_TYPE_SCALAR) {
+            h2o_configurator_errprintf(cmd, key, "key (representing the hostname) must be a string");
+            return -1;
+        }
+        if (h2o_url_parse_hostport(key->data.scalar, strlen(key->data.scalar), &hostname, &port) == NULL) {
+            h2o_configurator_errprintf(cmd, key, "invalid key (must be either `host` or `host:port`)");
+            return -1;
+        }
+        assert(hostname.len != 0);
+        if ((hostname.base[0] == '*' && !(hostname.len == 1 || hostname.base[1] == '.')) ||
+            memchr(hostname.base + 1, '*', hostname.len - 1) != NULL) {
+            h2o_configurator_errprintf(cmd, key, "wildcard (*) can only be used at the start of the hostname");
+            return -1;
+        }
+        h2o_configurator_context_t *host_ctx = create_context(ctx, 0);
+        if ((host_ctx->hostconf = h2o_config_register_host(host_ctx->globalconf, hostname, port)) == NULL) {
+            h2o_configurator_errprintf(cmd, key, "duplicate host entry");
+            destroy_context(host_ctx);
+            return -1;
+        }
+        host_ctx->mimemap = &host_ctx->hostconf->mimemap;
+        int cmd_ret = h2o_configurator_apply_commands(host_ctx, value, H2O_CONFIGURATOR_FLAG_HOST, NULL);
+        destroy_context(host_ctx);
+        if (cmd_ret != 0)
+            return -1;
+        if (yoml_get(value, "paths") == NULL) {
+            h2o_configurator_errprintf(NULL, value, "mandatory configuration directive `paths` is missing");
+            return -1;
+        }
+    }
+
+
+// Source: configurator.c
+// Lines 350-393

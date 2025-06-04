@@ -1,0 +1,103 @@
+static int parse_hunk_body(
+	git_patch_parsed *patch,
+	git_patch_hunk *hunk,
+	git_patch_parse_ctx *ctx)
+{
+	git_diff_line *line;
+	int error = 0;
+
+	int oldlines = hunk->hunk.old_lines;
+	int newlines = hunk->hunk.new_lines;
+	int last_origin = 0;
+
+	for (;
+		ctx->parse_ctx.remain_len > 1 &&
+		(oldlines || newlines) &&
+		!git_parse_ctx_contains_s(&ctx->parse_ctx, "@@ -");
+		git_parse_advance_line(&ctx->parse_ctx)) {
+
+		int old_lineno, new_lineno, origin, prefix = 1;
+		char c;
+
+		if (git__add_int_overflow(&old_lineno, hunk->hunk.old_start, hunk->hunk.old_lines) ||
+		    git__sub_int_overflow(&old_lineno, old_lineno, oldlines) ||
+		    git__add_int_overflow(&new_lineno, hunk->hunk.new_start, hunk->hunk.new_lines) ||
+		    git__sub_int_overflow(&new_lineno, new_lineno, newlines)) {
+			error = git_parse_err("unrepresentable line count at line %"PRIuZ,
+					      ctx->parse_ctx.line_num);
+			goto done;
+		}
+
+		if (ctx->parse_ctx.line_len == 0 || ctx->parse_ctx.line[ctx->parse_ctx.line_len - 1] != '\n') {
+			error = git_parse_err("invalid patch instruction at line %"PRIuZ,
+				ctx->parse_ctx.line_num);
+			goto done;
+		}
+
+		git_parse_peek(&c, &ctx->parse_ctx, 0);
+
+		switch (c) {
+		case '\n':
+			prefix = 0;
+			/* fall through */
+
+		case ' ':
+			origin = GIT_DIFF_LINE_CONTEXT;
+			oldlines--;
+			newlines--;
+			break;
+
+		case '-':
+			origin = GIT_DIFF_LINE_DELETION;
+			oldlines--;
+			new_lineno = -1;
+			break;
+
+		case '+':
+			origin = GIT_DIFF_LINE_ADDITION;
+			newlines--;
+			old_lineno = -1;
+			break;
+
+		case '\\':
+			/*
+			 * If there are no oldlines left, then this is probably
+			 * the "\ No newline at end of file" marker. Do not
+			 * verify its format, as it may be localized.
+			 */
+			if (!oldlines) {
+				prefix = 0;
+				origin = eof_for_origin(last_origin);
+				old_lineno = -1;
+				new_lineno = -1;
+				break;
+			}
+			/* fall through */
+
+		default:
+			error = git_parse_err("invalid patch hunk at line %"PRIuZ, ctx->parse_ctx.line_num);
+			goto done;
+		}
+
+		line = git_array_alloc(patch->base.lines);
+		GIT_ERROR_CHECK_ALLOC(line);
+
+		memset(line, 0x0, sizeof(git_diff_line));
+
+		line->content_len = ctx->parse_ctx.line_len - prefix;
+		line->content = git__strndup(ctx->parse_ctx.line + prefix, line->content_len);
+		GIT_ERROR_CHECK_ALLOC(line->content);
+		line->content_offset = ctx->parse_ctx.content_len - ctx->parse_ctx.remain_len;
+		line->origin = origin;
+		line->num_lines = 1;
+		line->old_lineno = old_lineno;
+		line->new_lineno = new_lineno;
+
+		hunk->line_count++;
+
+		last_origin = origin;
+	}
+
+
+// Source: patch_parse.c
+// Lines 567-665

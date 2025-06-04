@@ -1,0 +1,50 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'branch' at line 2
+2. Pointer 'branch_ref' at line 9
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int create_branch(
+	git_reference **branch,
+	git_repository *repo,
+	const git_oid *target,
+	const char *name,
+	const char *log_message)
+{
+	git_commit *head_obj = NULL;
+	git_reference *branch_ref = NULL;
+	git_str refname = GIT_STR_INIT;
+	int error;
+
+	/* Find the target commit */
+	if ((error = git_commit_lookup(&head_obj, repo, target)) < 0)
+		return error;
+
+	/* Create the new branch */
+	if ((error = git_str_printf(&refname, GIT_REFS_HEADS_DIR "%s", name)) < 0)
+		return error;
+
+	error = git_reference_create(&branch_ref, repo, git_str_cstr(&refname), target, 0, log_message);
+	git_str_dispose(&refname);
+	git_commit_free(head_obj);
+
+	if (!error)
+		*branch = branch_ref;
+	else
+		git_reference_free(branch_ref);
+
+	return error;
+}
+
+
+// Source: clone.c
+// Lines 28-58
+
+
+[ANSWER]
+MUST

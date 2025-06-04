@@ -1,0 +1,1 @@
+tci,gcc/gcc/ipa-polymorphic-call.c,4,data,gcc/gcc/ipa-polymorphic-call.c,1,1

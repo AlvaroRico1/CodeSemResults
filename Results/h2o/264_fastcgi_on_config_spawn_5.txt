@@ -1,0 +1,1 @@
+spawn_user,h2o/lib/handler/configurator/fastcgi.c,4,ctx,h2o/lib/handler/configurator/fastcgi.c,1,1

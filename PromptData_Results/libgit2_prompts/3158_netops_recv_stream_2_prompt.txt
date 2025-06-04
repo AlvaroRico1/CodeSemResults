@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'io' at line 3
+2. Pointer 'buf' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int recv_stream(gitno_buffer *buf)
+{
+	git_stream *io = (git_stream *) buf->cb_data;
+	size_t readlen = buf->len - buf->offset;
+	ssize_t ret;
+
+	readlen = min(readlen, INT_MAX);
+
+	ret = git_stream_read(io, buf->data + buf->offset, (int)readlen);
+	if (ret < 0)
+		return -1;
+
+	buf->offset += ret;
+	return (int)ret;
+}
+
+
+// Source: netops.c
+// Lines 36-50
+
+
+[ANSWER]
+MUST

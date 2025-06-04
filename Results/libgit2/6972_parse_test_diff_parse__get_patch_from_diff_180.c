@@ -1,0 +1,48 @@
+void test_diff_parse__get_patch_from_diff(void)
+{
+	git_repository *repo;
+	git_diff *computed, *parsed;
+	git_tree *a, *b;
+	git_diff_options opts = GIT_DIFF_OPTIONS_INIT;
+	git_buf computed_buf = GIT_BUF_INIT;
+	git_patch *patch_computed, *patch_parsed;
+
+	repo = cl_git_sandbox_init("diff");
+
+	opts.flags = GIT_DIFF_SHOW_BINARY;
+
+	cl_assert((a = resolve_commit_oid_to_tree(repo,
+		"d70d245ed97ed2aa596dd1af6536e4bfdb047b69")) != NULL);
+	cl_assert((b = resolve_commit_oid_to_tree(repo,
+		"7a9e0b02e63179929fed24f0a3e0f19168114d10")) != NULL);
+
+	cl_git_pass(git_diff_tree_to_tree(&computed, repo, a, b, &opts));
+	cl_git_pass(git_diff_to_buf(&computed_buf,
+		computed, GIT_DIFF_FORMAT_PATCH));
+	cl_git_pass(git_patch_from_diff(&patch_computed, computed, 0));
+
+	cl_git_pass(git_diff_from_buffer(&parsed,
+		computed_buf.ptr, computed_buf.size));
+	cl_git_pass(git_patch_from_diff(&patch_parsed, parsed, 0));
+
+	cl_assert_equal_i(
+		git_patch_num_hunks(patch_computed),
+		git_patch_num_hunks(patch_parsed));
+
+	git_patch_free(patch_computed);
+	git_patch_free(patch_parsed);
+
+	git_tree_free(a);
+	git_tree_free(b);
+
+	git_diff_free(computed);
+	git_diff_free(parsed);
+
+	git_buf_dispose(&computed_buf);
+
+	cl_git_sandbox_cleanup();
+}
+
+
+// Source: parse.c
+// Lines 228-271

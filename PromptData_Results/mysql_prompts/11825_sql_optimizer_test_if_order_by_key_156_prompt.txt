@@ -1,0 +1,144 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'order' at line 15
+2. Pointer 'order_src' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int test_if_order_by_key(ORDER_with_src *order_src, TABLE *table, uint idx,
+                         uint *used_key_parts, bool *skip_quick) {
+  DBUG_TRACE;
+  KEY_PART_INFO *key_part, *key_part_end;
+  key_part = table->key_info[idx].key_part;
+  key_part_end = key_part + table->key_info[idx].user_defined_key_parts;
+  key_part_map const_key_parts = table->const_key_parts[idx];
+  int reverse = 0;
+  uint key_parts;
+  bool on_pk_suffix = false;
+  // Whether [extented] key has key parts with mixed ASC/DESC order
+  bool mixed_order = false;
+  // Order direction of the first key part
+  bool reverse_sorted = (bool)(key_part->key_part_flag & HA_REVERSE_SORT);
+  ORDER *order = order_src->order;
+  *skip_quick = false;
+
+  for (; order; order = order->next, const_key_parts >>= 1) {
+    /*
+      Since only fields can be indexed, ORDER BY <something> that is
+      not a field cannot be resolved by using an index.
+    */
+    Item *real_itm = (*order->item)->real_item();
+    if (real_itm->type() != Item::FIELD_ITEM) return 0;
+
+    const Field *field = down_cast<const Item_field *>(real_itm)->field;
+
+    /*
+      Skip key parts that are constants in the WHERE clause.
+      These are already skipped in the ORDER BY by check_field_is_const()
+    */
+    for (; const_key_parts & 1 && key_part < key_part_end;
+         const_key_parts >>= 1)
+      key_part++;
+
+    /* Avoid usage of prefix index for sorting a partition table */
+    if (table->part_info && key_part != table->key_info[idx].key_part &&
+        key_part != key_part_end && is_prefix_index(table, idx))
+      return 0;
+
+    if (key_part == key_part_end) {
+      /*
+        We are at the end of the key. Check if the engine has the primary
+        key as a suffix to the secondary keys. If it has continue to check
+        the primary key as a suffix.
+      */
+      if (!on_pk_suffix &&
+          (table->file->ha_table_flags() & HA_PRIMARY_KEY_IN_READ_INDEX) &&
+          table->s->primary_key != MAX_KEY && table->s->primary_key != idx) {
+        on_pk_suffix = true;
+        key_part = table->key_info[table->s->primary_key].key_part;
+        key_part_end =
+            key_part +
+            table->key_info[table->s->primary_key].user_defined_key_parts;
+        const_key_parts = table->const_key_parts[table->s->primary_key];
+
+        for (; const_key_parts & 1 && key_part < key_part_end;
+             const_key_parts >>= 1)
+          key_part++;
+        /*
+         The primary and secondary key parts were all const (i.e. there's
+         one row).  The sorting doesn't matter.
+        */
+        if (key_part == key_part_end && reverse == 0) {
+          key_parts = 0;
+          reverse = 1;
+          goto ok;
+        }
+      } else
+        return 0;
+    }
+
+    if (key_part->field != field || !field->part_of_sortkey.is_set(idx))
+      return 0;
+    if (order->direction != ORDER_NOT_RELEVANT) {
+      const enum_order keypart_order =
+          (key_part->key_part_flag & HA_REVERSE_SORT) ? ORDER_DESC : ORDER_ASC;
+      /* set flag to 1 if we can use read-next on key, else to -1 */
+      int cur_scan_dir = (order->direction == keypart_order) ? 1 : -1;
+      if (reverse && cur_scan_dir != reverse) return 0;
+      reverse = cur_scan_dir;  // Remember if reverse
+    }
+    mixed_order |=
+        (reverse_sorted != (bool)((key_part)->key_part_flag & HA_REVERSE_SORT));
+
+    key_part++;
+  }
+  /*
+   The index picked here might be used for range scans with multiple ranges.
+   This will require tricky reordering in case of ranges would have to be
+   scanned backward and index consists of mixed ASC/DESC key parts. Due to that
+   backward scans on such indexes are disabled.
+  */
+  if (mixed_order && reverse < 0) *skip_quick = true;
+
+  if (!reverse) {
+    /*
+      We get here when the key is suitable and we don't care about it's
+      order, i.e. GROUP BY/DISTINCT. Use forward scan.
+    */
+    reverse = 1;
+  }
+  if (on_pk_suffix) {
+    uint used_key_parts_secondary = table->key_info[idx].user_defined_key_parts;
+    uint used_key_parts_pk =
+        (uint)(key_part - table->key_info[table->s->primary_key].key_part);
+    key_parts = used_key_parts_pk + used_key_parts_secondary;
+
+    if (reverse == -1 &&
+        (!(table->file->index_flags(idx, used_key_parts_secondary - 1, true) &
+           HA_READ_PREV) ||
+         !(table->file->index_flags(table->s->primary_key,
+                                    used_key_parts_pk - 1, true) &
+           HA_READ_PREV)))
+      reverse = 0;  // Index can't be used
+  } else {
+    key_parts = (uint)(key_part - table->key_info[idx].key_part);
+    if (reverse == -1 &&
+        !(table->file->index_flags(idx, key_parts - 1, true) & HA_READ_PREV))
+      reverse = 0;  // Index can't be used
+  }
+ok:
+  if (used_key_parts != nullptr) *used_key_parts = key_parts;
+  return reverse;
+}
+
+
+// Source: sql_optimizer.cc
+// Lines 1602-1726
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,66 @@
+screen_redraw_check_cell(struct client *c, u_int px, u_int py, int pane_status,
+    struct window_pane **wpp)
+{
+	struct window		*w = c->session->curw->window;
+	struct window_pane	*wp, *active;
+	int			 border;
+	u_int			 right, line;
+
+	*wpp = NULL;
+
+	if (px > w->sx || py > w->sy)
+		return (CELL_OUTSIDE);
+	if (px == w->sx || py == w->sy) /* window border */
+		return (screen_redraw_type_of_cell(c, px, py, pane_status));
+
+	if (pane_status != PANE_STATUS_OFF) {
+		active = wp = server_client_get_pane(c);
+		do {
+			if (!window_pane_visible(wp))
+				goto next1;
+
+			if (pane_status == PANE_STATUS_TOP)
+				line = wp->yoff - 1;
+			else
+				line = wp->yoff + wp->sy;
+			right = wp->xoff + 2 + wp->status_size - 1;
+
+			if (py == line && px >= wp->xoff + 2 && px <= right)
+				return (CELL_INSIDE);
+
+		next1:
+			wp = TAILQ_NEXT(wp, entry);
+			if (wp == NULL)
+				wp = TAILQ_FIRST(&w->panes);
+		} while (wp != active);
+	}
+
+	active = wp = server_client_get_pane(c);
+	do {
+		if (!window_pane_visible(wp))
+			goto next2;
+		*wpp = wp;
+
+		/*
+		 * If definitely inside, return. If not on border, skip.
+		 * Otherwise work out the cell.
+		 */
+		border = screen_redraw_pane_border(wp, px, py, pane_status);
+		if (border == SCREEN_REDRAW_INSIDE)
+			return (CELL_INSIDE);
+		if (border == SCREEN_REDRAW_OUTSIDE)
+			goto next2;
+		return (screen_redraw_type_of_cell(c, px, py, pane_status));
+
+	next2:
+		wp = TAILQ_NEXT(wp, entry);
+		if (wp == NULL)
+			wp = TAILQ_FIRST(&w->panes);
+	} while (wp != active);
+
+	return (CELL_OUTSIDE);
+}
+
+
+// Source: screen-redraw.c
+// Lines 278-339

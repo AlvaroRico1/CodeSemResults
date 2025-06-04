@@ -1,0 +1,28 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'args' at line 5
+2. Pointer 'data' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void encode_symlinkdata3(struct xdr_stream *xdr,
+				const void *data,
+				struct user_namespace *userns)
+{
+	const struct nfs3_symlinkargs *args = data;
+
+	encode_sattr3(xdr, args->sattr, userns);
+	encode_nfspath3(xdr, args->pages, args->pathlen);
+}
+
+
+// Source: nfs3xdr.c
+// Lines 1077-1085
+
+
+[ANSWER]
+MUST

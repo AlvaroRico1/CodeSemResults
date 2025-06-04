@@ -1,0 +1,1 @@
+ehdr_ptr,linux/fs/proc/vmcore.c,6,elfptr,linux/fs/proc/vmcore.c,1,1

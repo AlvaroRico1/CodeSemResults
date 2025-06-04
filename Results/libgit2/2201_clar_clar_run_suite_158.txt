@@ -1,0 +1,1 @@
+test,libgit2/tests/clar/clar.c,3,i,libgit2/tests/clar/clar.c,4,0

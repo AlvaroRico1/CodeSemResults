@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'conn' at line 8\n2. Pointer 'data' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void _state(struct Curl_easy *data,\n                   ftpstate newstate\n#ifdef DEBUGBUILD\n                   , int lineno\n#endif\n  )\n{\n  struct connectdata *conn = data->conn;\n  struct ftp_conn *ftpc = &conn->proto.ftpc;\n\n#if defined(DEBUGBUILD)\n\n#if defined(CURL_DISABLE_VERBOSE_STRINGS)\n  (void) lineno;\n#else\n  if(ftpc->state != newstate)\n    infof(data, \"FTP %p (line %d) state change from %s to %s\",\n          (void *)ftpc, lineno, ftp_state_names[ftpc->state],\n          ftp_state_names[newstate]);\n#endif\n#endif\n\n  ftpc->state = newstate;\n}\n\n\n// Source: ftp.c\n// Lines 755-778\n",
+  "ANSWER": "MUST"
+}

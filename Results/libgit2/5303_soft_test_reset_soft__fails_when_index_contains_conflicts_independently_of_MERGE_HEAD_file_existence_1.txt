@@ -1,0 +1,1 @@
+index,libgit2/tests/libgit2/reset/soft.c,3,head,libgit2/tests/libgit2/reset/soft.c,4,2

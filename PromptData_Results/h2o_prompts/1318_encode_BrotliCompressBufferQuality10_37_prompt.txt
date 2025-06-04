@@ -1,0 +1,222 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'storage_ix' at line 61
+2. Pointer 'storage' at line 60
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static BROTLI_BOOL BrotliCompressBufferQuality10(
+    int lgwin, size_t input_size, const uint8_t* input_buffer,
+    size_t* encoded_size, uint8_t* encoded_buffer) {
+  MemoryManager memory_manager;
+  MemoryManager* m = &memory_manager;
+
+  const size_t mask = BROTLI_SIZE_MAX >> 1;
+  const size_t max_backward_limit = BROTLI_MAX_BACKWARD_LIMIT(lgwin);
+  int dist_cache[4] = { 4, 11, 15, 16 };
+  int saved_dist_cache[4] = { 4, 11, 15, 16 };
+  BROTLI_BOOL ok = BROTLI_TRUE;
+  const size_t max_out_size = *encoded_size;
+  size_t total_out_size = 0;
+  uint8_t last_byte;
+  uint8_t last_byte_bits;
+  HasherHandle hasher = NULL;
+
+  const size_t hasher_eff_size =
+      BROTLI_MIN(size_t, input_size, max_backward_limit + BROTLI_WINDOW_GAP);
+
+  BrotliEncoderParams params;
+  const BrotliDictionary* dictionary = BrotliGetDictionary();
+
+  const int lgmetablock = BROTLI_MIN(int, 24, lgwin + 1);
+  size_t max_block_size;
+  const size_t max_metablock_size = (size_t)1 << lgmetablock;
+  const size_t max_literals_per_metablock = max_metablock_size / 8;
+  const size_t max_commands_per_metablock = max_metablock_size / 8;
+  size_t metablock_start = 0;
+  uint8_t prev_byte = 0;
+  uint8_t prev_byte2 = 0;
+
+  BrotliEncoderInitParams(&params);
+  params.quality = 10;
+  params.lgwin = lgwin;
+  SanitizeParams(&params);
+  params.lgblock = ComputeLgBlock(&params);
+  max_block_size = (size_t)1 << params.lgblock;
+
+  BrotliInitMemoryManager(m, 0, 0, 0);
+
+  assert(input_size <= mask + 1);
+  EncodeWindowBits(lgwin, &last_byte, &last_byte_bits);
+  InitOrStitchToPreviousBlock(m, &hasher, input_buffer, mask, &params,
+      0, hasher_eff_size, BROTLI_TRUE);
+  if (BROTLI_IS_OOM(m)) goto oom;
+
+  while (ok && metablock_start < input_size) {
+    const size_t metablock_end =
+        BROTLI_MIN(size_t, input_size, metablock_start + max_metablock_size);
+    const size_t expected_num_commands =
+        (metablock_end - metablock_start) / 12 + 16;
+    Command* commands = 0;
+    size_t num_commands = 0;
+    size_t last_insert_len = 0;
+    size_t num_literals = 0;
+    size_t metablock_size = 0;
+    size_t cmd_alloc_size = 0;
+    BROTLI_BOOL is_last;
+    uint8_t* storage;
+    size_t storage_ix;
+
+    size_t block_start;
+    for (block_start = metablock_start; block_start < metablock_end; ) {
+      size_t block_size =
+          BROTLI_MIN(size_t, metablock_end - block_start, max_block_size);
+      ZopfliNode* nodes = BROTLI_ALLOC(m, ZopfliNode, block_size + 1);
+      size_t path_size;
+      size_t new_cmd_alloc_size;
+      if (BROTLI_IS_OOM(m)) goto oom;
+      BrotliInitZopfliNodes(nodes, block_size + 1);
+      StitchToPreviousBlockH10(hasher, block_size, block_start,
+                               input_buffer, mask);
+      path_size = BrotliZopfliComputeShortestPath(
+          m, dictionary, block_size, block_start, input_buffer, mask, &params,
+          max_backward_limit, dist_cache, hasher, nodes);
+      if (BROTLI_IS_OOM(m)) goto oom;
+      /* We allocate a command buffer in the first iteration of this loop that
+         will be likely big enough for the whole metablock, so that for most
+         inputs we will not have to reallocate in later iterations. We do the
+         allocation here and not before the loop, because if the input is small,
+         this will be allocated after the Zopfli cost model is freed, so this
+         will not increase peak memory usage.
+         TODO: If the first allocation is too small, increase command
+         buffer size exponentially. */
+      new_cmd_alloc_size = BROTLI_MAX(size_t, expected_num_commands,
+                                      num_commands + path_size + 1);
+      if (cmd_alloc_size != new_cmd_alloc_size) {
+        Command* new_commands = BROTLI_ALLOC(m, Command, new_cmd_alloc_size);
+        if (BROTLI_IS_OOM(m)) goto oom;
+        cmd_alloc_size = new_cmd_alloc_size;
+        if (commands) {
+          memcpy(new_commands, commands, sizeof(Command) * num_commands);
+          BROTLI_FREE(m, commands);
+        }
+        commands = new_commands;
+      }
+      BrotliZopfliCreateCommands(block_size, block_start, max_backward_limit,
+                                 &nodes[0], dist_cache, &last_insert_len,
+                                 &params, &commands[num_commands],
+                                 &num_literals);
+      num_commands += path_size;
+      block_start += block_size;
+      metablock_size += block_size;
+      BROTLI_FREE(m, nodes);
+      if (num_literals > max_literals_per_metablock ||
+          num_commands > max_commands_per_metablock) {
+        break;
+      }
+    }
+
+    if (last_insert_len > 0) {
+      InitInsertCommand(&commands[num_commands++], last_insert_len);
+      num_literals += last_insert_len;
+    }
+
+    is_last = TO_BROTLI_BOOL(metablock_start + metablock_size == input_size);
+    storage = NULL;
+    storage_ix = last_byte_bits;
+
+    if (metablock_size == 0) {
+      /* Write the ISLAST and ISEMPTY bits. */
+      storage = BROTLI_ALLOC(m, uint8_t, 16);
+      if (BROTLI_IS_OOM(m)) goto oom;
+      storage[0] = last_byte;
+      BrotliWriteBits(2, 3, &storage_ix, storage);
+      storage_ix = (storage_ix + 7u) & ~7u;
+    } else if (!ShouldCompress(input_buffer, mask, metablock_start,
+                               metablock_size, num_literals, num_commands)) {
+      /* Restore the distance cache, as its last update by
+         CreateBackwardReferences is now unused. */
+      memcpy(dist_cache, saved_dist_cache, 4 * sizeof(dist_cache[0]));
+      storage = BROTLI_ALLOC(m, uint8_t, metablock_size + 16);
+      if (BROTLI_IS_OOM(m)) goto oom;
+      storage[0] = last_byte;
+      BrotliStoreUncompressedMetaBlock(is_last, input_buffer,
+                                       metablock_start, mask, metablock_size,
+                                       &storage_ix, storage);
+    } else {
+      uint32_t num_direct_distance_codes = 0;
+      uint32_t distance_postfix_bits = 0;
+      ContextType literal_context_mode = CONTEXT_UTF8;
+      MetaBlockSplit mb;
+      InitMetaBlockSplit(&mb);
+      if (!BrotliIsMostlyUTF8(input_buffer, metablock_start, mask,
+                              metablock_size, kMinUTF8Ratio)) {
+        literal_context_mode = CONTEXT_SIGNED;
+      }
+      BrotliBuildMetaBlock(m, input_buffer, metablock_start, mask, &params,
+                           prev_byte, prev_byte2,
+                           commands, num_commands,
+                           literal_context_mode,
+                           &mb);
+      if (BROTLI_IS_OOM(m)) goto oom;
+      BrotliOptimizeHistograms(num_direct_distance_codes,
+                               distance_postfix_bits,
+                               &mb);
+      storage = BROTLI_ALLOC(m, uint8_t, 2 * metablock_size + 502);
+      if (BROTLI_IS_OOM(m)) goto oom;
+      storage[0] = last_byte;
+      BrotliStoreMetaBlock(m, input_buffer, metablock_start, metablock_size,
+                           mask, prev_byte, prev_byte2,
+                           is_last,
+                           num_direct_distance_codes,
+                           distance_postfix_bits,
+                           literal_context_mode,
+                           commands, num_commands,
+                           &mb,
+                           &storage_ix, storage);
+      if (BROTLI_IS_OOM(m)) goto oom;
+      if (metablock_size + 4 < (storage_ix >> 3)) {
+        /* Restore the distance cache and last byte. */
+        memcpy(dist_cache, saved_dist_cache, 4 * sizeof(dist_cache[0]));
+        storage[0] = last_byte;
+        storage_ix = last_byte_bits;
+        BrotliStoreUncompressedMetaBlock(is_last, input_buffer,
+                                         metablock_start, mask,
+                                         metablock_size, &storage_ix, storage);
+      }
+      DestroyMetaBlockSplit(m, &mb);
+    }
+    last_byte = storage[storage_ix >> 3];
+    last_byte_bits = storage_ix & 7u;
+    metablock_start += metablock_size;
+    prev_byte = input_buffer[metablock_start - 1];
+    prev_byte2 = input_buffer[metablock_start - 2];
+    /* Save the state of the distance cache in case we need to restore it for
+       emitting an uncompressed block. */
+    memcpy(saved_dist_cache, dist_cache, 4 * sizeof(dist_cache[0]));
+
+    {
+      const size_t out_size = storage_ix >> 3;
+      total_out_size += out_size;
+      if (total_out_size <= max_out_size) {
+        memcpy(encoded_buffer, storage, out_size);
+        encoded_buffer += out_size;
+      } else {
+        ok = BROTLI_FALSE;
+      }
+    }
+    BROTLI_FREE(m, storage);
+    BROTLI_FREE(m, commands);
+  }
+
+
+// Source: encode.c
+// Lines 1078-1280
+
+
+[ANSWER]
+MAY

@@ -1,0 +1,28 @@
+static const char* FetchUnicodePoint(const char* ptr, uint32_t* code_point) {
+  const char* p = ptr;
+  // Fetch the code point.
+  const int len = UnicodeLength(*p++);
+  if (!ReadHexDigits(p, len, code_point)) return ptr;
+  p += len;
+
+  // Check if the code point we read is a "head surrogate." If so, then we
+  // expect it to be immediately followed by another code point which is a valid
+  // "trail surrogate," and together they form a UTF-16 pair which decodes into
+  // a single Unicode point. Trail surrogates may only use \u, not \U.
+  if (IsHeadSurrogate(*code_point) && *p == '\\' && *(p + 1) == 'u') {
+    uint32_t trail_surrogate;
+    if (ReadHexDigits(p + 2, 4, &trail_surrogate) &&
+        IsTrailSurrogate(trail_surrogate)) {
+      *code_point = AssembleUTF16(*code_point, trail_surrogate);
+      p += 6;
+    }
+    // If this failed, then we just emit the head surrogate as a code point.
+    // It's bogus, but so is the string.
+  }
+
+  return p;
+}
+
+
+// Source: tokenizer.cc
+// Lines 1061-1084

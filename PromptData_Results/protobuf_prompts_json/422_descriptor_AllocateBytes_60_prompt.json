@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'sizep' at line 4\n2. Pointer 'p' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid* DescriptorPool::Tables::AllocateBytes(int size) {\n  if (size == 0) return nullptr;\n  void* p = ::operator new(size + RoundUpTo<8>(sizeof(int)));\n  int* sizep = static_cast<int*>(p);\n  misc_allocs_.emplace_back(sizep);\n  *sizep = size;\n  return static_cast<char*>(p) + RoundUpTo<8>(sizeof(int));\n}\n\n\n// Source: descriptor.cc\n// Lines 1813-1820\n",
+  "ANSWER": "MUST"
+}

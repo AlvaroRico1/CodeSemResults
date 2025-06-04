@@ -1,0 +1,10 @@
+static h2o_iovec_t log_session_reused(h2o_req_t *req)
+{
+    struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
+    ptls_t *tls = quicly_get_tls(conn->h3.super.quic);
+    return ptls_is_psk_handshake(tls) ? h2o_iovec_init(H2O_STRLIT("1")) : h2o_iovec_init(H2O_STRLIT("0"));
+}
+
+
+// Source: server.c
+// Lines 546-551

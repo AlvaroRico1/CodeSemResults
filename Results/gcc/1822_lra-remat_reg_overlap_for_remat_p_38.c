@@ -1,0 +1,45 @@
+reg_overlap_for_remat_p (lra_insn_reg *reg, rtx_insn *insn)
+{
+  int iter;
+  lra_insn_recog_data_t id = lra_get_insn_recog_data (insn);
+  struct lra_static_insn_data *static_id = id->insn_static_data;
+  unsigned regno = reg->regno;
+  int nregs;
+
+  if (regno >= FIRST_PSEUDO_REGISTER && reg_renumber[regno] >= 0)
+    regno = reg_renumber[regno];
+  if (regno >= FIRST_PSEUDO_REGISTER)
+    nregs = 1;
+  else
+    nregs = hard_regno_nregs (regno, reg->biggest_mode);
+
+  struct lra_insn_reg *reg2;
+
+  for (iter = 0; iter < 2; iter++)
+    for (reg2 = (iter == 0 ? id->regs : static_id->hard_regs);
+	 reg2 != NULL;
+	 reg2 = reg2->next)
+      {
+	int nregs2;
+	unsigned regno2 = reg2->regno;
+
+	if (reg2->type != OP_IN && regno2 >= FIRST_PSEUDO_REGISTER)
+	  continue;
+
+	if (regno2 >= FIRST_PSEUDO_REGISTER && reg_renumber[regno2] >= 0)
+	  regno2 = reg_renumber[regno2];
+	if (regno2 >= FIRST_PSEUDO_REGISTER)
+	  nregs2 = 1;
+	else
+	  nregs2 = hard_regno_nregs (regno2, reg->biggest_mode);
+
+	if ((regno2 + nregs2 - 1 >= regno && regno2 < regno + nregs)
+	    || (regno + nregs - 1 >= regno2 && regno < regno2 + nregs2))
+	  return true;
+      }
+  return false;
+}
+
+
+// Source: lra-remat.c
+// Lines 660-700

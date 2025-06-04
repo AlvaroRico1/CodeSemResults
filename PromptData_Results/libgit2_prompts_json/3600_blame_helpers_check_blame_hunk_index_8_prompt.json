@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'start_line' at line 2\n2. Pointer 'obj' at line 11\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid check_blame_hunk_index(git_repository *repo, git_blame *blame, int idx,\n\t\tsize_t start_line, size_t len, char boundary, const char *commit_id, const char *orig_path)\n{\n\tchar expected[GIT_OID_HEXSZ+1] = {0}, actual[GIT_OID_HEXSZ+1] = {0};\n\tconst git_blame_hunk *hunk = git_blame_get_hunk_byindex(blame, idx);\n\tcl_assert(hunk);\n\n\tif (!strncmp(commit_id, \"0000\", 4)) {\n\t\tstrcpy(expected, \"0000000000000000000000000000000000000000\");\n\t} else {\n\t\tgit_object *obj;\n\t\tcl_git_pass(git_revparse_single(&obj, repo, commit_id));\n\t\tgit_oid_fmt(expected, git_object_id(obj));\n\t\tgit_object_free(obj);\n\t}\n\n\n// Source: blame_helpers.c\n// Lines 17-31\n",
+  "ANSWER": "MUST-NOT"
+}

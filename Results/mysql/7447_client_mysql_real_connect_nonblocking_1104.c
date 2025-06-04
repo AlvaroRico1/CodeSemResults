@@ -1,0 +1,53 @@
+net_async_status STDCALL mysql_real_connect_nonblocking(
+    MYSQL *mysql, const char *host, const char *user, const char *passwd,
+    const char *db, uint port, const char *unix_socket, ulong client_flag) {
+  DBUG_TRACE;
+
+  mysql_state_machine_status status;
+  mysql_async_connect *ctx = ASYNC_DATA(mysql)->connect_context;
+
+  if (!ctx) {
+    ctx = static_cast<mysql_async_connect *>(
+        my_malloc(key_memory_MYSQL, sizeof(*ctx), MYF(MY_WME | MY_ZEROFILL)));
+    if (!ctx) return NET_ASYNC_ERROR;
+
+    ctx->mysql = mysql;
+    ctx->host = host;
+    ctx->port = port;
+    ctx->db = db;
+    ctx->user = user;
+    ctx->passwd = passwd;
+    ctx->unix_socket = unix_socket;
+    mysql->options.client_flag |= client_flag;
+    ctx->client_flag = mysql->options.client_flag;
+    ctx->non_blocking = true;
+    ctx->state_function = csm_begin_connect;
+    ctx->ssl_state = SSL_NONE;
+    ASYNC_DATA(mysql)->connect_context = ctx;
+    ASYNC_DATA(mysql)->async_op_status = ASYNC_OP_CONNECT;
+  }
+
+  status = ctx->state_function(ctx);
+
+  if (status == STATE_MACHINE_DONE) {
+    my_free(ASYNC_DATA(mysql)->connect_context);
+    ASYNC_DATA(mysql)->connect_context = nullptr;
+    ASYNC_DATA(mysql)->async_op_status = ASYNC_OP_UNSET;
+    return NET_ASYNC_COMPLETE;
+  }
+  if (status == STATE_MACHINE_FAILED) {
+    DBUG_PRINT("error", ("message: %u/%s (%s)", mysql->net.last_errno,
+                         mysql->net.sqlstate, mysql->net.last_error));
+    /* Free alloced memory */
+    end_server(mysql);
+    mysql_close_free(mysql);
+    if (!(mysql->options.client_flag & CLIENT_REMEMBER_OPTIONS))
+      mysql_close_free_options(mysql);
+    return NET_ASYNC_ERROR;
+  }
+  return NET_ASYNC_NOT_READY;
+}
+
+
+// Source: client.cc
+// Lines 5684-5732

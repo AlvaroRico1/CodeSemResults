@@ -1,0 +1,69 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'conn' at line 3
+2. Pointer 'stream' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void crypto_stream_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len)
+{
+    quicly_conn_t *conn = stream->conn;
+    size_t in_epoch = -(1 + stream->stream_id), epoch_offsets[5] = {0};
+    ptls_iovec_t input;
+    ptls_buffer_t output;
+
+    if (quicly_streambuf_ingress_receive(stream, off, src, len) != 0)
+        return;
+
+    ptls_buffer_init(&output, "", 0);
+
+    /* send handshake messages to picotls, and let it fill in the response */
+    while ((input = quicly_streambuf_ingress_get(stream)).len != 0) {
+        int handshake_result = ptls_handle_message(conn->crypto.tls, &output, epoch_offsets, in_epoch, input.base, input.len,
+                                                   &conn->crypto.handshake_properties);
+        quicly_streambuf_ingress_shift(stream, input.len);
+        QUICLY_PROBE(CRYPTO_HANDSHAKE, conn, conn->stash.now, handshake_result);
+        switch (handshake_result) {
+        case 0:
+        case PTLS_ERROR_IN_PROGRESS:
+            break;
+        default:
+            initiate_close(conn,
+                           PTLS_ERROR_GET_CLASS(handshake_result) == PTLS_ERROR_CLASS_SELF_ALERT ? handshake_result
+                                                                                                 : QUICLY_TRANSPORT_ERROR_INTERNAL,
+                           QUICLY_FRAME_TYPE_CRYPTO, NULL);
+            goto Exit;
+        }
+        /* drop 0-RTT write key if 0-RTT is rejected by remote peer */
+        if (conn->application != NULL && !conn->application->one_rtt_writable &&
+            conn->application->cipher.egress.key.aead != NULL) {
+            assert(quicly_is_client(conn));
+            if (conn->crypto.handshake_properties.client.early_data_acceptance == PTLS_EARLY_DATA_REJECTED) {
+                dispose_cipher(&conn->application->cipher.egress.key);
+                conn->application->cipher.egress.key = (struct st_quicly_cipher_context_t){NULL};
+                /* retire all packets with ack_epoch == 3; they are all 0-RTT packets */
+                int ret;
+                if ((ret = discard_sentmap_by_epoch(conn, 1u << QUICLY_EPOCH_1RTT)) != 0) {
+                    initiate_close(conn, ret, QUICLY_FRAME_TYPE_CRYPTO, NULL);
+                    goto Exit;
+                }
+            }
+        }
+    }
+    write_crypto_data(conn, &output, epoch_offsets);
+
+Exit:
+    ptls_buffer_dispose(&output);
+}
+
+
+// Source: quicly.c
+// Lines 962-1011
+
+
+[ANSWER]
+MUST

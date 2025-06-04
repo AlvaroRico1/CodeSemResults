@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'res' at line 6\n2. Pointer 'msg' at line 14\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint __cdecl main(int argc, char *argv[])\n#else\nint main(int argc, char *argv[])\n#endif\n{\n\tint res;\n\tchar *at_exit_cmd;\n\n\tclar_test_init(argc, argv);\n\n\tres = git_libgit2_init();\n\tif (res < 0) {\n\t\tconst git_error *err = git_error_last();\n\t\tconst char *msg = err ? err->message : \"unknown failure\";\n\t\tfprintf(stderr, \"failed to init libgit2: %s\\n\", msg);\n\t\treturn res;\n\t}\n\n\n// Source: main.c\n// Lines 9-25\n",
+  "ANSWER": "MUST-NOT"
+}

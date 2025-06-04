@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'b_elt' at line 4\n2. Pointer 'b_elt' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nbitmap_equal_p (const_bitmap a, const_bitmap b)\n{\n  const bitmap_element *a_elt;\n  const bitmap_element *b_elt;\n  unsigned ix;\n\n  gcc_checking_assert (!a->tree_form && !b->tree_form);\n\n  for (a_elt = a->first, b_elt = b->first;\n       a_elt && b_elt;\n       a_elt = a_elt->next, b_elt = b_elt->next)\n    {\n      if (a_elt->indx != b_elt->indx)\n\treturn false;\n      for (ix = 0; ix < BITMAP_ELEMENT_WORDS; ix++)\n\tif (a_elt->bits[ix] != b_elt->bits[ix])\n\t  return false;\n    }\n  return !a_elt && !b_elt;\n}\n\n\n// Source: bitmap.c\n// Lines 2229-2248\n",
+  "ANSWER": "MUST"
+}

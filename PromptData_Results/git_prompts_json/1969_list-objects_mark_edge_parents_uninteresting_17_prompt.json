@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'parents' at line 5\n2. Pointer 'parents' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void mark_edge_parents_uninteresting(struct commit *commit,\n\t\t\t\t\t    struct rev_info *revs,\n\t\t\t\t\t    show_edge_fn show_edge)\n{\n\tstruct commit_list *parents;\n\n\tfor (parents = commit->parents; parents; parents = parents->next) {\n\t\tstruct commit *parent = parents->item;\n\t\tif (!(parent->object.flags & UNINTERESTING))\n\t\t\tcontinue;\n\t\tmark_tree_uninteresting(revs->repo, get_commit_tree(parent));\n\t\tif (revs->edge_hint && !(parent->object.flags & SHOWN)) {\n\t\t\tparent->object.flags |= SHOWN;\n\t\t\tshow_edge(parent);\n\t\t}\n\t}\n}\n\n\n// Source: list-objects.c\n// Lines 234-250\n",
+  "ANSWER": "MUST"
+}

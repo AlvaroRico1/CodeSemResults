@@ -1,0 +1,119 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'start' at line 94
+2. Pointer 'opt' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool get_one_option(int optid,
+                    const struct my_option *opt MY_ATTRIBUTE((unused)),
+                    char *argument) {
+  switch (optid) {
+    case OPT_CHARSETS_DIR:
+      strmake(mysql_charsets_dir, argument, sizeof(mysql_charsets_dir) - 1);
+      charsets_dir = mysql_charsets_dir;
+      break;
+    case OPT_DELIMITER:
+      if (argument == disabled_my_option) {
+        my_stpcpy(delimiter, DEFAULT_DELIMITER);
+      } else {
+        /* Check that delimiter does not contain a backslash */
+        if (!strstr(argument, "\\")) {
+          strmake(delimiter, argument, sizeof(delimiter) - 1);
+        } else {
+          put_info("DELIMITER cannot contain a backslash character",
+                   INFO_ERROR);
+          return false;
+        }
+      }
+      delimiter_length = (uint)strlen(delimiter);
+      delimiter_str = delimiter;
+      break;
+    case OPT_LOCAL_INFILE:
+      using_opt_local_infile = true;
+      break;
+    case OPT_ENABLE_CLEARTEXT_PLUGIN:
+      using_opt_enable_cleartext_plugin = true;
+      break;
+    case OPT_TEE:
+      if (argument == disabled_my_option) {
+        if (opt_outfile) end_tee();
+      } else
+        init_tee(argument);
+      break;
+    case OPT_PAGER:
+      if (argument == disabled_my_option)
+        opt_nopager = true;
+      else {
+        opt_nopager = false;
+        if (argument && strlen(argument)) {
+          default_pager_set = true;
+          strmake(pager, argument, sizeof(pager) - 1);
+          my_stpcpy(default_pager, pager);
+        } else if (default_pager_set)
+          my_stpcpy(pager, default_pager);
+        else
+          opt_nopager = true;
+      }
+      break;
+    case OPT_MYSQL_PROTOCOL:
+      opt_protocol =
+          find_type_or_exit(argument, &sql_protocol_typelib, opt->name);
+      break;
+    case 'A':
+      opt_rehash = false;
+      break;
+    case 'N':
+      column_names = false;
+      break;
+    case 'e':
+      status.batch = true;
+      status.add_to_history = false;
+      if (!status.line_buff)
+        ignore_errors = false;  // do it for the first -e only
+      if (!(status.line_buff =
+                batch_readline_command(status.line_buff, argument)))
+        return true;
+      break;
+    case 'j':
+      if (my_openlog("MysqlClient", 0, LOG_USER)) {
+        /* error */
+        put_info(strerror(errno), INFO_ERROR, errno);
+        return true;
+      }
+      opt_syslog = true;
+      break;
+    case 'o':
+      if (argument == disabled_my_option)
+        one_database = false;
+      else
+        one_database = skip_updates = true;
+      break;
+    case 'p':
+      if (argument == disabled_my_option) {
+        // Don't require password
+        static char empty_password[] = {'\0'};
+        assert(empty_password[0] ==
+               '\0');  // Check that it has not been overwritten
+        argument = empty_password;
+      }
+      if (argument) {
+        char *start = argument;
+        my_free(opt_password);
+        opt_password = my_strdup(PSI_NOT_INSTRUMENTED, argument, MYF(MY_FAE));
+        while (*argument) *argument++ = 'x';  // Destroy argument
+        if (*start) start[1] = 0;
+        tty_password = false;
+      } else
+
+
+// Source: mysql.cc
+// Lines 1962-2061
+
+
+[ANSWER]
+MUST-NOT

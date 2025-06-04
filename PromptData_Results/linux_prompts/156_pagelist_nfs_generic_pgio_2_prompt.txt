@@ -1,0 +1,78 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'last_page' at line 8
+2. Pointer 'req' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int nfs_generic_pgio(struct nfs_pageio_descriptor *desc,
+		     struct nfs_pgio_header *hdr)
+{
+	struct nfs_pgio_mirror *mirror = nfs_pgio_current_mirror(desc);
+
+	struct nfs_page		*req;
+	struct page		**pages,
+				*last_page;
+	struct list_head *head = &mirror->pg_list;
+	struct nfs_commit_info cinfo;
+	struct nfs_page_array *pg_array = &hdr->page_array;
+	unsigned int pagecount, pageused;
+	gfp_t gfp_flags = GFP_KERNEL;
+
+	pagecount = nfs_page_array_len(mirror->pg_base, mirror->pg_count);
+	pg_array->npages = pagecount;
+
+	if (pagecount <= ARRAY_SIZE(pg_array->page_array))
+		pg_array->pagevec = pg_array->page_array;
+	else {
+		pg_array->pagevec = kcalloc(pagecount, sizeof(struct page *), gfp_flags);
+		if (!pg_array->pagevec) {
+			pg_array->npages = 0;
+			nfs_pgio_error(hdr);
+			desc->pg_error = -ENOMEM;
+			return desc->pg_error;
+		}
+	}
+
+	nfs_init_cinfo(&cinfo, desc->pg_inode, desc->pg_dreq);
+	pages = hdr->page_array.pagevec;
+	last_page = NULL;
+	pageused = 0;
+	while (!list_empty(head)) {
+		req = nfs_list_entry(head->next);
+		nfs_list_move_request(req, &hdr->pages);
+
+		if (!last_page || last_page != req->wb_page) {
+			pageused++;
+			if (pageused > pagecount)
+				break;
+			*pages++ = last_page = req->wb_page;
+		}
+	}
+	if (WARN_ON_ONCE(pageused != pagecount)) {
+		nfs_pgio_error(hdr);
+		desc->pg_error = -EINVAL;
+		return desc->pg_error;
+	}
+
+	if ((desc->pg_ioflags & FLUSH_COND_STABLE) &&
+	    (desc->pg_moreio || nfs_reqs_to_commit(&cinfo)))
+		desc->pg_ioflags &= ~FLUSH_COND_STABLE;
+
+	/* Set up the argument struct */
+	nfs_pgio_rpcsetup(hdr, mirror->pg_count, desc->pg_ioflags, &cinfo);
+	desc->pg_rpc_callops = &nfs_pgio_common_ops;
+	return 0;
+}
+
+
+// Source: pagelist.c
+// Lines 758-816
+
+
+[ANSWER]
+MUST

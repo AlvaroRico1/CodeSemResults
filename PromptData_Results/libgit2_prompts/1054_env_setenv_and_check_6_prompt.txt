@@ -1,0 +1,33 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'name' at line 1
+2. Pointer 'check' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void setenv_and_check(const char *name, const char *value)
+{
+	char *check;
+
+	cl_git_pass(cl_setenv(name, value));
+	check = cl_getenv(name);
+
+	if (value)
+		cl_assert_equal_s(value, check);
+	else
+		cl_assert(check == NULL);
+
+	git__free(check);
+}
+
+
+// Source: env.c
+// Lines 68-81
+
+
+[ANSWER]
+MUST-NOT

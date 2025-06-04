@@ -1,0 +1,1 @@
+scan_end,libgit2/src/util/str.c,4,src,libgit2/src/util/str.c,1,1

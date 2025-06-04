@@ -1,0 +1,1 @@
+cmp_git,libgit2/tests/libgit2/checkout/crlf.c,8,cmp_gitattributes,libgit2/tests/libgit2/checkout/crlf.c,8,0

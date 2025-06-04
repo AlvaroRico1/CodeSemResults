@@ -1,0 +1,1 @@
+c,gcc/gcc/omp-general.c,6,c,gcc/gcc/omp-general.c,6,1

@@ -1,0 +1,26 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'data' at line 3
+2. Pointer 'sock' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void memcached_resumption_get(h2o_socket_t *sock, h2o_iovec_t session_id)
+{
+    struct st_h2o_memcached_resumption_accept_data_t *data = sock->data;
+
+    data->get_req = h2o_memcached_get(async_resumption_context.memcached.ctx, data->super.ctx->libmemcached_receiver, session_id,
+                                      memcached_resumption_on_get, data, H2O_MEMCACHED_ENCODE_KEY | H2O_MEMCACHED_ENCODE_VALUE);
+}
+
+
+// Source: util.c
+// Lines 145-151
+
+
+[ANSWER]
+MUST

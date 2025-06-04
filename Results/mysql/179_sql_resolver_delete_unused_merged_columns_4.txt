@@ -1,0 +1,1 @@
+item,mysql/sql/sql_resolver.cc,10,transl,mysql/sql/sql_resolver.cc,8,1

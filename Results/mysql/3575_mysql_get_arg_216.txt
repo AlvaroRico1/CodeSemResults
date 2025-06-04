@@ -1,0 +1,1 @@
+ptr,mysql/client/mysql.cc,2,qtype,mysql/client/mysql.cc,4,0

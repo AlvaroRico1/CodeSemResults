@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ptr' at line 4\n2. Pointer 'data' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int write_at(git_indexer *idx, const void *data, off64_t offset, size_t size)\n{\n\tsize_t remaining_size = size;\n\tconst char *ptr = (const char *)data;\n\n\t/* Handle data size larger that ssize_t */\n\twhile (remaining_size > 0) {\n\t\tssize_t nb;\n\t\tHANDLE_EINTR(nb, p_pwrite(idx->pack->mwf.fd, (void *)ptr,\n\t\t\t\t\t  remaining_size, offset));\n\t\tif (nb <= 0)\n\t\t\treturn -1;\n\n\t\tptr += nb;\n\t\toffset += nb;\n\t\tremaining_size -= nb;\n\t}\n\n\treturn 0;\n}\n\n\n// Source: indexer.c\n// Lines 620-639\n",
+  "ANSWER": "MUST"
+}

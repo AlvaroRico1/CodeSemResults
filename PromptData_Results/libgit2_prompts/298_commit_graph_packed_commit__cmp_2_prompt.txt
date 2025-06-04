@@ -1,0 +1,25 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'b' at line 4
+2. Pointer 'b_' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int packed_commit__cmp(const void *a_, const void *b_)
+{
+	const struct packed_commit *a = a_;
+	const struct packed_commit *b = b_;
+	return git_oid_cmp(&a->sha1, &b->sha1);
+}
+
+
+// Source: commit_graph.c
+// Lines 619-624
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,109 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tgstime' at line 41
+2. Pointer 'tgutime' at line 41
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int wait_task_zombie(struct wait_opts *wo, struct task_struct *p)
+{
+	int state, status;
+	pid_t pid = task_pid_vnr(p);
+	uid_t uid = from_kuid_munged(current_user_ns(), task_uid(p));
+	struct waitid_info *infop;
+
+	if (!likely(wo->wo_flags & WEXITED))
+		return 0;
+
+	if (unlikely(wo->wo_flags & WNOWAIT)) {
+		status = p->exit_code;
+		get_task_struct(p);
+		read_unlock(&tasklist_lock);
+		sched_annotate_sleep();
+		if (wo->wo_rusage)
+			getrusage(p, RUSAGE_BOTH, wo->wo_rusage);
+		put_task_struct(p);
+		goto out_info;
+	}
+	/*
+	 * Move the task's state to DEAD/TRACE, only one thread can do this.
+	 */
+	state = (ptrace_reparented(p) && thread_group_leader(p)) ?
+		EXIT_TRACE : EXIT_DEAD;
+	if (cmpxchg(&p->exit_state, EXIT_ZOMBIE, state) != EXIT_ZOMBIE)
+		return 0;
+	/*
+	 * We own this thread, nobody else can reap it.
+	 */
+	read_unlock(&tasklist_lock);
+	sched_annotate_sleep();
+
+	/*
+	 * Check thread_group_leader() to exclude the traced sub-threads.
+	 */
+	if (state == EXIT_DEAD && thread_group_leader(p)) {
+		struct signal_struct *sig = p->signal;
+		struct signal_struct *psig = current->signal;
+		unsigned long maxrss;
+		u64 tgutime, tgstime;
+
+		/*
+		 * The resource counters for the group leader are in its
+		 * own task_struct.  Those for dead threads in the group
+		 * are in its signal_struct, as are those for the child
+		 * processes it has previously reaped.  All these
+		 * accumulate in the parent's signal_struct c* fields.
+		 *
+		 * We don't bother to take a lock here to protect these
+		 * p->signal fields because the whole thread group is dead
+		 * and nobody can change them.
+		 *
+		 * psig->stats_lock also protects us from our sub-theads
+		 * which can reap other children at the same time. Until
+		 * we change k_getrusage()-like users to rely on this lock
+		 * we have to take ->siglock as well.
+		 *
+		 * We use thread_group_cputime_adjusted() to get times for
+		 * the thread group, which consolidates times for all threads
+		 * in the group including the group leader.
+		 */
+		thread_group_cputime_adjusted(p, &tgutime, &tgstime);
+		spin_lock_irq(&current->sighand->siglock);
+		write_seqlock(&psig->stats_lock);
+		psig->cutime += tgutime + sig->cutime;
+		psig->cstime += tgstime + sig->cstime;
+		psig->cgtime += task_gtime(p) + sig->gtime + sig->cgtime;
+		psig->cmin_flt +=
+			p->min_flt + sig->min_flt + sig->cmin_flt;
+		psig->cmaj_flt +=
+			p->maj_flt + sig->maj_flt + sig->cmaj_flt;
+		psig->cnvcsw +=
+			p->nvcsw + sig->nvcsw + sig->cnvcsw;
+		psig->cnivcsw +=
+			p->nivcsw + sig->nivcsw + sig->cnivcsw;
+		psig->cinblock +=
+			task_io_get_inblock(p) +
+			sig->inblock + sig->cinblock;
+		psig->coublock +=
+			task_io_get_oublock(p) +
+			sig->oublock + sig->coublock;
+		maxrss = max(sig->maxrss, sig->cmaxrss);
+		if (psig->cmaxrss < maxrss)
+			psig->cmaxrss = maxrss;
+		task_io_accounting_add(&psig->ioac, &p->ioac);
+		task_io_accounting_add(&psig->ioac, &sig->ioac);
+		write_sequnlock(&psig->stats_lock);
+		spin_unlock_irq(&current->sighand->siglock);
+	}
+
+
+// Source: exit.c
+// Lines 1058-1147
+
+
+[ANSWER]
+MAY

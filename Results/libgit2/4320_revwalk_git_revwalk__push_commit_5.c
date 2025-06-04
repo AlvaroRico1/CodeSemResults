@@ -1,0 +1,60 @@
+int git_revwalk__push_commit(git_revwalk *walk, const git_oid *oid, const git_revwalk__push_options *opts)
+{
+	git_oid commit_id;
+	int error;
+	git_object *obj, *oobj;
+	git_commit_list_node *commit;
+	git_commit_list *list;
+
+	if ((error = git_object_lookup(&oobj, walk->repo, oid, GIT_OBJECT_ANY)) < 0)
+		return error;
+
+	error = git_object_peel(&obj, oobj, GIT_OBJECT_COMMIT);
+	git_object_free(oobj);
+
+	if (error == GIT_ENOTFOUND || error == GIT_EINVALIDSPEC || error == GIT_EPEEL) {
+		/* If this comes from e.g. push_glob("tags"), ignore this */
+		if (opts->from_glob)
+			return 0;
+
+		git_error_set(GIT_ERROR_INVALID, "object is not a committish");
+		return error;
+	}
+	if (error < 0)
+		return error;
+
+	git_oid_cpy(&commit_id, git_object_id(obj));
+	git_object_free(obj);
+
+	commit = git_revwalk__commit_lookup(walk, &commit_id);
+	if (commit == NULL)
+		return -1; /* error already reported by failed lookup */
+
+	/* A previous hide already told us we don't want this commit  */
+	if (commit->uninteresting)
+		return 0;
+
+	if (opts->uninteresting) {
+		walk->limited = 1;
+		walk->did_hide = 1;
+	} else {
+		walk->did_push = 1;
+	}
+
+	commit->uninteresting = opts->uninteresting;
+	list = walk->user_input;
+	if ((opts->insert_by_date &&
+	    git_commit_list_insert_by_date(commit, &list) == NULL) ||
+	    git_commit_list_insert(commit, &list) == NULL) {
+		git_error_set_oom();
+		return -1;
+	}
+
+	walk->user_input = list;
+
+	return 0;
+}
+
+
+// Source: revwalk.c
+// Lines 41-96

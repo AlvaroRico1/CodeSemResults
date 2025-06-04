@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'commit' at line 3\n2. Pointer 'error' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int parse_commit(git_commit **out, const char *buffer)\n{\n\tgit_commit *commit;\n\tgit_odb_object fake_odb_object;\n\tint error;\n\n\tcommit = (git_commit*)git__malloc(sizeof(git_commit));\n\tmemset(commit, 0x0, sizeof(git_commit));\n\tcommit->object.repo = g_repo;\n\n\tmemset(&fake_odb_object, 0x0, sizeof(git_odb_object));\n\tfake_odb_object.buffer = (char *)buffer;\n\tfake_odb_object.cached.size = strlen(fake_odb_object.buffer);\n\n\terror = git_commit__parse(commit, &fake_odb_object);\n\n\t*out = commit;\n\treturn error;\n}\n\n\n// Source: parse.c\n// Lines 274-292\n",
+  "ANSWER": "MUST-NOT"
+}

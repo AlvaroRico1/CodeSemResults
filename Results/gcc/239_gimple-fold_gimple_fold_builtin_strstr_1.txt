@@ -1,0 +1,1 @@
+r,gcc/gcc/gimple-fold.c,22,p,gcc/gcc/gimple-fold.c,20,1

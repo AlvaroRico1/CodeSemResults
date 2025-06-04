@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'output' at line 1
+2. Pointer 'error' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool Parser::ConsumeInteger64(uint64_t max_value, uint64_t* output,
+                              const char* error) {
+  if (LookingAtType(io::Tokenizer::TYPE_INTEGER)) {
+    if (!io::Tokenizer::ParseInteger(input_->current().text, max_value,
+                                     output)) {
+      AddError("Integer out of range.");
+      // We still return true because we did, in fact, parse an integer.
+      *output = 0;
+    }
+    input_->Next();
+    return true;
+  } else {
+    AddError(error);
+    return false;
+  }
+}
+
+
+// Source: parser.cc
+// Lines 271-286
+
+
+[ANSWER]
+MAY

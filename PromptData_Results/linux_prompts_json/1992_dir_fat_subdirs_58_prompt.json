@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'cpos' at line 5\n2. Pointer 'bh' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint fat_subdirs(struct inode *dir)\n{\n\tstruct buffer_head *bh;\n\tstruct msdos_dir_entry *de;\n\tloff_t cpos;\n\tint count = 0;\n\n\tbh = NULL;\n\tcpos = 0;\n\twhile (fat_get_short_entry(dir, &cpos, &bh, &de) >= 0) {\n\t\tif (de->attr & ATTR_DIR)\n\t\t\tcount++;\n\t}\n\tbrelse(bh);\n\treturn count;\n}\n\n\n// Source: dir.c\n// Lines 936-951\n",
+  "ANSWER": "MAY"
+}

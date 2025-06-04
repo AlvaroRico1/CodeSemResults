@@ -1,0 +1,98 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'xoff' at line 4
+2. Pointer 'sy' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+layout_construct(struct layout_cell *lcparent, const char **layout)
+{
+	struct layout_cell     *lc, *lcchild;
+	u_int			sx, sy, xoff, yoff;
+	const char	       *saved;
+
+	if (!isdigit((u_char) **layout))
+		return (NULL);
+	if (sscanf(*layout, "%ux%u,%u,%u", &sx, &sy, &xoff, &yoff) != 4)
+		return (NULL);
+
+	while (isdigit((u_char) **layout))
+		(*layout)++;
+	if (**layout != 'x')
+		return (NULL);
+	(*layout)++;
+	while (isdigit((u_char) **layout))
+		(*layout)++;
+	if (**layout != ',')
+		return (NULL);
+	(*layout)++;
+	while (isdigit((u_char) **layout))
+		(*layout)++;
+	if (**layout != ',')
+		return (NULL);
+	(*layout)++;
+	while (isdigit((u_char) **layout))
+		(*layout)++;
+	if (**layout == ',') {
+		saved = *layout;
+		(*layout)++;
+		while (isdigit((u_char) **layout))
+			(*layout)++;
+		if (**layout == 'x')
+			*layout = saved;
+	}
+
+	lc = layout_create_cell(lcparent);
+	lc->sx = sx;
+	lc->sy = sy;
+	lc->xoff = xoff;
+	lc->yoff = yoff;
+
+	switch (**layout) {
+	case ',':
+	case '}':
+	case ']':
+	case '\0':
+		return (lc);
+	case '{':
+		lc->type = LAYOUT_LEFTRIGHT;
+		break;
+	case '[':
+		lc->type = LAYOUT_TOPBOTTOM;
+		break;
+	default:
+		goto fail;
+	}
+
+	do {
+		(*layout)++;
+		lcchild = layout_construct(lc, layout);
+		if (lcchild == NULL)
+			goto fail;
+		TAILQ_INSERT_TAIL(&lc->cells, lcchild, entry);
+	} while (**layout == ',');
+
+	switch (lc->type) {
+	case LAYOUT_LEFTRIGHT:
+		if (**layout != '}')
+			goto fail;
+		break;
+	case LAYOUT_TOPBOTTOM:
+		if (**layout != ']')
+			goto fail;
+		break;
+	default:
+		goto fail;
+	}
+
+
+// Source: layout-custom.c
+// Lines 271-349
+
+
+[ANSWER]
+MAY

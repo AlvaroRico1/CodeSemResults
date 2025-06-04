@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 's' at line 4
+2. Pointer 'conn' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void connect_done(struct Curl_easy *data)
+{
+  struct connectdata *conn = data->conn;
+  struct http_connect_state *s = conn->connect_state;
+  if(s->tunnel_state != TUNNEL_EXIT) {
+    s->tunnel_state = TUNNEL_EXIT;
+    Curl_dyn_free(&s->rcvbuf);
+    Curl_dyn_free(&s->req);
+
+    /* retore the protocol pointer */
+    data->req.p.http = s->prot_save;
+    s->prot_save = NULL;
+    infof(data, "CONNECT phase completed!");
+  }
+}
+
+
+// Source: http_proxy.c
+// Lines 201-215
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,1 @@
+istate,git/object-name.c,6,r,git/object-name.c,1,1

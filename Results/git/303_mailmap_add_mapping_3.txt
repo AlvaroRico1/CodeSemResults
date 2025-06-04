@@ -1,0 +1,1 @@
+me,git/mailmap.c,5,item,git/mailmap.c,6,1

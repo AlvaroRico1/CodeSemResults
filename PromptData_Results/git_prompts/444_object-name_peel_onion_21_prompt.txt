@@ -1,0 +1,36 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'sp' at line 5
+2. Pointer 'name' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int peel_onion(struct repository *r, const char *name, int len,
+		      struct object_id *oid, unsigned lookup_flags)
+{
+	struct object_id outer;
+	const char *sp;
+	unsigned int expected_type = 0;
+	struct object *o;
+
+	/*
+	 * "ref^{type}" dereferences ref repeatedly until you cannot
+	 * dereference anymore, or you get an object of given type,
+	 * whichever comes first.  "ref^{}" means just dereference
+	 * tags until you get a non-tag.  "ref^0" is a shorthand for
+	 * "ref^{commit}".  "commit^{tree}" could be used to find the
+	 * top-level tree of the given commit.
+	 */
+	if (len < 4 || name[len-1] != '}')
+
+
+// Source: object-name.c
+// Lines 1008-1024
+
+
+[ANSWER]
+MUST

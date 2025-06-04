@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'parent' at line 13\n2. Pointer 'commit' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int should_include(struct commit *commit, void *_data)\n{\n\tstruct include_data *data = _data;\n\tint bitmap_pos;\n\n\tbitmap_pos = bitmap_position(data->bitmap_git, &commit->object.oid);\n\tif (bitmap_pos < 0)\n\t\tbitmap_pos = ext_index_add_object(data->bitmap_git,\n\t\t\t\t\t\t  (struct object *)commit,\n\t\t\t\t\t\t  NULL);\n\n\tif (!add_to_include_set(data->bitmap_git, data, commit, bitmap_pos)) {\n\t\tstruct commit_list *parent = commit->parents;\n\n\t\twhile (parent) {\n\t\t\tparent->item->object.flags |= SEEN;\n\t\t\tparent = parent->next;\n\t\t}\n\n\t\treturn 0;\n\t}\n\n\n// Source: pack-bitmap.c\n// Lines 672-692\n",
+  "ANSWER": "MUST"
+}

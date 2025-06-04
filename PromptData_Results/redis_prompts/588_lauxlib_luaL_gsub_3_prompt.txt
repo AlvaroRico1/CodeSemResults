@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'wild' at line 3
+2. Pointer 's' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+LUALIB_API const char *luaL_gsub (lua_State *L, const char *s, const char *p,
+                                                               const char *r) {
+  const char *wild;
+  size_t l = strlen(p);
+  luaL_Buffer b;
+  luaL_buffinit(L, &b);
+  while ((wild = strstr(s, p)) != NULL) {
+    luaL_addlstring(&b, s, wild - s);  /* push prefix */
+    luaL_addstring(&b, r);  /* push replacement in place of pattern */
+    s = wild + l;  /* continue after `p' */
+  }
+  luaL_addstring(&b, s);  /* push last suffix */
+  luaL_pushresult(&b);
+  return lua_tostring(L, -1);
+}
+
+
+// Source: lauxlib.c
+// Lines 340-354
+
+
+[ANSWER]
+MUST

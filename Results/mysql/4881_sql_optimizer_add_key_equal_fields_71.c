@@ -1,0 +1,32 @@
+static bool add_key_equal_fields(THD *thd, Key_field **key_fields,
+                                 uint and_level, Item_func *cond,
+                                 Item_field *field_item, bool eq_func,
+                                 Item **val, uint num_values,
+                                 table_map usable_tables,
+                                 SARGABLE_PARAM **sargables) {
+  assert(cond->is_bool_func());
+
+  if (add_key_field(thd, key_fields, and_level, cond, field_item, eq_func, val,
+                    num_values, usable_tables, sargables))
+    return true;
+  Item_equal *item_equal = field_item->item_equal;
+  if (item_equal == nullptr) return false;
+  /*
+    Add to the set of possible key values every substitution of
+    the field for an equal field included into item_equal
+  */
+  Item_equal_iterator it(*item_equal);
+  Item_field *item;
+  while ((item = it++)) {
+    if (!field_item->field->eq(item->field)) {
+      if (add_key_field(thd, key_fields, and_level, cond, item, eq_func, val,
+                        num_values, usable_tables, sargables))
+        return true;
+    }
+  }
+  return false;
+}
+
+
+// Source: sql_optimizer.cc
+// Lines 6935-6962

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'str' at line 1\n2. Pointer 'p' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic const char *nextArgument(const char *start, const char **str, size_t *len) {\n    const char *p = start;\n    if (p[0] != '$') {\n        p = strchr(p,'$');\n        if (p == NULL) return NULL;\n    }\n\n    *len = (int)strtol(p+1,NULL,10);\n    p = strchr(p,'\\r');\n    assert(p);\n    *str = p+2;\n    return p+2+(*len)+2;\n}\n\n\n// Source: async.c\n// Lines 567-579\n",
+  "ANSWER": "MUST"
+}

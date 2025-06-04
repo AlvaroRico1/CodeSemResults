@@ -1,0 +1,134 @@
+int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_address_t *src, struct iovec *datagrams,
+                            size_t num_datagrams)
+{
+    union {
+        struct cmsghdr hdr;
+        char buf[
+#ifdef IPV6_PKTINFO
+            CMSG_SPACE(sizeof(struct in6_pktinfo))
+#elif defined(IP_PKTINFO)
+            CMSG_SPACE(sizeof(struct in_pktinfo))
+#elif defined(IP_SENDSRCADDR)
+            CMSG_SPACE(sizeof(struct in_addr))
+#else
+            CMSG_SPACE(1)
+#endif
+#ifdef UDP_SEGMENT
+            + CMSG_SPACE(sizeof(uint16_t))
+#endif
+            + CMSG_SPACE(1) /* sentry */
+        ];
+    } cmsgbuf = {.buf = {} /* zero-cleared so that CMSG_NXTHDR can be used for locating the *next* cmsghdr */ };
+    struct msghdr mess = {
+        .msg_name = &dest->sa,
+        .msg_namelen = quicly_get_socklen(&dest->sa),
+        .msg_control = cmsgbuf.buf,
+        .msg_controllen = sizeof(cmsgbuf.buf),
+    };
+    struct cmsghdr *cmsg = CMSG_FIRSTHDR(&mess);
+    int ret;
+
+#define PUSH_CMSG(level, type, value)                                                                                              \
+    do {                                                                                                                           \
+        cmsg->cmsg_level = (level);                                                                                                \
+        cmsg->cmsg_type = (type);                                                                                                  \
+        cmsg->cmsg_len = CMSG_LEN(sizeof(value));                                                                                  \
+        memcpy(CMSG_DATA(cmsg), &value, sizeof(value));                                                                            \
+        cmsg = CMSG_NXTHDR(&mess, cmsg);                                                                                           \
+    } while (0)
+
+    /* first CMSG is the source address */
+    if (src->sa.sa_family != AF_UNSPEC) {
+        switch (src->sa.sa_family) {
+        case AF_INET: {
+#if defined(IP_PKTINFO)
+            if (*ctx->sock.port != src->sin.sin_port)
+                return 0;
+            struct in_pktinfo info = {.ipi_spec_dst = src->sin.sin_addr};
+            PUSH_CMSG(IPPROTO_IP, IP_PKTINFO, info);
+#elif defined(IP_SENDSRCADDR)
+            if (*ctx->sock.port != src->sin.sin_port)
+                return 0;
+            struct sockaddr_in *fdaddr = (struct sockaddr_in *)&ctx->sock.addr;
+            assert(fdaddr->sin_family == AF_INET);
+            if (fdaddr->sin_addr.s_addr == INADDR_ANY)
+                PUSH_CMSG(IPPROTO_IP, IP_SENDSRCADDR, src->sin.sin_addr);
+#else
+            h2o_fatal("IP_PKTINFO not available");
+#endif
+        } break;
+        case AF_INET6:
+#ifdef IPV6_PKTINFO
+            if (*ctx->sock.port != src->sin6.sin6_port)
+                return 0;
+            struct in6_pktinfo info = {.ipi6_addr = src->sin6.sin6_addr};
+            PUSH_CMSG(IPPROTO_IPV6, IPV6_PKTINFO, info);
+#else
+            h2o_fatal("IPV6_PKTINFO not available");
+#endif
+            break;
+        default:
+            h2o_fatal("unexpected address family");
+            break;
+        }
+    }
+
+    /* next CMSG is UDP_SEGMENT size (for GSO) */
+    int using_gso = 0;
+#ifdef UDP_SEGMENT
+    if (num_datagrams > 1 && ctx->use_gso) {
+        for (size_t i = 1; i < num_datagrams - 1; ++i)
+            assert(datagrams[i].iov_len == datagrams[0].iov_len);
+        uint16_t segsize = (uint16_t)datagrams[0].iov_len;
+        PUSH_CMSG(SOL_UDP, UDP_SEGMENT, segsize);
+        using_gso = 1;
+    }
+#endif
+
+    /* commit CMSG length */
+    if ((mess.msg_controllen = (socklen_t)((char *)cmsg - (char *)cmsgbuf.buf)) == 0)
+        mess.msg_control = NULL;
+
+    /* send datagrams */
+    if (using_gso) {
+        mess.msg_iov = datagrams;
+        mess.msg_iovlen = (int)num_datagrams;
+        while ((ret = (int)sendmsg(h2o_socket_get_fd(ctx->sock.sock), &mess, 0)) == -1 && errno == EINTR)
+            ;
+        if (ret == -1)
+            goto SendmsgError;
+    } else {
+        for (size_t i = 0; i < num_datagrams; ++i) {
+            mess.msg_iov = datagrams + i;
+            mess.msg_iovlen = 1;
+            while ((ret = (int)sendmsg(h2o_socket_get_fd(ctx->sock.sock), &mess, 0)) == -1 && errno == EINTR)
+                ;
+            if (ret == -1)
+                goto SendmsgError;
+        }
+    }
+
+    h2o_error_reporter_record_success(&track_sendmsg);
+
+    return 1;
+
+SendmsgError:
+    /* The UDP stack returns EINVAL (linux) or EADDRNOTAVAIL (darwin, and presumably other BSD) when it was unable to use the
+     * designated source address.  We communicate that back to the caller so that the connection can be closed immediately. */
+    if (src->sa.sa_family != AF_UNSPEC && (errno == EINVAL || errno == EADDRNOTAVAIL))
+        return 0;
+
+    /* Temporary failure to send a packet is not a permanent error fo the connection. (TODO do we want do something more
+     * specific?) */
+
+    /* Log the number of failed invocations once per minute, if there has been such a failure. */
+    h2o_error_reporter_record_error(ctx->loop, &track_sendmsg, 60000, errno);
+
+    return 1;
+
+#undef PUSH_CMSG
+}
+
+
+// Source: common.c
+// Lines 67-196

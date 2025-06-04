@@ -1,0 +1,200 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'data' at line 18
+2. Pointer 'expr_p' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+gimplify_omp_for (tree *expr_p, gimple_seq *pre_p)
+{
+  tree for_stmt, orig_for_stmt, inner_for_stmt = NULL_TREE, decl, var, t;
+  enum gimplify_status ret = GS_ALL_DONE;
+  enum gimplify_status tret;
+  gomp_for *gfor;
+  gimple_seq for_body, for_pre_body;
+  int i;
+  bitmap has_decl_expr = NULL;
+  enum omp_region_type ort = ORT_WORKSHARE;
+
+  orig_for_stmt = for_stmt = *expr_p;
+
+  bool loop_p = (omp_find_clause (OMP_FOR_CLAUSES (for_stmt), OMP_CLAUSE_BIND)
+		 != NULL_TREE);
+  if (OMP_FOR_INIT (for_stmt) == NULL_TREE)
+    {
+      tree *data[4] = { NULL, NULL, NULL, NULL };
+      gcc_assert (TREE_CODE (for_stmt) != OACC_LOOP);
+      inner_for_stmt = walk_tree (&OMP_FOR_BODY (for_stmt),
+				  find_combined_omp_for, data, NULL);
+      if (inner_for_stmt == NULL_TREE)
+	{
+	  gcc_assert (seen_error ());
+	  *expr_p = NULL_TREE;
+	  return GS_ERROR;
+	}
+      if (data[2] && OMP_FOR_PRE_BODY (*data[2]))
+	{
+	  append_to_statement_list_force (OMP_FOR_PRE_BODY (*data[2]),
+					  &OMP_FOR_PRE_BODY (for_stmt));
+	  OMP_FOR_PRE_BODY (*data[2]) = NULL_TREE;
+	}
+      if (OMP_FOR_PRE_BODY (inner_for_stmt))
+	{
+	  append_to_statement_list_force (OMP_FOR_PRE_BODY (inner_for_stmt),
+					  &OMP_FOR_PRE_BODY (for_stmt));
+	  OMP_FOR_PRE_BODY (inner_for_stmt) = NULL_TREE;
+	}
+
+      if (data[0])
+	{
+	  /* We have some statements or variable declarations in between
+	     the composite construct directives.  Move them around the
+	     inner_for_stmt.  */
+	  data[0] = expr_p;
+	  for (i = 0; i < 3; i++)
+	    if (data[i])
+	      {
+		tree t = *data[i];
+		if (i < 2 && data[i + 1] == &OMP_BODY (t))
+		  data[i + 1] = data[i];
+		*data[i] = OMP_BODY (t);
+		tree body = build3 (BIND_EXPR, void_type_node, NULL_TREE,
+				    NULL_TREE, make_node (BLOCK));
+		OMP_BODY (t) = body;
+		append_to_statement_list_force (inner_for_stmt,
+						&BIND_EXPR_BODY (body));
+		*data[3] = t;
+		data[3] = tsi_stmt_ptr (tsi_start (BIND_EXPR_BODY (body)));
+		gcc_assert (*data[3] == inner_for_stmt);
+	      }
+	  return GS_OK;
+	}
+
+      for (i = 0; i < TREE_VEC_LENGTH (OMP_FOR_INIT (inner_for_stmt)); i++)
+	if (!loop_p
+	    && OMP_FOR_ORIG_DECLS (inner_for_stmt)
+	    && TREE_CODE (TREE_VEC_ELT (OMP_FOR_ORIG_DECLS (inner_for_stmt),
+					i)) == TREE_LIST
+	    && TREE_PURPOSE (TREE_VEC_ELT (OMP_FOR_ORIG_DECLS (inner_for_stmt),
+					   i)))
+	  {
+	    tree orig = TREE_VEC_ELT (OMP_FOR_ORIG_DECLS (inner_for_stmt), i);
+	    /* Class iterators aren't allowed on OMP_SIMD, so the only
+	       case we need to solve is distribute parallel for.  They are
+	       allowed on the loop construct, but that is already handled
+	       in gimplify_omp_loop.  */
+	    gcc_assert (TREE_CODE (inner_for_stmt) == OMP_FOR
+			&& TREE_CODE (for_stmt) == OMP_DISTRIBUTE
+			&& data[1]);
+	    tree orig_decl = TREE_PURPOSE (orig);
+	    tree last = TREE_VALUE (orig);
+	    tree *pc;
+	    for (pc = &OMP_FOR_CLAUSES (inner_for_stmt);
+		 *pc; pc = &OMP_CLAUSE_CHAIN (*pc))
+	      if ((OMP_CLAUSE_CODE (*pc) == OMP_CLAUSE_PRIVATE
+		   || OMP_CLAUSE_CODE (*pc) == OMP_CLAUSE_LASTPRIVATE)
+		  && OMP_CLAUSE_DECL (*pc) == orig_decl)
+		break;
+	    if (*pc == NULL_TREE)
+	      {
+		tree *spc;
+		for (spc = &OMP_PARALLEL_CLAUSES (*data[1]);
+		     *spc; spc = &OMP_CLAUSE_CHAIN (*spc))
+		  if (OMP_CLAUSE_CODE (*spc) == OMP_CLAUSE_PRIVATE
+		      && OMP_CLAUSE_DECL (*spc) == orig_decl)
+		    break;
+		if (*spc)
+		  {
+		    tree c = *spc;
+		    *spc = OMP_CLAUSE_CHAIN (c);
+		    OMP_CLAUSE_CHAIN (c) = NULL_TREE;
+		    *pc = c;
+		  }
+	      }
+	    if (*pc == NULL_TREE)
+	      ;
+	    else if (OMP_CLAUSE_CODE (*pc) == OMP_CLAUSE_PRIVATE)
+	      {
+		/* private clause will appear only on inner_for_stmt.
+		   Change it into firstprivate, and add private clause
+		   on for_stmt.  */
+		tree c = copy_node (*pc);
+		OMP_CLAUSE_CHAIN (c) = OMP_FOR_CLAUSES (for_stmt);
+		OMP_FOR_CLAUSES (for_stmt) = c;
+		OMP_CLAUSE_CODE (*pc) = OMP_CLAUSE_FIRSTPRIVATE;
+		lang_hooks.decls.omp_finish_clause (*pc, pre_p);
+	      }
+	    else
+	      {
+		/* lastprivate clause will appear on both inner_for_stmt
+		   and for_stmt.  Add firstprivate clause to
+		   inner_for_stmt.  */
+		tree c = build_omp_clause (OMP_CLAUSE_LOCATION (*pc),
+					   OMP_CLAUSE_FIRSTPRIVATE);
+		OMP_CLAUSE_DECL (c) = OMP_CLAUSE_DECL (*pc);
+		OMP_CLAUSE_CHAIN (c) = *pc;
+		*pc = c;
+		lang_hooks.decls.omp_finish_clause (*pc, pre_p);
+	      }
+	    tree c = build_omp_clause (UNKNOWN_LOCATION,
+				       OMP_CLAUSE_FIRSTPRIVATE);
+	    OMP_CLAUSE_DECL (c) = last;
+	    OMP_CLAUSE_CHAIN (c) = OMP_PARALLEL_CLAUSES (*data[1]);
+	    OMP_PARALLEL_CLAUSES (*data[1]) = c;
+	    c = build_omp_clause (UNKNOWN_LOCATION,
+				  *pc ? OMP_CLAUSE_SHARED
+				      : OMP_CLAUSE_FIRSTPRIVATE);
+	    OMP_CLAUSE_DECL (c) = orig_decl;
+	    OMP_CLAUSE_CHAIN (c) = OMP_PARALLEL_CLAUSES (*data[1]);
+	    OMP_PARALLEL_CLAUSES (*data[1]) = c;
+	  }
+      /* Similarly, take care of C++ range for temporaries, those should
+	 be firstprivate on OMP_PARALLEL if any.  */
+      if (data[1])
+	for (i = 0; i < TREE_VEC_LENGTH (OMP_FOR_INIT (inner_for_stmt)); i++)
+	  if (OMP_FOR_ORIG_DECLS (inner_for_stmt)
+	      && TREE_CODE (TREE_VEC_ELT (OMP_FOR_ORIG_DECLS (inner_for_stmt),
+					  i)) == TREE_LIST
+	      && TREE_CHAIN (TREE_VEC_ELT (OMP_FOR_ORIG_DECLS (inner_for_stmt),
+					   i)))
+	    {
+	      tree orig
+		= TREE_VEC_ELT (OMP_FOR_ORIG_DECLS (inner_for_stmt), i);
+	      tree v = TREE_CHAIN (orig);
+	      tree c = build_omp_clause (UNKNOWN_LOCATION,
+					 OMP_CLAUSE_FIRSTPRIVATE);
+	      /* First add firstprivate clause for the __for_end artificial
+		 decl.  */
+	      OMP_CLAUSE_DECL (c) = TREE_VEC_ELT (v, 1);
+	      if (TREE_CODE (TREE_TYPE (OMP_CLAUSE_DECL (c)))
+		  == REFERENCE_TYPE)
+		OMP_CLAUSE_FIRSTPRIVATE_NO_REFERENCE (c) = 1;
+	      OMP_CLAUSE_CHAIN (c) = OMP_PARALLEL_CLAUSES (*data[1]);
+	      OMP_PARALLEL_CLAUSES (*data[1]) = c;
+	      if (TREE_VEC_ELT (v, 0))
+		{
+		  /* And now the same for __for_range artificial decl if it
+		     exists.  */
+		  c = build_omp_clause (UNKNOWN_LOCATION,
+					OMP_CLAUSE_FIRSTPRIVATE);
+		  OMP_CLAUSE_DECL (c) = TREE_VEC_ELT (v, 0);
+		  if (TREE_CODE (TREE_TYPE (OMP_CLAUSE_DECL (c)))
+		      == REFERENCE_TYPE)
+		    OMP_CLAUSE_FIRSTPRIVATE_NO_REFERENCE (c) = 1;
+		  OMP_CLAUSE_CHAIN (c) = OMP_PARALLEL_CLAUSES (*data[1]);
+		  OMP_PARALLEL_CLAUSES (*data[1]) = c;
+		}
+	    }
+    }
+
+
+// Source: gimplify.c
+// Lines 11028-11208
+
+
+[ANSWER]
+MUST

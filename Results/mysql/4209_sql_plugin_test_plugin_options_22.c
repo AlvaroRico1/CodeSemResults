@@ -1,0 +1,113 @@
+static int test_plugin_options(MEM_ROOT *tmp_root, st_plugin_int *tmp,
+                               int *argc, char **argv) {
+  struct sys_var_chain chain = {nullptr, nullptr};
+  bool disable_plugin;
+  enum_plugin_load_option plugin_load_option = tmp->load_option;
+
+  /*
+    We should use tmp->mem_root here instead of the global plugin_mem_root,
+    but tmp->root is not always properly freed, so it will cause leaks in
+    Valgrind (e.g. the main.validate_password_plugin test).
+  */
+  MEM_ROOT *mem_root = &plugin_mem_root;
+  SYS_VAR **opt;
+  my_option *opts = nullptr;
+  LEX_CSTRING plugin_name;
+  char *varname;
+  int error;
+  sys_var *v MY_ATTRIBUTE((unused));
+  st_bookmark *var;
+  size_t len;
+  uint count = EXTRA_OPTIONS;
+  DBUG_TRACE;
+  assert(tmp->plugin && tmp->name.str);
+
+  /*
+    The 'federated' and 'ndbcluster' storage engines are always disabled by
+    default.
+  */
+  if (!(my_strcasecmp(&my_charset_latin1, tmp->name.str, "federated") &&
+        my_strcasecmp(&my_charset_latin1, tmp->name.str, "ndbcluster")))
+    plugin_load_option = PLUGIN_OFF;
+
+  for (opt = tmp->plugin->system_vars; opt && *opt; opt++)
+    count += 2; /* --{plugin}-{optname} and --plugin-{plugin}-{optname} */
+
+  if (count > EXTRA_OPTIONS || (*argc > 1)) {
+    if (!(opts = (my_option *)tmp_root->Alloc(sizeof(my_option) * count))) {
+      LogErr(ERROR_LEVEL, ER_PLUGIN_OOM, tmp->name.str);
+      return -1;
+    }
+    memset(opts, 0, sizeof(my_option) * count);
+
+    if (construct_options(tmp_root, tmp, opts)) {
+      LogErr(ERROR_LEVEL, ER_PLUGIN_BAD_OPTIONS, tmp->name.str);
+      return -1;
+    }
+
+    /*
+      We adjust the default value to account for the hardcoded exceptions
+      we have set for the federated and ndbcluster storage engines.
+    */
+    if (tmp->load_option != PLUGIN_FORCE &&
+        tmp->load_option != PLUGIN_FORCE_PLUS_PERMANENT)
+      opts[0].def_value = opts[1].def_value = plugin_load_option;
+
+    error = handle_options(argc, &argv, opts, check_if_option_is_deprecated);
+    (*argc)++; /* add back one for the program name */
+
+    if (error) {
+      LogErr(ERROR_LEVEL, ER_PLUGIN_PARSING_OPTIONS_FAILED, tmp->name.str);
+      goto err;
+    }
+    /*
+     Set plugin loading policy from option value. First element in the option
+     list is always the <plugin name> option value.
+    */
+    if (tmp->load_option != PLUGIN_FORCE &&
+        tmp->load_option != PLUGIN_FORCE_PLUS_PERMANENT)
+      plugin_load_option = (enum_plugin_load_option) * (ulong *)opts[0].value;
+  }
+
+  disable_plugin = (plugin_load_option == PLUGIN_OFF);
+  tmp->load_option = plugin_load_option;
+
+  /*
+    If the plugin is disabled it should not be initialized.
+  */
+  if (disable_plugin) {
+    LogErr(INFORMATION_LEVEL, ER_PLUGIN_DISABLED, tmp->name.str);
+    if (opts) my_cleanup_options(opts);
+    return 1;
+  }
+
+  if (!my_strcasecmp(&my_charset_latin1, tmp->name.str, "NDBCLUSTER")) {
+    plugin_name.str = const_cast<char *>("ndb");  // Use legacy "ndb" prefix
+    plugin_name.length = 3;
+  } else
+    plugin_name = tmp->name;
+
+  error = 1;
+  for (opt = tmp->plugin->system_vars; opt && *opt; opt++) {
+    SYS_VAR *o;
+    if (((o = *opt)->flags & PLUGIN_VAR_NOSYSVAR)) continue;
+    if ((var = find_bookmark(plugin_name.str, o->name, o->flags)))
+      v = new (mem_root) sys_var_pluginvar(&chain, var->key + 1, o);
+    else {
+      len = plugin_name.length + strlen(o->name) + 2;
+      varname = (char *)mem_root->Alloc(len);
+      strxmov(varname, plugin_name.str, "-", o->name, NullS);
+      my_casedn_str(&my_charset_latin1, varname);
+      convert_dash_to_underscore(varname, len - 1);
+      v = new (mem_root) sys_var_pluginvar(&chain, varname, o);
+    }
+    assert(v); /* check that an object was actually constructed */
+
+    const my_option *optp = opts;
+    if (findopt(o->name, strlen(o->name), &optp))
+      v->set_arg_source(optp->arg_source);
+  } /* end for */
+
+
+// Source: sql_plugin.cc
+// Lines 3537-3645

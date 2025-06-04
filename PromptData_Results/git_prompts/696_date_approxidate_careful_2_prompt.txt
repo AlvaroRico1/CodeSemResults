@@ -1,0 +1,36 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'timestamp' at line 4
+2. Pointer 'error_ret' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+timestamp_t approxidate_careful(const char *date, int *error_ret)
+{
+	struct timeval tv;
+	timestamp_t timestamp;
+	int offset;
+	int dummy = 0;
+	if (!error_ret)
+		error_ret = &dummy;
+
+	if (!parse_date_basic(date, &timestamp, &offset)) {
+		*error_ret = 0;
+		return timestamp;
+	}
+
+	get_time(&tv);
+	return approxidate_str(date, &tv, error_ret);
+}
+
+
+// Source: date.c
+// Lines 1340-1356
+
+
+[ANSWER]
+MAY

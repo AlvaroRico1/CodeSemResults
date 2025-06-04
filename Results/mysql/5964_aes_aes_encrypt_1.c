@@ -1,0 +1,53 @@
+aes_return_status aes_encrypt(const unsigned char *source,
+                              unsigned int source_length, unsigned char *dest,
+                              const unsigned char *key, unsigned int key_length,
+                              Keyring_aes_opmode mode, const unsigned char *iv,
+                              bool padding, size_t *encrypted_length) {
+  if (encrypted_length == nullptr) return AES_OUTPUT_SIZE_NULL;
+
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+  EVP_CIPHER_CTX stack_ctx;
+  EVP_CIPHER_CTX *ctx = &stack_ctx;
+#else  /* OPENSSL_VERSION_NUMBER < 0x10100000L */
+  EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+  if (ctx == nullptr) return AES_CTX_ALLOCATION_ERROR;
+#endif /* OPENSSL_VERSION_NUMBER < 0x10100000L */
+
+  auto cleanup_guard = create_scope_guard([&] {
+    /* need to explicitly clean up the error if we want to ignore it */
+    ERR_clear_error();
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+    EVP_CIPHER_CTX_cleanup(ctx);
+#else  /* OPENSSL_VERSION_NUMBER < 0x10100000L */
+    EVP_CIPHER_CTX_free(ctx);
+#endif /* OPENSSL_VERSION_NUMBER < 0x10100000L */
+  });
+
+  const EVP_CIPHER *cipher = aes_evp_type(mode);
+  if (cipher == nullptr) return AES_INVALID_BLOCK_MODE;
+
+  /* The real key to be used for encryption */
+  std::unique_ptr<unsigned char[]> rkey;
+  size_t rkey_size;
+  if (aes_create_key(key, key_length, rkey, &rkey_size, mode) == false)
+    return AES_KEY_TRANSFORMATION_ERROR;
+
+  if (EVP_CIPHER_iv_length(cipher) > 0 && !iv) return AES_IV_EMPTY;
+
+  int u_len, f_len;
+
+  if (!EVP_EncryptInit(ctx, cipher, rkey.get(), iv))
+    return AES_ENCRYPTION_ERROR;
+  if (!EVP_CIPHER_CTX_set_padding(ctx, padding)) return AES_ENCRYPTION_ERROR;
+  if (!EVP_EncryptUpdate(ctx, dest, &u_len, source, source_length))
+    return AES_ENCRYPTION_ERROR;
+  if (!EVP_EncryptFinal(ctx, dest + u_len, &f_len)) return AES_ENCRYPTION_ERROR;
+
+  /* All is well */
+  *encrypted_length = static_cast<size_t>(u_len + f_len);
+  return AES_OP_OK;
+}
+
+
+// Source: aes.cc
+// Lines 140-188

@@ -1,0 +1,15 @@
+static void filter_blobs_limit__init(
+	struct list_objects_filter_options *filter_options,
+	struct filter *filter)
+{
+	struct filter_blobs_limit_data *d = xcalloc(1, sizeof(*d));
+	d->max_bytes = filter_options->blob_limit_value;
+
+	filter->filter_data = d;
+	filter->filter_object_fn = filter_blobs_limit;
+	filter->free_fn = free;
+}
+
+
+// Source: list-objects-filter.c
+// Lines 338-348

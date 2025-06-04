@@ -1,0 +1,1 @@
+ancestor_ptr,libgit2/src/libgit2/merge_file.c,9,ancestor_input,libgit2/src/libgit2/merge_file.c,10,1

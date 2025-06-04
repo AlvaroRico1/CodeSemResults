@@ -1,0 +1,1 @@
+expected3,libgit2/tests/libgit2/diff/patch.c,13,one,libgit2/tests/libgit2/diff/patch.c,4,0

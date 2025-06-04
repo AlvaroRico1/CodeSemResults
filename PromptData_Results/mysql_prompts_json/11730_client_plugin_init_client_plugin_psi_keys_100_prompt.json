@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'count' at line 3\n2. Pointer 'category' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void init_client_plugin_psi_keys() {\n  const char *category = \"sql\";\n  int count;\n\n  count = array_elements(all_client_plugin_mutexes);\n  mysql_mutex_register(category, all_client_plugin_mutexes, count);\n\n  count = array_elements(all_client_plugin_memory);\n  mysql_memory_register(category, all_client_plugin_memory, count);\n}\n\n\n// Source: client_plugin.cc\n// Lines 90-99\n",
+  "ANSWER": "MUST-NOT"
+}

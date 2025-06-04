@@ -1,0 +1,88 @@
+bool Prepared_statement::insert_params(String *query, PS_PARAM *parameters) {
+  DBUG_TRACE;
+
+  Item_param **end = param_array + param_count;
+  size_t length = 0;
+  String str;
+
+  // Reserve an extra space of 32 bytes for each placeholder parameter.
+  if (with_log && query->reserve(m_query_string.length + 32 * param_count))
+    return true;
+
+  uint i = 0;
+  for (Item_param **it = param_array; it < end; ++it, i++) {
+    Item_param *const param = *it;
+    if (param->param_state() == Item_param::LONG_DATA_VALUE) {
+      /*
+        A long data stream was supplied for this parameter marker.
+        This was done after prepare, prior to providing a placeholder
+        type (the types are supplied at execute). Check that the
+        supplied type of placeholder can accept a data stream.
+      */
+      if (!is_param_long_data_type(param)) {
+        my_error(ER_WRONG_ARGUMENTS, MYF(0), "mysqld_stmt_execute");
+        return true;
+      }
+    } else if (parameters[i].null_bit) {
+      param->set_null();
+    } else {
+      // TODO: Add error handling for set_param_func functions.
+      param->set_param_func(param, const_cast<uchar **>(&parameters[i].value),
+                            parameters[i].length);
+      // NO_VALUE probably means broken client, no metadata provided.
+      if (param->param_state() == Item_param::NO_VALUE) {
+        my_error(ER_WRONG_ARGUMENTS, MYF(0), "mysqld_stmt_execute");
+        return true;
+      }
+
+      // Pinning of data types only implemented for integers
+      assert(!param->is_type_pinned() || param->result_type() == INT_RESULT);
+
+      if (param->is_type_pinned()) {
+        // Accept string values from client
+        // @todo Validate string values, do not accept garbage in string
+        if (param->param_state() == Item_param::STRING_VALUE) {
+          longlong val = param->val_int();
+          if (param->unsigned_flag)
+            param->set_int((ulonglong)val);
+          else
+            param->set_int(val);
+        } else if (param->param_state() != Item_param::INT_VALUE) {
+          my_error(ER_WRONG_ARGUMENTS, MYF(0), "mysqld_stmt_execute");
+          return true;
+        }
+        if ((param->unsigned_flag && !param->is_unsigned_actual() &&
+             param->value.integer < 0) ||
+            (!param->unsigned_flag && param->is_unsigned_actual() &&
+             param->value.integer < 0)) {
+          my_error(ER_DATA_OUT_OF_RANGE, MYF(0), "signed integer",
+                   "mysqld_stmt_execute");
+          return true;
+        }
+      }
+    }
+    if (with_log) {
+      const String *val = param->query_val_str(thd, &str);
+      if (val == nullptr) return true;
+      if (param->convert_str_value()) return true; /* out of memory */
+
+      size_t num_bytes = param->pos_in_query - length;
+      if (query->length() + num_bytes + val->length() >
+          std::numeric_limits<uint32>::max()) {
+        my_error(ER_WRONG_ARGUMENTS, MYF(0), "mysqld_stmt_execute");
+        return true;
+      }
+      if (query->append(m_query_string.str + length, num_bytes) ||
+          query->append(*val))
+        return true;
+
+      length = param->pos_in_query + 1;
+    } else {
+      if (param->convert_str_value()) return true; /* out of memory */
+    }
+    param->sync_clones();
+  }
+
+
+// Source: sql_prepare.cc
+// Lines 751-834

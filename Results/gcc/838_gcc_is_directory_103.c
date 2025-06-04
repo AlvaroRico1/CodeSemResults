@@ -1,0 +1,35 @@
+is_directory (const char *path1, bool linker)
+{
+  int len1;
+  char *path;
+  char *cp;
+  struct stat st;
+
+  /* Ensure the string ends with "/.".  The resulting path will be a
+     directory even if the given path is a symbolic link.  */
+  len1 = strlen (path1);
+  path = (char *) alloca (3 + len1);
+  memcpy (path, path1, len1);
+  cp = path + len1;
+  if (!IS_DIR_SEPARATOR (cp[-1]))
+    *cp++ = DIR_SEPARATOR;
+  *cp++ = '.';
+  *cp = '\0';
+
+  /* Exclude directories that the linker is known to search.  */
+  if (linker
+      && IS_DIR_SEPARATOR (path[0])
+      && ((cp - path == 6
+	   && filename_ncmp (path + 1, "lib", 3) == 0)
+	  || (cp - path == 10
+	      && filename_ncmp (path + 1, "usr", 3) == 0
+	      && IS_DIR_SEPARATOR (path[4])
+	      && filename_ncmp (path + 5, "lib", 3) == 0)))
+    return 0;
+
+  return (stat (path, &st) >= 0 && S_ISDIR (st.st_mode));
+}
+
+
+// Source: gcc.c
+// Lines 7171-7201

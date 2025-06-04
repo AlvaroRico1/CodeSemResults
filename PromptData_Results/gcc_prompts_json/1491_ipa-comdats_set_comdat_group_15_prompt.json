@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'head' at line 4\n2. Pointer 'head_p' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nset_comdat_group (symtab_node *symbol,\n\t          void *head_p)\n{\n  symtab_node *head = (symtab_node *)head_p;\n\n  gcc_assert (!symbol->get_comdat_group ());\n  if (symbol->real_symbol_p ())\n    {\n      symbol->set_comdat_group (head->get_comdat_group ());\n      symbol->add_to_same_comdat_group (head);\n    }\n  return false;\n}\n\n\n// Source: ipa-comdats.c\n// Lines 208-220\n",
+  "ANSWER": "MUST"
+}

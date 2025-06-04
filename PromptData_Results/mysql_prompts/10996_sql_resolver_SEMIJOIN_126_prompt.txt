@@ -1,0 +1,281 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'prev_table' at line 8
+2. Pointer 'table' at line 36
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+    SEMIJOIN = 1 << 3
+  };
+  uint changes = 0;          // To keep track of changes.
+  if (changelog == nullptr)  // This is the top call.
+    changelog = &changes;
+
+  NESTED_JOIN *nested_join;
+  TABLE_LIST *prev_table = nullptr;
+  const bool straight_join = active_options() & SELECT_STRAIGHT_JOIN;
+  DBUG_TRACE;
+
+  /*
+    Try to simplify join operations from join_list.
+    The most outer join operation is checked for conversion first.
+    join_list is a join nest, and 'cond' is a condition which acts as a filter
+    applied to the nest's operation (post-filter).
+    Thus, considering this example:
+    (A LEFT JOIN B ON JC) WHERE W ,
+    we'll "confront W with A LEFT JOIN B": this will, recursively,
+    - confront W with B,
+    - confront W with A.
+    Because W is external to the nest, if W would be false when B is
+    NULL-complemented we know we can change LEFT JOIN to JOIN.
+    We will not confront JC with B or A, it wouldn't make sense, as JC isn't a
+    post-filter for their join operation.
+    Another example:
+    (A LEFT JOIN (B LEFT JOIN C ON JC2) ON JC1) WHERE W ,
+    while confronting W with (B LEFT JOIN C), we will also, as first step,
+    confront JC1 with (B LEFT JOIN C), and thus recursively confront JC1
+    with C and then with B.
+    Another example:
+    (A LEFT JOIN (B SEMI JOIN C ON JC2) ON JC1) WHERE W ,
+    while confronting W with (B SEMI JOIN C), if W is known false we will
+
+  */
+  for (TABLE_LIST *table : *join_list) {
+    table_map used_tables;
+    table_map not_null_tables = (table_map)0;
+
+    if ((nested_join = table->nested_join)) {
+      /*
+         If the element of join_list is a nested join apply
+         the procedure to its nested join list first.
+         This confronts the join nest's condition with each member of the
+         nest.
+      */
+      if (table->join_cond()) {
+        Item *join_cond = table->join_cond();
+        /*
+           If a join condition JC is attached to the table,
+           check all null rejected predicates in this condition.
+           If such a predicate over an attribute belonging to
+           an inner table of an embedded outer join is found,
+           the outer join is converted to an inner join and
+           the corresponding join condition is added to JC.
+        */
+        if (simplify_joins(
+                thd, &nested_join->join_list,
+                false,  // not 'top' as it's not WHERE.
+                // SJ nests can dissolve into upper SJ or anti SJ nests:
+                in_sj || table->is_sj_or_aj_nest(), &join_cond, changelog))
+          return true;
+
+        if (join_cond != table->join_cond()) {
+          assert(join_cond);
+          table->set_join_cond(join_cond);
+        }
+      }
+      nested_join->used_tables = (table_map)0;
+      nested_join->not_null_tables = (table_map)0;
+      // This recursively confronts "cond" with each member of the nest
+      if (simplify_joins(thd, &nested_join->join_list,
+                         top,  // if it was WHERE it still is
+                         in_sj || table->is_sj_or_aj_nest(), cond, changelog))
+        return true;
+      used_tables = nested_join->used_tables;
+      not_null_tables = nested_join->not_null_tables;
+    } else {
+      used_tables = table->map();
+      if (*cond) not_null_tables = (*cond)->not_null_tables();
+    }
+
+    if (table->embedding) {
+      table->embedding->nested_join->used_tables |= used_tables;
+      table->embedding->nested_join->not_null_tables |= not_null_tables;
+    }
+
+    if (!table->outer_join || (used_tables & not_null_tables)) {
+      /*
+        For some of the inner tables there are conjunctive predicates
+        that reject nulls => the outer join can be replaced by an inner join.
+      */
+      if (table->outer_join) {
+        *changelog |= OUTER_JOIN_TO_INNER;
+        table->outer_join = false;
+      }
+      if (table->join_cond()) {
+        *changelog |= JOIN_COND_TO_WHERE;
+        /* Add join condition to the WHERE or upper-level join condition. */
+        if (*cond) {
+          Item *i1 = *cond, *i2 = table->join_cond();
+          /*
+            User supplied stored procedures in the query can violate row-level
+            filter enforced by a view. So make sure view's filter conditions
+            precede any other conditions.
+          */
+          if (table->is_view() && i1->has_stored_program()) {
+            std::swap(i1, i2);
+          }
+
+          Item_cond_and *new_cond =
+              down_cast<Item_cond_and *>(and_conds(i1, i2));
+          if (!new_cond) return true;
+          new_cond->apply_is_true();
+          /*
+            It is always a new item as both the upper-level condition and a
+            join condition existed
+          */
+          assert(!new_cond->fixed);
+          Item *cond_after_fix = new_cond;
+          if (new_cond->fix_fields(thd, &cond_after_fix)) return true;
+
+          if (new_cond == cond_after_fix) {
+          }
+          *cond = cond_after_fix;
+        } else {
+          *cond = table->join_cond();
+        }
+        table->set_join_cond(nullptr);
+      }
+    }
+
+    // A table is traversed when 'cond' is WHERE, and when 'cond' is the join
+    // condition of any nest containing the table. Some bitmaps can be set
+    // only after all traversals of this table i.e. when 'cond' is WHERE.
+    if (!top) continue;
+
+    /*
+      Only inner tables of non-convertible outer joins remain with
+      the join condition.
+    */
+    if (table->join_cond()) {
+      table->dep_tables |= table->join_cond()->used_tables();
+      // At this point the joined tables always have an embedding join nest:
+      assert(table->embedding);
+      table->dep_tables &= ~table->embedding->nested_join->used_tables;
+
+      // Embedding table depends on tables used in embedded join conditions.
+      table->embedding->join_cond_dep_tables |=
+          table->join_cond()->used_tables();
+    }
+
+    if (prev_table) {
+      /* The order of tables is reverse: prev_table follows table */
+      if (prev_table->straight || straight_join)
+        prev_table->dep_tables |= used_tables;
+      if (prev_table->join_cond()) {
+        prev_table->dep_tables |= table->join_cond_dep_tables;
+        table_map prev_used_tables = prev_table->nested_join
+                                         ? prev_table->nested_join->used_tables
+                                         : prev_table->map();
+        /*
+          If join condition contains no reference to outer tables
+          we still make the inner tables dependent on the outer tables,
+          as the outer must go before the inner since the executor requires
+          that at least one outer table is before the inner tables.
+          It would be enough to set dependency only on one outer table
+          for them. Yet this is really a rare case.
+          Note:
+          PSEUDO_TABLE_BITS mask should not be counted as it
+          prevents update of inner table dependencies.
+          For example it might happen if RAND()/COUNT(*) function
+          is used in JOIN ON clause.
+        */
+        if ((((prev_table->join_cond()->used_tables() & ~PSEUDO_TABLE_BITS) &
+              ~prev_used_tables) &
+             used_tables) == 0) {
+          prev_table->dep_tables |= used_tables;
+        }
+      }
+    }
+    prev_table = table;
+  }
+
+  /*
+    Flatten nested joins that can be flattened.
+    no join condition and not a semi-join => can be flattened.
+  */
+  for (auto li = join_list->begin(); li != join_list->end();) {
+    TABLE_LIST *table = *li;
+    nested_join = table->nested_join;
+    if (table->is_sj_or_aj_nest()) {
+      // See other uses of clear_sj_expressions().
+      // 'cond' is a post-filter after the semi/antijoin, so if it's
+      // always false the semi/antijoin can be partially simplified
+      // (note that the semi/antijoin nest will still be created and used in
+      // optimization and execution).
+      if (*cond && (*cond)->const_item() &&
+          !(*cond)->walk(&Item::is_non_const_over_literals, enum_walk::POSTFIX,
+                         nullptr)) {
+        bool cond_value = true;
+        if (simplify_const_condition(thd, cond, false, &cond_value))
+          return true;
+        if (!cond_value) clear_sj_expressions(nested_join);
+      }
+    }
+    if (table->is_sj_nest() && !in_sj) {
+      /*
+        If this is a semi-join that is not contained within another semi-join,
+        leave it intact.
+        Otherwise it is flattened, for example
+        A SJ (B SJ (C)) becomes the equivalent A SJ (B JOIN C),
+        A AJ (B SJ (C)) becomes the equivalent A AJ (B JOIN C),
+        While dissolving a SJ nest into an AJ nest is ok (for the AJ
+        this may lead to duplicates but AJ only cares for "at least
+        one match"), dissolving an AJ nest into a SJ is not ok:
+        A SJ (B AJ (C)) is not equivalent to A SJ (B JOIN C);
+        that is why the next if() block is guarded by !join_cond() which takes
+        care of that.
+        Note that when dissolving the SJ nest, its condition isn't lost as it
+        has previously been added to WHERE or outer nest's condition in
+        convert_subquery_to_semijoin().
+      */
+      *changelog |= SEMIJOIN;
+    } else if (nested_join && !table->join_cond()) {
+      *changelog |= PAREN_REMOVAL;
+      for (TABLE_LIST *tbl : nested_join->join_list) {
+        tbl->embedding = table->embedding;
+        tbl->join_list = table->join_list;
+        tbl->dep_tables |= table->dep_tables;
+      }
+      li = join_list->erase(li);
+      li = join_list->insert(li, nested_join->join_list.begin(),
+                             nested_join->join_list.end());
+
+      // Don't advance li; we want to process the newly added tables.
+      continue;
+    }
+    ++li;
+  }
+
+  if (changes) {
+    Opt_trace_context *trace = &thd->opt_trace;
+    if (unlikely(trace->is_started())) {
+      Opt_trace_object trace_wrapper(trace);
+      Opt_trace_object trace_object(trace, "transformations_to_nested_joins");
+      {
+        Opt_trace_array trace_changes(trace, "transformations");
+        if (changes & SEMIJOIN) trace_changes.add_alnum("semijoin");
+        if (changes & OUTER_JOIN_TO_INNER)
+          trace_changes.add_alnum("outer_join_to_inner_join");
+        if (changes & JOIN_COND_TO_WHERE)
+          trace_changes.add_alnum("JOIN_condition_to_WHERE");
+        if (changes & PAREN_REMOVAL)
+          trace_changes.add_alnum("parenthesis_removal");
+      }
+      // the newly transformed query is worth printing
+      opt_trace_print_expanded_query(thd, this, &trace_object);
+    }
+  }
+  return false;
+}
+
+
+// Source: sql_resolver.cc
+// Lines 1877-2138
+
+
+[ANSWER]
+MUST

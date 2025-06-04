@@ -1,0 +1,132 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ssl_fd' at line 38
+2. Pointer 'ssl_init_error' at line 39
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int cli_establish_ssl(MYSQL *mysql) {
+  NET *net = &mysql->net;
+
+  /* Don't fallback on unencrypted connection if SSL required. */
+  if (mysql->options.extension &&
+      mysql->options.extension->ssl_mode >= SSL_MODE_REQUIRED &&
+      !(mysql->server_capabilities & CLIENT_SSL)) {
+    set_mysql_extended_error(mysql, CR_SSL_CONNECTION_ERROR, unknown_sqlstate,
+                             ER_CLIENT(CR_SSL_CONNECTION_ERROR),
+                             "SSL is required but the server doesn't "
+                             "support it");
+    goto error;
+  }
+
+  /*
+    If the ssl_mode is VERIFY_CA or VERIFY_IDENTITY, make sure that the
+    connection doesn't succeed without providing the CA certificate.
+  */
+  if (mysql->options.extension &&
+      mysql->options.extension->ssl_mode > SSL_MODE_REQUIRED &&
+      !(mysql->options.ssl_ca || mysql->options.ssl_capath)) {
+    set_mysql_extended_error(mysql, CR_SSL_CONNECTION_ERROR, unknown_sqlstate,
+                             ER_CLIENT(CR_SSL_CONNECTION_ERROR),
+                             "CA certificate is required if ssl-mode "
+                             "is VERIFY_CA or VERIFY_IDENTITY");
+    goto error;
+  }
+
+  /*
+    Attempt SSL connection if ssl_mode != SSL_MODE_DISABLED and the
+    server supports SSL. Fallback on unencrypted connection otherwise.
+  */
+  if (mysql->options.extension &&
+      mysql->options.extension->ssl_mode != SSL_MODE_DISABLED &&
+      (mysql->server_capabilities & CLIENT_SSL)) {
+    /* Do the SSL layering. */
+    struct st_mysql_options *options = &mysql->options;
+    struct st_VioSSLFd *ssl_fd;
+    enum enum_ssl_init_error ssl_init_error = SSL_INITERR_NOERROR;
+    const char *cert_error;
+    unsigned long ssl_error;
+    char buff[33], *end;
+    const bool verify_identity =
+        mysql->client_flag & CLIENT_SSL_VERIFY_SERVER_CERT;
+
+    /* check if server supports compression else turn off client capability */
+    if (!(mysql->server_capabilities & CLIENT_ZSTD_COMPRESSION_ALGORITHM))
+      mysql->client_flag &= ~CLIENT_ZSTD_COMPRESSION_ALGORITHM;
+    if (!(mysql->server_capabilities & CLIENT_COMPRESS))
+      mysql->client_flag &= ~CLIENT_COMPRESS;
+
+    end = mysql_fill_packet_header(mysql, buff, sizeof(buff));
+
+    /*
+    Send mysql->client_flag, max_packet_size - unencrypted otherwise
+    the server does not know we want to do SSL
+    */
+    MYSQL_TRACE(SEND_SSL_REQUEST, mysql,
+                ((size_t)(end - buff), (const unsigned char *)buff));
+    if (my_net_write(net, (uchar *)buff, (size_t)(end - buff)) ||
+        net_flush(net)) {
+      set_mysql_extended_error(mysql, CR_SERVER_LOST, unknown_sqlstate,
+                               ER_CLIENT(CR_SERVER_LOST_EXTENDED),
+                               "sending connection information to server",
+                               errno);
+      goto error;
+    }
+
+    MYSQL_TRACE_STAGE(mysql, SSL_NEGOTIATION);
+
+    /* Create the VioSSLConnectorFd - init SSL and load certs */
+    if (!(ssl_fd = new_VioSSLConnectorFd(
+              options->ssl_key, options->ssl_cert, options->ssl_ca,
+              options->ssl_capath, options->ssl_cipher,
+              options->extension ? options->extension->tls_ciphersuites
+                                 : nullptr,
+              &ssl_init_error,
+              options->extension ? options->extension->ssl_crl : nullptr,
+              options->extension ? options->extension->ssl_crlpath : nullptr,
+              options->extension ? options->extension->ssl_ctx_flags : 0,
+              verify_identity ? mysql->host : nullptr))) {
+      set_mysql_extended_error(mysql, CR_SSL_CONNECTION_ERROR, unknown_sqlstate,
+                               ER_CLIENT(CR_SSL_CONNECTION_ERROR),
+                               sslGetErrString(ssl_init_error));
+      goto error;
+    }
+    mysql->connector_fd = (unsigned char *)ssl_fd;
+
+    /* Connect to the server */
+    DBUG_PRINT("info", ("IO layer change in progress..."));
+    MYSQL_TRACE(SSL_CONNECT, mysql, ());
+    if (sslconnect(ssl_fd, net->vio, (long)(mysql->options.connect_timeout),
+                   &ssl_error, nullptr)) {
+      char buf[512];
+      ERR_error_string_n(ssl_error, buf, 512);
+      buf[511] = 0;
+      set_mysql_extended_error(mysql, CR_SSL_CONNECTION_ERROR, unknown_sqlstate,
+                               ER_CLIENT(CR_SSL_CONNECTION_ERROR), buf);
+      goto error;
+    }
+    DBUG_PRINT("info", ("IO layer change done!"));
+
+    /* Verify server cert */
+    if (verify_identity &&
+        ssl_verify_server_cert(net->vio, mysql->host, &cert_error)) {
+      set_mysql_extended_error(mysql, CR_SSL_CONNECTION_ERROR, unknown_sqlstate,
+                               ER_CLIENT(CR_SSL_CONNECTION_ERROR), cert_error);
+      goto error;
+    }
+
+    MYSQL_TRACE(SSL_CONNECTED, mysql, ());
+    MYSQL_TRACE_STAGE(mysql, AUTHENTICATE);
+  }
+
+
+// Source: client.cc
+// Lines 4146-4258
+
+
+[ANSWER]
+MUST-NOT

@@ -1,0 +1,1 @@
+configuration,libgit2/tests/libgit2/config/snapshot.c,3,backend,libgit2/tests/libgit2/config/snapshot.c,4,0

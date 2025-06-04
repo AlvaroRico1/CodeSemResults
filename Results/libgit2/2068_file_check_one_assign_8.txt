@@ -1,0 +1,1 @@
+pattern,libgit2/tests/libgit2/attr/file.c,5,rule,libgit2/tests/libgit2/attr/file.c,10,0

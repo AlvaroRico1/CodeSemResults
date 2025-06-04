@@ -1,0 +1,62 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'j' at line 9
+2. Pointer 'str' at line 41
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void build_completion_hash(bool rehash, bool write_info) {
+  COMMANDS *cmd = commands;
+  MYSQL_RES *databases = nullptr, *tables = nullptr;
+  MYSQL_RES *fields;
+  static char ***field_names = nullptr;
+  MYSQL_ROW database_row, table_row;
+  MYSQL_FIELD *sql_field;
+  char buf[NAME_LEN * 2 + 2];  // table name plus field name plus 2
+  int i, j, num_fields;
+  DBUG_TRACE;
+
+#ifndef NDEBUG
+  if (!opt_build_completion_hash)
+#endif
+  {
+    if (status.batch || quick || !current_db)
+      return;  // We don't need completion in batches
+  }
+
+  if (!rehash) return;
+
+  /* Free old used memory */
+  if (field_names) field_names = nullptr;
+  completion_hash_clean(&ht);
+  free_root(&hash_mem_root, MYF(0));
+
+  /* hash this file's known subset of SQL commands */
+  while (cmd->name) {
+    add_word(&ht, cmd->name);
+    cmd++;
+  }
+
+  /* hash MySQL functions (to be implemented) */
+
+  /* hash all database names */
+  if (mysql_query(&mysql, "show databases") == 0) {
+    if (!(databases = mysql_store_result(&mysql)))
+      put_info(mysql_error(&mysql), INFO_INFO);
+    else {
+      while ((database_row = mysql_fetch_row(databases))) {
+        char *str = strdup_root(&hash_mem_root, (char *)database_row[0]);
+        if (str) add_word(&ht, (char *)str);
+      }
+
+
+// Source: mysql.cc
+// Lines 2824-2866
+
+
+[ANSWER]
+MUST-NOT

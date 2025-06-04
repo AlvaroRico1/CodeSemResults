@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'idmap' at line 3\n2. Pointer 'server' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint nfs_map_group_to_gid(const struct nfs_server *server, const char *name, size_t namelen, kgid_t *gid)\n{\n\tstruct idmap *idmap = server->nfs_client->cl_idmap;\n\t__u32 id = -1;\n\tint ret = 0;\n\n\tif (!nfs_map_string_to_numeric(name, namelen, &id))\n\t\tret = nfs_idmap_lookup_id(name, namelen, \"gid\", &id, idmap);\n\tif (ret == 0) {\n\t\t*gid = make_kgid(idmap_userns(idmap), id);\n\t\tif (!gid_valid(*gid))\n\t\t\tret = -ERANGE;\n\t}\n\ttrace_nfs4_map_group_to_gid(name, namelen, id, ret);\n\treturn ret;\n}\n\n\n// Source: nfs4idmap.c\n// Lines 759-774\n",
+  "ANSWER": "MUST"
+}

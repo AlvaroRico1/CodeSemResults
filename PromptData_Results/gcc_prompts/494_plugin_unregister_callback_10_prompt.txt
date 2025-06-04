@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'callback' at line 3
+2. Pointer 'cbp' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+unregister_callback (const char *plugin_name, int event)
+{
+  struct callback_info *callback, **cbp;
+
+  if (event >= event_last)
+    return PLUGEVT_NO_SUCH_EVENT;
+
+  for (cbp = &plugin_callbacks[event]; (callback = *cbp); cbp = &callback->next)
+    if (strcmp (callback->plugin_name, plugin_name) == 0)
+      {
+	*cbp = callback->next;
+	return PLUGEVT_SUCCESS;
+      }
+  return PLUGEVT_NO_CALLBACK;
+}
+
+
+// Source: plugin.c
+// Lines 524-538
+
+
+[ANSWER]
+MUST

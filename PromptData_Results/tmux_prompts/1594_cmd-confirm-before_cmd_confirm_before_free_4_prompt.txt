@@ -1,0 +1,26 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'cdata' at line 3
+2. Pointer 'data' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+cmd_confirm_before_free(void *data)
+{
+	struct cmd_confirm_before_data	*cdata = data;
+
+	cmd_list_free(cdata->cmdlist);
+	free(cdata);
+}
+
+
+// Source: cmd-confirm-before.c
+// Lines 136-142
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,56 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'p' at line 5
+2. Pointer 'buffer' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+char *FastInt32ToBuffer(int32 i, char* buffer) {
+  // We could collapse the positive and negative sections, but that
+  // would be slightly slower for positive numbers...
+  // 12 bytes is enough to store -2**32, -4294967296.
+  char* p = buffer + kFastInt32ToBufferOffset;
+  *p-- = '\0';
+  if (i >= 0) {
+    do {
+      *p-- = '0' + i % 10;
+      i /= 10;
+    } while (i > 0);
+    return p + 1;
+  } else {
+    // On different platforms, % and / have different behaviors for
+    // negative numbers, so we need to jump through hoops to make sure
+    // we don't divide negative numbers.
+    if (i > -10) {
+      i = -i;
+      *p-- = '0' + i;
+      *p = '-';
+      return p;
+    } else {
+      // Make sure we aren't at MIN_INT, in which case we can't say i = -i
+      i = i + 10;
+      i = -i;
+      *p-- = '0' + i % 10;
+      // Undo what we did a moment ago
+      i = i / 10 + 1;
+      do {
+        *p-- = '0' + i % 10;
+        i /= 10;
+      } while (i > 0);
+      *p = '-';
+      return p;
+    }
+  }
+}
+
+
+// Source: strutil.cc
+// Lines 848-884
+
+
+[ANSWER]
+MUST

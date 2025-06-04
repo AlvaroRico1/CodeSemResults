@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'loop' at line 3\n2. Pointer 'e' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void redisAeAddRead(void *privdata) {\n    redisAeEvents *e = (redisAeEvents*)privdata;\n    aeEventLoop *loop = e->loop;\n    if (!e->reading) {\n        e->reading = 1;\n        aeCreateFileEvent(loop,e->fd,AE_READABLE,redisAeReadEvent,e);\n    }\n\n\n// Source: sentinel.c\n// Lines 310-316\n",
+  "ANSWER": "MUST"
+}

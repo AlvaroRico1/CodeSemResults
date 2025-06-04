@@ -1,0 +1,21 @@
+static h2o_redis_command_t *create_command(h2o_redis_client_t *client, h2o_redis_command_cb cb, void *cb_data,
+                                           h2o_redis_command_type_t type)
+{
+    h2o_redis_command_t *command = h2o_mem_alloc(sizeof(h2o_redis_command_t));
+    *command = (h2o_redis_command_t){NULL};
+    command->client = client;
+    command->cb = cb;
+    command->data = cb_data;
+    command->type = type;
+    h2o_timer_init(&command->_command_timeout, on_command_timeout);
+
+    if (client->command_timeout != 0 && (type == H2O_REDIS_COMMAND_TYPE_NORMAL || type == H2O_REDIS_COMMAND_TYPE_UNSUBSCRIBE ||
+                                         type == H2O_REDIS_COMMAND_TYPE_PUNSUBSCRIBE))
+        h2o_timer_link(client->loop, client->command_timeout, &command->_command_timeout);
+
+    return command;
+}
+
+
+// Source: redis.c
+// Lines 224-240

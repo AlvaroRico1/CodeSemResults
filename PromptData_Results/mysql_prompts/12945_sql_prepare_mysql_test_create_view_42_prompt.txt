@@ -1,0 +1,80 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'lex' at line 6
+2. Pointer 'stmt' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static bool mysql_test_create_view(Prepared_statement *stmt) {
+  DBUG_TRACE;
+  assert(stmt->m_arena.is_stmt_prepare());
+
+  THD *thd = stmt->thd;
+  LEX *lex = stmt->lex;
+  Query_block *const select = lex->query_block;
+  bool res = true;
+  /* Skip first table, which is the view we are creating */
+  bool link_to_local;
+  TABLE_LIST *view = lex->unlink_first_table(&link_to_local);
+  TABLE_LIST *tables = lex->query_tables;
+
+  if (create_view_precheck(thd, tables, view, lex->create_view_mode)) goto err;
+
+  /*
+    Since we can't pre-open temporary tables for SQLCOM_CREATE_VIEW,
+    (see mysql_create_view) we have to do it here instead.
+  */
+  if (open_temporary_tables(thd, tables)) goto err;
+
+  if (open_tables_for_query(thd, tables, MYSQL_OPEN_FORCE_SHARED_MDL)) goto err;
+
+  lex->context_analysis_only |= CONTEXT_ANALYSIS_ONLY_VIEW;
+
+  {
+    Prepared_stmt_arena_holder ps_arena_holder(thd);
+
+    res = select_like_stmt_test(thd, nullptr, 0);
+    if (res) goto err;
+
+    /* Check if the auto generated column names are conforming. */
+    make_valid_column_names(lex);
+
+    /*
+      Only column names of the first query block should be checked for
+      duplication; any further UNION-ed part isn't used for determining
+      names of the view's columns.
+    */
+    if (check_duplicate_names(view->derived_column_names(), select->fields,
+                              true)) {
+      res = true;
+      goto err;
+    }
+
+    /*
+      Make sure the view doesn't have so many columns that we hit the
+      64k header limit if the view is materialized as a MyISAM table.
+    */
+    if (select->fields.size() > MAX_FIELDS) {
+      my_error(ER_TOO_MANY_FIELDS, MYF(0));
+      res = true;
+      goto err;
+    }
+  }
+
+err:
+  /* put view back for PS rexecuting */
+  lex->link_first_table_back(view, link_to_local);
+  return res;
+}
+
+
+// Source: sql_prepare.cc
+// Lines 1182-1242
+
+
+[ANSWER]
+MUST

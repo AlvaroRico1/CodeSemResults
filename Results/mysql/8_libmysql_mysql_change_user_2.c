@@ -1,0 +1,63 @@
+bool STDCALL mysql_change_user(MYSQL *mysql, const char *user,
+                               const char *passwd, const char *db) {
+  int rc;
+  CHARSET_INFO *saved_cs = mysql->charset;
+  char *saved_user = mysql->user;
+  char *saved_passwd = mysql->passwd;
+  char *saved_db = mysql->db;
+
+  DBUG_TRACE;
+
+  /* Get the connection-default character set. */
+
+  if (mysql_init_character_set(mysql)) {
+    mysql->charset = saved_cs;
+    return true;
+  }
+
+  /*
+    Use an empty string instead of NULL.
+    Alloc user and password on heap because mysql_reconnect()
+    calls mysql_close() on success.
+  */
+  mysql->user = my_strdup(PSI_NOT_INSTRUMENTED, user ? user : "", MYF(MY_WME));
+  mysql->passwd =
+      my_strdup(PSI_NOT_INSTRUMENTED, passwd ? passwd : "", MYF(MY_WME));
+  mysql->db = nullptr;
+
+  rc = run_plugin_auth(mysql, nullptr, 0, nullptr, db);
+
+  MYSQL_TRACE_STAGE(mysql, READY_FOR_COMMAND);
+
+  /*
+    The server will close all statements no matter was the attempt
+    to change user successful or not.
+  */
+  mysql_detach_stmt_list(&mysql->stmts, "mysql_change_user");
+  if (rc == 0) {
+    /* Free old connect information */
+    my_free(saved_user);
+    my_free(saved_passwd);
+    my_free(saved_db);
+
+    /* alloc new connect information */
+    mysql->db = db ? my_strdup(PSI_NOT_INSTRUMENTED, db, MYF(MY_WME)) : nullptr;
+  } else {
+    /* Free temporary connect information */
+    my_free(mysql->user);
+    my_free(mysql->passwd);
+    my_free(mysql->db);
+
+    /* Restore saved state */
+    mysql->charset = saved_cs;
+    mysql->user = saved_user;
+    mysql->passwd = saved_passwd;
+    mysql->db = saved_db;
+  }
+
+  return rc;
+}
+
+
+// Source: libmysql.cc
+// Lines 266-324

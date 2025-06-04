@@ -1,0 +1,33 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'message' at line 3
+2. Pointer 'commit' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+const char *git_commit_message(const git_commit *commit)
+{
+	const char *message;
+
+	GIT_ASSERT_ARG_WITH_RETVAL(commit, NULL);
+
+	message = commit->raw_message;
+
+	/* trim leading newlines from raw message */
+	while (*message && *message == '\n')
+		++message;
+
+	return message;
+}
+
+
+// Source: commit.c
+// Lines 532-545
+
+
+[ANSWER]
+MUST

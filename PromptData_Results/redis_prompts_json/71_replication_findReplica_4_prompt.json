@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'replicaip' at line 9\n2. Pointer 'ip' at line 9\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic client *findReplica(char *host, int port) {\n    listIter li;\n    listNode *ln;\n    client *replica;\n\n    listRewind(server.slaves,&li);\n    while((ln = listNext(&li))) {\n        replica = ln->value;\n        char ip[NET_IP_STR_LEN], *replicaip = replica->slave_addr;\n\n        if (!replicaip) {\n            if (connPeerToString(replica->conn, ip, sizeof(ip), NULL) == -1)\n                continue;\n            replicaip = ip;\n        }\n\n\n// Source: replication.c\n// Lines 3525-3539\n",
+  "ANSWER": "MUST"
+}

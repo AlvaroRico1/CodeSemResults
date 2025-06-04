@@ -1,0 +1,1 @@
+enable_reg,linux/drivers/acpi/acpica/evgpe.c,7,status_reg,linux/drivers/acpi/acpica/evgpe.c,6,2

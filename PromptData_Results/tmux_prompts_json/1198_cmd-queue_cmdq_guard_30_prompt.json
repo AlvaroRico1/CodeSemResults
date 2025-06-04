@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'c' at line 3\n2. Pointer 'item' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ncmdq_guard(struct cmdq_item *item, const char *guard, int flags)\n{\n\tstruct client\t*c = item->client;\n\tlong\t\t t = item->time;\n\tu_int\t\t number = item->number;\n\n\tif (c != NULL && (c->flags & CLIENT_CONTROL))\n\t\tcontrol_write(c, \"%%%s %ld %u %d\", guard, t, number, flags);\n}\n\n\n// Source: cmd-queue.c\n// Lines 798-806\n",
+  "ANSWER": "MUST"
+}

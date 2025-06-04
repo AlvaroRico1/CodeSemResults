@@ -1,0 +1,51 @@
+int git_packfile_unpack_header(
+		size_t *size_p,
+		git_object_t *type_p,
+		struct git_pack_file *p,
+		git_mwindow **w_curs,
+		off64_t *curpos)
+{
+	unsigned char *base;
+	unsigned int left;
+	unsigned long used;
+	int error;
+
+	if ((error = git_mutex_lock(&p->lock)) < 0)
+		return error;
+	if ((error = git_mutex_lock(&p->mwf.lock)) < 0) {
+		git_mutex_unlock(&p->lock);
+		return error;
+	}
+
+	if (p->mwf.fd == -1 && (error = packfile_open_locked(p)) < 0) {
+		git_mutex_unlock(&p->lock);
+		git_mutex_unlock(&p->mwf.lock);
+		return error;
+	}
+
+	/* pack_window_open() assures us we have [base, base + 20) available
+	 * as a range that we can look at at. (Its actually the hash
+	 * size that is assured.) With our object header encoding
+	 * the maximum deflated object size is 2^137, which is just
+	 * insane, so we know won't exceed what we have been given.
+	 */
+	base = git_mwindow_open(&p->mwf, w_curs, *curpos, 20, &left);
+	git_mutex_unlock(&p->lock);
+	git_mutex_unlock(&p->mwf.lock);
+	if (base == NULL)
+		return GIT_EBUFS;
+
+	error = packfile_unpack_header1(&used, size_p, type_p, base, left);
+	git_mwindow_close(w_curs);
+	if (error == GIT_EBUFS)
+		return error;
+	else if (error < 0)
+		return packfile_error("header length is zero");
+
+	*curpos += used;
+	return 0;
+}
+
+
+// Source: pack.c
+// Lines 451-497

@@ -1,0 +1,51 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'param' at line 3
+2. Pointer 'stmt' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool STDCALL mysql_stmt_bind_param(MYSQL_STMT *stmt, MYSQL_BIND *my_bind) {
+  uint count = 0;
+  MYSQL_BIND *param, *end;
+  DBUG_TRACE;
+
+  if (!stmt->param_count) {
+    if ((int)stmt->state < (int)MYSQL_STMT_PREPARE_DONE) {
+      set_stmt_error(stmt, CR_NO_PREPARE_STMT, unknown_sqlstate, nullptr);
+      return true;
+    }
+    return false;
+  }
+
+  /* Allocated on prepare */
+  memcpy((char *)stmt->params, (char *)my_bind,
+         sizeof(MYSQL_BIND) * stmt->param_count);
+
+  for (param = stmt->params, end = param + stmt->param_count; param < end;
+       param++) {
+    if (fix_param_bind(param, count++)) {
+      my_stpcpy(stmt->sqlstate, unknown_sqlstate);
+      sprintf(stmt->last_error,
+              ER_CLIENT(stmt->last_errno = CR_UNSUPPORTED_PARAM_TYPE),
+              param->buffer_type, count);
+      return true;
+    }
+  }
+  /* We have to send/resend type information to MySQL */
+  stmt->send_types_to_server = true;
+  stmt->bind_param_done = true;
+  return false;
+}
+
+
+// Source: libmysql.cc
+// Lines 2423-2454
+
+
+[ANSWER]
+MUST-NOT

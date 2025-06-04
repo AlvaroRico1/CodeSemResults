@@ -1,0 +1,24 @@
+key_bindings_init_done(__unused struct cmdq_item *item, __unused void *data)
+{
+	struct key_table	*table;
+	struct key_binding	*bd, *new_bd;
+
+	RB_FOREACH(table, key_tables, &key_tables) {
+		RB_FOREACH(bd, key_bindings, &table->key_bindings) {
+			new_bd = xcalloc(1, sizeof *bd);
+			new_bd->key = bd->key;
+			if (bd->note != NULL)
+				new_bd->note = xstrdup(bd->note);
+			new_bd->flags = bd->flags;
+			new_bd->cmdlist = bd->cmdlist;
+			new_bd->cmdlist->references++;
+			RB_INSERT(key_bindings, &table->default_key_bindings,
+			    new_bd);
+		}
+	}
+	return (CMD_RETURN_NORMAL);
+}
+
+
+// Source: key-bindings.c
+// Lines 320-339

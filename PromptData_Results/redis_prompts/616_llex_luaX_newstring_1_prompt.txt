@@ -1,0 +1,29 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'L' at line 2
+2. Pointer 'ls' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+TString *luaX_newstring (LexState *ls, const char *str, size_t l) {
+  lua_State *L = ls->L;
+  TString *ts = luaS_newlstr(L, str, l);
+  TValue *o = luaH_setstr(L, ls->fs->h, ts);  /* entry for `str' */
+  if (ttisnil(o)) {
+    setbvalue(o, 1);  /* make sure `str' will not be collected */
+    luaC_checkGC(L);
+  }
+  return ts;
+}
+
+
+// Source: llex.c
+// Lines 117-126
+
+
+[ANSWER]
+MUST

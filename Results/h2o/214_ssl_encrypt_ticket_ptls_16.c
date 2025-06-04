@@ -1,0 +1,33 @@
+static int encrypt_ticket_ptls(ptls_encrypt_ticket_t *_self, ptls_t *tls, int is_encrypt, ptls_buffer_t *dst, ptls_iovec_t src)
+{
+    struct encrypt_ticket_ptls_t *self = (void *)_self;
+    int ret;
+
+    if (is_encrypt) {
+        /* encrypt given data, with the QUIC tag appended if necessary */
+        uint8_t srcbuf[src.len + sizeof(self->quic_tag)];
+        if (self->is_quic) {
+            memcpy(srcbuf, src.base, src.len);
+            memcpy(srcbuf + src.len, self->quic_tag, sizeof(self->quic_tag));
+            src.base = srcbuf;
+            src.len += sizeof(self->quic_tag);
+        }
+        return ptls_openssl_encrypt_ticket(dst, src, ticket_key_callback);
+    } else {
+        /* decrypt given data, then if necessary, check and remove the QUIC tag */
+        size_t dst_start_off = dst->off;
+        if ((ret = ptls_openssl_decrypt_ticket(dst, src, ticket_key_callback)) != 0)
+            return ret;
+        if (self->is_quic) {
+            if (dst->off - dst_start_off < sizeof(self->quic_tag))
+                return PTLS_ALERT_DECODE_ERROR;
+            dst->off -= sizeof(self->quic_tag);
+            if (memcmp(dst->base + dst->off, self->quic_tag, sizeof(self->quic_tag)) != 0)
+                return PTLS_ERROR_REJECT_EARLY_DATA;
+        }
+        return 0;
+    }
+
+
+// Source: ssl.c
+// Lines 345-373

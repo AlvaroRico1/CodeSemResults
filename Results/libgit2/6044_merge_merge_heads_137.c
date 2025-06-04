@@ -1,0 +1,40 @@
+static int merge_heads(
+	git_annotated_commit **ancestor_head_out,
+	git_annotated_commit **our_head_out,
+	git_repository *repo,
+	git_reference *our_ref,
+	const git_annotated_commit **their_heads,
+	size_t their_heads_len)
+{
+	git_annotated_commit *ancestor_head = NULL, *our_head = NULL;
+	int error = 0;
+
+	*ancestor_head_out = NULL;
+	*our_head_out = NULL;
+
+	if ((error = git_annotated_commit_from_ref(&our_head, repo, our_ref)) < 0)
+		goto done;
+
+	if ((error = merge_ancestor_head(&ancestor_head, repo, our_head, their_heads, their_heads_len)) < 0) {
+		if (error != GIT_ENOTFOUND)
+			goto done;
+
+		git_error_clear();
+		error = 0;
+	}
+
+	*ancestor_head_out = ancestor_head;
+	*our_head_out = our_head;
+
+done:
+	if (error < 0) {
+		git_annotated_commit_free(ancestor_head);
+		git_annotated_commit_free(our_head);
+	}
+
+	return error;
+}
+
+
+// Source: merge.c
+// Lines 3165-3200

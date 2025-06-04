@@ -1,0 +1,1 @@
+operand,linux/drivers/acpi/acpica/exoparg1.c,3,temp_desc,linux/drivers/acpi/acpica/exoparg1.c,4,2

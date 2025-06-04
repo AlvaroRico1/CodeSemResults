@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'sg' at line 3\n2. Pointer 'name' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nsession_group_find(const char *name)\n{\n\tstruct session_group\tsg;\n\n\tsg.name = name;\n\treturn (RB_FIND(session_groups, &session_groups, &sg));\n}\n\n\n// Source: session.c\n// Lines 532-538\n",
+  "ANSWER": "MUST"
+}

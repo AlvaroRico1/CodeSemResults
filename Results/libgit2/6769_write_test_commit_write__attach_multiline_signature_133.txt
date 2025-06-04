@@ -1,0 +1,1 @@
+complete,libgit2/tests/libgit2/commit/write.c,28,obj,libgit2/tests/libgit2/commit/write.c,54,0

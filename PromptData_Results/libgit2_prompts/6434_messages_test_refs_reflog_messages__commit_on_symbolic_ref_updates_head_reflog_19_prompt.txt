@@ -1,0 +1,56 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ref1' at line 6
+2. Pointer 'sig' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_refs_reflog_messages__commit_on_symbolic_ref_updates_head_reflog(void)
+{
+	git_signature *sig;
+	git_oid id;
+	git_tree *tree;
+	git_reference *ref1, *ref2;
+	const char *msg;
+	size_t nentries_head, nentries_master;
+
+	nentries_head = reflog_entrycount(g_repo, GIT_HEAD_FILE);
+
+	cl_git_pass(git_signature_now(&sig, "me", "foo@example.com"));
+
+	cl_git_pass(git_repository_head(&ref1, g_repo));
+	cl_git_pass(git_reference_peel((git_object **) &tree, ref1, GIT_OBJECT_TREE));
+
+	nentries_master = reflog_entrycount(g_repo, "refs/heads/master");
+
+	msg = "message 1";
+	cl_git_pass(git_reference_symbolic_create(&ref2, g_repo, "refs/heads/master", "refs/heads/foo", 1, msg));
+
+	cl_assert_equal_i(0, reflog_entrycount(g_repo, "refs/heads/foo"));
+	cl_assert_equal_i(nentries_head, reflog_entrycount(g_repo, GIT_HEAD_FILE));
+	cl_assert_equal_i(nentries_master, reflog_entrycount(g_repo, "refs/heads/master"));
+
+	msg = "message 2";
+	cl_git_pass(git_commit_create(&id, g_repo, "HEAD", sig, sig, NULL, msg, tree, 0, NULL));
+
+	cl_assert_equal_i(1, reflog_entrycount(g_repo, "refs/heads/foo"));
+	cl_assert_equal_i(nentries_head + 1, reflog_entrycount(g_repo, GIT_HEAD_FILE));
+	cl_assert_equal_i(nentries_master, reflog_entrycount(g_repo, "refs/heads/master"));
+
+	git_signature_free(sig);
+	git_reference_free(ref1);
+	git_reference_free(ref2);
+	git_tree_free(tree);
+}
+
+
+// Source: messages.c
+// Lines 171-207
+
+
+[ANSWER]
+MAY

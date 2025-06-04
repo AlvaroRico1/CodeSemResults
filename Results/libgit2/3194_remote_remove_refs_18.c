@@ -1,0 +1,50 @@
+static int remove_refs(git_repository *repo, const git_refspec *spec)
+{
+	git_reference_iterator *iter = NULL;
+	git_vector refs;
+	const char *name;
+	char *dup;
+	int error;
+	size_t i;
+
+	if ((error = git_vector_init(&refs, 8, NULL)) < 0)
+		return error;
+
+	if ((error = git_reference_iterator_new(&iter, repo)) < 0)
+		goto cleanup;
+
+	while ((error = git_reference_next_name(&name, iter)) == 0) {
+		if (!git_refspec_dst_matches(spec, name))
+			continue;
+
+		dup = git__strdup(name);
+		if (!dup) {
+			error = -1;
+			goto cleanup;
+		}
+
+		if ((error = git_vector_insert(&refs, dup)) < 0)
+			goto cleanup;
+	}
+	if (error == GIT_ITEROVER)
+		error = 0;
+	if (error < 0)
+		goto cleanup;
+
+	git_vector_foreach(&refs, i, name) {
+		if ((error = git_reference_remove(repo, name)) < 0)
+			break;
+	}
+
+cleanup:
+	git_reference_iterator_free(iter);
+	git_vector_foreach(&refs, i, dup) {
+		git__free(dup);
+	}
+	git_vector_free(&refs);
+	return error;
+}
+
+
+// Source: remote.c
+// Lines 2740-2785

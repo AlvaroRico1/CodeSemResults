@@ -1,0 +1,44 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'p' at line 4
+2. Pointer 'net' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int seq_open_net(struct inode *inode, struct file *file)
+{
+	unsigned int state_size = PDE(inode)->state_size;
+	struct seq_net_private *p;
+	struct net *net;
+
+	WARN_ON_ONCE(state_size < sizeof(*p));
+
+	if (file->f_mode & FMODE_WRITE && !PDE(inode)->write)
+		return -EACCES;
+
+	net = get_proc_net(inode);
+	if (!net)
+		return -ENXIO;
+
+	p = __seq_open_private(file, PDE(inode)->seq_ops, state_size);
+	if (!p) {
+		put_net(net);
+		return -ENOMEM;
+	}
+#ifdef CONFIG_NET_NS
+	p->net = net;
+#endif
+	return 0;
+}
+
+
+// Source: proc_net.c
+// Lines 58-82
+
+
+[ANSWER]
+MUST

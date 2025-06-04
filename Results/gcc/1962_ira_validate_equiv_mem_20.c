@@ -1,0 +1,59 @@
+validate_equiv_mem (rtx_insn *start, rtx reg, rtx memref)
+{
+  rtx_insn *insn;
+  rtx note;
+  struct equiv_mem_data info = { memref, false };
+  enum valid_equiv ret = valid_reload;
+
+  /* If the memory reference has side effects or is volatile, it isn't a
+     valid equivalence.  */
+  if (side_effects_p (memref))
+    return valid_none;
+
+  for (insn = start; insn; insn = NEXT_INSN (insn))
+    {
+      if (!INSN_P (insn))
+	continue;
+
+      if (find_reg_note (insn, REG_DEAD, reg))
+	return ret;
+
+      if (CALL_P (insn))
+	{
+	  /* We can combine a reg def from one insn into a reg use in
+	     another over a call if the memory is readonly or the call
+	     const/pure.  However, we can't set reg_equiv notes up for
+	     reload over any call.  The problem is the equivalent form
+	     may reference a pseudo which gets assigned a call
+	     clobbered hard reg.  When we later replace REG with its
+	     equivalent form, the value in the call-clobbered reg has
+	     been changed and all hell breaks loose.  */
+	  ret = valid_combine;
+	  if (!MEM_READONLY_P (memref)
+	      && !RTL_CONST_OR_PURE_CALL_P (insn))
+	    return valid_none;
+	}
+
+      note_stores (insn, validate_equiv_mem_from_store, &info);
+      if (info.equiv_mem_modified)
+	return valid_none;
+
+      /* If a register mentioned in MEMREF is modified via an
+	 auto-increment, we lose the equivalence.  Do the same if one
+	 dies; although we could extend the life, it doesn't seem worth
+	 the trouble.  */
+
+      for (note = REG_NOTES (insn); note; note = XEXP (note, 1))
+	if ((REG_NOTE_KIND (note) == REG_INC
+	     || REG_NOTE_KIND (note) == REG_DEAD)
+	    && REG_P (XEXP (note, 0))
+	    && reg_overlap_mentioned_p (XEXP (note, 0), memref))
+	  return valid_none;
+    }
+
+  return valid_none;
+}
+
+
+// Source: ira.c
+// Lines 2953-3007

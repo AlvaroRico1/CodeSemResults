@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'wl' at line 3\n2. Pointer 's' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nsession_attach(struct session *s, struct window *w, int idx, char **cause)\n{\n\tstruct winlink\t*wl;\n\n\tif ((wl = winlink_add(&s->windows, idx)) == NULL) {\n\t\txasprintf(cause, \"index in use: %d\", idx);\n\t\treturn (NULL);\n\t}\n\twl->session = s;\n\twinlink_set_window(wl, w);\n\tnotify_session_window(\"window-linked\", s, w);\n\n\tsession_group_synchronize_from(s);\n\treturn (wl);\n}\n\n\n// Source: session.c\n// Lines 336-350\n",
+  "ANSWER": "MUST"
+}

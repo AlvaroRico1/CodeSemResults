@@ -1,0 +1,1 @@
+argv,linux/kernel/trace/trace_kprobe.c,1,offset,linux/kernel/trace/trace_kprobe.c,30,2

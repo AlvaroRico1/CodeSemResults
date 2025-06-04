@@ -1,0 +1,1 @@
+ltype,linux/arch/x86/kernel/cpu/mtrr/generic.c,4,lsize,linux/arch/x86/kernel/cpu/mtrr/generic.c,3,0

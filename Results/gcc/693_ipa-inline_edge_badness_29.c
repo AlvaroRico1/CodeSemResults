@@ -1,0 +1,213 @@
+edge_badness (struct cgraph_edge *edge, bool dump)
+{
+  sreal badness;
+  int growth;
+  sreal edge_time, unspec_edge_time;
+  struct cgraph_node *callee = edge->callee->ultimate_alias_target ();
+  class ipa_fn_summary *callee_info = ipa_fn_summaries->get (callee);
+  ipa_hints hints;
+  cgraph_node *caller = (edge->caller->inlined_to
+			 ? edge->caller->inlined_to
+			 : edge->caller);
+
+  growth = estimate_edge_growth (edge);
+  edge_time = estimate_edge_time (edge, &unspec_edge_time);
+  hints = estimate_edge_hints (edge);
+  gcc_checking_assert (edge_time >= 0);
+  /* Check that inlined time is better, but tolerate some roundoff issues.
+     FIXME: When callee profile drops to 0 we account calls more.  This
+     should be fixed by never doing that.  */
+  gcc_checking_assert ((edge_time * 100
+			- callee_info->time * 101).to_int () <= 0
+			|| callee->count.ipa ().initialized_p ());
+  gcc_checking_assert (growth <= ipa_size_summaries->get (callee)->size);
+
+  if (dump)
+    {
+      fprintf (dump_file, "    Badness calculation for %s -> %s\n",
+	       edge->caller->dump_name (),
+	       edge->callee->dump_name ());
+      fprintf (dump_file, "      size growth %i, time %f unspec %f ",
+	       growth,
+	       edge_time.to_double (),
+	       unspec_edge_time.to_double ());
+      ipa_dump_hints (dump_file, hints);
+      if (big_speedup_p (edge))
+	fprintf (dump_file, " big_speedup");
+      fprintf (dump_file, "\n");
+    }
+
+  /* Always prefer inlining saving code size.  */
+  if (growth <= 0)
+    {
+      badness = (sreal) (-SREAL_MIN_SIG + growth) << (SREAL_MAX_EXP / 256);
+      if (dump)
+	fprintf (dump_file, "      %f: Growth %d <= 0\n", badness.to_double (),
+		 growth);
+    }
+   /* Inlining into EXTERNAL functions is not going to change anything unless
+      they are themselves inlined.  */
+   else if (DECL_EXTERNAL (caller->decl))
+    {
+      if (dump)
+	fprintf (dump_file, "      max: function is external\n");
+      return sreal::max ();
+    }
+  /* When profile is available. Compute badness as:
+     
+                 time_saved * caller_count
+     goodness =  -------------------------------------------------
+	         growth_of_caller * overall_growth * combined_size
+
+     badness = - goodness
+
+     Again use negative value to make calls with profile appear hotter
+     then calls without.
+  */
+  else if (opt_for_fn (caller->decl, flag_guess_branch_prob)
+	   || caller->count.ipa ().nonzero_p ())
+    {
+      sreal numerator, denominator;
+      int overall_growth;
+      sreal freq = edge->sreal_frequency ();
+
+      numerator = inlining_speedup (edge, freq, unspec_edge_time, edge_time);
+      if (numerator <= 0)
+	numerator = ((sreal) 1 >> 8);
+      if (caller->count.ipa ().nonzero_p ())
+	numerator *= caller->count.ipa ().to_gcov_type ();
+      else if (caller->count.ipa ().initialized_p ())
+	numerator = numerator >> 11;
+      denominator = growth;
+
+      overall_growth = callee_info->growth;
+
+      /* Look for inliner wrappers of the form:
+
+	 inline_caller ()
+	   {
+	     do_fast_job...
+	     if (need_more_work)
+	       noninline_callee ();
+	   }
+	 Without penalizing this case, we usually inline noninline_callee
+	 into the inline_caller because overall_growth is small preventing
+	 further inlining of inline_caller.
+
+	 Penalize only callgraph edges to functions with small overall
+	 growth ...
+	*/
+      if (growth > overall_growth
+	  /* ... and having only one caller which is not inlined ... */
+	  && callee_info->single_caller
+	  && !edge->caller->inlined_to
+	  /* ... and edges executed only conditionally ... */
+	  && freq < 1
+	  /* ... consider case where callee is not inline but caller is ... */
+	  && ((!DECL_DECLARED_INLINE_P (edge->callee->decl)
+	       && DECL_DECLARED_INLINE_P (caller->decl))
+	      /* ... or when early optimizers decided to split and edge
+		 frequency still indicates splitting is a win ... */
+	      || (callee->split_part && !caller->split_part
+		  && freq * 100
+			 < opt_for_fn (caller->decl,
+				       param_partial_inlining_entry_probability)
+		  /* ... and do not overwrite user specified hints.   */
+		  && (!DECL_DECLARED_INLINE_P (edge->callee->decl)
+		      || DECL_DECLARED_INLINE_P (caller->decl)))))
+	{
+	  ipa_fn_summary *caller_info = ipa_fn_summaries->get (caller);
+	  int caller_growth = caller_info->growth;
+
+	  /* Only apply the penalty when caller looks like inline candidate,
+	     and it is not called once.  */
+	  if (!caller_info->single_caller && overall_growth < caller_growth
+	      && caller_info->inlinable
+	      && wrapper_heuristics_may_apply
+	     	 (caller, ipa_size_summaries->get (caller)->size))
+	    {
+	      if (dump)
+		fprintf (dump_file,
+			 "     Wrapper penalty. Increasing growth %i to %i\n",
+			 overall_growth, caller_growth);
+	      overall_growth = caller_growth;
+	    }
+	}
+      if (overall_growth > 0)
+        {
+	  /* Strongly prefer functions with few callers that can be inlined
+	     fully.  The square root here leads to smaller binaries at average.
+	     Watch however for extreme cases and return to linear function
+	     when growth is large.  */
+	  if (overall_growth < 256)
+	    overall_growth *= overall_growth;
+	  else
+	    overall_growth += 256 * 256 - 256;
+	  denominator *= overall_growth;
+        }
+      denominator *= ipa_size_summaries->get (caller)->size + growth;
+
+      badness = - numerator / denominator;
+
+      if (dump)
+	{
+	  fprintf (dump_file,
+		   "      %f: guessed profile. frequency %f, count %" PRId64
+		   " caller count %" PRId64
+		   " time saved %f"
+		   " overall growth %i (current) %i (original)"
+		   " %i (compensated)\n",
+		   badness.to_double (),
+		   freq.to_double (),
+		   edge->count.ipa ().initialized_p () ? edge->count.ipa ().to_gcov_type () : -1,
+		   caller->count.ipa ().initialized_p () ? caller->count.ipa ().to_gcov_type () : -1,
+		   inlining_speedup (edge, freq, unspec_edge_time, edge_time).to_double (),
+		   estimate_growth (callee),
+		   callee_info->growth, overall_growth);
+	}
+    }
+  /* When function local profile is not available or it does not give
+     useful information (i.e. frequency is zero), base the cost on
+     loop nest and overall size growth, so we optimize for overall number
+     of functions fully inlined in program.  */
+  else
+    {
+      int nest = MIN (ipa_call_summaries->get (edge)->loop_depth, 8);
+      badness = growth;
+
+      /* Decrease badness if call is nested.  */
+      if (badness > 0)
+	badness = badness >> nest;
+      else
+	badness = badness << nest;
+      if (dump)
+	fprintf (dump_file, "      %f: no profile. nest %i\n",
+		 badness.to_double (), nest);
+    }
+  gcc_checking_assert (badness != 0);
+
+  if (edge->recursive_p ())
+    badness = badness.shift (badness > 0 ? 4 : -4);
+  if ((hints & (INLINE_HINT_indirect_call
+		| INLINE_HINT_loop_iterations
+		| INLINE_HINT_loop_stride))
+      || callee_info->growth <= 0)
+    badness = badness.shift (badness > 0 ? -2 : 2);
+  if (hints & (INLINE_HINT_same_scc))
+    badness = badness.shift (badness > 0 ? 3 : -3);
+  else if (hints & (INLINE_HINT_in_scc))
+    badness = badness.shift (badness > 0 ? 2 : -2);
+  else if (hints & (INLINE_HINT_cross_module))
+    badness = badness.shift (badness > 0 ? 1 : -1);
+  if (DECL_DISREGARD_INLINE_LIMITS (callee->decl))
+    badness = badness.shift (badness > 0 ? -4 : 4);
+  else if ((hints & INLINE_HINT_declared_inline))
+    badness = badness.shift (badness > 0 ? -3 : 3);
+  if (dump)
+    fprintf (dump_file, "      Adjusted by hints %f\n", badness.to_double ());
+  return badness;
+}
+
+
+// Source: ipa-inline.c
+// Lines 1117-1325

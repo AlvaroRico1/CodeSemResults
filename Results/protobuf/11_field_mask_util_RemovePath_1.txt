@@ -1,0 +1,1 @@
+current_descriptor,protobuf/src/google/protobuf/util/field_mask_util.cc,15,descriptor,protobuf/src/google/protobuf/util/field_mask_util.cc,2,1

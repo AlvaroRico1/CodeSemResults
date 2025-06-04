@@ -1,0 +1,38 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'self' at line 3
+2. Pointer 'cmd' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int on_config_index(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct st_h2o_file_configurator_t *self = (void *)cmd->configurator;
+    size_t i;
+
+    free(self->vars->index_files);
+    self->vars->index_files = h2o_mem_alloc(sizeof(self->vars->index_files[0]) * (node->data.sequence.size + 1));
+    for (i = 0; i != node->data.sequence.size; ++i) {
+        yoml_t *element = node->data.sequence.elements[i];
+        if (element->type != YOML_TYPE_SCALAR) {
+            h2o_configurator_errprintf(cmd, element, "argument must be a sequence of scalars");
+            return -1;
+        }
+        self->vars->index_files[i] = element->data.scalar;
+    }
+    self->vars->index_files[i] = NULL;
+
+    return 0;
+}
+
+
+// Source: file.c
+// Lines 53-71
+
+
+[ANSWER]
+MUST

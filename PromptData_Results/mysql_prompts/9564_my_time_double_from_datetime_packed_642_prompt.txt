@@ -1,0 +1,26 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'result' at line 3
+2. Pointer 'packed_value' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+double double_from_datetime_packed(enum enum_field_types type,
+                                   longlong packed_value) {
+  longlong result = longlong_from_datetime_packed(type, packed_value);
+  return result +
+         (static_cast<double>(my_packed_time_get_frac_part(packed_value))) /
+             1000000;
+}
+
+
+// Source: my_time.cc
+// Lines 2891-2897
+
+
+[ANSWER]
+MUST-NOT

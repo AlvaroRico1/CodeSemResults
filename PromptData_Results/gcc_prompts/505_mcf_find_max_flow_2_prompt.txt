@@ -1,0 +1,100 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'bb_pred' at line 5
+2. Pointer 'augmenting_path' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+find_max_flow (fixup_graph_type *fixup_graph, int source, int sink)
+{
+  int fnum_edges;
+  augmenting_path_type augmenting_path;
+  int *bb_pred;
+  gcov_type max_flow = 0;
+  int i, u;
+  fixup_edge_p fedge_list, pfedge, r_pfedge;
+
+  gcc_assert (fixup_graph);
+
+  fnum_edges = fixup_graph->num_edges;
+  fedge_list = fixup_graph->edge_list;
+
+  /* Initialize flow to 0.  */
+  for (i = 0; i < fnum_edges; i++)
+    {
+      pfedge = fedge_list + i;
+      pfedge->flow = 0;
+    }
+
+  compute_residual_flow (fixup_graph);
+
+  init_augmenting_path (&augmenting_path, fixup_graph->num_vertices);
+
+  bb_pred = augmenting_path.bb_pred;
+  while (find_augmenting_path (fixup_graph, &augmenting_path, source, sink))
+    {
+      /* Determine the amount by which we can increment the flow.  */
+      gcov_type increment = CAP_INFINITY;
+      for (u = sink; u != source; u = bb_pred[u])
+	{
+	  pfedge = find_fixup_edge (fixup_graph, bb_pred[u], u);
+	  increment = MIN (increment, pfedge->rflow);
+	}
+      max_flow += increment;
+
+      /* Now increment the flow. EXIT vertex index is 1.  */
+      for (u = sink; u != source; u = bb_pred[u])
+	{
+	  pfedge = find_fixup_edge (fixup_graph, bb_pred[u], u);
+	  r_pfedge = find_fixup_edge (fixup_graph, u, bb_pred[u]);
+	  if (pfedge->type)
+	    {
+	      /* forward edge.  */
+	      pfedge->flow += increment;
+	      pfedge->rflow -= increment;
+	      r_pfedge->rflow += increment;
+	    }
+	  else
+	    {
+	      /* backward edge.  */
+	      gcc_assert (r_pfedge->type);
+	      r_pfedge->rflow += increment;
+	      r_pfedge->flow -= increment;
+	      pfedge->rflow -= increment;
+	    }
+	}
+
+      if (dump_file)
+	{
+	  fprintf (dump_file, "\nDump augmenting path:\n");
+	  for (u = sink; u != source; u = bb_pred[u])
+	    {
+	      print_basic_block (dump_file, fixup_graph, u);
+	      fprintf (dump_file, "<-");
+	    }
+	  fprintf (dump_file,
+		   "ENTRY  (path_capacity=%" PRId64 ")\n",
+		   increment);
+	  fprintf (dump_file,
+		   "Network flow is %" PRId64 ".\n",
+		   max_flow);
+	}
+    }
+
+  free_augmenting_path (&augmenting_path);
+  if (dump_file)
+    dump_fixup_graph (dump_file, fixup_graph, "After find_max_flow()");
+  return max_flow;
+}
+
+
+// Source: mcf.c
+// Lines 1027-1107
+
+
+[ANSWER]
+MUST

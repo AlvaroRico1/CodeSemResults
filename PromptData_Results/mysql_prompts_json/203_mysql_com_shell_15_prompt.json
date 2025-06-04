@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'shell_cmd' at line 3\n2. Pointer 'line' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int com_shell(String *buffer MY_ATTRIBUTE((unused)),\n                     char *line MY_ATTRIBUTE((unused))) {\n  char *shell_cmd;\n\n  /* Skip space from line begin */\n  while (my_isspace(charset_info, *line)) line++;\n  if (!(shell_cmd = strchr(line, ' '))) {\n    put_info(\"Usage: \\\\! shell-command\", INFO_ERROR);\n    return -1;\n  }\n  /*\n    The output of the shell command does not\n    get directed to the pager or the outfile\n  */\n  if (system(shell_cmd) == -1) {\n    put_info(strerror(errno), INFO_ERROR, errno);\n    return -1;\n  }\n  return 0;\n}\n\n\n// Source: mysql.cc\n// Lines 4116-4135\n",
+  "ANSWER": "MUST-NOT"
+}

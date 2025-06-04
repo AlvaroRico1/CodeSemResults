@@ -1,0 +1,68 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'w_dst' at line 9
+2. Pointer 'wl_dst' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+cmd_swap_window_exec(struct cmd *self, struct cmdq_item *item)
+{
+	struct args		*args = cmd_get_args(self);
+	struct cmd_find_state	*source = cmdq_get_source(item);
+	struct cmd_find_state	*target = cmdq_get_target(item);
+	struct session		*src = source->s, *dst = target->s;
+	struct session_group	*sg_src, *sg_dst;
+	struct winlink		*wl_src = source->wl, *wl_dst = target->wl;
+	struct window		*w_src, *w_dst;
+
+	sg_src = session_group_contains(src);
+	sg_dst = session_group_contains(dst);
+
+	if (src != dst &&
+	    sg_src != NULL &&
+	    sg_dst != NULL &&
+	    sg_src == sg_dst) {
+		cmdq_error(item, "can't move window, sessions are grouped");
+		return (CMD_RETURN_ERROR);
+	}
+
+	if (wl_dst->window == wl_src->window)
+		return (CMD_RETURN_NORMAL);
+
+	w_dst = wl_dst->window;
+	TAILQ_REMOVE(&w_dst->winlinks, wl_dst, wentry);
+	w_src = wl_src->window;
+	TAILQ_REMOVE(&w_src->winlinks, wl_src, wentry);
+
+	wl_dst->window = w_src;
+	TAILQ_INSERT_TAIL(&w_src->winlinks, wl_dst, wentry);
+	wl_src->window = w_dst;
+	TAILQ_INSERT_TAIL(&w_dst->winlinks, wl_src, wentry);
+
+	if (args_has(args, 'd')) {
+		session_select(dst, wl_dst->idx);
+		if (src != dst)
+			session_select(src, wl_src->idx);
+	}
+	session_group_synchronize_from(src);
+	server_redraw_session_group(src);
+	if (src != dst) {
+		session_group_synchronize_from(dst);
+		server_redraw_session_group(dst);
+	}
+	recalculate_sizes();
+
+	return (CMD_RETURN_NORMAL);
+}
+
+
+// Source: cmd-swap-window.c
+// Lines 46-94
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,1 @@
+empty_ancestor,libgit2/src/libgit2/merge.c,9,resolved,libgit2/src/libgit2/merge.c,59,2

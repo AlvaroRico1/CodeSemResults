@@ -1,0 +1,211 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'err' at line 173
+2. Pointer 'arg' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+    const char **argv;		/* vector of args.  */
+  };
+  const char *arg;
+
+  struct command *commands;	/* each command buffer with above info.  */
+
+  gcc_assert (!processing_spec_function);
+
+  if (wrapper_string)
+    {
+      string = find_a_file (&exec_prefixes,
+			    argbuf[0], X_OK, false);
+      if (string)
+	argbuf[0] = string;
+      insert_wrapper (wrapper_string);
+    }
+
+  /* Count # of piped commands.  */
+  for (n_commands = 1, i = 0; argbuf.iterate (i, &arg); i++)
+    if (strcmp (arg, "|") == 0)
+      n_commands++;
+
+  /* Get storage for each command.  */
+  commands = (struct command *) alloca (n_commands * sizeof (struct command));
+
+  /* Split argbuf into its separate piped processes,
+     and record info about each one.
+     Also search for the programs that are to be run.  */
+
+  argbuf.safe_push (0);
+
+  commands[0].prog = argbuf[0]; /* first command.  */
+  commands[0].argv = argbuf.address ();
+
+  if (!wrapper_string)
+    {
+      string = find_a_file (&exec_prefixes, commands[0].prog, X_OK, false);
+      if (string)
+	commands[0].argv[0] = string;
+    }
+
+  for (n_commands = 1, i = 0; argbuf.iterate (i, &arg); i++)
+    if (arg && strcmp (arg, "|") == 0)
+      {				/* each command.  */
+#if defined (__MSDOS__) || defined (OS2) || defined (VMS)
+	fatal_error (input_location, "%<-pipe%> not supported");
+#endif
+	argbuf[i] = 0; /* Termination of command args.  */
+	commands[n_commands].prog = argbuf[i + 1];
+	commands[n_commands].argv
+	  = &(argbuf.address ())[i + 1];
+	string = find_a_file (&exec_prefixes, commands[n_commands].prog,
+			      X_OK, false);
+	if (string)
+	  commands[n_commands].argv[0] = string;
+	n_commands++;
+      }
+
+  /* If -v, print what we are about to do, and maybe query.  */
+
+  if (verbose_flag)
+    {
+      /* For help listings, put a blank line between sub-processes.  */
+      if (print_help_list)
+	fputc ('\n', stderr);
+
+      /* Print each piped command as a separate line.  */
+      for (i = 0; i < n_commands; i++)
+	{
+	  const char *const *j;
+
+	  if (verbose_only_flag)
+	    {
+	      for (j = commands[i].argv; *j; j++)
+		{
+		  const char *p;
+		  for (p = *j; *p; ++p)
+		    if (!ISALNUM ((unsigned char) *p)
+			&& *p != '_' && *p != '/' && *p != '-' && *p != '.')
+		      break;
+		  if (*p || !*j)
+		    {
+		      fprintf (stderr, " \"");
+		      for (p = *j; *p; ++p)
+			{
+			  if (*p == '"' || *p == '\\' || *p == '$')
+			    fputc ('\\', stderr);
+			  fputc (*p, stderr);
+			}
+		      fputc ('"', stderr);
+		    }
+		  /* If it's empty, print "".  */
+		  else if (!**j)
+		    fprintf (stderr, " \"\"");
+		  else
+		    fprintf (stderr, " %s", *j);
+		}
+	    }
+	  else
+	    for (j = commands[i].argv; *j; j++)
+	      /* If it's empty, print "".  */
+	      if (!**j)
+		fprintf (stderr, " \"\"");
+	      else
+		fprintf (stderr, " %s", *j);
+
+	  /* Print a pipe symbol after all but the last command.  */
+	  if (i + 1 != n_commands)
+	    fprintf (stderr, " |");
+	  fprintf (stderr, "\n");
+	}
+      fflush (stderr);
+      if (verbose_only_flag != 0)
+        {
+	  /* verbose_only_flag should act as if the spec was
+	     executed, so increment execution_count before
+	     returning.  This prevents spurious warnings about
+	     unused linker input files, etc.  */
+	  execution_count++;
+	  return 0;
+        }
+#ifdef DEBUG
+      fnotice (stderr, "\nGo ahead? (y or n) ");
+      fflush (stderr);
+      i = getchar ();
+      if (i != '\n')
+	while (getchar () != '\n')
+	  ;
+
+      if (i != 'y' && i != 'Y')
+	return 0;
+#endif /* DEBUG */
+    }
+
+#ifdef ENABLE_VALGRIND_CHECKING
+  /* Run the each command through valgrind.  To simplify prepending the
+     path to valgrind and the option "-q" (for quiet operation unless
+     something triggers), we allocate a separate argv array.  */
+
+  for (i = 0; i < n_commands; i++)
+    {
+      const char **argv;
+      int argc;
+      int j;
+
+      for (argc = 0; commands[i].argv[argc] != NULL; argc++)
+	;
+
+      argv = XALLOCAVEC (const char *, argc + 3);
+
+      argv[0] = VALGRIND_PATH;
+      argv[1] = "-q";
+      for (j = 2; j < argc + 2; j++)
+	argv[j] = commands[i].argv[j - 2];
+      argv[j] = NULL;
+
+      commands[i].argv = argv;
+      commands[i].prog = argv[0];
+    }
+#endif
+
+  /* Run each piped subprocess.  */
+
+  pex = pex_init (PEX_USE_PIPES | ((report_times || report_times_to_file)
+				   ? PEX_RECORD_TIMES : 0),
+		  progname, temp_filename);
+  if (pex == NULL)
+    fatal_error (input_location, "%<pex_init%> failed: %m");
+
+  for (i = 0; i < n_commands; i++)
+    {
+      const char *errmsg;
+      int err;
+      const char *string = commands[i].argv[0];
+
+      errmsg = pex_run (pex,
+			((i + 1 == n_commands ? PEX_LAST : 0)
+			 | (string == commands[i].prog ? PEX_SEARCH : 0)),
+			string, CONST_CAST (char **, commands[i].argv),
+			NULL, NULL, &err);
+      if (errmsg != NULL)
+	{
+	  errno = err;
+	  fatal_error (input_location,
+		       err ? G_("cannot execute %qs: %s: %m")
+		       : G_("cannot execute %qs: %s"),
+		       string, errmsg);
+	}
+
+      if (i && string != commands[i].prog)
+	free (CONST_CAST (char *, string));
+    }
+
+
+// Source: gcc.c
+// Lines 3033-3224
+
+
+[ANSWER]
+MAY

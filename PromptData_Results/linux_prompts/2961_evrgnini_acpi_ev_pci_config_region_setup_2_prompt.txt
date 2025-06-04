@@ -1,0 +1,188 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'pci_value' at line 6
+2. Pointer 'region_context' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+acpi_ev_pci_config_region_setup(acpi_handle handle,
+				u32 function,
+				void *handler_context, void **region_context)
+{
+	acpi_status status = AE_OK;
+	u64 pci_value;
+	struct acpi_pci_id *pci_id = *region_context;
+	union acpi_operand_object *handler_obj;
+	struct acpi_namespace_node *parent_node;
+	struct acpi_namespace_node *pci_root_node;
+	struct acpi_namespace_node *pci_device_node;
+	union acpi_operand_object *region_obj =
+	    (union acpi_operand_object *)handle;
+
+	ACPI_FUNCTION_TRACE(ev_pci_config_region_setup);
+
+	handler_obj = region_obj->region.handler;
+	if (!handler_obj) {
+		/*
+		 * No installed handler. This shouldn't happen because the dispatch
+		 * routine checks before we get here, but we check again just in case.
+		 */
+		ACPI_DEBUG_PRINT((ACPI_DB_OPREGION,
+				  "Attempting to init a region %p, with no handler\n",
+				  region_obj));
+		return_ACPI_STATUS(AE_NOT_EXIST);
+	}
+
+	*region_context = NULL;
+	if (function == ACPI_REGION_DEACTIVATE) {
+		if (pci_id) {
+			ACPI_FREE(pci_id);
+		}
+		return_ACPI_STATUS(status);
+	}
+
+	parent_node = region_obj->region.node->parent;
+
+	/*
+	 * Get the _SEG and _BBN values from the device upon which the handler
+	 * is installed.
+	 *
+	 * We need to get the _SEG and _BBN objects relative to the PCI BUS device.
+	 * This is the device the handler has been registered to handle.
+	 */
+
+	/*
+	 * If the address_space.Node is still pointing to the root, we need
+	 * to scan upward for a PCI Root bridge and re-associate the op_region
+	 * handlers with that device.
+	 */
+	if (handler_obj->address_space.node == acpi_gbl_root_node) {
+
+		/* Start search from the parent object */
+
+		pci_root_node = parent_node;
+		while (pci_root_node != acpi_gbl_root_node) {
+
+			/* Get the _HID/_CID in order to detect a root_bridge */
+
+			if (acpi_ev_is_pci_root_bridge(pci_root_node)) {
+
+				/* Install a handler for this PCI root bridge */
+
+				status = acpi_install_address_space_handler((acpi_handle)pci_root_node, ACPI_ADR_SPACE_PCI_CONFIG, ACPI_DEFAULT_HANDLER, NULL, NULL);
+				if (ACPI_FAILURE(status)) {
+					if (status == AE_SAME_HANDLER) {
+						/*
+						 * It is OK if the handler is already installed on the
+						 * root bridge. Still need to return a context object
+						 * for the new PCI_Config operation region, however.
+						 */
+						status = AE_OK;
+					} else {
+						ACPI_EXCEPTION((AE_INFO, status,
+								"Could not install PciConfig handler "
+								"for Root Bridge %4.4s",
+								acpi_ut_get_node_name
+								(pci_root_node)));
+					}
+				}
+				break;
+			}
+
+			pci_root_node = pci_root_node->parent;
+		}
+
+		/* PCI root bridge not found, use namespace root node */
+	} else {
+		pci_root_node = handler_obj->address_space.node;
+	}
+
+	/*
+	 * If this region is now initialized, we are done.
+	 * (install_address_space_handler could have initialized it)
+	 */
+	if (region_obj->region.flags & AOPOBJ_SETUP_COMPLETE) {
+		return_ACPI_STATUS(AE_OK);
+	}
+
+	/* Region is still not initialized. Create a new context */
+
+	pci_id = ACPI_ALLOCATE_ZEROED(sizeof(struct acpi_pci_id));
+	if (!pci_id) {
+		return_ACPI_STATUS(AE_NO_MEMORY);
+	}
+
+	/*
+	 * For PCI_Config space access, we need the segment, bus, device and
+	 * function numbers. Acquire them here.
+	 *
+	 * Find the parent device object. (This allows the operation region to be
+	 * within a subscope under the device, such as a control method.)
+	 */
+	pci_device_node = region_obj->region.node;
+	while (pci_device_node && (pci_device_node->type != ACPI_TYPE_DEVICE)) {
+		pci_device_node = pci_device_node->parent;
+	}
+
+	if (!pci_device_node) {
+		ACPI_FREE(pci_id);
+		return_ACPI_STATUS(AE_AML_OPERAND_TYPE);
+	}
+
+	/*
+	 * Get the PCI device and function numbers from the _ADR object
+	 * contained in the parent's scope.
+	 */
+	status = acpi_ut_evaluate_numeric_object(METHOD_NAME__ADR,
+						 pci_device_node, &pci_value);
+
+	/*
+	 * The default is zero, and since the allocation above zeroed the data,
+	 * just do nothing on failure.
+	 */
+	if (ACPI_SUCCESS(status)) {
+		pci_id->device = ACPI_HIWORD(ACPI_LODWORD(pci_value));
+		pci_id->function = ACPI_LOWORD(ACPI_LODWORD(pci_value));
+	}
+
+	/* The PCI segment number comes from the _SEG method */
+
+	status = acpi_ut_evaluate_numeric_object(METHOD_NAME__SEG,
+						 pci_root_node, &pci_value);
+	if (ACPI_SUCCESS(status)) {
+		pci_id->segment = ACPI_LOWORD(pci_value);
+	}
+
+	/* The PCI bus number comes from the _BBN method */
+
+	status = acpi_ut_evaluate_numeric_object(METHOD_NAME__BBN,
+						 pci_root_node, &pci_value);
+	if (ACPI_SUCCESS(status)) {
+		pci_id->bus = ACPI_LOWORD(pci_value);
+	}
+
+	/* Complete/update the PCI ID for this device */
+
+	status =
+	    acpi_hw_derive_pci_id(pci_id, pci_root_node,
+				  region_obj->region.node);
+	if (ACPI_FAILURE(status)) {
+		ACPI_FREE(pci_id);
+		return_ACPI_STATUS(status);
+	}
+
+	*region_context = pci_id;
+	return_ACPI_STATUS(AE_OK);
+}
+
+
+// Source: evrgnini.c
+// Lines 129-297
+
+
+[ANSWER]
+MAY

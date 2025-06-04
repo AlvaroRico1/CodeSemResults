@@ -1,0 +1,39 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'repo' at line 3
+2. Pointer 'config' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_repo_open__format_version_1(void)
+{
+	git_repository *repo;
+	git_config *config;
+
+	repo = cl_git_sandbox_init("empty_bare.git");
+
+	cl_git_pass(git_repository_open(&repo, "empty_bare.git"));
+	cl_git_pass(git_repository_config(&config, repo));
+
+	cl_git_pass(git_config_set_int32(config, "core.repositoryformatversion", 1));
+
+	git_config_free(config);
+	git_repository_free(repo);
+
+	cl_git_pass(git_repository_open(&repo, "empty_bare.git"));
+	cl_assert(git_repository_path(repo) != NULL);
+	cl_assert(git__suffixcmp(git_repository_path(repo), "/") == 0);
+	git_repository_free(repo);
+}
+
+
+// Source: open.c
+// Lines 24-43
+
+
+[ANSWER]
+MAY

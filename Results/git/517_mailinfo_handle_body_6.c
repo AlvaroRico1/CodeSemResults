@@ -1,0 +1,63 @@
+static void handle_body(struct mailinfo *mi, struct strbuf *line)
+{
+	struct strbuf prev = STRBUF_INIT;
+
+	/* Skip up to the first boundary */
+	if (*(mi->content_top)) {
+		if (!find_boundary(mi, line))
+			goto handle_body_out;
+	}
+
+	do {
+		/* process any boundary lines */
+		if (*(mi->content_top) && is_multipart_boundary(mi, line)) {
+			/* flush any leftover */
+			if (prev.len) {
+				handle_filter(mi, &prev);
+				strbuf_reset(&prev);
+			}
+			summarize_quoted_cr(mi);
+			mi->have_quoted_cr = 0;
+			if (!handle_boundary(mi, line))
+				goto handle_body_out;
+		}
+
+		/* Unwrap transfer encoding */
+		decode_transfer_encoding(mi, line);
+
+		switch (mi->transfer_encoding) {
+		case TE_BASE64:
+		case TE_QP:
+		{
+			struct strbuf **lines, **it, *sb;
+
+			/* Prepend any previous partial lines */
+			strbuf_insert(line, 0, prev.buf, prev.len);
+			strbuf_reset(&prev);
+
+			/*
+			 * This is a decoded line that may contain
+			 * multiple new lines.  Pass only one chunk
+			 * at a time to handle_filter()
+			 */
+			lines = strbuf_split(line, '\n');
+			for (it = lines; (sb = *it); it++) {
+				if (*(it + 1) == NULL) /* The last line */
+					if (sb->buf[sb->len - 1] != '\n') {
+						/* Partial line, save it for later. */
+						strbuf_addbuf(&prev, sb);
+						break;
+					}
+				handle_filter_flowed(mi, sb, &prev);
+			}
+			/*
+			 * The partial chunk is saved in "prev" and will be
+			 * appended by the next iteration of read_line_with_nul().
+			 */
+			strbuf_list_free(lines);
+			break;
+		}
+
+
+// Source: mailinfo.c
+// Lines 1053-1111

@@ -1,0 +1,1 @@
+dest,gcc/libcpp/directives.c,3,src,gcc/libcpp/directives.c,4,2

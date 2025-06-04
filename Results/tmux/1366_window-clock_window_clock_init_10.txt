@@ -1,0 +1,1 @@
+wme,tmux/window-clock.c,1,data,tmux/window-clock.c,5,1

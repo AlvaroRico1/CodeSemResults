@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'v' at line 1
+2. Pointer 'new_contents' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+GIT_INLINE(int) resize_vector(git_vector *v, size_t new_size)
+{
+	void *new_contents;
+
+	if (new_size == 0)
+		return 0;
+
+	new_contents = git__reallocarray(v->contents, new_size, sizeof(void *));
+	GIT_ERROR_CHECK_ALLOC(new_contents);
+
+	v->_alloc_size = new_size;
+	v->contents = new_contents;
+
+	return 0;
+}
+
+
+// Source: vector.c
+// Lines 31-45
+
+
+[ANSWER]
+MUST

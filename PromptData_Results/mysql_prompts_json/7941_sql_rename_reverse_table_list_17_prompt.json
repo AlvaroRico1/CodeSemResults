@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'table_list' at line 1\n2. Pointer 'next' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic TABLE_LIST *reverse_table_list(TABLE_LIST *table_list) {\n  TABLE_LIST *prev = nullptr;\n\n  while (table_list) {\n    TABLE_LIST *next = table_list->next_local;\n    table_list->next_local = prev;\n    prev = table_list;\n    table_list = next;\n  }\n\n\n// Source: sql_rename.cc\n// Lines 516-524\n",
+  "ANSWER": "MUST"
+}

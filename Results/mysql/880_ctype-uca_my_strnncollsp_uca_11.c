@@ -1,0 +1,43 @@
+static int my_strnncollsp_uca(const CHARSET_INFO *cs, Mb_wc mb_wc,
+                              const uchar *s, size_t slen, const uchar *t,
+                              size_t tlen) {
+  int s_res, t_res;
+
+  uca_scanner_any<Mb_wc> sscanner(mb_wc, cs, s, slen);
+  uca_scanner_any<Mb_wc> tscanner(mb_wc, cs, t, tlen);
+
+  do {
+    s_res = sscanner.next();
+    t_res = tscanner.next();
+  } while (s_res == t_res && s_res > 0);
+
+  if (s_res > 0 && t_res < 0) {
+    /* Calculate weight for SPACE character */
+    t_res = my_space_weight(cs);
+
+    /* compare the first string to spaces */
+    do {
+      if (s_res != t_res) return (s_res - t_res);
+      s_res = sscanner.next();
+    } while (s_res > 0);
+    return 0;
+  }
+
+  if (s_res < 0 && t_res > 0) {
+    /* Calculate weight for SPACE character */
+    s_res = my_space_weight(cs);
+
+    /* compare the second string to spaces */
+    do {
+      if (s_res != t_res) return (s_res - t_res);
+      t_res = tscanner.next();
+    } while (t_res > 0);
+    return 0;
+  }
+
+  return (s_res - t_res);
+}
+
+
+// Source: ctype-uca.cc
+// Lines 1939-1977

@@ -1,0 +1,1 @@
+vector,h2o/deps/hiredis/sds.c,4,current,h2o/deps/hiredis/sds.c,3,1

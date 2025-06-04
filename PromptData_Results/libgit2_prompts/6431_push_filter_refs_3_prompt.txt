@@ -1,0 +1,36 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'heads_len' at line 4
+2. Pointer 'heads' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int filter_refs(git_remote *remote)
+{
+	const git_remote_head **heads;
+	size_t heads_len, i;
+
+	git_vector_clear(&remote->refs);
+
+	if (git_remote_ls(&heads, &heads_len, remote) < 0)
+		return -1;
+
+	for (i = 0; i < heads_len; i++) {
+		if (git_vector_insert(&remote->refs, (void *)heads[i]) < 0)
+			return -1;
+	}
+
+	return 0;
+}
+
+
+// Source: push.c
+// Lines 451-467
+
+
+[ANSWER]
+MAY

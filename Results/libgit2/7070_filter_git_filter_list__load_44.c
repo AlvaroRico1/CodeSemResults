@@ -1,0 +1,81 @@
+int git_filter_list__load(
+	git_filter_list **filters,
+	git_repository *repo,
+	git_blob *blob, /* can be NULL */
+	const char *path,
+	git_filter_mode_t mode,
+	git_filter_session *filter_session)
+{
+	int error = 0;
+	git_filter_list *fl = NULL;
+	git_filter_source src = { 0 };
+	git_filter_entry *fe;
+	size_t idx;
+	git_filter_def *fdef;
+
+	if (git_rwlock_rdlock(&filter_registry.lock) < 0) {
+		git_error_set(GIT_ERROR_OS, "failed to lock filter registry");
+		return -1;
+	}
+
+	src.repo = repo;
+	src.path = path;
+	src.mode = mode;
+
+	memcpy(&src.options, &filter_session->options, sizeof(git_filter_options));
+
+	if (blob)
+		git_oid_cpy(&src.oid, git_blob_id(blob));
+
+	git_vector_foreach(&filter_registry.filters, idx, fdef) {
+		const char **values = NULL;
+		void *payload = NULL;
+
+		if (!fdef || !fdef->filter)
+			continue;
+
+		if (fdef->nattrs > 0) {
+			error = filter_list_check_attributes(
+				&values, repo,
+				filter_session, fdef, &src);
+
+			if (error == GIT_ENOTFOUND) {
+				error = 0;
+				continue;
+			} else if (error < 0)
+				break;
+		}
+
+		if (!fdef->initialized && (error = filter_initialize(fdef)) < 0)
+			break;
+
+		if (fdef->filter->check)
+			error = fdef->filter->check(
+				fdef->filter, &payload, &src, values);
+
+		git__free((void *)values);
+
+		if (error == GIT_PASSTHROUGH)
+			error = 0;
+		else if (error < 0)
+			break;
+		else {
+			if (!fl) {
+				if ((error = filter_list_new(&fl, &src)) < 0)
+					break;
+
+				fl->temp_buf = filter_session->temp_buf;
+			}
+
+			fe = git_array_alloc(fl->filters);
+			GIT_ERROR_CHECK_ALLOC(fe);
+
+			fe->filter = fdef->filter;
+			fe->filter_name = fdef->filter_name;
+			fe->payload = payload;
+		}
+	}
+
+
+// Source: filter.c
+// Lines 510-586

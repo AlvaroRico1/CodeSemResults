@@ -1,0 +1,199 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 't' at line 1
+2. Pointer 'typep' at line 172
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+finish_struct (location_t loc, tree t, tree fieldlist, tree attributes,
+	       class c_struct_parse_info *enclosing_struct_parse_info)
+{
+  tree x;
+  bool toplevel = file_scope == current_scope;
+
+  /* If this type was previously laid out as a forward reference,
+     make sure we lay it out again.  */
+
+  TYPE_SIZE (t) = NULL_TREE;
+
+  decl_attributes (&t, attributes, (int) ATTR_FLAG_TYPE_IN_PLACE);
+
+  if (pedantic)
+    {
+      for (x = fieldlist; x; x = DECL_CHAIN (x))
+	{
+	  if (DECL_NAME (x) != NULL_TREE)
+	    break;
+	  if (flag_isoc11 && RECORD_OR_UNION_TYPE_P (TREE_TYPE (x)))
+	    break;
+	}
+
+      if (x == NULL_TREE)
+	{
+	  if (TREE_CODE (t) == UNION_TYPE)
+	    {
+	      if (fieldlist)
+		pedwarn (loc, OPT_Wpedantic, "union has no named members");
+	      else
+		pedwarn (loc, OPT_Wpedantic, "union has no members");
+	    }
+	  else
+	    {
+	      if (fieldlist)
+		pedwarn (loc, OPT_Wpedantic, "struct has no named members");
+	      else
+		pedwarn (loc, OPT_Wpedantic, "struct has no members");
+	    }
+	}
+    }
+
+  /* Install struct as DECL_CONTEXT of each field decl.
+     Also process specified field sizes, found in the DECL_INITIAL,
+     storing 0 there after the type has been changed to precision equal
+     to its width, rather than the precision of the specified standard
+     type.  (Correct layout requires the original type to have been preserved
+     until now.)  */
+
+  bool saw_named_field = false;
+  for (x = fieldlist; x; x = DECL_CHAIN (x))
+    {
+      if (TREE_TYPE (x) == error_mark_node)
+	continue;
+
+      DECL_CONTEXT (x) = t;
+
+      /* If any field is const, the structure type is pseudo-const.  */
+      if (TREE_READONLY (x))
+	C_TYPE_FIELDS_READONLY (t) = 1;
+      else
+	{
+	  /* A field that is pseudo-const makes the structure likewise.  */
+	  tree t1 = strip_array_types (TREE_TYPE (x));
+	  if (RECORD_OR_UNION_TYPE_P (t1) && C_TYPE_FIELDS_READONLY (t1))
+	    C_TYPE_FIELDS_READONLY (t) = 1;
+	}
+
+      /* Any field that is volatile means variables of this type must be
+	 treated in some ways as volatile.  */
+      if (TREE_THIS_VOLATILE (x))
+	C_TYPE_FIELDS_VOLATILE (t) = 1;
+
+      /* Any field of nominal variable size implies structure is too.  */
+      if (C_DECL_VARIABLE_SIZE (x))
+	C_TYPE_VARIABLE_SIZE (t) = 1;
+
+      if (DECL_C_BIT_FIELD (x))
+	{
+	  unsigned HOST_WIDE_INT width = tree_to_uhwi (DECL_INITIAL (x));
+	  DECL_SIZE (x) = bitsize_int (width);
+	  DECL_BIT_FIELD (x) = 1;
+	}
+
+      if (TYPE_PACKED (t)
+	  && (DECL_BIT_FIELD (x)
+	      || TYPE_ALIGN (TREE_TYPE (x)) > BITS_PER_UNIT))
+	DECL_PACKED (x) = 1;
+
+      /* Detect flexible array member in an invalid context.  */
+      if (TREE_CODE (TREE_TYPE (x)) == ARRAY_TYPE
+	  && TYPE_SIZE (TREE_TYPE (x)) == NULL_TREE
+	  && TYPE_DOMAIN (TREE_TYPE (x)) != NULL_TREE
+	  && TYPE_MAX_VALUE (TYPE_DOMAIN (TREE_TYPE (x))) == NULL_TREE)
+	{
+	  if (TREE_CODE (t) == UNION_TYPE)
+	    {
+	      error_at (DECL_SOURCE_LOCATION (x),
+			"flexible array member in union");
+	      TREE_TYPE (x) = error_mark_node;
+	    }
+	  else if (DECL_CHAIN (x) != NULL_TREE)
+	    {
+	      error_at (DECL_SOURCE_LOCATION (x),
+			"flexible array member not at end of struct");
+	      TREE_TYPE (x) = error_mark_node;
+	    }
+	  else if (!saw_named_field)
+	    {
+	      error_at (DECL_SOURCE_LOCATION (x),
+			"flexible array member in a struct with no named "
+			"members");
+	      TREE_TYPE (x) = error_mark_node;
+	    }
+	}
+
+      if (pedantic && TREE_CODE (t) == RECORD_TYPE
+	  && flexible_array_type_p (TREE_TYPE (x)))
+	pedwarn (DECL_SOURCE_LOCATION (x), OPT_Wpedantic,
+		 "invalid use of structure with flexible array member");
+
+      if (DECL_NAME (x)
+	  || RECORD_OR_UNION_TYPE_P (TREE_TYPE (x)))
+	saw_named_field = true;
+    }
+
+  detect_field_duplicates (fieldlist);
+
+  /* Now we have the nearly final fieldlist.  Record it,
+     then lay out the structure or union (including the fields).  */
+
+  TYPE_FIELDS (t) = fieldlist;
+
+  maybe_apply_pragma_scalar_storage_order (t);
+
+  layout_type (t);
+
+  if (TYPE_SIZE_UNIT (t)
+      && TREE_CODE (TYPE_SIZE_UNIT (t)) == INTEGER_CST
+      && !TREE_OVERFLOW (TYPE_SIZE_UNIT (t))
+      && !valid_constant_size_p (TYPE_SIZE_UNIT (t)))
+    error ("type %qT is too large", t);
+
+  /* Give bit-fields their proper types and rewrite the type of array fields
+     with scalar component if the enclosing type has reverse storage order.  */
+  for (tree field = fieldlist; field; field = DECL_CHAIN (field))
+    {
+      if (TREE_CODE (field) == FIELD_DECL
+	  && DECL_INITIAL (field)
+	  && TREE_TYPE (field) != error_mark_node)
+	{
+	  unsigned HOST_WIDE_INT width
+	    = tree_to_uhwi (DECL_INITIAL (field));
+	  tree type = TREE_TYPE (field);
+	  if (width != TYPE_PRECISION (type))
+	    {
+	      TREE_TYPE (field)
+		= c_build_bitfield_integer_type (width, TYPE_UNSIGNED (type));
+	      SET_DECL_MODE (field, TYPE_MODE (TREE_TYPE (field)));
+	    }
+	  DECL_INITIAL (field) = NULL_TREE;
+	}
+      else if (TYPE_REVERSE_STORAGE_ORDER (t)
+	       && TREE_CODE (field) == FIELD_DECL
+	       && TREE_CODE (TREE_TYPE (field)) == ARRAY_TYPE)
+	{
+	  tree ftype = TREE_TYPE (field);
+	  tree ctype = strip_array_types (ftype);
+	  if (!RECORD_OR_UNION_TYPE_P (ctype) && TYPE_MODE (ctype) != QImode)
+	    {
+	      tree fmain_type = TYPE_MAIN_VARIANT (ftype);
+	      tree *typep = &fmain_type;
+	      do {
+		*typep = build_distinct_type_copy (*typep);
+		TYPE_REVERSE_STORAGE_ORDER (*typep) = 1;
+		typep = &TREE_TYPE (*typep);
+	      } while (TREE_CODE (*typep) == ARRAY_TYPE);
+	      TREE_TYPE (field)
+		= c_build_qualified_type (fmain_type, TYPE_QUALS (ftype));
+	    }
+
+
+// Source: c-decl.c
+// Lines 8390-8569
+
+
+[ANSWER]
+MUST-NOT

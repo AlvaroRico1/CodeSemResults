@@ -1,0 +1,1 @@
+hunk,libgit2/tests/libgit2/diff/diff_helpers.c,3,scan,libgit2/tests/libgit2/diff/diff_helpers.c,7,0

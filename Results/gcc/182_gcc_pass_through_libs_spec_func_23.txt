@@ -1,0 +1,1 @@
+lopt,gcc/gcc/gcc.c,16,argv,gcc/gcc/gcc.c,1,0

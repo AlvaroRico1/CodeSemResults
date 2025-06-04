@@ -1,0 +1,1 @@
+challenge,libgit2/deps/ntlmclient/ntlm.c,7,challenge_msg,libgit2/deps/ntlmclient/ntlm.c,3,1

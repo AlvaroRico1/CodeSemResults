@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'z' at line 1
+2. Pointer 'buff' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int luaZ_fill (ZIO *z) {
+  size_t size;
+  lua_State *L = z->L;
+  const char *buff;
+  lua_unlock(L);
+  buff = z->reader(L, z->data, &size);
+  lua_lock(L);
+  if (buff == NULL || size == 0) return EOZ;
+  z->n = size - 1;
+  z->p = buff;
+  return char2int(*(z->p++));
+}
+
+
+// Source: lzio.c
+// Lines 21-32
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,28 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'removed' at line 6
+2. Pointer 'data' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+flatten_remove_node_hook (struct cgraph_node *node, void *data)
+{
+  if (lookup_attribute ("flatten", DECL_ATTRIBUTES (node->decl)) == NULL)
+    return;
+
+  hash_set<struct cgraph_node *> *removed
+    = (hash_set<struct cgraph_node *> *) data;
+  removed->add (node);
+}
+
+
+// Source: ipa-inline.c
+// Lines 2580-2588
+
+
+[ANSWER]
+MUST

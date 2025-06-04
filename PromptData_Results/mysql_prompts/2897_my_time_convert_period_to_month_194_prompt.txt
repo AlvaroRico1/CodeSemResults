@@ -1,0 +1,30 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'b' at line 3
+2. Pointer 'a' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+uint64_t convert_period_to_month(uint64_t period) {
+  uint64_t a;
+  unsigned b;
+  if (period == 0) return 0L;
+  if ((a = period / 100) < YY_PART_YEAR)
+    a += 2000;
+  else if (a < 100)
+    a += 1900;
+  b = period % 100;
+  return a * 12 + b - 1;
+}
+
+
+// Source: my_time.cc
+// Lines 2255-2265
+
+
+[ANSWER]
+MUST-NOT

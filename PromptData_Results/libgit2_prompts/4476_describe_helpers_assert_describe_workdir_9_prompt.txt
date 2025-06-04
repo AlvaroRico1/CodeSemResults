@@ -1,0 +1,36 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'fmt_opts' at line 5
+2. Pointer 'result' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void assert_describe_workdir(
+	const char *expected_output,
+	git_repository *repo,
+	git_describe_options *opts,
+	git_describe_format_options *fmt_opts)
+{
+	git_buf label = GIT_BUF_INIT;
+	git_describe_result *result;
+
+	cl_git_pass(git_describe_workdir(&result, repo, opts));
+	cl_git_pass(git_describe_format(&label, result, fmt_opts));
+
+	cl_must_pass(wildmatch(expected_output, label.ptr, 0));
+
+	git_describe_result_free(result);
+	git_buf_dispose(&label);
+}
+
+
+// Source: describe_helpers.c
+// Lines 28-44
+
+
+[ANSWER]
+MUST-NOT

@@ -1,0 +1,75 @@
+  size_t len;
+
+  if (instance == nullptr)               // nowhere to return the handle
+    return LOG_SERVICE_INVALID_ARGUMENT; /* purecov: inspected */
+
+  *instance = nullptr;
+
+  if (opened >= 99)  // limit instances, and thus file-name length
+    return LOG_SERVICE_TOO_MANY_INSTANCES; /* purecov: inspected */
+
+  // malloc state failed
+  if ((mi = (my_state *)log_bs->malloc(sizeof(my_state))) == nullptr) {
+    rr = LOG_SERVICE_OUT_OF_MEMORY; /* purecov: inspected */
+    goto fail;                      /* purecov: inspected */
+  }
+
+  mi->ext = nullptr;
+  mi->id = opened;
+
+  if ((rr = get_json_log_name(mi, buff, sizeof(buff))) != LOG_SERVICE_SUCCESS)
+    goto fail_with_free; /* purecov: inspected */
+
+  len = strlen(buff);
+
+  if ((mi->ext = log_bs->strndup(buff, len + 1)) ==
+      nullptr) {                    // copy ext failed
+    rr = LOG_SERVICE_OUT_OF_MEMORY; /* purecov: inspected */
+    goto fail_with_free;            /* purecov: inspected */
+  }
+
+  if ((rr = log_bi->open_errstream(mi->ext, &mi->errstream)) >= 0) {
+    opened++;
+    *instance = (void *)mi;
+    return LOG_SERVICE_SUCCESS;
+  }
+
+  log_bs->free(mi->ext); /* purecov: begin inspected */
+
+fail_with_free:
+  log_bs->free(mi);
+
+fail:
+  return rr; /* purecov: end */
+}
+
+/**
+  Close and release an instance. Flushes any buffers.
+
+  @retval  <0        an error occurred
+  @retval  =0        success
+*/
+DEFINE_METHOD(log_service_error, log_service_imp::close, (void **instance)) {
+  my_state *mi;
+  log_service_error rr;
+
+  if (instance == nullptr) return LOG_SERVICE_INVALID_ARGUMENT;
+
+  mi = (my_state *)*instance;
+
+  *instance = nullptr;
+
+  opened--;
+
+  rr = log_bi->close_errstream(&mi->errstream);
+
+  if (mi->ext != nullptr) log_bs->free(mi->ext);
+
+  log_bs->free(mi);
+
+  return rr;
+}
+
+
+// Source: log_sink_json.cc
+// Lines 469-539

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'c' at line 3\n2. Pointer 'c_loop' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ncmd_find_best_client(struct session *s)\n{\n\tstruct client\t*c_loop, *c;\n\n\tif (s->attached == 0)\n\t\ts = NULL;\n\n\tc = NULL;\n\tTAILQ_FOREACH(c_loop, &clients, entry) {\n\t\tif (c_loop->session == NULL)\n\t\t\tcontinue;\n\t\tif (s != NULL && c_loop->session != s)\n\t\t\tcontinue;\n\t\tif (cmd_find_client_better(c_loop, c))\n\t\t\tc = c_loop;\n\t}\n\treturn (c);\n}\n\n\n// Source: cmd-find.c\n// Lines 113-130\n",
+  "ANSWER": "MUST"
+}

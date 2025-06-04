@@ -1,0 +1,37 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'hashparams' at line 3
+2. Pointer 'ctxt' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int Curl_HMAC_final(struct HMAC_context *ctxt, unsigned char *result)
+{
+  const struct HMAC_params *hashparams = ctxt->hmac_hash;
+
+  /* Do not get result if called with a null parameter: only release
+     storage. */
+
+  if(!result)
+    result = (unsigned char *) ctxt->hmac_hashctxt2 +
+     ctxt->hmac_hash->hmac_ctxtsize;
+
+  (*hashparams->hmac_hfinal)(result, ctxt->hmac_hashctxt1);
+  (*hashparams->hmac_hupdate)(ctxt->hmac_hashctxt2,
+   result, hashparams->hmac_resultlen);
+  (*hashparams->hmac_hfinal)(result, ctxt->hmac_hashctxt2);
+  free((char *) ctxt);
+  return 0;
+}
+
+
+// Source: hmac.c
+// Lines 114-131
+
+
+[ANSWER]
+MUST

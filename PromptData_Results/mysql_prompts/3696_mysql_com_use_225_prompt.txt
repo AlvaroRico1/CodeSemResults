@@ -1,0 +1,96 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tmp' at line 2
+2. Pointer 'line' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int com_use(String *buffer MY_ATTRIBUTE((unused)), char *line) {
+  char *tmp, buff[FN_REFLEN + 1];
+  int select_db;
+  uint warnings;
+
+  memset(buff, 0, sizeof(buff));
+
+  /*
+    In case of quotes used, try to get the normalized db name.
+  */
+  if (get_quote_count(line) > 0) {
+    if (normalize_dbname(line, buff, sizeof(buff))) return put_error(&mysql);
+    tmp = buff;
+  } else {
+    strmake(buff, line, sizeof(buff) - 1);
+    tmp = get_arg(buff, false);
+  }
+
+  if (!tmp || !*tmp) {
+    put_info("USE must be followed by a database name", INFO_ERROR);
+    return 0;
+  }
+  /*
+    We need to recheck the current database, because it may change
+    under our feet, for example if DROP DATABASE or RENAME DATABASE
+    (latter one not yet available by the time the comment was written)
+    If this command fails we assume we lost connection.
+  */
+  if (get_current_db()) connected = false;
+
+  if (!current_db || cmp_database(charset_info, current_db, tmp)) {
+    if (one_database) {
+      skip_updates = true;
+      select_db = 0;  // don't do mysql_select_db()
+    } else
+      select_db = 2;  // do mysql_select_db() and build_completion_hash()
+  } else {
+    /*
+      USE to the current db specified.
+      We do need to send mysql_select_db() to make server
+      update database level privileges, which might
+      change since last USE (see bug#10979).
+      For performance purposes, we'll skip rebuilding of completion hash.
+    */
+    skip_updates = false;
+    select_db = 1;  // do only mysql_select_db(), without completion
+  }
+
+  if (select_db) {
+    /*
+      reconnect once if connection is down or if connection was found to
+      be down during query
+    */
+    if (!connected && reconnect())
+      return opt_reconnect ? -1 : 1;  // Fatal error
+    if (mysql_select_db(&mysql, tmp)) {
+      if (mysql_errno(&mysql) != CR_SERVER_GONE_ERROR) return put_error(&mysql);
+
+      if (reconnect()) return opt_reconnect ? -1 : 1;  // Fatal error
+      if (mysql_select_db(&mysql, tmp)) return put_error(&mysql);
+    }
+    my_free(current_db);
+    current_db = my_strdup(PSI_NOT_INSTRUMENTED, tmp, MYF(MY_WME));
+#ifdef HAVE_READLINE
+    if (select_db > 1) build_completion_hash(opt_rehash, true);
+#endif
+  }
+
+  if (0 < (warnings = mysql_warning_count(&mysql))) {
+    snprintf(buff, sizeof(buff), "Database changed, %u warning%s", warnings,
+             warnings > 1 ? "s" : "");
+    put_info(buff, INFO_INFO);
+    if (show_warnings == 1) print_warnings();
+  } else
+    put_info("Database changed", INFO_INFO);
+  return 0;
+}
+
+
+// Source: mysql.cc
+// Lines 4262-4338
+
+
+[ANSWER]
+MUST-NOT

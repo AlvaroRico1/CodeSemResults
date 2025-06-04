@@ -1,0 +1,42 @@
+window_client_key(struct window_mode_entry *wme, struct client *c,
+    __unused struct session *s, __unused struct winlink *wl, key_code key,
+    struct mouse_event *m)
+{
+	struct window_pane		*wp = wme->wp;
+	struct window_client_modedata	*data = wme->data;
+	struct mode_tree_data		*mtd = data->data;
+	struct window_client_itemdata	*item;
+	int				 finished;
+
+	finished = mode_tree_key(mtd, c, &key, m, NULL, NULL);
+	switch (key) {
+	case 'd':
+	case 'x':
+	case 'z':
+		item = mode_tree_get_current(mtd);
+		window_client_do_detach(data, item, c, key);
+		mode_tree_build(mtd);
+		break;
+	case 'D':
+	case 'X':
+	case 'Z':
+		mode_tree_each_tagged(mtd, window_client_do_detach, c, key, 0);
+		mode_tree_build(mtd);
+		break;
+	case '\r':
+		item = mode_tree_get_current(mtd);
+		mode_tree_run_command(c, NULL, data->command, item->c->ttyname);
+		finished = 1;
+		break;
+	}
+	if (finished || server_client_how_many() == 0)
+		window_pane_reset_mode(wp);
+	else {
+		mode_tree_draw(mtd);
+		wp->flags |= PANE_REDRAW;
+	}
+}
+
+
+// Source: window-client.c
+// Lines 381-418

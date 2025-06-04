@@ -1,0 +1,41 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'content' at line 1
+2. Pointer 'lf' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int format_header_field(git_str *out, const char *field, const char *content)
+{
+	const char *lf;
+
+	GIT_ASSERT_ARG(out);
+	GIT_ASSERT_ARG(field);
+	GIT_ASSERT_ARG(content);
+
+	git_str_puts(out, field);
+	git_str_putc(out, ' ');
+
+	while ((lf = strchr(content, '\n')) != NULL) {
+		git_str_put(out, content, lf - content);
+		git_str_puts(out, "\n ");
+		content = lf + 1;
+	}
+
+	git_str_puts(out, content);
+	git_str_putc(out, '\n');
+
+	return git_str_oom(out) ? -1 : 0;
+}
+
+
+// Source: commit.c
+// Lines 937-958
+
+
+[ANSWER]
+MUST

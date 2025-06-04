@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'cdata' at line 3\n2. Pointer 'data' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ncmd_command_prompt_free(void *data)\n{\n\tstruct cmd_command_prompt_cdata\t*cdata = data;\n\tu_int\t\t\t\t i;\n\n\tfor (i = 0; i < cdata->count; i++) {\n\t\tfree(cdata->prompts[i].prompt);\n\t\tfree(cdata->prompts[i].input);\n\t}\n\tfree(cdata->prompts);\n\tcmd_free_argv(cdata->argc, cdata->argv);\n\targs_make_commands_free(cdata->state);\n\tfree(cdata);\n}\n\n\n// Source: cmd-command-prompt.c\n// Lines 225-238\n",
+  "ANSWER": "MUST"
+}

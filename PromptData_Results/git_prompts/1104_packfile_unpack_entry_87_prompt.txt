@@ -1,0 +1,105 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'data' at line 6
+2. Pointer 'ent' at line 20
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void *unpack_entry(struct repository *r, struct packed_git *p, off_t obj_offset,
+		   enum object_type *final_type, unsigned long *final_size)
+{
+	struct pack_window *w_curs = NULL;
+	off_t curpos = obj_offset;
+	void *data = NULL;
+	unsigned long size;
+	enum object_type type;
+	struct unpack_entry_stack_ent small_delta_stack[UNPACK_ENTRY_STACK_PREALLOC];
+	struct unpack_entry_stack_ent *delta_stack = small_delta_stack;
+	int delta_stack_nr = 0, delta_stack_alloc = UNPACK_ENTRY_STACK_PREALLOC;
+	int base_from_cache = 0;
+
+	write_pack_access_log(p, obj_offset);
+
+	/* PHASE 1: drill down to the innermost base object */
+	for (;;) {
+		off_t base_offset;
+		int i;
+		struct delta_base_cache_entry *ent;
+
+		ent = get_delta_base_cache_entry(p, curpos);
+		if (ent) {
+			type = ent->type;
+			data = ent->data;
+			size = ent->size;
+			detach_delta_base_cache_entry(ent);
+			base_from_cache = 1;
+			break;
+		}
+
+		if (do_check_packed_object_crc && p->index_version > 1) {
+			uint32_t pack_pos, index_pos;
+			off_t len;
+
+			if (offset_to_pack_pos(p, obj_offset, &pack_pos) < 0) {
+				error("could not find object at offset %"PRIuMAX" in pack %s",
+				      (uintmax_t)obj_offset, p->pack_name);
+				data = NULL;
+				goto out;
+			}
+
+			len = pack_pos_to_offset(p, pack_pos + 1) - obj_offset;
+			index_pos = pack_pos_to_index(p, pack_pos);
+			if (check_pack_crc(p, &w_curs, obj_offset, len, index_pos)) {
+				struct object_id oid;
+				nth_packed_object_id(&oid, p, index_pos);
+				error("bad packed object CRC for %s",
+				      oid_to_hex(&oid));
+				mark_bad_packed_object(p, &oid);
+				data = NULL;
+				goto out;
+			}
+		}
+
+		type = unpack_object_header(p, &w_curs, &curpos, &size);
+		if (type != OBJ_OFS_DELTA && type != OBJ_REF_DELTA)
+			break;
+
+		base_offset = get_delta_base(p, &w_curs, &curpos, type, obj_offset);
+		if (!base_offset) {
+			error("failed to validate delta base reference "
+			      "at offset %"PRIuMAX" from %s",
+			      (uintmax_t)curpos, p->pack_name);
+			/* bail to phase 2, in hopes of recovery */
+			data = NULL;
+			break;
+		}
+
+		/* push object, proceed to base */
+		if (delta_stack_nr >= delta_stack_alloc
+		    && delta_stack == small_delta_stack) {
+			delta_stack_alloc = alloc_nr(delta_stack_nr);
+			ALLOC_ARRAY(delta_stack, delta_stack_alloc);
+			COPY_ARRAY(delta_stack, small_delta_stack,
+				   delta_stack_nr);
+		} else {
+			ALLOC_GROW(delta_stack, delta_stack_nr+1, delta_stack_alloc);
+		}
+		i = delta_stack_nr++;
+		delta_stack[i].obj_offset = obj_offset;
+		delta_stack[i].curpos = curpos;
+		delta_stack[i].size = size;
+
+		curpos = obj_offset = base_offset;
+	}
+
+
+// Source: packfile.c
+// Lines 1665-1750
+
+
+[ANSWER]
+MUST

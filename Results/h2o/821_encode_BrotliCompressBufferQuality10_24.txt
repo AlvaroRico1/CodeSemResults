@@ -1,0 +1,1 @@
+storage,h2o/deps/brotli/c/enc/encode.c,60,encoded_buffer,h2o/deps/brotli/c/enc/encode.c,3,2

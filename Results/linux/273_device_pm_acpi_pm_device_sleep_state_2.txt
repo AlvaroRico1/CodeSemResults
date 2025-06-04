@@ -1,0 +1,1 @@
+d_min_p,linux/drivers/acpi/device_pm.c,1,d_min,linux/drivers/acpi/device_pm.c,4,2

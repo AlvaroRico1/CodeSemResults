@@ -1,0 +1,84 @@
+static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res, void *_self)
+{
+    struct st_connect_generator_t *self = _self;
+    if (getaddr_req == self->getaddr_req.v4) {
+        self->getaddr_req.v4 = NULL;
+    } else if (getaddr_req == self->getaddr_req.v6) {
+        self->getaddr_req.v6 = NULL;
+    } else {
+        h2o_fatal("unexpected getaddr_req");
+    }
+
+    /* Store addresses, or convert error to ACL denial. */
+    if (errstr == NULL) {
+        if (self->is_tcp) {
+            assert(res->ai_socktype == SOCK_STREAM);
+        } else {
+            assert(res->ai_socktype == SOCK_DGRAM);
+        }
+        assert(res != NULL && "upon successful return, getaddrinfo shall return at least one address (RFC 3493 Section 6.1)");
+        if (!store_server_addresses(self, res))
+            set_last_error(self, ERROR_CLASS_ACCESS_PROHIBITED, "destination_ip_prohibited");
+    } else {
+        set_last_error(self, ERROR_CLASS_NAME_RESOLUTION, errstr);
+    }
+
+    if (self->getaddr_req.v4 == NULL) {
+        /* If v6 lookup is still running, that means that v4 lookup has *just* completed. Set the resolution delay timer if v4
+         * addresses are available. */
+        if (self->getaddr_req.v6 != NULL) {
+            assert(self->server_addresses.used == 0);
+            if (self->server_addresses.size != 0) {
+                self->eyeball_delay.cb = on_resolution_delay_timeout;
+                h2o_timer_link(get_loop(self), self->handler->config.happy_eyeballs.name_resolution_delay, &self->eyeball_delay);
+            }
+            return;
+        }
+
+        /* Both v4 and v6 lookups are complete. If the resolution delay timer is running. Reset it. */
+        if (h2o_timer_is_linked(&self->eyeball_delay) && self->eyeball_delay.cb == on_resolution_delay_timeout) {
+            assert(self->server_addresses.used == 0);
+            h2o_timer_unlink(&self->eyeball_delay);
+        }
+        /* In case no addresses are available, send HTTP error. */
+        if (self->server_addresses.size == 0) {
+            if (self->last_error.class == ERROR_CLASS_ACCESS_PROHIBITED) {
+                record_error(self, self->last_error.str, NULL, NULL);
+                send_connect_error(self, 403, "Destination IP Prohibited", "Destination IP Prohibited");
+            } else {
+                const char *rcode;
+                if (self->last_error.str == h2o_hostinfo_error_nxdomain) {
+                    rcode = "NXDOMAIN";
+                } else if (self->last_error.str == h2o_hostinfo_error_nodata) {
+                    rcode = "NODATA";
+                } else if (self->last_error.str == h2o_hostinfo_error_refused) {
+                    rcode = "REFUSED";
+                } else if (self->last_error.str == h2o_hostinfo_error_servfail) {
+                    rcode = "SERVFAIL";
+                } else {
+                    rcode = NULL;
+                }
+                record_error(self, "dns_error", self->last_error.str, rcode);
+                on_connect_error(self, self->last_error.str);
+            }
+            return;
+        }
+    }
+
+    /* Try connecting if possible. */
+    if (self->server_addresses.used == self->server_addresses.size)
+        return;
+    /* If connection attempt has been under way for more than CONNECTION_ATTEMPT_DELAY_MS, stop that and try next address. Return
+     * otherwise. */
+    if (self->sock != NULL) {
+        if (h2o_timer_is_linked(&self->eyeball_delay))
+            return;
+        h2o_socket_close(self->sock);
+        self->sock = NULL;
+    }
+    try_connect(self);
+}
+
+
+// Source: connect.c
+// Lines 348-427

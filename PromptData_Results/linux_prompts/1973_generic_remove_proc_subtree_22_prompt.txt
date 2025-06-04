@@ -1,0 +1,64 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'de' at line 3
+2. Pointer 'de' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int remove_proc_subtree(const char *name, struct proc_dir_entry *parent)
+{
+	struct proc_dir_entry *root = NULL, *de, *next;
+	const char *fn = name;
+	unsigned int len;
+
+	write_lock(&proc_subdir_lock);
+	if (__xlate_proc_name(name, &parent, &fn) != 0) {
+		write_unlock(&proc_subdir_lock);
+		return -ENOENT;
+	}
+	len = strlen(fn);
+
+	root = pde_subdir_find(parent, fn, len);
+	if (!root) {
+		write_unlock(&proc_subdir_lock);
+		return -ENOENT;
+	}
+	rb_erase(&root->subdir_node, &parent->subdir);
+
+	de = root;
+	while (1) {
+		next = pde_subdir_first(de);
+		if (next) {
+			rb_erase(&next->subdir_node, &de->subdir);
+			de = next;
+			continue;
+		}
+		write_unlock(&proc_subdir_lock);
+
+		proc_entry_rundown(de);
+		next = de->parent;
+		if (S_ISDIR(de->mode))
+			next->nlink--;
+		de->nlink = 0;
+		if (de == root)
+			break;
+		pde_put(de);
+
+		write_lock(&proc_subdir_lock);
+		de = next;
+	}
+	pde_put(root);
+	return 0;
+}
+
+
+// Source: generic.c
+// Lines 689-733
+
+
+[ANSWER]
+MUST

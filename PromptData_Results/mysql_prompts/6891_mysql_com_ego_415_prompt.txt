@@ -1,0 +1,27 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'result' at line 2
+2. Pointer 'oldvertical' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int com_ego(String *buffer, char *line) {
+  int result;
+  bool oldvertical = vertical;
+  vertical = true;
+  result = com_go(buffer, line);
+  vertical = oldvertical;
+  return result;
+}
+
+
+// Source: mysql.cc
+// Lines 3471-3478
+
+
+[ANSWER]
+MUST-NOT

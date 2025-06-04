@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ptg_thread' at line 4\n2. Pointer 'gtp_thread' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int tloop_spawnwait_tasks(struct bidirectional_transfer_state *s)\n{\n\tpthread_t gtp_thread;\n\tpthread_t ptg_thread;\n\tint err;\n\tint ret = 0;\n\terr = pthread_create(&gtp_thread, NULL, udt_copy_task_routine,\n\t\t&s->gtp);\n\tif (err)\n\t\tdie(_(\"can't start thread for copying data: %s\"), strerror(err));\n\terr = pthread_create(&ptg_thread, NULL, udt_copy_task_routine,\n\t\t&s->ptg);\n\tif (err)\n\t\tdie(_(\"can't start thread for copying data: %s\"), strerror(err));\n\n\tret |= tloop_join(gtp_thread, \"Git to program copy\");\n\tret |= tloop_join(ptg_thread, \"Program to git copy\");\n\treturn ret;\n}\n\n\n// Source: transport-helper.c\n// Lines 1475-1493\n",
+  "ANSWER": "MAY"
+}

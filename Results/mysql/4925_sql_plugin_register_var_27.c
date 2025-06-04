@@ -1,0 +1,110 @@
+static st_bookmark *register_var(const char *plugin, const char *name,
+                                 int flags) {
+  size_t length = strlen(plugin) + strlen(name) + 3, size = 0, offset, new_size;
+  st_bookmark *result;
+  char *varname, *p;
+
+  if (!(flags & PLUGIN_VAR_THDLOCAL)) return nullptr;
+
+  switch (flags & PLUGIN_VAR_TYPEMASK) {
+    case PLUGIN_VAR_BOOL:
+      size = sizeof(bool);
+      break;
+    case PLUGIN_VAR_INT:
+      size = sizeof(int);
+      break;
+    case PLUGIN_VAR_LONG:
+    case PLUGIN_VAR_ENUM:
+      size = sizeof(long);
+      break;
+    case PLUGIN_VAR_LONGLONG:
+    case PLUGIN_VAR_SET:
+      size = sizeof(ulonglong);
+      break;
+    case PLUGIN_VAR_STR:
+      size = sizeof(char *);
+      break;
+    case PLUGIN_VAR_DOUBLE:
+      size = sizeof(double);
+      break;
+    default:
+      assert(0);
+      return nullptr;
+  };
+
+  varname = ((char *)my_alloca(length));
+  strxmov(varname + 1, plugin, "_", name, NullS);
+  for (p = varname + 1; *p; p++)
+    if (*p == '-') *p = '_';
+
+  if (!(result = find_bookmark(nullptr, varname + 1, flags))) {
+    result =
+        (st_bookmark *)plugin_mem_root.Alloc(sizeof(st_bookmark) + length - 1);
+    varname[0] = flags & PLUGIN_VAR_TYPEMASK;
+    memcpy(result->key, varname, length);
+    result->name_len = length - 2;
+    result->offset = -1;
+
+    assert(size && !(size & (size - 1))); /* must be power of 2 */
+
+    offset = global_system_variables.dynamic_variables_size;
+    offset = (offset + size - 1) & ~(size - 1);
+    result->offset = (int)offset;
+
+    new_size = (offset + size + 63) & ~63;
+
+    if (new_size > global_variables_dynamic_size) {
+      global_system_variables.dynamic_variables_ptr = (char *)my_realloc(
+          key_memory_global_system_variables,
+          global_system_variables.dynamic_variables_ptr, new_size,
+          MYF(MY_WME | MY_FAE | MY_ALLOW_ZERO_PTR));
+      max_system_variables.dynamic_variables_ptr = (char *)my_realloc(
+          key_memory_global_system_variables,
+          max_system_variables.dynamic_variables_ptr, new_size,
+          MYF(MY_WME | MY_FAE | MY_ALLOW_ZERO_PTR));
+      /*
+        Clear the new variable value space. This is required for string
+        variables. If their value is non-NULL, it must point to a valid
+        string.
+      */
+      memset(global_system_variables.dynamic_variables_ptr +
+                 global_variables_dynamic_size,
+             0, new_size - global_variables_dynamic_size);
+      memset(max_system_variables.dynamic_variables_ptr +
+                 global_variables_dynamic_size,
+             0, new_size - global_variables_dynamic_size);
+      global_variables_dynamic_size = new_size;
+    }
+
+    global_system_variables.dynamic_variables_head = offset;
+    max_system_variables.dynamic_variables_head = offset;
+    global_system_variables.dynamic_variables_size = offset + size;
+    max_system_variables.dynamic_variables_size = offset + size;
+    global_system_variables.dynamic_variables_version++;
+    max_system_variables.dynamic_variables_version++;
+
+    result->version = global_system_variables.dynamic_variables_version;
+
+    /* this should succeed because we have already checked if a dup exists */
+    std::string key(result->key, result->name_len + 1);
+    bookmark_hash->emplace(key, result);
+
+    /*
+      Hashing vars of string type with MEMALLOC flag.
+    */
+    if (((flags & PLUGIN_VAR_TYPEMASK) == PLUGIN_VAR_STR) &&
+        (flags & PLUGIN_VAR_MEMALLOC) &&
+        !malloced_string_type_sysvars_bookmark_hash->emplace(key, result)
+             .second) {
+      fprintf(stderr,
+              "failed to add placeholder to"
+              " hash of malloced string type sysvars");
+      assert(0);
+    }
+  }
+  return result;
+}
+
+
+// Source: sql_plugin.cc
+// Lines 2810-2915

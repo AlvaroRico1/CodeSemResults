@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'size' at line 8\n2. Pointer 'type' at line 7\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nconst void *repo_get_commit_buffer(struct repository *r,\n\t\t\t\t   const struct commit *commit,\n\t\t\t\t   unsigned long *sizep)\n{\n\tconst void *ret = get_cached_commit_buffer(r, commit, sizep);\n\tif (!ret) {\n\t\tenum object_type type;\n\t\tunsigned long size;\n\t\tret = repo_read_object_file(r, &commit->object.oid, &type, &size);\n\t\tif (!ret)\n\t\t\tdie(\"cannot read commit object %s\",\n\t\t\t    oid_to_hex(&commit->object.oid));\n\t\tif (type != OBJ_COMMIT)\n\t\t\tdie(\"expected commit for %s, got %s\",\n\t\t\t    oid_to_hex(&commit->object.oid), type_name(type));\n\t\tif (sizep)\n\t\t\t*sizep = size;\n\t}\n\treturn ret;\n}\n\n\n// Source: commit.c\n// Lines 292-311\n",
+  "ANSWER": "MAY"
+}

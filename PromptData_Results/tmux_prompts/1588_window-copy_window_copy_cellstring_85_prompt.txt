@@ -1,0 +1,52 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'copy' at line 6
+2. Pointer 'size' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+window_copy_cellstring(const struct grid_line *gl, u_int px, size_t *size,
+    int *allocated)
+{
+	static struct utf8_data	 ud;
+	struct grid_cell_entry	*gce;
+	char			*copy;
+
+	if (px >= gl->cellsize) {
+		*size = 1;
+		*allocated = 0;
+		return (" ");
+	}
+
+	gce = &gl->celldata[px];
+	if (gce->flags & GRID_FLAG_PADDING) {
+		*size = 0;
+		*allocated = 0;
+		return (NULL);
+	}
+	if (~gce->flags & GRID_FLAG_EXTENDED) {
+		*size = 1;
+		*allocated = 0;
+		return (&gce->data.data);
+	}
+
+	utf8_to_data(gl->extddata[gce->offset].data, &ud);
+	*size = ud.size;
+	*allocated = 1;
+
+	copy = xmalloc(ud.size);
+	memcpy(copy, ud.data, ud.size);
+	return (copy);
+}
+
+
+// Source: window-copy.c
+// Lines 3125-3157
+
+
+[ANSWER]
+MAY

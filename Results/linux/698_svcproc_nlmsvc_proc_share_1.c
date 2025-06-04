@@ -1,0 +1,34 @@
+nlmsvc_proc_share(struct svc_rqst *rqstp)
+{
+	struct nlm_args *argp = rqstp->rq_argp;
+	struct nlm_res *resp = rqstp->rq_resp;
+	struct nlm_host	*host;
+	struct nlm_file	*file;
+
+	dprintk("lockd: SHARE         called\n");
+
+	resp->cookie = argp->cookie;
+
+	/* Don't accept new lock requests during grace period */
+	if (locks_in_grace(SVC_NET(rqstp)) && !argp->reclaim) {
+		resp->status = nlm_lck_denied_grace_period;
+		return rpc_success;
+	}
+
+	/* Obtain client and file */
+	if ((resp->status = nlmsvc_retrieve_args(rqstp, argp, &host, &file)))
+		return resp->status == nlm_drop_reply ? rpc_drop_reply :rpc_success;
+
+	/* Now try to create the share */
+	resp->status = cast_status(nlmsvc_share_file(host, file, argp));
+
+	dprintk("lockd: SHARE         status %d\n", ntohl(resp->status));
+	nlmsvc_release_lockowner(&argp->lock);
+	nlmsvc_release_host(host);
+	nlm_release_file(file);
+	return rpc_success;
+}
+
+
+// Source: svcproc.c
+// Lines 396-425

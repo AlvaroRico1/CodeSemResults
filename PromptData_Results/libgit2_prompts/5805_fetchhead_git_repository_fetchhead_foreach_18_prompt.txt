@@ -1,0 +1,75 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'is_merge' at line 9
+2. Pointer 'buffer' at line 10
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_repository_fetchhead_foreach(git_repository *repo,
+	git_repository_fetchhead_foreach_cb cb,
+	void *payload)
+{
+	git_str path = GIT_STR_INIT, file = GIT_STR_INIT, name = GIT_STR_INIT;
+	const char *ref_name;
+	git_oid oid;
+	const char *remote_url;
+	unsigned int is_merge = 0;
+	char *buffer, *line;
+	size_t line_num = 0;
+	int error = 0;
+
+	GIT_ASSERT_ARG(repo);
+	GIT_ASSERT_ARG(cb);
+
+	if (git_str_joinpath(&path, repo->gitdir, GIT_FETCH_HEAD_FILE) < 0)
+		return -1;
+
+	if ((error = git_futils_readbuffer(&file, git_str_cstr(&path))) < 0)
+		goto done;
+
+	buffer = file.ptr;
+
+	while ((line = git__strsep(&buffer, "\n")) != NULL) {
+		++line_num;
+
+		if ((error = fetchhead_ref_parse(
+				&oid, &is_merge, &name, &remote_url, line, line_num)) < 0)
+			goto done;
+
+		if (git_str_len(&name) > 0)
+			ref_name = git_str_cstr(&name);
+		else
+			ref_name = NULL;
+
+		error = cb(ref_name, remote_url, &oid, is_merge, payload);
+		if (error) {
+			git_error_set_after_callback(error);
+			goto done;
+		}
+	}
+
+	if (*buffer) {
+		git_error_set(GIT_ERROR_FETCHHEAD, "no EOL at line %"PRIuZ, line_num+1);
+		error = -1;
+		goto done;
+	}
+
+done:
+	git_str_dispose(&file);
+	git_str_dispose(&path);
+	git_str_dispose(&name);
+
+	return error;
+}
+
+
+// Source: fetchhead.c
+// Lines 272-327
+
+
+[ANSWER]
+MAY

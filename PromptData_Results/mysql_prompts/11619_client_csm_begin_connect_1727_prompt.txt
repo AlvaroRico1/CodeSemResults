@@ -1,0 +1,400 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'unix_socket' at line 8
+2. Pointer 'net' at line 19
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static mysql_state_machine_status csm_begin_connect(mysql_async_connect *ctx) {
+  MYSQL *mysql = ctx->mysql;
+  const char *host = ctx->host;
+  const char *user = ctx->user;
+  const char *passwd = ctx->passwd;
+  const char *db = ctx->db;
+  uint port = ctx->port;
+  const char *unix_socket = ctx->unix_socket;
+  ulong client_flag = ctx->client_flag;
+  bool connect_done =
+      true;  // this is true for most of the connect methods except sockets
+
+  DBUG_TRACE;
+
+  DBUG_PRINT("enter",
+             ("host: %s  db: %s  user: %s (client)", host ? host : "(Null)",
+              db ? db : "(Null)", user ? user : "(Null)"));
+
+  NET *net = &mysql->net;
+#ifdef _WIN32
+  HANDLE hPipe = INVALID_HANDLE_VALUE;
+#endif
+#ifdef HAVE_SYS_UN_H
+  struct sockaddr_un UNIXaddr;
+#endif
+  /* Test whether we're already connected */
+  if (net->vio) {
+    set_mysql_error(mysql, CR_ALREADY_CONNECTED, unknown_sqlstate);
+    return STATE_MACHINE_FAILED;
+  }
+
+  if (set_connect_attributes(mysql, ctx->buff, sizeof(ctx->buff)))
+    return STATE_MACHINE_FAILED;
+
+  mysql->methods = &client_methods;
+  net->vio = nullptr;     /* If something goes wrong */
+  mysql->client_flag = 0; /* For handshake */
+
+  /* use default options */
+  if (mysql->options.my_cnf_file || mysql->options.my_cnf_group) {
+    mysql_read_default_options(
+        &mysql->options,
+        (mysql->options.my_cnf_file ? mysql->options.my_cnf_file : "my"),
+        mysql->options.my_cnf_group);
+    my_free(mysql->options.my_cnf_file);
+    my_free(mysql->options.my_cnf_group);
+    mysql->options.my_cnf_file = mysql->options.my_cnf_group = nullptr;
+  }
+
+  /* Some empty-string-tests are done because of ODBC */
+  if (!host || !host[0]) host = mysql->options.host;
+  if (!user || !user[0]) {
+    user = mysql->options.user;
+    if (!user) user = "";
+  }
+  if (!passwd) {
+    passwd = mysql->options.password;
+#if !defined(MYSQL_SERVER)
+    if (!passwd) passwd = getenv("MYSQL_PWD"); /* get it from environment */
+#endif
+    if (!passwd) passwd = "";
+  }
+  if (!db || !db[0]) db = mysql->options.db;
+  if (!port) port = mysql->options.port;
+  if (!unix_socket) unix_socket = mysql->options.unix_socket;
+
+  mysql->server_status = SERVER_STATUS_AUTOCOMMIT;
+  DBUG_PRINT("info", ("Connecting"));
+
+  MYSQL_TRACE_STAGE(mysql, CONNECTING);
+  MYSQL_TRACE(CONNECTING, mysql, ());
+
+#if defined(_WIN32)
+  if ((!mysql->options.protocol ||
+       mysql->options.protocol == MYSQL_PROTOCOL_MEMORY) &&
+      (!host || !strcmp(host, LOCAL_HOST))) {
+    HANDLE handle_map;
+    DBUG_PRINT("info", ("Using shared memory"));
+
+    handle_map =
+        create_shared_memory(mysql, net, get_win32_connect_timeout(mysql));
+
+    if (handle_map == INVALID_HANDLE_VALUE) {
+      DBUG_PRINT("error",
+                 ("host: '%s'  socket: '%s'  shared memory: %s  have_tcpip: %d",
+                  host ? host : "<null>", unix_socket ? unix_socket : "<null>",
+                  mysql->options.shared_memory_base_name, (int)have_tcpip));
+      if (mysql->options.protocol == MYSQL_PROTOCOL_MEMORY)
+        return STATE_MACHINE_FAILED;
+      /*
+        Try also with PIPE or TCP/IP. Clear the error from
+        create_shared_memory().
+      */
+
+      net_clear_error(net);
+    } else {
+      mysql->options.protocol = MYSQL_PROTOCOL_MEMORY;
+      unix_socket = 0;
+      host = mysql->options.shared_memory_base_name;
+      snprintf(ctx->host_info = ctx->buff, sizeof(ctx->buff) - 1,
+               ER_CLIENT(CR_SHARED_MEMORY_CONNECTION), host);
+    }
+  }
+#endif /* _WIN32 */
+#if defined(HAVE_SYS_UN_H)
+  if (!net->vio &&
+      (!mysql->options.protocol ||
+       mysql->options.protocol == MYSQL_PROTOCOL_SOCKET) &&
+      (unix_socket || mysql_unix_port) &&
+      (!host || !strcmp(host, LOCAL_HOST))) {
+    my_socket sock = socket(AF_UNIX, SOCK_STREAM, 0);
+    DBUG_PRINT("info", ("Using socket"));
+    if (sock == SOCKET_ERROR) {
+      set_mysql_extended_error(mysql, CR_SOCKET_CREATE_ERROR, unknown_sqlstate,
+                               ER_CLIENT(CR_SOCKET_CREATE_ERROR), socket_errno);
+      return STATE_MACHINE_FAILED;
+    }
+
+    net->vio =
+        vio_new(sock, VIO_TYPE_SOCKET, VIO_LOCALHOST | VIO_BUFFERED_READ);
+    if (!net->vio) {
+      DBUG_PRINT("error", ("Unknow protocol %d ", mysql->options.protocol));
+      set_mysql_error(mysql, CR_CONN_UNKNOW_PROTOCOL, unknown_sqlstate);
+      closesocket(sock);
+      return STATE_MACHINE_FAILED;
+    }
+
+    if (ctx->non_blocking) vio_set_blocking_flag(net->vio, !ctx->non_blocking);
+
+    host = LOCAL_HOST;
+    if (!unix_socket) unix_socket = mysql_unix_port;
+    ctx->host_info = const_cast<char *>(ER_CLIENT(CR_LOCALHOST_CONNECTION));
+    DBUG_PRINT("info", ("Using UNIX sock '%s'", unix_socket));
+
+    memset(&UNIXaddr, 0, sizeof(UNIXaddr));
+    UNIXaddr.sun_family = AF_UNIX;
+    strmake(UNIXaddr.sun_path, unix_socket, sizeof(UNIXaddr.sun_path) - 1);
+
+    if (mysql->options.extension && mysql->options.extension->retry_count)
+      my_net_set_retry_count(net, mysql->options.extension->retry_count);
+
+    if (vio_socket_connect(net->vio, (struct sockaddr *)&UNIXaddr,
+                           sizeof(UNIXaddr), ctx->non_blocking,
+                           get_vio_connect_timeout(mysql), &connect_done)) {
+      DBUG_PRINT("error",
+                 ("Got error %d on connect to local server", socket_errno));
+      set_mysql_extended_error(mysql, CR_CONNECTION_ERROR, unknown_sqlstate,
+                               ER_CLIENT(CR_CONNECTION_ERROR), unix_socket,
+                               socket_errno);
+      vio_delete(net->vio);
+      net->vio = nullptr;
+      return STATE_MACHINE_FAILED;
+    }
+    mysql->options.protocol = MYSQL_PROTOCOL_SOCKET;
+  }
+#elif defined(_WIN32)
+  if (!net->vio && (mysql->options.protocol == MYSQL_PROTOCOL_PIPE ||
+                    (host && !strcmp(host, LOCAL_HOST_NAMEDPIPE)) ||
+                    (!have_tcpip && (unix_socket || !host && is_NT())))) {
+    hPipe = create_named_pipe(mysql, get_win32_connect_timeout(mysql), &host,
+                              &unix_socket);
+
+    if (hPipe == INVALID_HANDLE_VALUE) {
+      DBUG_PRINT(
+          "error",
+          ("host: '%s'  socket: '%s'  have_tcpip: %d", host ? host : "<null>",
+           unix_socket ? unix_socket : "<null>", (int)have_tcpip));
+      if (mysql->options.protocol == MYSQL_PROTOCOL_PIPE ||
+          (host && !strcmp(host, LOCAL_HOST_NAMEDPIPE)) ||
+          (unix_socket && !strcmp(unix_socket, MYSQL_NAMEDPIPE)))
+        return STATE_MACHINE_FAILED;
+      /* Try also with TCP/IP */
+    } else {
+      net->vio = vio_new_win32pipe(hPipe);
+      snprintf(ctx->host_info = ctx->buff, sizeof(ctx->buff) - 1,
+               ER_CLIENT(CR_NAMEDPIPE_CONNECTION), unix_socket);
+    }
+  }
+#endif
+  DBUG_PRINT("info",
+             ("net->vio: %p  protocol: %d", net->vio, mysql->options.protocol));
+  if (!net->vio && (!mysql->options.protocol ||
+                    mysql->options.protocol == MYSQL_PROTOCOL_TCP)) {
+    struct addrinfo *res_lst, *client_bind_ai_lst = nullptr, hints, *t_res;
+    char port_buf[NI_MAXSERV];
+    my_socket sock = SOCKET_ERROR;
+    int gai_errno, saved_error = 0, status = -1, bind_result = 0;
+    uint flags = VIO_BUFFERED_READ;
+
+    unix_socket = nullptr; /* This is not used */
+
+    if (!port) port = mysql_port;
+
+    if (!host) host = LOCAL_HOST;
+
+    snprintf(ctx->host_info = ctx->buff, sizeof(ctx->buff) - 1,
+             ER_CLIENT(CR_TCP_CONNECTION), host);
+    DBUG_PRINT("info", ("Server name: '%s'.  TCP sock: %d", host, port));
+
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    hints.ai_family = AF_UNSPEC;
+
+    DBUG_PRINT("info", ("IPV6 getaddrinfo %s", host));
+    snprintf(port_buf, NI_MAXSERV, "%d", port);
+    gai_errno = getaddrinfo(host, port_buf, &hints, &res_lst);
+
+    DBUG_EXECUTE_IF("vio_client_use_localhost", {
+      assert(strlen(host) == 255);
+      gai_errno = getaddrinfo(LOCAL_HOST, port_buf, &hints, &res_lst);
+    });
+
+    if (gai_errno != 0) {
+      /*
+        For DBUG we are keeping the right message but for client we default to
+        historical error message.
+      */
+      DBUG_PRINT("info", ("IPV6 getaddrinfo error %d", gai_errno));
+      set_mysql_extended_error(mysql, CR_UNKNOWN_HOST, unknown_sqlstate,
+                               ER_CLIENT(CR_UNKNOWN_HOST), host, errno);
+      return STATE_MACHINE_FAILED;
+    }
+
+    /* Get address info for client bind name if it is provided */
+    if (mysql->options.bind_address) {
+      int bind_gai_errno = 0;
+
+      DBUG_PRINT("info", ("Resolving addresses for client bind: '%s'",
+                          mysql->options.bind_address));
+      /* Lookup address info for name */
+      bind_gai_errno = getaddrinfo(mysql->options.bind_address, nullptr, &hints,
+                                   &client_bind_ai_lst);
+      if (bind_gai_errno) {
+        DBUG_PRINT("info",
+                   ("client bind getaddrinfo error %d", bind_gai_errno));
+        set_mysql_extended_error(mysql, CR_UNKNOWN_HOST, unknown_sqlstate,
+                                 ER_CLIENT(CR_UNKNOWN_HOST),
+                                 mysql->options.bind_address, bind_gai_errno);
+
+        freeaddrinfo(res_lst);
+        return STATE_MACHINE_FAILED;
+      }
+      DBUG_PRINT("info", ("  got address info for client bind name"));
+    }
+
+    /*
+      A hostname might map to multiple IP addresses (IPv4/IPv6). Go over the
+      list of IP addresses until a successful connection can be established.
+      For each IP address, attempt to bind the socket to each client address
+      for the client-side bind hostname until the bind is successful.
+    */
+    DBUG_PRINT("info", ("Try connect on all addresses for host."));
+    for (t_res = res_lst; t_res; t_res = t_res->ai_next) {
+      DBUG_PRINT("info",
+                 ("Create socket, family: %d  type: %d  proto: %d",
+                  t_res->ai_family, t_res->ai_socktype, t_res->ai_protocol));
+
+      sock = socket(t_res->ai_family, t_res->ai_socktype, t_res->ai_protocol);
+      if (sock == SOCKET_ERROR) {
+        DBUG_PRINT("info", ("Socket created was invalid"));
+        /* Try next address if there is one */
+        saved_error = socket_errno;
+        continue;
+      }
+
+      if (client_bind_ai_lst) {
+        struct addrinfo *curr_bind_ai = nullptr;
+        DBUG_PRINT("info", ("Attempting to bind socket to bind address(es)"));
+
+        /*
+           We'll attempt to bind to each of the addresses returned, until
+           we find one that works.
+           If none works, we'll try the next destination host address
+           (if any)
+        */
+        curr_bind_ai = client_bind_ai_lst;
+
+        while (curr_bind_ai != nullptr) {
+          /* Attempt to bind the socket to the given address */
+          bind_result = bind(sock, curr_bind_ai->ai_addr,
+                             static_cast<int>(curr_bind_ai->ai_addrlen));
+          if (!bind_result) break; /* Success */
+
+          DBUG_PRINT("info", ("bind failed, attempting another bind address"));
+          /* Problem with the bind, move to next address if present */
+          curr_bind_ai = curr_bind_ai->ai_next;
+        }
+
+        if (bind_result) {
+          /*
+            Could not bind to any client-side address with this destination
+             Try the next destination address (if any)
+          */
+          DBUG_PRINT("info", ("All bind attempts with this address failed"));
+          saved_error = socket_errno;
+          closesocket(sock);
+          continue;
+        }
+        DBUG_PRINT("info", ("Successfully bound client side of socket"));
+      }
+
+      /* Create a new Vio object to abstract the socket. */
+      if (!net->vio) {
+        if (!(net->vio = vio_new(sock, VIO_TYPE_TCPIP, flags))) {
+          set_mysql_error(mysql, CR_OUT_OF_MEMORY, unknown_sqlstate);
+          closesocket(sock);
+          freeaddrinfo(res_lst);
+          if (client_bind_ai_lst) freeaddrinfo(client_bind_ai_lst);
+          return STATE_MACHINE_FAILED;
+        }
+      }
+      /* Just reinitialize if one is already allocated. */
+      else if (vio_reset(net->vio, VIO_TYPE_TCPIP, sock, nullptr, flags)) {
+        set_mysql_error(mysql, CR_UNKNOWN_ERROR, unknown_sqlstate);
+        closesocket(sock);
+        freeaddrinfo(res_lst);
+        if (client_bind_ai_lst) freeaddrinfo(client_bind_ai_lst);
+        return STATE_MACHINE_FAILED;
+      }
+
+      if (ctx->non_blocking)
+        vio_set_blocking_flag(net->vio, !ctx->non_blocking);
+
+      DBUG_PRINT("info", ("Connect socket"));
+
+      if (mysql->options.extension && mysql->options.extension->retry_count)
+        my_net_set_retry_count(net, mysql->options.extension->retry_count);
+
+      status = vio_socket_connect(
+          net->vio, t_res->ai_addr, (socklen_t)t_res->ai_addrlen,
+          ctx->non_blocking, get_vio_connect_timeout(mysql), &connect_done);
+      /*
+        Here we rely on vio_socket_connect() to return success only if
+        the connect attempt was really successful. Otherwise we would
+        stop trying another address, believing we were successful.
+      */
+      if (!status) break;
+
+      /*
+        Save either the socket error status or the error code of
+        the failed vio_connection operation. It is necessary to
+        avoid having it overwritten by later operations.
+      */
+      saved_error = socket_errno;
+
+      DBUG_PRINT("info", ("No success, try next address."));
+    }
+    DBUG_PRINT("info",
+               ("End of connect attempts, sock: %d  status: %d  error: %d",
+                sock, status, saved_error));
+
+    freeaddrinfo(res_lst);
+    if (client_bind_ai_lst) freeaddrinfo(client_bind_ai_lst);
+
+    if (sock == SOCKET_ERROR) {
+      set_mysql_extended_error(mysql, CR_IPSOCK_ERROR, unknown_sqlstate,
+                               ER_CLIENT(CR_IPSOCK_ERROR), saved_error);
+      return STATE_MACHINE_FAILED;
+    }
+
+    if (status) {
+      DBUG_PRINT("error",
+                 ("Got error %d on connect to '%s'", saved_error, host));
+      set_mysql_extended_error(mysql, CR_CONN_HOST_ERROR, unknown_sqlstate,
+                               ER_CLIENT(CR_CONN_HOST_ERROR), host, port,
+                               saved_error);
+      return STATE_MACHINE_FAILED;
+    }
+  }
+
+  ctx->state_function = connect_done ? csm_complete_connect : csm_wait_connect;
+  ctx->host = host;
+  ctx->user = user;
+  ctx->passwd = passwd;
+  ctx->db = db;
+  ctx->port = port;
+  ctx->unix_socket = unix_socket;
+  ctx->client_flag = client_flag;
+  return STATE_MACHINE_CONTINUE;
+}
+
+
+// Source: client.cc
+// Lines 5737-6117
+
+
+[ANSWER]
+MUST-NOT

@@ -1,0 +1,73 @@
+static int index_from_diff_list(git_index **out,
+	git_merge_diff_list *diff_list, bool skip_reuc)
+{
+	git_index *index;
+	size_t i;
+	git_merge_diff *conflict;
+	int error = 0;
+
+	*out = NULL;
+
+	if ((error = git_index_new(&index)) < 0)
+		return error;
+
+	if ((error = git_index__fill(index, &diff_list->staged)) < 0)
+		goto on_error;
+
+	git_vector_foreach(&diff_list->conflicts, i, conflict) {
+		const git_index_entry *ancestor =
+			GIT_MERGE_INDEX_ENTRY_EXISTS(conflict->ancestor_entry) ?
+			&conflict->ancestor_entry : NULL;
+
+		const git_index_entry *ours =
+			GIT_MERGE_INDEX_ENTRY_EXISTS(conflict->our_entry) ?
+			&conflict->our_entry : NULL;
+
+		const git_index_entry *theirs =
+			GIT_MERGE_INDEX_ENTRY_EXISTS(conflict->their_entry) ?
+			&conflict->their_entry : NULL;
+
+		if ((error = git_index_conflict_add(index, ancestor, ours, theirs)) < 0)
+			goto on_error;
+	}
+
+	/* Add each rename entry to the rename portion of the index. */
+	git_vector_foreach(&diff_list->conflicts, i, conflict) {
+		const char *ancestor_path, *our_path, *their_path;
+
+		if (!GIT_MERGE_INDEX_ENTRY_EXISTS(conflict->ancestor_entry))
+			continue;
+
+		ancestor_path = conflict->ancestor_entry.path;
+
+		our_path =
+			GIT_MERGE_INDEX_ENTRY_EXISTS(conflict->our_entry) ?
+			conflict->our_entry.path : NULL;
+
+		their_path =
+			GIT_MERGE_INDEX_ENTRY_EXISTS(conflict->their_entry) ?
+			conflict->their_entry.path : NULL;
+
+		if ((our_path && strcmp(ancestor_path, our_path) != 0) ||
+			(their_path && strcmp(ancestor_path, their_path) != 0)) {
+			if ((error = git_index_name_add(index, ancestor_path, our_path, their_path)) < 0)
+				goto on_error;
+		}
+	}
+
+	if (!skip_reuc) {
+		if ((error = index_update_reuc(index, diff_list)) < 0)
+			goto on_error;
+	}
+
+	*out = index;
+	return 0;
+
+on_error:
+	git_index_free(index);
+	return error;
+}
+
+
+// Source: merge.c
+// Lines 2000-2068

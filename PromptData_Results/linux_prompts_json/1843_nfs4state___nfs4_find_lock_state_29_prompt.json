@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ret' at line 4\n2. Pointer 'pos' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\n__nfs4_find_lock_state(struct nfs4_state *state,\n\t\t       fl_owner_t fl_owner, fl_owner_t fl_owner2)\n{\n\tstruct nfs4_lock_state *pos, *ret = NULL;\n\tlist_for_each_entry(pos, &state->lock_states, ls_locks) {\n\t\tif (pos->ls_owner == fl_owner) {\n\t\t\tret = pos;\n\t\t\tbreak;\n\t\t}\n\t\tif (pos->ls_owner == fl_owner2)\n\t\t\tret = pos;\n\t}\n\tif (ret)\n\t\trefcount_inc(&ret->ls_count);\n\treturn ret;\n}\n\n\n// Source: nfs4state.c\n// Lines 845-860\n",
+  "ANSWER": "MUST"
+}

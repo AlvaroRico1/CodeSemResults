@@ -1,0 +1,114 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'origin' at line 1
+2. Pointer 'sg_origin' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int pass_blame(git_blame *blame, git_blame__origin *origin, uint32_t opt)
+{
+	git_commit *commit = origin->commit;
+	int i, num_parents;
+	git_blame__origin *sg_buf[16];
+	git_blame__origin *porigin, **sg_origin = sg_buf;
+	int ret, error = 0;
+
+	num_parents = git_commit_parentcount(commit);
+	if (!git_oid_cmp(git_commit_id(commit), &blame->options.oldest_commit))
+		/* Stop at oldest specified commit */
+		num_parents = 0;
+	else if (opt & GIT_BLAME_FIRST_PARENT && num_parents > 1)
+		/* Limit search to the first parent */
+		num_parents = 1;
+
+	if (!num_parents) {
+		git_oid_cpy(&blame->options.oldest_commit, git_commit_id(commit));
+		goto finish;
+	} else if (num_parents < (int)ARRAY_SIZE(sg_buf))
+		memset(sg_buf, 0, sizeof(sg_buf));
+	else {
+		sg_origin = git__calloc(num_parents, sizeof(*sg_origin));
+		GIT_ERROR_CHECK_ALLOC(sg_origin);
+	}
+
+	for (i=0; i<num_parents; i++) {
+		git_commit *p;
+		int j, same;
+
+		if (sg_origin[i])
+			continue;
+
+		if ((error = git_commit_parent(&p, origin->commit, i)) < 0)
+			goto finish;
+		porigin = find_origin(blame, p, origin);
+
+		if (!porigin) {
+			/*
+			 * We only have to decrement the parent's
+			 * reference count when no porigin has
+			 * been created, as otherwise the commit
+			 * is assigned to the created object.
+			 */
+			git_commit_free(p);
+			continue;
+		}
+		if (porigin->blob && origin->blob &&
+		    !git_oid_cmp(git_blob_id(porigin->blob), git_blob_id(origin->blob))) {
+			error = pass_whole_blame(blame, origin, porigin);
+			origin_decref(porigin);
+			goto finish;
+		}
+		for (j = same = 0; j<i; j++)
+			if (sg_origin[j] &&
+				 !git_oid_cmp(git_blob_id(sg_origin[j]->blob), git_blob_id(porigin->blob))) {
+				same = 1;
+				break;
+			}
+		if (!same)
+			sg_origin[i] = porigin;
+		else
+			origin_decref(porigin);
+	}
+
+	/* Standard blame */
+	for (i=0; i<num_parents; i++) {
+		git_blame__origin *porigin = sg_origin[i];
+		if (!porigin)
+			continue;
+		if (!origin->previous) {
+			origin_incref(porigin);
+			origin->previous = porigin;
+		}
+
+		if ((ret = pass_blame_to_parent(blame, origin, porigin)) != 0) {
+			if (ret < 0)
+				error = -1;
+
+			goto finish;
+		}
+	}
+
+	/* TODO: optionally find moves in parents' files */
+
+	/* TODO: optionally find copies in parents' files */
+
+finish:
+	for (i=0; i<num_parents; i++)
+		if (sg_origin[i])
+			origin_decref(sg_origin[i]);
+	if (sg_origin != sg_buf)
+		git__free(sg_origin);
+	return error;
+}
+
+
+// Source: blame_git.c
+// Lines 519-613
+
+
+[ANSWER]
+MUST

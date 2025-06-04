@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'd' at line 5
+2. Pointer 'data' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+replace_reduction_placeholders (tree *tp, int *walk_subtrees, void *data)
+{
+  if (DECL_P (*tp))
+    {
+      tree *d = (tree *) data;
+      if (*tp == OMP_CLAUSE_REDUCTION_PLACEHOLDER (d[0]))
+	{
+	  *tp = OMP_CLAUSE_REDUCTION_PLACEHOLDER (d[1]);
+	  *walk_subtrees = 0;
+	}
+      else if (*tp == OMP_CLAUSE_REDUCTION_DECL_PLACEHOLDER (d[0]))
+	{
+	  *tp = OMP_CLAUSE_REDUCTION_DECL_PLACEHOLDER (d[1]);
+	  *walk_subtrees = 0;
+	}
+    }
+
+
+// Source: gimplify.c
+// Lines 12247-12262
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,33 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'cs' at line 3
+2. Pointer 'c' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+control_vwrite(struct client *c, const char *fmt, va_list ap)
+{
+	struct control_state	*cs = c->control_state;
+	char			*s;
+
+	xvasprintf(&s, fmt, ap);
+	log_debug("%s: %s: writing line: %s", __func__, c->name, s);
+
+	bufferevent_write(cs->write_event, s, strlen(s));
+	bufferevent_write(cs->write_event, "\n", 1);
+
+	bufferevent_enable(cs->write_event, EV_WRITE);
+	free(s);
+}
+
+
+// Source: control.c
+// Lines 389-402
+
+
+[ANSWER]
+MUST

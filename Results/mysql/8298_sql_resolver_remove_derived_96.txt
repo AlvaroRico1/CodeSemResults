@@ -1,0 +1,1 @@
+qbp,mysql/sql/sql_resolver.cc,27,thd,mysql/sql/sql_resolver.cc,1,1

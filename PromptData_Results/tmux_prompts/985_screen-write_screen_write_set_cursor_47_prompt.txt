@@ -1,0 +1,49 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'wp' at line 3
+2. Pointer 'ctx' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+screen_write_set_cursor(struct screen_write_ctx *ctx, int cx, int cy)
+{
+	struct window_pane	*wp = ctx->wp;
+	struct window		*w;
+	struct screen		*s = ctx->s;
+	struct timeval		 tv = { .tv_usec = 10000 };
+
+	if (cx != -1 && (u_int)cx == s->cx && cy != -1 && (u_int)cy == s->cy)
+		return;
+
+	if (cx != -1) {
+		if ((u_int)cx > screen_size_x(s)) /* allow last column */
+			cx = screen_size_x(s) - 1;
+		s->cx = cx;
+	}
+	if (cy != -1) {
+		if ((u_int)cy > screen_size_y(s) - 1)
+			cy = screen_size_y(s) - 1;
+		s->cy = cy;
+	}
+
+	if (wp == NULL)
+		return;
+	w = wp->window;
+
+	if (!event_initialized(&w->offset_timer))
+		evtimer_set(&w->offset_timer, screen_write_offset_timer, w);
+	if (!evtimer_pending(&w->offset_timer, NULL))
+		evtimer_add(&w->offset_timer, &tv);
+}
+
+
+// Source: screen-write.c
+// Lines 88-117
+
+
+[ANSWER]
+MUST

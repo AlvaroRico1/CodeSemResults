@@ -1,0 +1,81 @@
+bool ParseTime(const std::string& value, int64* seconds, int32* nanos) {
+  DateTime time;
+  const char* data = value.c_str();
+  // We only accept:
+  //   Z-normalized: 2015-05-20T13:29:35.120Z
+  //   With UTC offset: 2015-05-20T13:29:35.120-08:00
+
+  // Parse year
+  if ((data = ParseInt(data, 4, 1, 9999, &time.year)) == nullptr) {
+    return false;
+  }
+  // Expect '-'
+  if (*data++ != '-') return false;
+  // Parse month
+  if ((data = ParseInt(data, 2, 1, 12, &time.month)) == nullptr) {
+    return false;
+  }
+  // Expect '-'
+  if (*data++ != '-') return false;
+  // Parse day
+  if ((data = ParseInt(data, 2, 1, 31, &time.day)) == nullptr) {
+    return false;
+  }
+  // Expect 'T'
+  if (*data++ != 'T') return false;
+  // Parse hour
+  if ((data = ParseInt(data, 2, 0, 23, &time.hour)) == nullptr) {
+    return false;
+  }
+  // Expect ':'
+  if (*data++ != ':') return false;
+  // Parse minute
+  if ((data = ParseInt(data, 2, 0, 59, &time.minute)) == nullptr) {
+    return false;
+  }
+  // Expect ':'
+  if (*data++ != ':') return false;
+  // Parse second
+  if ((data = ParseInt(data, 2, 0, 59, &time.second)) == nullptr) {
+    return false;
+  }
+  if (!DateTimeToSeconds(time, seconds)) {
+    return false;
+  }
+  // Parse nanoseconds.
+  if (*data == '.') {
+    ++data;
+    // Parse nanoseconds.
+    if ((data = ParseNanos(data, nanos)) == nullptr) {
+      return false;
+    }
+  } else {
+    *nanos = 0;
+  }
+  // Parse UTC offsets.
+  if (*data == 'Z') {
+    ++data;
+  } else if (*data == '+') {
+    ++data;
+    int64 offset;
+    if ((data = ParseTimezoneOffset(data, &offset)) == nullptr) {
+      return false;
+    }
+    *seconds -= offset;
+  } else if (*data == '-') {
+    ++data;
+    int64 offset;
+    if ((data = ParseTimezoneOffset(data, &offset)) == nullptr) {
+      return false;
+    }
+    *seconds += offset;
+  } else {
+    return false;
+  }
+  // Done with parsing.
+  return *data == 0;
+}
+
+
+// Source: time.cc
+// Lines 285-361

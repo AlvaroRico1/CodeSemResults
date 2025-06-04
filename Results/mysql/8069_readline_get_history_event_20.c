@@ -1,0 +1,120 @@
+get_history_event(const char *cmd, int *cindex, int qchar)
+{
+	int idx, sign, sub, num, begin, ret;
+	size_t len;
+	char	*pat;
+	const char *rptr;
+	HistEvent ev;
+
+	idx = *cindex;
+	if (cmd[idx++] != history_expansion_char)
+		return NULL;
+
+	/* find out which event to take */
+	if (cmd[idx] == history_expansion_char || cmd[idx] == '\0') {
+		if (history(h, &ev, H_FIRST) != 0)
+			return NULL;
+		*cindex = cmd[idx]? (idx + 1):idx;
+		return ev.str;
+	}
+	sign = 0;
+	if (cmd[idx] == '-') {
+		sign = 1;
+		idx++;
+	}
+
+	if ('0' <= cmd[idx] && cmd[idx] <= '9') {
+		HIST_ENTRY *he;
+
+		num = 0;
+		while (cmd[idx] && '0' <= cmd[idx] && cmd[idx] <= '9') {
+			num = num * 10 + cmd[idx] - '0';
+			idx++;
+		}
+		if (sign)
+			num = history_length - num + history_base;
+
+		if (!(he = history_get(num)))
+			return NULL;
+
+		*cindex = idx;
+		return he->line;
+	}
+	sub = 0;
+	if (cmd[idx] == '?') {
+		sub = 1;
+		idx++;
+	}
+	begin = idx;
+	while (cmd[idx]) {
+		if (cmd[idx] == '\n')
+			break;
+		if (sub && cmd[idx] == '?')
+			break;
+		if (!sub && (cmd[idx] == ':' || cmd[idx] == ' '
+				    || cmd[idx] == '\t' || cmd[idx] == qchar))
+			break;
+		idx++;
+	}
+	len = (size_t)idx - (size_t)begin;
+	if (sub && cmd[idx] == '?')
+		idx++;
+	if (sub && len == 0 && last_search_pat && *last_search_pat)
+		pat = last_search_pat;
+	else if (len == 0)
+		return NULL;
+	else {
+		if ((pat = el_calloc(len + 1, sizeof(*pat))) == NULL)
+			return NULL;
+		(void)strlcpy(pat, cmd + begin, len + 1);
+	}
+
+	if (history(h, &ev, H_CURR) != 0) {
+		if (pat != last_search_pat)
+			el_free(pat);
+		return NULL;
+	}
+	num = ev.num;
+
+	if (sub) {
+		if (pat != last_search_pat) {
+			if (last_search_pat)
+				el_free(last_search_pat);
+			last_search_pat = pat;
+		}
+		ret = history_search(pat, -1);
+	} else
+		ret = history_search_prefix(pat, -1);
+
+	if (ret == -1) {
+		/* restore to end of list on failed search */
+		history(h, &ev, H_FIRST);
+		(void)fprintf(rl_outstream, "%s: Event not found\n", pat);
+		if (pat != last_search_pat)
+			el_free(pat);
+		return NULL;
+	}
+
+	if (sub && len) {
+		if (last_search_match && last_search_match != pat)
+			el_free(last_search_match);
+		last_search_match = pat;
+	}
+
+	if (pat != last_search_pat)
+		el_free(pat);
+
+	if (history(h, &ev, H_CURR) != 0)
+		return NULL;
+	*cindex = idx;
+	rptr = ev.str;
+
+	/* roll back to original position */
+	(void)history(h, &ev, H_SET, num);
+
+	return rptr;
+}
+
+
+// Source: readline.c
+// Lines 546-661

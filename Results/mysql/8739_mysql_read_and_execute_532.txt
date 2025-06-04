@@ -1,0 +1,1 @@
+prompt,mysql/client/mysql.cc,71,interactive,mysql/client/mysql.cc,1,0

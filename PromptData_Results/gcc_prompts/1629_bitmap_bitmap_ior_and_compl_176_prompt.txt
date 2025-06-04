@@ -1,0 +1,123 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'dst_elt' at line 5
+2. Pointer 'dst_prev_pnext' at line 10
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bitmap_ior_and_compl (bitmap dst, const_bitmap a, const_bitmap b, const_bitmap kill)
+{
+  bool changed = false;
+
+  bitmap_element *dst_elt = dst->first;
+  const bitmap_element *a_elt = a->first;
+  const bitmap_element *b_elt = b->first;
+  const bitmap_element *kill_elt = kill->first;
+  bitmap_element *dst_prev = NULL;
+  bitmap_element **dst_prev_pnext = &dst->first;
+
+  gcc_checking_assert (!dst->tree_form && !a->tree_form && !b->tree_form
+		       && !kill->tree_form);
+  gcc_assert (dst != a && dst != b && dst != kill);
+
+  /* Special cases.  We don't bother checking for bitmap_equal_p (b, kill).  */
+  if (b == kill || bitmap_empty_p (b))
+    {
+      changed = !bitmap_equal_p (dst, a);
+      if (changed)
+	bitmap_copy (dst, a);
+      return changed;
+    }
+  if (bitmap_empty_p (kill))
+    return bitmap_ior (dst, a, b);
+  if (bitmap_empty_p (a))
+    return bitmap_and_compl (dst, b, kill);
+
+  while (a_elt || b_elt)
+    {
+      bool new_element = false;
+
+      if (b_elt)
+	while (kill_elt && kill_elt->indx < b_elt->indx)
+	  kill_elt = kill_elt->next;
+
+      if (b_elt && kill_elt && kill_elt->indx == b_elt->indx
+	  && (!a_elt || a_elt->indx >= b_elt->indx))
+        {
+	  bitmap_element tmp_elt;
+	  unsigned ix;
+
+	  BITMAP_WORD ior = 0;
+	  tmp_elt.indx = b_elt->indx;
+	  for (ix = 0; ix < BITMAP_ELEMENT_WORDS; ix++)
+            {
+              BITMAP_WORD r = b_elt->bits[ix] & ~kill_elt->bits[ix];
+              ior |= r;
+              tmp_elt.bits[ix] = r;
+            }
+
+	  if (ior)
+	    {
+	      changed = bitmap_elt_ior (dst, dst_elt, dst_prev,
+				        a_elt, &tmp_elt, changed);
+	      new_element = true;
+	      if (a_elt && a_elt->indx == b_elt->indx)
+                a_elt = a_elt->next;
+	    }
+
+	  b_elt = b_elt->next;
+	  kill_elt = kill_elt->next;
+	}
+      else
+	{
+	  changed = bitmap_elt_ior (dst, dst_elt, dst_prev,
+				    a_elt, b_elt, changed);
+	  new_element = true;
+
+          if (a_elt && b_elt && a_elt->indx == b_elt->indx)
+	    {
+	      a_elt = a_elt->next;
+	      b_elt = b_elt->next;
+	    }
+          else
+	    {
+	      if (a_elt && (!b_elt || a_elt->indx <= b_elt->indx))
+                a_elt = a_elt->next;
+              else if (b_elt && (!a_elt || b_elt->indx <= a_elt->indx))
+                b_elt = b_elt->next;
+	    }
+	}
+
+      if (new_element)
+	{
+	  dst_prev = *dst_prev_pnext;
+	  dst_prev_pnext = &dst_prev->next;
+	  dst_elt = *dst_prev_pnext;
+	}
+    }
+
+  if (dst_elt)
+    {
+      changed = true;
+      /* Ensure that dst->current is valid.  */
+      dst->current = dst->first;
+      bitmap_elt_clear_from (dst, dst_elt);
+    }
+  gcc_checking_assert (!dst->current == !dst->first);
+  if (dst->current)
+    dst->indx = dst->current->indx;
+
+  return changed;
+}
+
+
+// Source: bitmap.c
+// Lines 2314-2417
+
+
+[ANSWER]
+MUST

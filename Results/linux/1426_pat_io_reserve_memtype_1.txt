@@ -1,0 +1,1 @@
+new_type,linux/arch/x86/mm/pat.c,6,type,linux/arch/x86/mm/pat.c,2,2

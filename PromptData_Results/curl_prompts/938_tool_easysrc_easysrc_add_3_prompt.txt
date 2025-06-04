@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'plist' at line 1
+2. Pointer 'list' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+CURLcode easysrc_add(struct slist_wc **plist, const char *line)
+{
+  CURLcode ret = CURLE_OK;
+  struct slist_wc *list = slist_wc_append(*plist, line);
+  if(!list) {
+    easysrc_free();
+    ret = CURLE_OUT_OF_MEMORY;
+  }
+  else
+    *plist = list;
+  return ret;
+}
+
+
+// Source: tool_easysrc.c
+// Lines 95-106
+
+
+[ANSWER]
+MUST

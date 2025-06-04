@@ -1,0 +1,45 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'lopt' at line 16
+2. Pointer 'argv' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+pass_through_libs_spec_func (int argc, const char **argv)
+{
+  char *prepended = xstrdup (" ");
+  int n;
+  /* Shlemiel the painter's algorithm.  Innately horrible, but at least
+     we know that there will never be more than a handful of strings to
+     concat, and it's only once per run, so it's not worth optimising.  */
+  for (n = 0; n < argc; n++)
+    {
+      char *old = prepended;
+      /* Anything that isn't an option is a full path to an output
+         file; pass it through if it ends in '.a'.  Among options,
+	 pass only -l.  */
+      if (argv[n][0] == '-' && argv[n][1] == 'l')
+	{
+	  const char *lopt = argv[n] + 2;
+	  /* Handle both joined and non-joined -l options.  If for any
+	     reason there's a trailing -l with no joined or following
+	     arg just discard it.  */
+	  if (!*lopt && ++n >= argc)
+	    break;
+	  else if (!*lopt)
+	    lopt = argv[n];
+	  prepended = concat (prepended, "-plugin-opt=-pass-through=-l",
+		lopt, " ", NULL);
+	}
+
+
+// Source: gcc.c
+// Lines 9903-9928
+
+
+[ANSWER]
+MUST-NOT

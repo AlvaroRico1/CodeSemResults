@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'delta' at line 1\n2. Pointer 'expected' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int test_names_expected(const git_diff_delta *delta, float progress, void *p)\n{\n\tstruct rename_expected *expected = p;\n\n\tGIT_UNUSED(progress);\n\n\tcl_assert(expected->idx < expected->len);\n\n\tcl_assert_equal_i(delta->status, expected->status[expected->idx]);\n\n\tcl_assert(git__strcmp(expected->sources[expected->idx],\n\t\tdelta->old_file.path) == 0);\n\tcl_assert(git__strcmp(expected->targets[expected->idx],\n\t\tdelta->new_file.path) == 0);\n\n\texpected->idx++;\n\n\treturn 0;\n}\n\n\n// Source: rename.c\n// Lines 941-959\n",
+  "ANSWER": "MUST-NOT"
+}

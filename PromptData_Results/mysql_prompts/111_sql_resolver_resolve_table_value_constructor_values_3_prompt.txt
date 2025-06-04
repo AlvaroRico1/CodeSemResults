@@ -1,0 +1,67 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'item' at line 31
+2. Pointer 'column' at line 44
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool Query_block::resolve_table_value_constructor_values(THD *thd) {
+  // Item_values_column objects may be allocated; they should be persistent for
+  // PREPARE statements.
+  Prepared_stmt_arena_holder ps_arena_holder(thd);
+
+  size_t num_rows = row_value_list->size();
+  size_t row_degree = row_value_list->front()->size();
+
+  // All table row value expressions shall be of the same degree. Note that
+  // non-scalar subqueries are not allowed; we can simply count the number of
+  // elements.
+  if (row_degree > MAX_FIELDS) {
+    my_error(ER_TOO_MANY_FIELDS, MYF(0));
+    return true;
+  }
+
+  size_t row_index = 0;
+  for (mem_root_deque<Item *> *values_row : *row_value_list) {
+    if (values_row->size() != row_degree) {
+      my_error(ER_WRONG_VALUE_COUNT_ON_ROW, MYF(0), row_index + 1);
+      return true;
+    } else if (values_row->empty()) {
+      // A table value constructor with empty row objects is a syntax error,
+      // except when used as the source for an INSERT statement.
+      my_error(ER_TABLE_VALUE_CONSTRUCTOR_MUST_HAVE_COLUMNS, MYF(0));
+      return true;
+    }
+
+    size_t item_index = 0;
+    for (auto it = values_row->begin(); it != values_row->end(); ++it) {
+      Item *item = *it;
+      if ((!item->fixed && item->fix_fields(thd, &*it)) ||
+          (item = *it)->check_cols(1))
+        return true; /* purecov: inspected */
+
+      if (item->type() == Item::DEFAULT_VALUE_ITEM) {
+        my_error(ER_TABLE_VALUE_CONSTRUCTOR_CANNOT_HAVE_DEFAULT, MYF(0));
+        return true;
+      }
+
+      if (row_index == 0) {
+        // If single row, we skip setting up indirections.
+        if (num_rows != 1 && first_execution) {
+          Item_values_column *column = new Item_values_column(thd, item);
+          if (column == nullptr) return true;
+          column->add_used_tables(item);
+          item = column;
+        }
+
+
+// Source: sql_resolver.cc
+// Lines 5105-5152
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,28 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'i' at line 6
+2. Pointer 'cmd_char' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+inline int get_command_index(char cmd_char) {
+  /*
+    All client-specific commands are in the first part of commands array
+    and have a function to implement it.
+  */
+  for (uint i = 0; *commands[i].func != nullptr; i++)
+    if (commands[i].cmd_char == cmd_char) return i;
+  return -1;
+}
+
+
+// Source: mysql.cc
+// Lines 1209-1217
+
+
+[ANSWER]
+MUST-NOT

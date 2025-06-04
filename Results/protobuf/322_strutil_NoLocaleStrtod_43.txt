@@ -1,0 +1,1 @@
+endptr,protobuf/src/google/protobuf/stubs/strutil.cc,1,str,protobuf/src/google/protobuf/stubs/strutil.cc,1,2

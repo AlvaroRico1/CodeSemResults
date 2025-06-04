@@ -1,0 +1,59 @@
+static int read_on_variable(
+	git_config_parser *reader,
+	const char *current_section,
+	const char *var_name,
+	const char *var_value,
+	const char *line,
+	size_t line_len,
+	void *data)
+{
+	config_file_parse_data *parse_data = (config_file_parse_data *)data;
+	git_str buf = GIT_STR_INIT;
+	git_config_entry *entry;
+	const char *c;
+	int result = 0;
+
+	GIT_UNUSED(reader);
+	GIT_UNUSED(line);
+	GIT_UNUSED(line_len);
+
+	if (current_section) {
+		/* TODO: Once warnings lang, we should likely warn
+		 * here. Git appears to warn in most cases if it sees
+		 * un-namespaced config options.
+		 */
+		git_str_puts(&buf, current_section);
+		git_str_putc(&buf, '.');
+	}
+
+	for (c = var_name; *c; c++)
+		git_str_putc(&buf, git__tolower(*c));
+
+	if (git_str_oom(&buf))
+		return -1;
+
+	entry = git__calloc(1, sizeof(git_config_entry));
+	GIT_ERROR_CHECK_ALLOC(entry);
+	entry->name = git_str_detach(&buf);
+	entry->value = var_value ? git__strdup(var_value) : NULL;
+	entry->level = parse_data->level;
+	entry->include_depth = parse_data->depth;
+
+	if ((result = git_config_entries_append(parse_data->entries, entry)) < 0)
+		return result;
+
+	result = 0;
+
+	/* Add or append the new config option */
+	if (!git__strcmp(entry->name, "include.path"))
+		result = parse_include(parse_data, entry->value);
+	else if (!git__prefixcmp(entry->name, "includeif.") &&
+	         !git__suffixcmp(entry->name, ".path"))
+		result = parse_conditional_include(parse_data, entry->name, entry->value);
+
+	return result;
+}
+
+
+// Source: config_file.c
+// Lines 768-822

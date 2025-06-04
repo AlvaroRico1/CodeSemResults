@@ -1,0 +1,1 @@
+cond_after_fix,mysql/sql/sql_resolver.cc,120,new_cond,mysql/sql/sql_resolver.cc,111,1

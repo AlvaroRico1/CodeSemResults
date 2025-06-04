@@ -1,0 +1,55 @@
+int verify_midx_file(struct repository *r, const char *object_dir, unsigned flags)
+{
+	struct pair_pos_vs_id *pairs = NULL;
+	uint32_t i;
+	struct progress *progress = NULL;
+	struct multi_pack_index *m = load_multi_pack_index(object_dir, 1);
+	verify_midx_error = 0;
+
+	if (!m) {
+		int result = 0;
+		struct stat sb;
+		char *filename = get_midx_filename(object_dir);
+		if (!stat(filename, &sb)) {
+			error(_("multi-pack-index file exists, but failed to parse"));
+			result = 1;
+		}
+		free(filename);
+		return result;
+	}
+
+	if (!midx_checksum_valid(m))
+		midx_report(_("incorrect checksum"));
+
+	if (flags & MIDX_PROGRESS)
+		progress = start_delayed_progress(_("Looking for referenced packfiles"),
+					  m->num_packs);
+	for (i = 0; i < m->num_packs; i++) {
+		if (prepare_midx_pack(r, m, i))
+			midx_report("failed to load pack in position %d", i);
+
+		display_progress(progress, i + 1);
+	}
+	stop_progress(&progress);
+
+	for (i = 0; i < 255; i++) {
+		uint32_t oid_fanout1 = ntohl(m->chunk_oid_fanout[i]);
+		uint32_t oid_fanout2 = ntohl(m->chunk_oid_fanout[i + 1]);
+
+		if (oid_fanout1 > oid_fanout2)
+			midx_report(_("oid fanout out of order: fanout[%d] = %"PRIx32" > %"PRIx32" = fanout[%d]"),
+				    i, oid_fanout1, oid_fanout2, i + 1);
+	}
+
+	if (m->num_objects == 0) {
+		midx_report(_("the midx contains no oid"));
+		/*
+		 * Remaining tests assume that we have objects, so we can
+		 * return here.
+		 */
+		return verify_midx_error;
+	}
+
+
+// Source: midx.c
+// Lines 1470-1520

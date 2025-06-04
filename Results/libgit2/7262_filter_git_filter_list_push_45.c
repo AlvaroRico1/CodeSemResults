@@ -1,0 +1,42 @@
+int git_filter_list_push(
+	git_filter_list *fl, git_filter *filter, void *payload)
+{
+	int error = 0;
+	size_t pos;
+	git_filter_def *fdef = NULL;
+	git_filter_entry *fe;
+
+	GIT_ASSERT_ARG(fl);
+	GIT_ASSERT_ARG(filter);
+
+	if (git_rwlock_rdlock(&filter_registry.lock) < 0) {
+		git_error_set(GIT_ERROR_OS, "failed to lock filter registry");
+		return -1;
+	}
+
+	if (git_vector_search2(
+			&pos, &filter_registry.filters,
+			filter_def_filter_key_check, filter) == 0)
+		fdef = git_vector_get(&filter_registry.filters, pos);
+
+	git_rwlock_rdunlock(&filter_registry.lock);
+
+	if (fdef == NULL) {
+		git_error_set(GIT_ERROR_FILTER, "cannot use an unregistered filter");
+		return -1;
+	}
+
+	if (!fdef->initialized && (error = filter_initialize(fdef)) < 0)
+		return error;
+
+	fe = git_array_alloc(fl->filters);
+	GIT_ERROR_CHECK_ALLOC(fe);
+	fe->filter  = filter;
+	fe->payload = payload;
+
+	return 0;
+}
+
+
+// Source: filter.c
+// Lines 669-706

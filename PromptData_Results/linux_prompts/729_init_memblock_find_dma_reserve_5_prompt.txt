@@ -1,0 +1,57 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'end_addr' at line 6
+2. Pointer 'start_addr' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void __init memblock_find_dma_reserve(void)
+{
+#ifdef CONFIG_X86_64
+	u64 nr_pages = 0, nr_free_pages = 0;
+	unsigned long start_pfn, end_pfn;
+	phys_addr_t start_addr, end_addr;
+	int i;
+	u64 u;
+
+	/*
+	 * Iterate over all memory ranges (free and reserved ones alike),
+	 * to calculate the total number of pages in the first 16 MB of RAM:
+	 */
+	nr_pages = 0;
+	for_each_mem_pfn_range(i, MAX_NUMNODES, &start_pfn, &end_pfn, NULL) {
+		start_pfn = min(start_pfn, MAX_DMA_PFN);
+		end_pfn   = min(end_pfn,   MAX_DMA_PFN);
+
+		nr_pages += end_pfn - start_pfn;
+	}
+
+	/*
+	 * Iterate over free memory ranges to calculate the number of free
+	 * pages in the DMA zone, while not counting potential partial
+	 * pages at the beginning or the end of the range:
+	 */
+	nr_free_pages = 0;
+	for_each_free_mem_range(u, NUMA_NO_NODE, MEMBLOCK_NONE, &start_addr, &end_addr, NULL) {
+		start_pfn = min_t(unsigned long, PFN_UP(start_addr), MAX_DMA_PFN);
+		end_pfn   = min_t(unsigned long, PFN_DOWN(end_addr), MAX_DMA_PFN);
+
+		if (start_pfn < end_pfn)
+			nr_free_pages += end_pfn - start_pfn;
+	}
+
+	set_dma_reserve(nr_pages - nr_free_pages);
+#endif
+}
+
+
+// Source: init.c
+// Lines 895-932
+
+
+[ANSWER]
+MAY

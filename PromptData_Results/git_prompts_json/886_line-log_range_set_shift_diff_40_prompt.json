@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'src' at line 7\n2. Pointer 'rs' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void range_set_shift_diff(struct range_set *out,\n\t\t\t\t struct range_set *rs,\n\t\t\t\t struct diff_ranges *diff)\n{\n\tunsigned int i, j = 0;\n\tlong offset = 0;\n\tstruct range *src = rs->ranges;\n\tstruct range *target = diff->target.ranges;\n\tstruct range *parent = diff->parent.ranges;\n\n\tfor (i = 0; i < rs->nr; i++) {\n\t\twhile (j < diff->target.nr && src[i].start >= target[j].start) {\n\t\t\toffset += (parent[j].end-parent[j].start)\n\t\t\t\t- (target[j].end-target[j].start);\n\t\t\tj++;\n\t\t}\n\t\trange_set_append(out, src[i].start+offset, src[i].end+offset);\n\t}\n}\n\n\n// Source: line-log.c\n// Lines 426-444\n",
+  "ANSWER": "MUST"
+}

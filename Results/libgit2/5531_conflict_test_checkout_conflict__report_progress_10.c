@@ -1,0 +1,49 @@
+void test_checkout_conflict__report_progress(void)
+{
+	git_checkout_options opts = GIT_CHECKOUT_OPTIONS_INIT;
+	git_vector paths = GIT_VECTOR_INIT;
+	char *path;
+	size_t i;
+
+	struct checkout_index_entry checkout_index_entries[] = {
+		{ 0100644, CONFLICTING_ANCESTOR_OID, 1, "conflicting-1.txt" },
+		{ 0100644, CONFLICTING_OURS_OID, 2, "conflicting-1.txt" },
+		{ 0100644, CONFLICTING_THEIRS_OID, 3, "conflicting-1.txt" },
+
+		{ 0100644, CONFLICTING_ANCESTOR_OID, 1, "conflicting-2.txt" },
+		{ 0100644, CONFLICTING_OURS_OID, 2, "conflicting-2.txt" },
+		{ 0100644, CONFLICTING_THEIRS_OID, 3, "conflicting-2.txt" },
+
+		{ 0100644, AUTOMERGEABLE_ANCESTOR_OID, 1, "conflicting-3.txt" },
+		{ 0100644, AUTOMERGEABLE_OURS_OID, 2, "conflicting-3.txt" },
+		{ 0100644, AUTOMERGEABLE_THEIRS_OID, 3, "conflicting-3.txt" },
+
+		{ 0100644, AUTOMERGEABLE_ANCESTOR_OID, 1, "conflicting-4.txt" },
+		{ 0100644, AUTOMERGEABLE_OURS_OID, 2, "conflicting-4.txt" },
+		{ 0100644, AUTOMERGEABLE_THEIRS_OID, 3, "conflicting-4.txt" },
+	};
+
+	opts.progress_cb = collect_progress;
+	opts.progress_payload = &paths;
+
+
+	create_index(checkout_index_entries, 12);
+	cl_git_pass(git_index_write(g_index));
+
+	cl_git_pass(git_checkout_index(g_repo, g_index, &opts));
+
+	cl_assert_equal_i(4, git_vector_length(&paths));
+	cl_assert_equal_s("conflicting-1.txt", git_vector_get(&paths, 0));
+	cl_assert_equal_s("conflicting-2.txt", git_vector_get(&paths, 1));
+	cl_assert_equal_s("conflicting-3.txt", git_vector_get(&paths, 2));
+	cl_assert_equal_s("conflicting-4.txt", git_vector_get(&paths, 3));
+
+	git_vector_foreach(&paths, i, path)
+		git__free(path);
+
+	git_vector_free(&paths);
+}
+
+
+// Source: conflict.c
+// Lines 1101-1145

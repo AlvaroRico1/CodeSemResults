@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'p' at line 3\n2. Pointer 'o' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid close_object_store(struct raw_object_store *o)\n{\n\tstruct packed_git *p;\n\n\tfor (p = o->packed_git; p; p = p->next)\n\t\tif (p->do_not_close)\n\t\t\tBUG(\"want to close pack marked 'do-not-close'\");\n\t\telse\n\t\t\tclose_pack(p);\n\n\tif (o->multi_pack_index) {\n\t\tclose_midx(o->multi_pack_index);\n\t\to->multi_pack_index = NULL;\n\t}\n\n\tclose_commit_graph(o);\n}\n\n\n// Source: packfile.c\n// Lines 345-361\n",
+  "ANSWER": "MUST"
+}

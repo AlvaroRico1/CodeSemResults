@@ -1,0 +1,78 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'dst' at line 6
+2. Pointer 'buf' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int ptls_openssl_encrypt_ticket(ptls_buffer_t *buf, ptls_iovec_t src,
+                                int (*cb)(unsigned char *key_name, unsigned char *iv, EVP_CIPHER_CTX *ctx, HMAC_CTX *hctx, int enc))
+{
+    EVP_CIPHER_CTX *cctx = NULL;
+    HMAC_CTX *hctx = NULL;
+    uint8_t *dst;
+    int clen, ret;
+
+    if ((cctx = EVP_CIPHER_CTX_new()) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+    if ((hctx = HMAC_CTX_new()) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+
+    if ((ret = ptls_buffer_reserve(buf, TICKET_LABEL_SIZE + TICKET_IV_SIZE + src.len + EVP_MAX_BLOCK_LENGTH + EVP_MAX_MD_SIZE)) !=
+        0)
+        goto Exit;
+    dst = buf->base + buf->off;
+
+    /* fill label and iv, as well as obtaining the keys */
+    if (!(*cb)(dst, dst + TICKET_LABEL_SIZE, cctx, hctx, 1)) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    dst += TICKET_LABEL_SIZE + TICKET_IV_SIZE;
+
+    /* encrypt */
+    if (!EVP_EncryptUpdate(cctx, dst, &clen, src.base, (int)src.len)) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    dst += clen;
+    if (!EVP_EncryptFinal_ex(cctx, dst, &clen)) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    dst += clen;
+
+    /* append hmac */
+    if (!HMAC_Update(hctx, buf->base + buf->off, dst - (buf->base + buf->off)) || !HMAC_Final(hctx, dst, NULL)) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    dst += HMAC_size(hctx);
+
+    assert(dst <= buf->base + buf->capacity);
+    buf->off += dst - (buf->base + buf->off);
+    ret = 0;
+
+Exit:
+    if (cctx != NULL)
+        EVP_CIPHER_CTX_free(cctx);
+    if (hctx != NULL)
+        HMAC_CTX_free(hctx);
+    return ret;
+}
+
+
+// Source: openssl.c
+// Lines 1423-1481
+
+
+[ANSWER]
+MUST

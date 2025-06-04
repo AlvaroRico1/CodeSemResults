@@ -1,0 +1,30 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tmp' at line 5
+2. Pointer 'it' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static st_plugin_dl *plugin_dl_find(const LEX_STRING *dl) {
+  DBUG_TRACE;
+  for (st_plugin_dl **it = plugin_dl_array->begin();
+       it != plugin_dl_array->end(); ++it) {
+    st_plugin_dl *tmp = *it;
+    if (tmp->ref_count &&
+        !my_strnncoll(files_charset_info, pointer_cast<uchar *>(dl->str),
+                      dl->length, pointer_cast<uchar *>(tmp->dl.str),
+                      tmp->dl.length))
+      return tmp;
+  }
+
+
+// Source: sql_plugin.cc
+// Lines 579-589
+
+
+[ANSWER]
+MUST

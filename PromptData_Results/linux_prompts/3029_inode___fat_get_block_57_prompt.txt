@@ -1,0 +1,82 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'mapped_blocks' at line 7
+2. Pointer 'phys' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static inline int __fat_get_block(struct inode *inode, sector_t iblock,
+				  unsigned long *max_blocks,
+				  struct buffer_head *bh_result, int create)
+{
+	struct super_block *sb = inode->i_sb;
+	struct msdos_sb_info *sbi = MSDOS_SB(sb);
+	unsigned long mapped_blocks;
+	sector_t phys, last_block;
+	int err, offset;
+
+	err = fat_bmap(inode, iblock, &phys, &mapped_blocks, create, false);
+	if (err)
+		return err;
+	if (phys) {
+		map_bh(bh_result, sb, phys);
+		*max_blocks = min(mapped_blocks, *max_blocks);
+		return 0;
+	}
+	if (!create)
+		return 0;
+
+	if (iblock != MSDOS_I(inode)->mmu_private >> sb->s_blocksize_bits) {
+		fat_fs_error(sb, "corrupted file size (i_pos %lld, %lld)",
+			MSDOS_I(inode)->i_pos, MSDOS_I(inode)->mmu_private);
+		return -EIO;
+	}
+
+	last_block = inode->i_blocks >> (sb->s_blocksize_bits - 9);
+	offset = (unsigned long)iblock & (sbi->sec_per_clus - 1);
+	/*
+	 * allocate a cluster according to the following.
+	 * 1) no more available blocks
+	 * 2) not part of fallocate region
+	 */
+	if (!offset && !(iblock < last_block)) {
+		/* TODO: multiple cluster allocation would be desirable. */
+		err = fat_add_cluster(inode);
+		if (err)
+			return err;
+	}
+	/* available blocks on this cluster */
+	mapped_blocks = sbi->sec_per_clus - offset;
+
+	*max_blocks = min(mapped_blocks, *max_blocks);
+	MSDOS_I(inode)->mmu_private += *max_blocks << sb->s_blocksize_bits;
+
+	err = fat_bmap(inode, iblock, &phys, &mapped_blocks, create, false);
+	if (err)
+		return err;
+	if (!phys) {
+		fat_fs_error(sb,
+			     "invalid FAT chain (i_pos %lld, last_block %llu)",
+			     MSDOS_I(inode)->i_pos,
+			     (unsigned long long)last_block);
+		return -EIO;
+	}
+
+	BUG_ON(*max_blocks != mapped_blocks);
+	set_buffer_new(bh_result);
+	map_bh(bh_result, sb, phys);
+
+	return 0;
+}
+
+
+// Source: inode.c
+// Lines 113-175
+
+
+[ANSWER]
+MAY

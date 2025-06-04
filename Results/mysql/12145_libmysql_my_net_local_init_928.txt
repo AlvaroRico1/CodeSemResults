@@ -1,0 +1,1 @@
+local_max_allowed_packet,mysql/libmysql/libmysql.cc,3,net,mysql/libmysql/libmysql.cc,1,0

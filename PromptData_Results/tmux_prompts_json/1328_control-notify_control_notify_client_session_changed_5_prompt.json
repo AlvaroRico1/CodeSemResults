@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 's' at line 4\n2. Pointer 'cc' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ncontrol_notify_client_session_changed(struct client *cc)\n{\n\tstruct client\t*c;\n\tstruct session\t*s;\n\n\tif (cc->session == NULL)\n\t\treturn;\n\ts = cc->session;\n\n\tTAILQ_FOREACH(c, &clients, entry) {\n\t\tif (!CONTROL_SHOULD_NOTIFY_CLIENT(c) || c->session == NULL)\n\t\t\tcontinue;\n\n\t\tif (cc == c) {\n\t\t\tcontrol_write(c, \"%%session-changed $%u %s\", s->id,\n\t\t\t    s->name);\n\t\t} else {\n\t\t\tcontrol_write(c, \"%%client-session-changed %s $%u %s\",\n\t\t\t    cc->name, s->id, s->name);\n\t\t}\n\t}\n}\n\n\n// Source: control-notify.c\n// Lines 151-172\n",
+  "ANSWER": "MUST"
+}

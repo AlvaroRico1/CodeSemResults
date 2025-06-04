@@ -1,0 +1,140 @@
+ssize_t rdbSaveObject(rio *rdb, robj *o, robj *key) {
+    ssize_t n = 0, nwritten = 0;
+
+    if (o->type == OBJ_STRING) {
+        /* Save a string value */
+        if ((n = rdbSaveStringObject(rdb,o)) == -1) return -1;
+        nwritten += n;
+    } else if (o->type == OBJ_LIST) {
+        /* Save a list value */
+        if (o->encoding == OBJ_ENCODING_QUICKLIST) {
+            quicklist *ql = o->ptr;
+            quicklistNode *node = ql->head;
+
+            if ((n = rdbSaveLen(rdb,ql->len)) == -1) return -1;
+            nwritten += n;
+
+            while(node) {
+                if (quicklistNodeIsCompressed(node)) {
+                    void *data;
+                    size_t compress_len = quicklistGetLzf(node, &data);
+                    if ((n = rdbSaveLzfBlob(rdb,data,compress_len,node->sz)) == -1) return -1;
+                    nwritten += n;
+                } else {
+                    if ((n = rdbSaveRawString(rdb,node->zl,node->sz)) == -1) return -1;
+                    nwritten += n;
+                }
+                node = node->next;
+            }
+        } else {
+            serverPanic("Unknown list encoding");
+        }
+    } else if (o->type == OBJ_SET) {
+        /* Save a set value */
+        if (o->encoding == OBJ_ENCODING_HT) {
+            dict *set = o->ptr;
+            dictIterator *di = dictGetIterator(set);
+            dictEntry *de;
+
+            if ((n = rdbSaveLen(rdb,dictSize(set))) == -1) {
+                dictReleaseIterator(di);
+                return -1;
+            }
+            nwritten += n;
+
+            while((de = dictNext(di)) != NULL) {
+                sds ele = dictGetKey(de);
+                if ((n = rdbSaveRawString(rdb,(unsigned char*)ele,sdslen(ele)))
+                    == -1)
+                {
+                    dictReleaseIterator(di);
+                    return -1;
+                }
+                nwritten += n;
+            }
+            dictReleaseIterator(di);
+        } else if (o->encoding == OBJ_ENCODING_INTSET) {
+            size_t l = intsetBlobLen((intset*)o->ptr);
+
+            if ((n = rdbSaveRawString(rdb,o->ptr,l)) == -1) return -1;
+            nwritten += n;
+        } else {
+            serverPanic("Unknown set encoding");
+        }
+    } else if (o->type == OBJ_ZSET) {
+        /* Save a sorted set value */
+        if (o->encoding == OBJ_ENCODING_ZIPLIST) {
+            size_t l = ziplistBlobLen((unsigned char*)o->ptr);
+
+            if ((n = rdbSaveRawString(rdb,o->ptr,l)) == -1) return -1;
+            nwritten += n;
+        } else if (o->encoding == OBJ_ENCODING_SKIPLIST) {
+            zset *zs = o->ptr;
+            zskiplist *zsl = zs->zsl;
+
+            if ((n = rdbSaveLen(rdb,zsl->length)) == -1) return -1;
+            nwritten += n;
+
+            /* We save the skiplist elements from the greatest to the smallest
+             * (that's trivial since the elements are already ordered in the
+             * skiplist): this improves the load process, since the next loaded
+             * element will always be the smaller, so adding to the skiplist
+             * will always immediately stop at the head, making the insertion
+             * O(1) instead of O(log(N)). */
+            zskiplistNode *zn = zsl->tail;
+            while (zn != NULL) {
+                if ((n = rdbSaveRawString(rdb,
+                    (unsigned char*)zn->ele,sdslen(zn->ele))) == -1)
+                {
+                    return -1;
+                }
+                nwritten += n;
+                if ((n = rdbSaveBinaryDoubleValue(rdb,zn->score)) == -1)
+                    return -1;
+                nwritten += n;
+                zn = zn->backward;
+            }
+        } else {
+            serverPanic("Unknown sorted set encoding");
+        }
+    } else if (o->type == OBJ_HASH) {
+        /* Save a hash value */
+        if (o->encoding == OBJ_ENCODING_ZIPLIST) {
+            size_t l = ziplistBlobLen((unsigned char*)o->ptr);
+
+            if ((n = rdbSaveRawString(rdb,o->ptr,l)) == -1) return -1;
+            nwritten += n;
+
+        } else if (o->encoding == OBJ_ENCODING_HT) {
+            dictIterator *di = dictGetIterator(o->ptr);
+            dictEntry *de;
+
+            if ((n = rdbSaveLen(rdb,dictSize((dict*)o->ptr))) == -1) {
+                dictReleaseIterator(di);
+                return -1;
+            }
+            nwritten += n;
+
+            while((de = dictNext(di)) != NULL) {
+                sds field = dictGetKey(de);
+                sds value = dictGetVal(de);
+
+                if ((n = rdbSaveRawString(rdb,(unsigned char*)field,
+                        sdslen(field))) == -1)
+                {
+                    dictReleaseIterator(di);
+                    return -1;
+                }
+                nwritten += n;
+                if ((n = rdbSaveRawString(rdb,(unsigned char*)value,
+                        sdslen(value))) == -1)
+                {
+                    dictReleaseIterator(di);
+                    return -1;
+                }
+                nwritten += n;
+            }
+
+
+// Source: rdb.c
+// Lines 806-941

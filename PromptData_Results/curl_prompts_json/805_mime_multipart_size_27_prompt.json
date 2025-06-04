@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'part' at line 5\n2. Pointer 'part' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic curl_off_t multipart_size(curl_mime *mime)\n{\n  curl_off_t size;\n  size_t boundarysize;\n  curl_mimepart *part;\n\n  if(!mime)\n    return 0;           /* Not present -> empty. */\n\n  boundarysize = 4 + strlen(mime->boundary) + 2;\n  size = boundarysize;  /* Final boundary - CRLF after headers. */\n\n  for(part = mime->firstpart; part; part = part->nextpart) {\n    curl_off_t sz = Curl_mime_size(part);\n\n    if(sz < 0)\n      size = sz;\n\n    if(size >= 0)\n      size += boundarysize + sz;\n  }\n\n  return size;\n}\n\n\n// Source: mime.c\n// Lines 1665-1688\n",
+  "ANSWER": "MUST"
+}

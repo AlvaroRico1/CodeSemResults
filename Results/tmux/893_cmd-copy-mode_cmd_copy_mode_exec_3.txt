@@ -1,0 +1,1 @@
+swp,tmux/cmd-copy-mode.c,9,source,tmux/cmd-copy-mode.c,5,1

@@ -1,0 +1,1 @@
+dictMode,mysql/extra/zstd/lib/compress/zstd_opt.c,6,optStatePtr,mysql/extra/zstd/lib/compress/zstd_opt.c,8,2

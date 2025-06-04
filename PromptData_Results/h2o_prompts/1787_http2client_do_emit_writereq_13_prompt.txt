@@ -1,0 +1,57 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'node' at line 6
+2. Pointer 'node' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void do_emit_writereq(struct st_h2o_http2client_conn_t *conn)
+{
+    assert(conn->output.buf_in_flight == NULL);
+
+    /* emit DATA frames */
+    h2o_linklist_t *node = conn->output.sending_streams.next;
+    h2o_linklist_t *first = node;
+    while (node != &conn->output.sending_streams) {
+        h2o_linklist_t *next = node->next;
+        struct st_h2o_http2client_stream_t *stream =
+            H2O_STRUCT_FROM_MEMBER(struct st_h2o_http2client_stream_t, output.sending_link, node);
+        h2o_linklist_unlink(node);
+
+        size_t bytes_emitted = 0;
+        if (stream->output.buf != NULL && stream->output.buf->size != 0)
+            bytes_emitted = stream_emit_pending_data(stream);
+
+        if (stream->output.buf != NULL && stream->output.buf->size == 0) {
+            h2o_linklist_insert(&conn->output.sent_streams, node);
+        } else if (h2o_http2_window_get_avail(&stream->output.window) > 0) {
+            h2o_linklist_insert(&conn->output.sending_streams, node); /* move to the tail to rotate buffers */
+        }
+
+        if (next == first)
+            break;
+        node = next;
+    }
+
+    if (conn->output.buf->size != 0) {
+        /* write and wait for completion */
+        h2o_iovec_t buf = {conn->output.buf->bytes, conn->output.buf->size};
+        h2o_socket_write(conn->super.sock, &buf, 1, on_write_complete);
+        conn->output.buf_in_flight = conn->output.buf;
+        h2o_buffer_init(&conn->output.buf, &h2o_http2_wbuf_buffer_prototype);
+        if (!h2o_timer_is_linked(&conn->io_timeout))
+            h2o_timer_link(conn->super.ctx->loop, conn->super.ctx->io_timeout, &conn->io_timeout);
+    }
+}
+
+
+// Source: http2client.c
+// Lines 1163-1200
+
+
+[ANSWER]
+MUST

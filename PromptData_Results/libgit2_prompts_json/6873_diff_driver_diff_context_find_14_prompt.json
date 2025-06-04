@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ctxt' at line 8\n2. Pointer 'payload' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic long diff_context_find(\n\tconst char *line,\n\tlong line_len,\n\tchar *out,\n\tlong out_size,\n\tvoid *payload)\n{\n\tgit_diff_find_context_payload *ctxt = payload;\n\n\tif (git_str_set(&ctxt->line, line, (size_t)line_len) < 0)\n\t\treturn -1;\n\tgit_str_rtrim(&ctxt->line);\n\n\tif (!ctxt->line.size)\n\t\treturn -1;\n\n\tif (!ctxt->match_line || !ctxt->match_line(ctxt->driver, &ctxt->line))\n\t\treturn -1;\n\n\tif (out_size > (long)ctxt->line.size)\n\t\tout_size = (long)ctxt->line.size;\n\tmemcpy(out, ctxt->line.ptr, (size_t)out_size);\n\n\treturn out_size;\n}\n\n\n// Source: diff_driver.c\n// Lines 474-498\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,144 @@
+canonicalize_insn (rtx_insn *insn, struct set **psets, int n_sets)
+{
+  struct set *sets = *psets;
+  rtx tem;
+  rtx x = PATTERN (insn);
+  int i;
+
+  if (CALL_P (insn))
+    {
+      for (tem = CALL_INSN_FUNCTION_USAGE (insn); tem; tem = XEXP (tem, 1))
+	if (GET_CODE (XEXP (tem, 0)) != SET)
+	  XEXP (tem, 0) = canon_reg (XEXP (tem, 0), insn);
+    }
+
+  if (GET_CODE (x) == SET && GET_CODE (SET_SRC (x)) == CALL)
+    {
+      canon_reg (SET_SRC (x), insn);
+      apply_change_group ();
+      fold_rtx (SET_SRC (x), insn);
+    }
+  else if (GET_CODE (x) == CLOBBER)
+    {
+      /* If we clobber memory, canon the address.
+	 This does nothing when a register is clobbered
+	 because we have already invalidated the reg.  */
+      if (MEM_P (XEXP (x, 0)))
+	canon_reg (XEXP (x, 0), insn);
+    }
+  else if (GET_CODE (x) == USE
+	   && ! (REG_P (XEXP (x, 0))
+		 && REGNO (XEXP (x, 0)) < FIRST_PSEUDO_REGISTER))
+    /* Canonicalize a USE of a pseudo register or memory location.  */
+    canon_reg (x, insn);
+  else if (GET_CODE (x) == ASM_OPERANDS)
+    canon_asm_operands (x, insn);
+  else if (GET_CODE (x) == CALL)
+    {
+      canon_reg (x, insn);
+      apply_change_group ();
+      fold_rtx (x, insn);
+    }
+  else if (DEBUG_INSN_P (insn))
+    canon_reg (PATTERN (insn), insn);
+  else if (GET_CODE (x) == PARALLEL)
+    {
+      for (i = XVECLEN (x, 0) - 1; i >= 0; i--)
+	{
+	  rtx y = XVECEXP (x, 0, i);
+	  if (GET_CODE (y) == SET && GET_CODE (SET_SRC (y)) == CALL)
+	    {
+	      canon_reg (SET_SRC (y), insn);
+	      apply_change_group ();
+	      fold_rtx (SET_SRC (y), insn);
+	    }
+	  else if (GET_CODE (y) == CLOBBER)
+	    {
+	      if (MEM_P (XEXP (y, 0)))
+		canon_reg (XEXP (y, 0), insn);
+	    }
+	  else if (GET_CODE (y) == USE
+		   && ! (REG_P (XEXP (y, 0))
+			 && REGNO (XEXP (y, 0)) < FIRST_PSEUDO_REGISTER))
+	    canon_reg (y, insn);
+	  else if (GET_CODE (y) == ASM_OPERANDS)
+	    canon_asm_operands (y, insn);
+	  else if (GET_CODE (y) == CALL)
+	    {
+	      canon_reg (y, insn);
+	      apply_change_group ();
+	      fold_rtx (y, insn);
+	    }
+	}
+    }
+
+  if (n_sets == 1 && REG_NOTES (insn) != 0
+      && (tem = find_reg_note (insn, REG_EQUAL, NULL_RTX)) != 0)
+    {
+      /* We potentially will process this insn many times.  Therefore,
+	 drop the REG_EQUAL note if it is equal to the SET_SRC of the
+	 unique set in INSN.
+
+	 Do not do so if the REG_EQUAL note is for a STRICT_LOW_PART,
+	 because cse_insn handles those specially.  */
+      if (GET_CODE (SET_DEST (sets[0].rtl)) != STRICT_LOW_PART
+	  && rtx_equal_p (XEXP (tem, 0), SET_SRC (sets[0].rtl)))
+	remove_note (insn, tem);
+      else
+	{
+	  canon_reg (XEXP (tem, 0), insn);
+	  apply_change_group ();
+	  XEXP (tem, 0) = fold_rtx (XEXP (tem, 0), insn);
+	  df_notes_rescan (insn);
+	}
+    }
+
+  /* Canonicalize sources and addresses of destinations.
+     We do this in a separate pass to avoid problems when a MATCH_DUP is
+     present in the insn pattern.  In that case, we want to ensure that
+     we don't break the duplicate nature of the pattern.  So we will replace
+     both operands at the same time.  Otherwise, we would fail to find an
+     equivalent substitution in the loop calling validate_change below.
+
+     We used to suppress canonicalization of DEST if it appears in SRC,
+     but we don't do this any more.  */
+
+  for (i = 0; i < n_sets; i++)
+    {
+      rtx dest = SET_DEST (sets[i].rtl);
+      rtx src = SET_SRC (sets[i].rtl);
+      rtx new_rtx = canon_reg (src, insn);
+
+      validate_change (insn, &SET_SRC (sets[i].rtl), new_rtx, 1);
+
+      if (GET_CODE (dest) == ZERO_EXTRACT)
+	{
+	  validate_change (insn, &XEXP (dest, 1),
+			   canon_reg (XEXP (dest, 1), insn), 1);
+	  validate_change (insn, &XEXP (dest, 2),
+			   canon_reg (XEXP (dest, 2), insn), 1);
+	}
+
+      while (GET_CODE (dest) == SUBREG
+	     || GET_CODE (dest) == ZERO_EXTRACT
+	     || GET_CODE (dest) == STRICT_LOW_PART)
+	dest = XEXP (dest, 0);
+
+      if (MEM_P (dest))
+	canon_reg (dest, insn);
+    }
+
+  /* Now that we have done all the replacements, we can apply the change
+     group and see if they all work.  Note that this will cause some
+     canonicalizations that would have worked individually not to be applied
+     because some other canonicalization didn't work, but this should not
+     occur often.
+
+     The result of apply_change_group can be ignored; see canon_reg.  */
+
+  apply_change_group ();
+}
+
+
+// Source: cse.c
+// Lines 4384-4523

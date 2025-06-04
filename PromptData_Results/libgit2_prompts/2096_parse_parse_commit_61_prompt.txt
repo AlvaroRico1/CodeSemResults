@@ -1,0 +1,38 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'buffer' at line 1
+2. Pointer 'commit' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int parse_commit(git_commit **out, const char *buffer)
+{
+	git_commit *commit;
+	git_odb_object fake_odb_object;
+	int error;
+
+	commit = (git_commit*)git__malloc(sizeof(git_commit));
+	memset(commit, 0x0, sizeof(git_commit));
+	commit->object.repo = g_repo;
+
+	memset(&fake_odb_object, 0x0, sizeof(git_odb_object));
+	fake_odb_object.buffer = (char *)buffer;
+	fake_odb_object.cached.size = strlen(fake_odb_object.buffer);
+
+	error = git_commit__parse(commit, &fake_odb_object);
+
+	*out = commit;
+	return error;
+}
+
+
+// Source: parse.c
+// Lines 274-292
+
+
+[ANSWER]
+MUST-NOT

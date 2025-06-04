@@ -1,0 +1,59 @@
+static struct option *preprocess_options(struct parse_opt_ctx_t *ctx,
+					 const struct option *options)
+{
+	struct option *newopt;
+	int i, nr, alias;
+	int nr_aliases = 0;
+
+	for (nr = 0; options[nr].type != OPTION_END; nr++) {
+		if (options[nr].type == OPTION_ALIAS)
+			nr_aliases++;
+	}
+
+	if (!nr_aliases)
+		return NULL;
+
+	ALLOC_ARRAY(newopt, nr + 1);
+	COPY_ARRAY(newopt, options, nr + 1);
+
+	/* each alias has two string pointers and NULL */
+	CALLOC_ARRAY(ctx->alias_groups, 3 * (nr_aliases + 1));
+
+	for (alias = 0, i = 0; i < nr; i++) {
+		int short_name;
+		const char *long_name;
+		const char *source;
+		struct strbuf help = STRBUF_INIT;
+		int j;
+
+		if (newopt[i].type != OPTION_ALIAS)
+			continue;
+
+		short_name = newopt[i].short_name;
+		long_name = newopt[i].long_name;
+		source = newopt[i].value;
+
+		if (!long_name)
+			BUG("An alias must have long option name");
+		strbuf_addf(&help, _("alias of --%s"), source);
+
+		for (j = 0; j < nr; j++) {
+			const char *name = options[j].long_name;
+
+			if (!name || strcmp(name, source))
+				continue;
+
+			if (options[j].type == OPTION_ALIAS)
+				BUG("No please. Nested aliases are not supported.");
+
+			memcpy(newopt + i, options + j, sizeof(*newopt));
+			newopt[i].short_name = short_name;
+			newopt[i].long_name = long_name;
+			newopt[i].help = strbuf_detach(&help, NULL);
+			newopt[i].flags |= PARSE_OPT_FROM_ALIAS;
+			break;
+		}
+
+
+// Source: parse-options.c
+// Lines 618-672

@@ -1,0 +1,52 @@
+struct bitmap_index *prepare_bitmap_walk(struct rev_info *revs,
+					 struct list_objects_filter_options *filter,
+					 int filter_provided_objects)
+{
+	unsigned int i;
+
+	struct object_list *wants = NULL;
+	struct object_list *haves = NULL;
+
+	struct bitmap *wants_bitmap = NULL;
+	struct bitmap *haves_bitmap = NULL;
+
+	struct bitmap_index *bitmap_git;
+
+	/*
+	 * We can't do pathspec limiting with bitmaps, because we don't know
+	 * which commits are associated with which object changes (let alone
+	 * even which objects are associated with which paths).
+	 */
+	if (revs->prune)
+		return NULL;
+
+	if (!can_filter_bitmap(filter))
+		return NULL;
+
+	/* try to open a bitmapped pack, but don't parse it yet
+	 * because we may not need to use it */
+	CALLOC_ARRAY(bitmap_git, 1);
+	if (open_bitmap(revs->repo, bitmap_git) < 0)
+		goto cleanup;
+
+	for (i = 0; i < revs->pending.nr; ++i) {
+		struct object *object = revs->pending.objects[i].item;
+
+		if (object->type == OBJ_NONE)
+			parse_object_or_die(&object->oid, NULL);
+
+		while (object->type == OBJ_TAG) {
+			struct tag *tag = (struct tag *) object;
+
+			if (object->flags & UNINTERESTING)
+				object_list_insert(object, &haves);
+			else
+				object_list_insert(object, &wants);
+
+			object = parse_object_or_die(get_tagged_oid(tag), NULL);
+			object->flags |= (tag->object.flags & UNINTERESTING);
+		}
+
+
+// Source: pack-bitmap.c
+// Lines 1212-1259

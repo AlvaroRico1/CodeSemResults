@@ -1,0 +1,1 @@
+value,tmux/tty-term.c,11,caps,tmux/tty-term.c,1,1

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'table_header' at line 7\n2. Pointer 'offset' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic ssize_t acpi_table_show(struct file *filp, struct kobject *kobj,\n\t\t\t       struct bin_attribute *bin_attr, char *buf,\n\t\t\t       loff_t offset, size_t count)\n{\n\tstruct acpi_table_attr *table_attr =\n\t    container_of(bin_attr, struct acpi_table_attr, attr);\n\tstruct acpi_table_header *table_header = NULL;\n\tacpi_status status;\n\tssize_t rc;\n\n\tstatus = acpi_get_table(table_attr->name, table_attr->instance,\n\t\t\t\t&table_header);\n\tif (ACPI_FAILURE(status))\n\t\treturn -ENODEV;\n\n\trc = memory_read_from_buffer(buf, count, &offset, table_header,\n\t\t\ttable_header->length);\n\tacpi_put_table(table_header);\n\treturn rc;\n}\n\n\n// Source: sysfs.c\n// Lines 341-360\n",
+  "ANSWER": "MAY"
+}

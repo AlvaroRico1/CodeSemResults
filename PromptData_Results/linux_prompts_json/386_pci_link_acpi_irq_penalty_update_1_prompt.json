@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'irq' at line 7\n2. Pointer 'str' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int __init acpi_irq_penalty_update(char *str, int used)\n{\n\tint i;\n\n\tfor (i = 0; i < 16; i++) {\n\t\tint retval;\n\t\tint irq;\n\t\tint new_penalty;\n\n\t\tretval = get_option(&str, &irq);\n\n\t\tif (!retval)\n\t\t\tbreak;\t/* no number found */\n\n\t\t/* see if this is a ISA IRQ */\n\t\tif ((irq < 0) || (irq >= ACPI_MAX_ISA_IRQS))\n\t\t\tcontinue;\n\n\t\tif (used)\n\t\t\tnew_penalty = acpi_isa_irq_penalty[irq] +\n\t\t\t\t\tPIRQ_PENALTY_ISA_USED;\n\t\telse\n\t\t\tnew_penalty = 0;\n\n\t\tacpi_isa_irq_penalty[irq] = new_penalty;\n\t\tif (retval != 2)\t/* no next number */\n\t\t\tbreak;\n\t}\n\n\n// Source: pci_link.c\n// Lines 813-840\n",
+  "ANSWER": "MAY"
+}

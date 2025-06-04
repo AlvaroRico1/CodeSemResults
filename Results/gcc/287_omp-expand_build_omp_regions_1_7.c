@@ -1,0 +1,95 @@
+build_omp_regions_1 (basic_block bb, struct omp_region *parent,
+		     bool single_tree)
+{
+  gimple_stmt_iterator gsi;
+  gimple *stmt;
+  basic_block son;
+
+  gsi = gsi_last_nondebug_bb (bb);
+  if (!gsi_end_p (gsi) && is_gimple_omp (gsi_stmt (gsi)))
+    {
+      struct omp_region *region;
+      enum gimple_code code;
+
+      stmt = gsi_stmt (gsi);
+      code = gimple_code (stmt);
+      if (code == GIMPLE_OMP_RETURN)
+	{
+	  /* STMT is the return point out of region PARENT.  Mark it
+	     as the exit point and make PARENT the immediately
+	     enclosing region.  */
+	  gcc_assert (parent);
+	  region = parent;
+	  region->exit = bb;
+	  parent = parent->outer;
+	}
+      else if (code == GIMPLE_OMP_ATOMIC_STORE)
+	{
+	  /* GIMPLE_OMP_ATOMIC_STORE is analogous to
+	     GIMPLE_OMP_RETURN, but matches with
+	     GIMPLE_OMP_ATOMIC_LOAD.  */
+	  gcc_assert (parent);
+	  gcc_assert (parent->type == GIMPLE_OMP_ATOMIC_LOAD);
+	  region = parent;
+	  region->exit = bb;
+	  parent = parent->outer;
+	}
+      else if (code == GIMPLE_OMP_CONTINUE)
+	{
+	  gcc_assert (parent);
+	  parent->cont = bb;
+	}
+      else if (code == GIMPLE_OMP_SECTIONS_SWITCH)
+	{
+	  /* GIMPLE_OMP_SECTIONS_SWITCH is part of
+	     GIMPLE_OMP_SECTIONS, and we do nothing for it.  */
+	}
+      else
+	{
+	  region = new_omp_region (bb, code, parent);
+	  /* Otherwise...  */
+	  if (code == GIMPLE_OMP_TARGET)
+	    {
+	      switch (gimple_omp_target_kind (stmt))
+		{
+		case GF_OMP_TARGET_KIND_REGION:
+		case GF_OMP_TARGET_KIND_OACC_PARALLEL:
+		case GF_OMP_TARGET_KIND_OACC_KERNELS:
+		case GF_OMP_TARGET_KIND_OACC_SERIAL:
+		  break;
+		case GF_OMP_TARGET_KIND_UPDATE:
+		case GF_OMP_TARGET_KIND_ENTER_DATA:
+		case GF_OMP_TARGET_KIND_EXIT_DATA:
+		case GF_OMP_TARGET_KIND_DATA:
+		case GF_OMP_TARGET_KIND_OACC_DATA:
+		case GF_OMP_TARGET_KIND_OACC_HOST_DATA:
+		case GF_OMP_TARGET_KIND_OACC_UPDATE:
+		case GF_OMP_TARGET_KIND_OACC_ENTER_EXIT_DATA:
+		case GF_OMP_TARGET_KIND_OACC_DECLARE:
+		  /* ..., other than for those stand-alone directives...  */
+		  region = NULL;
+		  break;
+		default:
+		  gcc_unreachable ();
+		}
+	    }
+	  else if (code == GIMPLE_OMP_ORDERED
+		   && omp_find_clause (gimple_omp_ordered_clauses
+					 (as_a <gomp_ordered *> (stmt)),
+				       OMP_CLAUSE_DEPEND))
+	    /* #pragma omp ordered depend is also just a stand-alone
+	       directive.  */
+	    region = NULL;
+	  else if (code == GIMPLE_OMP_TASK
+		   && gimple_omp_task_taskwait_p (stmt))
+	    /* #pragma omp taskwait depend(...) is a stand-alone directive.  */
+	    region = NULL;
+	  /* ..., this directive becomes the parent for a new region.  */
+	  if (region)
+	    parent = region;
+	}
+    }
+
+
+// Source: omp-expand.c
+// Lines 8906-8996

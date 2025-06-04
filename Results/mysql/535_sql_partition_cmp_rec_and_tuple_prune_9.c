@@ -1,0 +1,46 @@
+static int cmp_rec_and_tuple_prune(part_column_list_val *val,
+                                   uint32 n_vals_in_rec, bool is_left_endpoint,
+                                   bool include_endpoint) {
+  int cmp;
+  Field **field;
+  if ((cmp = cmp_rec_and_tuple(val, n_vals_in_rec))) return cmp;
+  field = val->part_info->part_field_array + n_vals_in_rec;
+  if (!(*field)) {
+    /* Full match. Only equal if including endpoint. */
+    if (include_endpoint) return 0;
+
+    if (is_left_endpoint)
+      return +4; /* Start of range, part_tuple < rec, return higher. */
+    return -4;   /* End of range, rec < part_tupe, return lesser. */
+  }
+  /*
+    The prefix is equal and there are more partition columns to compare.
+
+    If including left endpoint or not including right endpoint
+    then the record is considered lesser compared to the partition.
+
+    i.e:
+    part(10, x) <= rec(10, unknown) and rec(10, unknown) < part(10, x)
+    part <= rec -> lesser (i.e. this or previous partitions)
+    rec < part -> lesser (i.e. this or previous partitions)
+  */
+  if (is_left_endpoint == include_endpoint) return -2;
+
+  /*
+    If right endpoint and the first additional partition value
+    is MAXVALUE, then the record is lesser.
+  */
+  if (!is_left_endpoint && (val + n_vals_in_rec)->max_value) return -3;
+
+  /*
+    Otherwise the record is considered greater.
+
+    rec <= part -> greater (i.e. does not match this partition, seek higher).
+    part < rec -> greater (i.e. does not match this partition, seek higher).
+  */
+  return 2;
+}
+
+
+// Source: sql_partition.cc
+// Lines 5516-5557

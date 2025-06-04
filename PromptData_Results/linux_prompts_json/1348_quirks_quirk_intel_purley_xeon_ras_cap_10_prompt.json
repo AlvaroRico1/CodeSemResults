@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'capid5' at line 3\n2. Pointer 'capid0' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void quirk_intel_purley_xeon_ras_cap(struct pci_dev *pdev)\n{\n\tu32 capid0, capid5;\n\n\tpci_read_config_dword(pdev, 0x84, &capid0);\n\tpci_read_config_dword(pdev, 0x98, &capid5);\n\n\t/*\n\t * CAPID0{7:6} indicate whether this is an advanced RAS SKU\n\t * CAPID5{8:5} indicate that various NVDIMM usage modes are\n\t * enabled, so memory machine check recovery is also enabled.\n\t */\n\tif ((capid0 & 0xc0) == 0xc0 || (capid5 & 0x1e0))\n\t\tstatic_branch_inc(&mcsafe_key);\n\n}\n\n\n// Source: quirks.c\n// Lines 647-662\n",
+  "ANSWER": "MAY"
+}

@@ -1,0 +1,362 @@
+bool Query_block::transform_grouped_to_derived(THD *thd, bool *break_off) {
+  // Collect all aggregates, and add them to our new select list
+  Item_sum::Collect_grouped_aggregate_info aggregates(this);
+
+  if (collect_aggregates(this, &aggregates)) return true;
+  if (aggregates.m_break_off) {
+    *break_off = true;  // some aggregates functions aggregate in an outer query
+    return false;
+  } else if (aggregates.list.size() == 0) {
+    // No longer to be found, probably optimized away ORDER BY
+    return false;
+  }
+
+  // Remember implicit grouping in case this query is also a scalar subquery
+  // so we can still identify it after this transform.
+  assert(is_implicitly_grouped());
+  m_was_implicitly_grouped = true;
+
+  TABLE_LIST *tl = nullptr;
+  Query_block *new_derived = nullptr;
+  List<Item> item_fields_or_view_refs;
+  std::unordered_map<Field *, Item_field *> unique_fields;
+  std::vector<Item_view_ref *> unique_view_refs;
+  /*
+    In addition to adding the aggregates to the derived table's SELECT list,
+    we need to add all referenced fields that will be needed in this query
+    block.
+    They fall into three categories:
+
+    1) fields referenced directly in the select list
+    2) fields referenced by window functions as arguments, or in
+       in a window definition's ORDER BY or PARTITION BY clauses
+    3) fields referenced by the transformed query block's ORDER BY clause
+
+    All of these can reference items from tables that are now moved inside the
+    derived table.
+
+    This query block will get its fields replaced by the corresponding ones in
+    the derived table shortly, after we have resolved the derived table.  We
+    need to give them unique names in the derived table, else we could have
+    issues with resolution. Can probably be removed after WL#6570.
+
+    Method: collect all unique fields referenced in categories 1-3 above.
+    Add them with unique names to the SELECT list of the derived table,
+    after the aggregates (e.g. inside the derived table one may see t1.i and
+    t2.i, but at this level both fields are part of the same derived table,
+    so they cannot both be known as i in this query block).
+
+    When the fields in the derived table are known (after the call to
+    resolve_placeholder_tables below, we can go back and modify the references
+    at this level.
+  */
+  std::vector<Item **> contrib_exprs;
+
+  // We want permanent changes
+  {
+    Prepared_stmt_arena_holder ps_arena_holder(thd);
+
+    Query_expression *const old_slave = slave;
+    slave = nullptr;
+    // The new derived table takes over WHERE and HAVING from this query block
+    Query_expression *new_slu = parent_lex->create_query_expr_and_block(
+        thd, this, m_where_cond, m_having_cond, CTX_DERIVED);
+    if (new_slu == nullptr) return true;
+    new_derived = new_slu->first_query_block();
+
+    m_where_cond = nullptr;
+    m_having_cond = nullptr;
+    new_derived->linkage = DERIVED_TABLE_TYPE;
+
+    // inherit item counts for safe allocation of base_ref_items array
+    new_derived->select_n_having_items = select_n_having_items;
+    new_derived->select_n_where_fields = select_n_where_fields;
+    new_derived->n_sum_items = n_sum_items;
+    new_derived->n_child_sum_items = n_child_sum_items;
+    // update condition counts
+    new_derived->cond_count = cond_count;
+    // between_count is updated if cond_count gets updated when there are any
+    // transformations. So we do the same here too. However it needs to be
+    // investigated if this is necessary or not.
+    new_derived->between_count = between_count;
+
+    with_sum_func = false;
+
+    // Any moved Item_ident needs new name resolution context
+    Item *conds[2] = {new_derived->m_where_cond, new_derived->m_having_cond};
+    for (auto cond : conds) {
+      if (update_context_to_derived(cond, new_derived)) return true;
+    }
+
+    assert(join == nullptr);
+
+    // Move FROM tables under the new derived table with fix ups
+    new_derived->table_list = table_list;
+    table_list.clear();
+    for (TABLE_LIST *tables = new_derived->table_list.first; tables != nullptr;
+         tables = tables->next_local) {
+      tables->query_block = new_derived;  // update query block context
+      if (update_context_to_derived(tables->join_cond(), new_derived))
+        return true; /* purecov: inspected */
+    }
+
+    new_derived->derived_table_count = this->derived_table_count;
+    derived_table_count = 0;  // will soon become 1.
+
+    assert(is_implicitly_grouped());  // only implicit grouping moved
+    assert(group_list.elements == 0);
+    assert(olap == UNSPECIFIED_OLAP_TYPE);
+
+    // Let new derived take over grouping flags
+    new_derived->m_agg_func_used = m_agg_func_used;
+    m_agg_func_used = false;
+    new_derived->m_json_agg_func_used = m_json_agg_func_used;
+    m_json_agg_func_used = false;
+
+    // Let new derived take over any semijoin candidates
+    new_derived->sj_candidates = sj_candidates;
+    sj_candidates = nullptr;
+
+    assert(join_list == &top_join_list);
+    new_derived->top_join_list = std::move(top_join_list);
+    top_join_list.clear();
+    new_derived->join_list = &new_derived->top_join_list;
+    new_derived->leaf_tables = leaf_tables;
+    new_derived->leaf_table_count = leaf_table_count;
+    leaf_tables = nullptr;
+    leaf_table_count = 0;
+    // Add the derived table to this query block's FROM list
+    tl = synthesize_derived(thd, new_slu, nullptr, false, false);
+    if (tl == nullptr) return true;
+
+    if (!(tl->derived_result = new (thd->mem_root) Query_result_union()))
+      return true; /* purecov: inspected */
+    new_slu->set_query_result(tl->derived_result);
+
+    top_join_list.push_back(tl);
+
+    // Update this query block's and the derived table's query block's name
+    // resolution contexts
+    context.table_list = tl;
+    context.first_name_resolution_table = tl;
+    assert(context.last_name_resolution_table == nullptr);
+    new_derived->context.init();
+    new_derived->context.table_list = table_list.first;
+    new_derived->context.query_block = new_derived;
+    new_derived->context.outer_context = &context;
+    new_derived->context.first_name_resolution_table = table_list.first;
+
+    /*
+      Retain only subqueries from SELECT list in this block [2]; all other
+      query expressions go to the new derived table [1]:
+    */
+    Item_subselect::Collect_subq_info subqueries(this);
+    for (Item *item : fields) {
+      if (item->walk(&Item::collect_subqueries, enum_walk::PREFIX,
+                     pointer_cast<uchar *>(&subqueries)))
+        return true; /* purecov: inspected */
+    }
+
+    assert(slave != nullptr);
+    assert(new_derived->slave == nullptr);
+
+    // Collect all query expressions in a container first, since we cannot rely
+    // on old_slave's ::next pointer chain once we start inserting them.
+    std::vector<Query_expression *> old_slaves;
+    for (Query_expression *cand = old_slave; cand != nullptr;
+         cand = cand->next) {
+      old_slaves.push_back(cand);
+    }
+
+    for (auto cand : old_slaves) {
+      if (cand == new_slu) continue;  // already in place
+      if (subqueries.contains(cand))
+        cand->include_down(parent_lex, this);  // [2]
+      else {
+        cand->include_down(parent_lex, new_derived);  // [1]
+        // These subqueries are now moving into a new query block, so we need
+        // to update any outer references inside such subqueries from this block
+        // to that of the new derived table.
+        Item_ident::Depended_change info{this, new_derived};
+        if (cand->walk(&Item::update_depended_from, enum_walk::SUBQUERY_PREFIX,
+                       pointer_cast<uchar *>(&info)))
+          return true; /* purecov: inspected */
+      }
+    }
+
+    // Insert the aggregates in the derived table's query block
+    int i = 0;
+    for (Item_sum *agg : aggregates.list) {
+      assert(agg->aggr_query_block == agg->base_query_block);
+      agg->aggr_query_block = new_derived;
+      agg->base_query_block = new_derived;
+      if (agg->hidden) {
+        // Because 'agg' is going to move to the derived table's SELECT list,
+        // its 'hidden' flag will become true. Then, in the current query block,
+        // 'agg' will be replaced by an Item_field for the column of that
+        // derived table; such Item_field must have the original value of
+        // agg->hidden, which we thus save here:
+        aggregates.aggregates_that_were_hidden.insert(agg);
+      }
+      if (new_derived->add_item_to_list(agg)) return true;
+      if (agg->item_name.length() == 0) {
+        // Generate a name (required)
+        char buff[100];
+        std::snprintf(buff, sizeof(buff), "tmp_aggr_%d", ++i);
+        agg->item_name.copy(buff);
+        if (agg->item_name.length() == 0) return true;  // allocation error.
+      }
+    }
+
+    // We will find all fields mentioned above by checking fields, which
+    // has any hidden fields induced by ORDER BY or window specifications, in
+    // addition to fields from the select expressions.
+    for (Item *&item : fields) {
+      contrib_exprs.push_back(&item);
+    }
+
+    // Collect fields in expr, but not from inside grouped aggregates.
+    Item::Collect_item_fields_or_view_refs info{&item_fields_or_view_refs,
+                                                this};
+    for (auto expr : contrib_exprs) {
+      if ((*expr)->walk(&Item::collect_item_field_or_view_ref_processor,
+                        enum_walk::SUBQUERY_PREFIX | enum_walk::POSTFIX,
+                        pointer_cast<uchar *>(&info)))
+        return true; /* purecov: inspected */
+    }
+
+    List_iterator<Item> lfi(item_fields_or_view_refs);
+    Item *lf;
+
+    // Remove irrelevant field references, i.e. those fields that are not local
+    // to new_derived
+    while ((lf = lfi++)) {
+      if (lf->type() == Item::FIELD_ITEM) {
+        Item_field *f = down_cast<Item_field *>(lf);
+        if (!(f->context->query_block == this || f->depended_from == this))
+          lfi.remove();
+      }
+    }
+    // We now have all fields and view refefences; now find only unique ones.
+    lfi.init(item_fields_or_view_refs);
+    while ((lf = lfi++)) {
+      if (lf->type() == Item::FIELD_ITEM) {
+        Item_field *f = down_cast<Item_field *>(lf);
+        if (unique_fields.find(f->field) == unique_fields.end()) {
+          unique_fields.emplace(std::pair<Field *, Item_field *>(f->field, f));
+        }
+      } else {
+        Item_view_ref *vr = down_cast<Item_view_ref *>(lf);
+        for (auto curr : unique_view_refs) {
+          if (curr->eq(vr, true)) goto continue_outer;
+        }
+        unique_view_refs.push_back(vr);
+      }
+    continue_outer:;
+    }
+
+    int field_no = 1;
+
+    for (auto vr : unique_view_refs) {
+      if (baptize_item(thd, vr, &field_no)) return true;
+      if (new_derived->add_item_to_list(vr)) return true;
+      if (update_context_to_derived(vr, new_derived)) return true;
+      vr->depended_from = nullptr;
+    }
+
+    for (auto pair : unique_fields) {
+      if (new_derived->add_item_to_list(pair.second)) return true;
+      if (baptize_item(thd, pair.second, &field_no)) return true;
+      if (update_context_to_derived(pair.second, new_derived)) return true;
+      pair.second->depended_from = nullptr;
+    }
+
+    if (new_derived->has_sj_candidates() &&
+        new_derived->flatten_subqueries(thd))
+      return true;
+
+    if (setup_tables(thd, get_table_list(), false)) return true;
+  }  // Prepared_stmt_arena_holder scope
+
+  // Resolving the new derived table needs normal arena
+  if (resolve_placeholder_tables(thd, true)) return true;
+
+  {
+    Prepared_stmt_arena_holder ps_arena_holder(thd);
+    assert(tl->table != nullptr);
+
+    /*
+      We pushed the HAVING clause into new_derived above, but it is resolved to
+      this query block, meaning it may have Item_aggregate_refs pointing into
+      this->base_ref_items. We need to update such references to point into
+      new_derived->base_ref_items instead, since this is where the aggregates
+      are now also. We do this by adding them as hidden items and setting
+      the Item_aggregate_refs::ref accordingly.
+    */
+    if (new_derived->m_having_cond != nullptr) {
+      Item_sum::Collect_grouped_aggregate_info having_aggs(this);
+      if (new_derived->m_having_cond->walk(&Item::collect_grouped_aggregates,
+                                           enum_walk::PREFIX,
+                                           pointer_cast<uchar *>(&having_aggs)))
+        return true; /* purecov: inspected */
+
+      for (Item_sum *agg : having_aggs.list) {
+        Item::Aggregate_ref_update info(agg, new_derived);
+        bool MY_ATTRIBUTE((unused)) error = new_derived->m_having_cond->walk(
+            &Item::update_aggr_refs, enum_walk::PREFIX,
+            pointer_cast<uchar *>(&info));
+        assert(!error);
+        agg->aggr_query_block = new_derived;
+      }
+    }
+
+    /*
+      Permanently replace the aggregates in this select list and windowing
+      clauses with fields from the derived table.
+    */
+    Field **field_ptr = tl->table->field;
+    for (Item_sum *agg : aggregates.list) {
+      Item_field *replaces_agg = new (thd->mem_root) Item_field(*field_ptr);
+      if (replaces_agg == nullptr) return true;
+
+      // So we can re-bind this field in EXECUTE phase of prepared statement
+      // Remove after WL#6570.
+      // replaces_agg->set_orig_names();
+
+      /*
+        The WHERE condition cannot contain group function from this level, so
+        ignore. Only replace aggregates from the SELECT lists with fields from
+        the derived table, then remove aggregates from top select lists.
+      */
+      Item::Aggregate_replacement info(agg, replaces_agg);
+      if (replace_aggregate_in_list(
+              info, aggregates.aggregates_that_were_hidden.count(agg) != 0,
+              &fields, &base_ref_items))
+        return true;
+
+      // We only transform implicit grouping to a derived table: in such a case,
+      // the order by is eliminated since the result set has only one row, so
+      // skip processing of order_list.
+      assert(group_list.elements == 0);
+      assert(order_list.elements == 0);
+
+      List_iterator<Window> wli(m_windows);
+      for (Window *w = wli++; w != nullptr; w = wli++) {
+        for (ORDER *it : {w->first_order_by(), w->first_partition_by()}) {
+          if (it != nullptr) {
+            for (auto ord = it; ord != nullptr; ord = ord->next) {
+              Item *new_item;
+              if (!(new_item = (*ord->item)
+                                   ->transform(&Item::replace_aggregate,
+                                               pointer_cast<uchar *>(&info))))
+                return true; /* purecov: inspected */
+              new_item->update_used_tables();
+              if (new_item != *ord->item) {
+                *ord->item = new_item;
+              }
+            }
+          }
+
+
+// Source: sql_resolver.cc
+// Lines 5867-6224

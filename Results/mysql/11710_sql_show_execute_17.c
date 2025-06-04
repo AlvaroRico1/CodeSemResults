@@ -1,0 +1,22 @@
+bool Sql_cmd_show_status::execute(THD *thd) {
+  System_status_var old_status_var = thd->status_var;
+  thd->initial_status_var = &old_status_var;
+
+  bool status = Sql_cmd_show::execute(thd);
+
+  // Don't log SHOW STATUS commands to slow query log
+  thd->server_status &=
+      ~(SERVER_QUERY_NO_INDEX_USED | SERVER_QUERY_NO_GOOD_INDEX_USED);
+  // Restore status variables, as we don't want 'show status' to cause changes
+  mysql_mutex_lock(&LOCK_status);
+  add_diff_to_status(&global_status_var, &thd->status_var, &old_status_var);
+  thd->status_var = old_status_var;
+  thd->initial_status_var = nullptr;
+  mysql_mutex_unlock(&LOCK_status);
+
+  return status;
+}
+
+
+// Source: sql_show.cc
+// Lines 744-761

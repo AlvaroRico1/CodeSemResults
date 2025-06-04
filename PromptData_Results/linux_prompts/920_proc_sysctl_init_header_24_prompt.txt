@@ -1,0 +1,39 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'entry' at line 17
+2. Pointer 'table' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void init_header(struct ctl_table_header *head,
+	struct ctl_table_root *root, struct ctl_table_set *set,
+	struct ctl_node *node, struct ctl_table *table)
+{
+	head->ctl_table = table;
+	head->ctl_table_arg = table;
+	head->used = 0;
+	head->count = 1;
+	head->nreg = 1;
+	head->unregistering = NULL;
+	head->root = root;
+	head->set = set;
+	head->parent = NULL;
+	head->node = node;
+	INIT_HLIST_HEAD(&head->inodes);
+	if (node) {
+		struct ctl_table *entry;
+		for (entry = table; entry->procname; entry++, node++)
+			node->header = head;
+	}
+
+
+// Source: proc_sysctl.c
+// Lines 186-205
+
+
+[ANSWER]
+MUST

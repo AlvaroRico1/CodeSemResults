@@ -1,0 +1,326 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'item_sum' at line 301
+2. Pointer 'end' at line 300
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool Query_block::prepare(THD *thd, mem_root_deque<Item *> *insert_field_list) {
+  DBUG_TRACE;
+
+  assert(this == thd->lex->current_query_block());
+  assert(join == nullptr);
+  assert(!thd->is_error());
+
+  // If this query block is a table value constructor, a lot of the preparation
+  // done in Query_block::prepare becomes irrelevant. Thus we call our own
+  // Query_block::prepare_values in this case.
+  if (is_table_value_constructor) return prepare_values(thd);
+
+  Query_expression *const unit = master_query_expression();
+
+  if (!top_join_list.empty()) propagate_nullability(&top_join_list, false);
+
+  /*
+    Determine whether it is suggested to merge immediate derived tables, based
+    on the placement of the query block:
+      - DTs belonging to outermost query block: always
+      - DTs belonging to first level subqueries: Yes if inside SELECT statement,
+        no otherwise (including UPDATE and DELETE).
+        This is required to support a workaround for allowing subqueries
+        containing the same table as is target for delete or update,
+        by forcing a materialization of the subquery.
+      - All other cases inherit status of parent query block.
+  */
+  allow_merge_derived = outer_query_block() == nullptr ||
+                        master_query_expression()->item == nullptr ||
+                        (outer_query_block()->outer_query_block() == nullptr
+                             ? parent_lex->sql_command == SQLCOM_SELECT ||
+                                   parent_lex->sql_command == SQLCOM_SET_OPTION
+                             : outer_query_block()->allow_merge_derived);
+
+  Opt_trace_context *const trace = &thd->opt_trace;
+  Opt_trace_object trace_wrapper_prepare(trace);
+  Opt_trace_object trace_prepare(trace, "join_preparation");
+  trace_prepare.add_select_number(select_number);
+  Opt_trace_array trace_steps(trace, "steps");
+
+  /*
+    Setup the expressions in the SELECT list.
+    For derived tables/views, wait with privilege checking of columns and
+    marking in read/write sets until we know how they are used (may be used in
+    UPDATE and INSERT). Exceptions:
+     - Always assume columns referenced in subqueries are selected.
+     - Always assume outer references are selected (marking is then done in
+       Item_outer_ref::fix_fields).
+
+    Expressions must be resolved here, before tables are set up, otherwise table
+    function's arguments are not resolved properly.
+  */
+  const bool check_privs = !thd->derived_tables_processing ||
+                           master_query_expression()->item != nullptr;
+  thd->mark_used_columns = check_privs ? MARK_COLUMNS_READ : MARK_COLUMNS_NONE;
+  ulonglong want_privilege_saved = thd->want_privilege;
+  thd->want_privilege = check_privs ? SELECT_ACL : 0;
+
+  /*
+    Expressions in lateral join can't refer to item list, thus item list lookup
+    shouldn't be allowed during table/table function setup.
+  */
+  is_item_list_lookup = false;
+
+  /* Check that all tables, fields, conds and order are ok */
+
+  if (setup_tables(thd, get_table_list(), false)) return true;
+
+  if ((derived_table_count || table_func_count) &&
+      resolve_placeholder_tables(thd, true))
+    return true;
+
+  // Wait with privilege checking until all derived tables are resolved.
+  if (derived_table_count && !thd->derived_tables_processing &&
+      check_view_privileges(thd, SELECT_ACL, SELECT_ACL))
+    return true;
+
+  is_item_list_lookup = true;
+
+  // Precompute and store the row types of NATURAL/USING joins.
+  if (leaf_table_count >= 2 &&
+      setup_natural_join_row_types(thd, join_list, &context))
+    return true;
+
+  Mem_root_array<Item_exists_subselect *> sj_candidates_local(thd->mem_root);
+  set_sj_candidates(&sj_candidates_local);
+
+  /*
+    Item and Item_field CTORs will both increment some counters
+    in current_query_block(), based on the current parsing context.
+    We are not parsing anymore: any new Items created now are due to
+    query rewriting, so stop incrementing counters.
+   */
+  assert(parsing_place == CTX_NONE);
+  parsing_place = CTX_NONE;
+
+  resolve_place = RESOLVE_SELECT_LIST;
+
+  if (with_wild && setup_wild(thd)) return true;
+  if (setup_base_ref_items(thd)) return true; /* purecov: inspected */
+
+  if (setup_fields(thd, thd->want_privilege, /*allow_sum_func=*/true,
+                   /*split_sum_funcs=*/true, /*column_update=*/false,
+                   insert_field_list, &fields, base_ref_items))
+    return true;
+
+  resolve_place = RESOLVE_NONE;
+
+  const nesting_map save_allow_sum_func = thd->lex->allow_sum_func;
+  const nesting_map save_deny_window_func = thd->lex->m_deny_window_func;
+
+  // Do not allow local set functions for join conditions, WHERE and GROUP BY
+  thd->lex->allow_sum_func &= ~((nesting_map)1 << nest_level);
+
+  thd->mark_used_columns = MARK_COLUMNS_READ;
+  thd->want_privilege = SELECT_ACL;
+
+  // Set up join conditions and WHERE clause
+  if (setup_conds(thd)) return true;
+
+  // Set up the GROUP BY clause
+  int all_fields_count = fields.size();
+  if (group_list.elements && setup_group(thd)) return true;
+  hidden_group_field_count = fields.size() - all_fields_count;
+
+  // Allow local set functions in HAVING and ORDER BY
+  thd->lex->allow_sum_func |= (nesting_map)1 << nest_level;
+
+  // Windowing is not allowed with HAVING
+  thd->lex->m_deny_window_func |= (nesting_map)1 << nest_level;
+
+  if (olap == ROLLUP_TYPE) {
+    for (Item *item : fields) {
+      mark_item_as_maybe_null_if_rollup_item(item);
+    }
+  }
+
+  // Setup the HAVING clause
+  if (m_having_cond) {
+    assert(m_having_cond->is_bool_func());
+    thd->where = "having clause";
+    having_fix_field = true;
+    resolve_place = RESOLVE_HAVING;
+    if (!m_having_cond->fixed &&
+        (m_having_cond->fix_fields(thd, &m_having_cond) ||
+         m_having_cond->check_cols(1)))
+      return true;
+
+    assert(m_having_cond->data_type() != MYSQL_TYPE_INVALID);
+
+    /*
+      Rollup may alter nullability of HAVING condition, so wait with
+      simplification of this condition until after rollup is resolved.
+    */
+
+    having_fix_field = false;
+    resolve_place = RESOLVE_NONE;
+  }
+
+  if (olap == ROLLUP_TYPE && resolve_rollup(thd))
+    return true; /* purecov: inspected */
+
+  thd->lex->m_deny_window_func = save_deny_window_func;
+
+  if (m_having_cond != nullptr) {
+    if (olap == ROLLUP_TYPE) {
+      m_having_cond = resolve_rollup_item(thd, m_having_cond);
+      if (m_having_cond == nullptr) {
+        return true;
+      }
+    }
+    /*
+      Simplify the having condition if it is a const item.
+      Leave a TRUE condition if HAVING is always true, so that query block
+      is still marked as having a HAVING condition.
+    */
+    if (m_having_cond->const_item() && !thd->lex->is_view_context_analysis() &&
+        !m_having_cond->walk(&Item::is_non_const_over_literals,
+                             enum_walk::POSTFIX, nullptr) &&
+        simplify_const_condition(thd, &m_having_cond, false))
+      return true;
+  }
+  // Set up the ORDER BY clause
+  all_fields_count = fields.size();
+  if (order_list.elements) {
+    if (setup_order(thd, base_ref_items, get_table_list(), &fields,
+                    order_list.first))
+      return true;
+  }
+
+  hidden_order_field_count = fields.size() - all_fields_count;
+
+  // Resolve OFFSET and LIMIT clauses
+  if (resolve_limits(thd)) return true;
+
+  /*
+    Query block is completely resolved, except for windows (see below) which
+    handles its own, so restore set function allowance.
+  */
+  thd->lex->allow_sum_func = save_allow_sum_func;
+
+  /*
+    Permanently remove redundant parts from the query if
+      1) This is a subquery
+      2) Not normalizing a view. Removal should take place when a
+         query involving a view is optimized, not when the view
+         is created
+  */
+  if (unit->item &&                           // 1)
+      !thd->lex->is_view_context_analysis())  // 2)
+  {
+    remove_redundant_subquery_clauses(thd, hidden_group_field_count);
+  }
+
+  /*
+    Set up windows after setup_order() (as the query's ORDER BY may contain
+    window functions), and before setup_order_final() (as such function needs
+    to know about implicit grouping which may be induced by an aggregate
+    function in the window's PARTITION or ORDER clause).
+  */
+  if (m_windows.elements != 0 &&
+      Window::setup_windows1(thd, this, base_ref_items, get_table_list(),
+                             &fields, m_windows))
+    return true;
+
+  bool added_new_sum_funcs = false;
+
+  if (order_list.elements) {
+    if (setup_order_final(thd)) return true; /* purecov: inspected */
+    added_new_sum_funcs = true;
+  }
+
+  thd->want_privilege = want_privilege_saved;
+
+  if (is_distinct() && can_skip_distinct())
+    remove_base_options(SELECT_DISTINCT);
+
+  /*
+    Printing the expanded query should happen here and not elsewhere, because
+    when a view is merged (when the view is opened in open_tables()), the
+    parent query's query_block does not yet contain a correct WHERE clause (it
+    misses the view's merged WHERE clause). This is corrected only just above,
+    in TABLE_LIST::prep_where(), called by
+    setup_without_group()->setup_conds().
+    We also have to wait for fix_fields() on HAVING, above.
+    At this stage, we also have properly set up Item_ref-s.
+  */
+  {
+    Opt_trace_object trace_wrapper(trace);
+    opt_trace_print_expanded_query(thd, this, &trace_wrapper);
+  }
+
+  /*
+    When normalizing a view (like when writing a view's body to the FRM),
+    subquery transformations don't apply (if they did, IN->EXISTS could not be
+    undone in favour of materialization, when optimizing a later statement
+    using the view)
+  */
+  if (unit->item &&                      // This is a subquery
+      this != unit->fake_query_block &&  // A real query block
+                                         // Not normalizing a view
+      !thd->lex->is_view_context_analysis()) {
+    // Query block represents a subquery within an IN/ANY/ALL/EXISTS predicate
+    if (resolve_subquery(thd)) return true;
+  }
+
+  // Transform eligible scalar subqueries to derived tables.
+  //
+  // Don't transform if analyzing a view: the resulting query may not be
+  // compilable from sqldump, (due to group by check/visibility in HAVING).
+  //
+  // Don't transform if the switch subquery_to_derived is false.
+  //
+  // Note that the transformation must precede m_having_cond->split_sum_func2
+  // below since substitutions may be made in the HAVING clause which would not
+  // otherwise get done.
+
+  if (!(thd->lex->context_analysis_only & CONTEXT_ANALYSIS_ONLY_VIEW) &&
+      (thd->optimizer_switch_flag(OPTIMIZER_SWITCH_SUBQUERY_TO_DERIVED) ||
+       (parent_lex->m_sql_cmd != nullptr &&
+        thd->secondary_engine_optimization() ==
+            Secondary_engine_optimization::SECONDARY)) &&
+      transform_scalar_subqueries_to_join_with_derived(thd))
+    return true; /* purecov: inspected */
+
+  /*
+    If GROUPING function is present in having condition -
+    1. Set that the evaluation of this condition depends on rollup
+    result.
+    2. Add a reference to the condition so that result is stored
+    after evalution.
+  */
+  if (m_having_cond && (m_having_cond->has_aggregation() ||
+                        m_having_cond->has_grouping_func())) {
+    m_having_cond->split_sum_func2(thd, base_ref_items, &fields, &m_having_cond,
+                                   true);
+    added_new_sum_funcs = true;
+  }
+  if (inner_sum_func_list) {
+    Item_sum *end = inner_sum_func_list;
+    Item_sum *item_sum = end;
+    do {
+      item_sum = item_sum->next_sum;
+      item_sum->split_sum_func2(thd, base_ref_items, &fields, nullptr, false);
+      added_new_sum_funcs = true;
+    } while (item_sum != end);
+  }
+
+
+// Source: sql_resolver.cc
+// Lines 170-476
+
+
+[ANSWER]
+MUST

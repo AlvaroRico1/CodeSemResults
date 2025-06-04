@@ -1,0 +1,74 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'pkt_data_len' at line 2
+2. Pointer 'net' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static size_t net_read_packet(NET *net, size_t *complen) {
+  size_t pkt_len, pkt_data_len;
+
+  *complen = 0;
+
+  net->reading_or_writing = 1;
+
+  /* Retrieve packet length and number. */
+  if (net_read_packet_header(net)) goto error;
+
+  net->compress_pkt_nr = net->pkt_nr;
+
+  if (net->compress) {
+    /*
+      The right-hand expression
+      must match the size of the buffer allocated in net_realloc().
+    */
+    assert(net->where_b + NET_HEADER_SIZE + 3 <=
+           net->max_packet + NET_HEADER_SIZE + COMP_HEADER_SIZE);
+
+    /*
+      If the packet is compressed then complen > 0 and contains the
+      number of bytes in the uncompressed packet.
+    */
+    *complen = uint3korr(&(net->buff[net->where_b + NET_HEADER_SIZE]));
+  }
+
+  /* The length of the packet that follows. */
+  pkt_len = uint3korr(net->buff + net->where_b);
+
+  /* End of big multi-packet. */
+  if (!pkt_len) goto end;
+
+  pkt_data_len = max(pkt_len, *complen) + net->where_b;
+
+  /* Expand packet buffer if necessary. */
+  if ((pkt_data_len >= net->max_packet) && net_realloc(net, pkt_data_len))
+    goto error;
+
+  /* Read the packet data (payload). */
+  if (net_read_raw_loop(net, pkt_len)) goto error;
+
+end:
+  if (net->error == NET_ERROR_SOCKET_NOT_WRITABLE)
+    net->error = NET_ERROR_SOCKET_UNUSABLE;
+  DBUG_DUMP("net read", net->buff + net->where_b, pkt_len);
+  net->reading_or_writing = 0;
+  return pkt_len;
+
+error:
+  if (net->error == NET_ERROR_SOCKET_NOT_WRITABLE)
+    net->error = NET_ERROR_SOCKET_UNUSABLE;
+  net->reading_or_writing = 0;
+  return packet_error;
+}
+
+
+// Source: net_serv.cc
+// Lines 2040-2094
+
+
+[ANSWER]
+MUST-NOT

@@ -1,0 +1,56 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'oldsize' at line 18
+2. Pointer 'newsize' at line 19
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int apply_buf(
+	const char *old,
+	const char *oldname,
+	const char *new,
+	const char *newname,
+	const char *expected,
+	const git_diff_options *diff_opts,
+	git_apply_hunk_cb hunk_cb,
+	void *payload)
+{
+	git_patch *patch;
+	git_str result = GIT_STR_INIT;
+	git_str patchbuf = GIT_STR_INIT;
+	git_apply_options opts = GIT_APPLY_OPTIONS_INIT;
+	char *filename;
+	unsigned int mode;
+	int error;
+	size_t oldsize = strlen(old);
+	size_t newsize = strlen(new);
+
+	opts.hunk_cb = hunk_cb;
+	opts.payload = payload;
+
+	cl_git_pass(git_patch_from_buffers(&patch, old, oldsize, oldname, new, newsize, newname, diff_opts));
+	if ((error = git_apply__patch(&result, &filename, &mode, old, oldsize, patch, &opts)) == 0) {
+		cl_assert_equal_s(expected, result.ptr);
+		cl_assert_equal_s(newname, filename);
+		cl_assert_equal_i(0100644, mode);
+	}
+
+	git__free(filename);
+	git_str_dispose(&result);
+	git_str_dispose(&patchbuf);
+	git_patch_free(patch);
+
+	return error;
+}
+
+
+// Source: partial.c
+// Lines 75-111
+
+
+[ANSWER]
+MUST-NOT

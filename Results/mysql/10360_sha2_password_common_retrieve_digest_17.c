@@ -1,0 +1,272 @@
+bool SHA256_digest::retrieve_digest(unsigned char *digest,
+                                    unsigned int length) {
+  DBUG_TRACE;
+  if (!m_ok || !digest || length != CACHING_SHA2_DIGEST_LENGTH) {
+    DBUG_PRINT("info", ("Either digest context is not ok or "
+                        "digest length is not as expected."));
+    return true;
+  }
+  m_ok = EVP_DigestFinal_ex(md_context, m_digest, nullptr);
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+  EVP_MD_CTX_cleanup(md_context);
+#else  /* OPENSSL_VERSION_NUMBER < 0x10100000L */
+  EVP_MD_CTX_reset(md_context);
+#endif /* OPENSSL_VERSION_NUMBER < 0x10100000L */
+  memcpy(digest, m_digest, length);
+  return !m_ok;
+}
+
+/**
+  Cleanup and reinit
+*/
+
+void SHA256_digest::scrub() {
+  deinit();
+  init();
+}
+
+/**
+  Initialize digest context
+
+  1. Allocate memory for digest context
+  2. Call initialization function(s)
+*/
+
+void SHA256_digest::init() {
+  DBUG_TRACE;
+  m_ok = false;
+  md_context = EVP_MD_CTX_create();
+  if (!md_context) {
+    DBUG_PRINT("info", ("Failed to create digest context"));
+    return;
+  }
+
+  m_ok = (bool)EVP_DigestInit_ex(md_context, EVP_sha256(), nullptr);
+
+  if (!m_ok) {
+    EVP_MD_CTX_destroy(md_context);
+    md_context = nullptr;
+    DBUG_PRINT("info", ("Failed to initialize digest context"));
+  }
+}
+
+/**
+  Release allocated memory for digest context
+*/
+
+void SHA256_digest::deinit() {
+  if (md_context) EVP_MD_CTX_destroy(md_context);
+  md_context = nullptr;
+  m_ok = false;
+}
+
+/**
+  Generate_scramble constructor
+
+  @param [in] source Plaintext source
+  @param [in] rnd    Salt
+  @param [in] digest_type Digest type
+*/
+Generate_scramble::Generate_scramble(
+    const std::string source, const std::string rnd,
+    Digest_info digest_type) /* = Digest_info::SHA256_DIGEST */
+    : m_src(source), m_rnd(rnd), m_digest_type(digest_type) {
+  switch (m_digest_type) {
+    case Digest_info::SHA256_DIGEST: {
+      m_digest_generator = new SHA256_digest();
+      m_digest_length = CACHING_SHA2_DIGEST_LENGTH;
+      break;
+    }
+    default:
+      assert(false);
+  };
+}
+
+/**
+  Generate_scramble destructor
+*/
+
+Generate_scramble::~Generate_scramble() {
+  if (m_digest_generator) delete m_digest_generator;
+  m_digest_generator = nullptr;
+}
+
+/**
+  Scramble generation
+
+  @param [out] scramble        Output buffer for generated scramble
+  @param [in]  scramble_length Size of scramble buffer
+
+  @note
+    SHA2(src) => digest_stage1
+    SHA2(digest_stage1) => digest_stage2
+    SHA2(digest_stage2, m_rnd) => scramble_stage1
+    XOR(digest_stage1, scramble_stage1) => scramble
+
+  @returns Status of scramble generation
+    @retval true  Error generating scramble
+    @retval false Success
+*/
+
+bool Generate_scramble::scramble(unsigned char *scramble,
+                                 unsigned int scramble_length) {
+  DBUG_TRACE;
+  unsigned char *digest_stage1;
+  unsigned char *digest_stage2;
+  unsigned char *scramble_stage1;
+
+  if (!scramble || scramble_length != m_digest_length) {
+    DBUG_PRINT("info", ("Unexpected scrable length"
+                        "Expected: %d, Actual: %d",
+                        m_digest_length, !scramble ? 0 : scramble_length));
+    return true;
+  }
+
+  switch (m_digest_type) {
+    case Digest_info::SHA256_DIGEST: {
+      digest_stage1 = (unsigned char *)alloca(m_digest_length);
+      digest_stage2 = (unsigned char *)alloca(m_digest_length);
+      scramble_stage1 = (unsigned char *)alloca(m_digest_length);
+      break;
+    }
+    default: {
+      assert(false);
+      return true;
+    }
+  }
+
+  /* SHA2(src) => digest_stage1 */
+  if (m_digest_generator->update_digest(m_src.c_str(), m_src.length()) ||
+      m_digest_generator->retrieve_digest(digest_stage1, m_digest_length)) {
+    DBUG_PRINT("info", ("Failed to generate digest_stage1: SHA2(src)"));
+    return true;
+  }
+
+  /* SHA2(digest_stage1) => digest_stage2 */
+  m_digest_generator->scrub();
+  if (m_digest_generator->update_digest(digest_stage1, m_digest_length) ||
+      m_digest_generator->retrieve_digest(digest_stage2, m_digest_length)) {
+    DBUG_PRINT("info",
+               ("Failed to generate digest_stage2: SHA2(digest_stage1)"));
+    return true;
+  }
+
+  /* SHA2(digest_stage2, m_rnd) => scramble_stage1 */
+  m_digest_generator->scrub();
+  if (m_digest_generator->update_digest(digest_stage2, m_digest_length) ||
+      m_digest_generator->update_digest(m_rnd.c_str(), m_rnd.length()) ||
+      m_digest_generator->retrieve_digest(scramble_stage1, m_digest_length)) {
+    DBUG_PRINT("info", ("Failed to generate scrmable_stage1: "
+                        "SHA2(digest_stage2, m_rnd)"));
+    return true;
+  }
+
+  /* XOR(digest_stage1, scramble_stage1) => scramble */
+  for (uint i = 0; i < m_digest_length; ++i)
+    scramble[i] = (digest_stage1[i] ^ scramble_stage1[i]);
+
+  return false;
+}
+
+/**
+  Validate scramble constructor
+  @param [in] scramble    Scramble to be validated
+  @param [in] known       Known digest against which scramble is to be verified
+  @param [in] rnd         Salt
+  @param [in] rnd_length  Length of the salt buffer
+  @param [in] digest_type Type od digest
+*/
+
+Validate_scramble::Validate_scramble(
+    const unsigned char *scramble, const unsigned char *known,
+    const unsigned char *rnd, unsigned int rnd_length,
+    Digest_info digest_type) /* = Digest_info::SHA256_DIGEST */
+    : m_scramble(scramble),
+      m_known(known),
+      m_rnd(rnd),
+      m_rnd_length(rnd_length),
+      m_digest_type(digest_type) {
+  switch (m_digest_type) {
+    case Digest_info::SHA256_DIGEST: {
+      m_digest_generator = new SHA256_digest();
+      m_digest_length = CACHING_SHA2_DIGEST_LENGTH;
+      break;
+    }
+    default:
+      assert(false);
+      break;
+  };
+}
+
+/** Validate_scramble destructor */
+
+Validate_scramble::~Validate_scramble() {
+  if (m_digest_generator) delete m_digest_generator;
+  m_digest_generator = nullptr;
+}
+
+/**
+  Validate the scramble
+
+  @note
+    SHA2(known, rnd) => scramble_stage1
+    XOR(scramble, scramble_stage1) => digest_stage1
+    SHA2(digest_stage1) => digest_stage2
+    m_known == digest_stage2
+
+  @returns Result of validation process
+    @retval false Successful validation
+    @retval true Error
+*/
+
+bool Validate_scramble::validate() {
+  DBUG_TRACE;
+  unsigned char *digest_stage1 = nullptr;
+  unsigned char *digest_stage2 = nullptr;
+  unsigned char *scramble_stage1 = nullptr;
+
+  switch (m_digest_type) {
+    case Digest_info::SHA256_DIGEST: {
+      digest_stage1 = (unsigned char *)alloca(m_digest_length);
+      digest_stage2 = (unsigned char *)alloca(m_digest_length);
+      scramble_stage1 = (unsigned char *)alloca(m_digest_length);
+      break;
+    }
+    default: {
+      assert(false);
+      return true;
+    }
+  }
+
+  /* SHA2(known, m_rnd) => scramble_stage1 */
+  if (m_digest_generator->update_digest(m_known, m_digest_length) ||
+      m_digest_generator->update_digest(m_rnd, m_rnd_length) ||
+      m_digest_generator->retrieve_digest(scramble_stage1, m_digest_length)) {
+    DBUG_PRINT("info",
+               ("Failed to generate scramble_stage1: SHA2(known, m_rnd)"));
+    return true;
+  }
+
+  /* XOR(scramble, scramble_stage1) => digest_stage1 */
+  for (unsigned int i = 0; i < m_digest_length; ++i)
+    digest_stage1[i] = (m_scramble[i] ^ scramble_stage1[i]);
+
+  /* SHA2(digest_stage1) => digest_stage2 */
+  m_digest_generator->scrub();
+  if (m_digest_generator->update_digest(digest_stage1, m_digest_length) ||
+      m_digest_generator->retrieve_digest(digest_stage2, m_digest_length)) {
+    DBUG_PRINT("info",
+               ("Failed to generate digest_stage2: SHA2(digest_stage1)"));
+    return true;
+  }
+
+  /* m_known == digest_stage2 */
+  if (memcmp(m_known, digest_stage2, m_digest_length) == 0) return false;
+
+  return true;
+}
+}  // namespace sha2_password
+
+
+// Source: sha2_password_common.cc
+// Lines 95-362

@@ -1,0 +1,1 @@
+config_size,git/submodule-config.c,6,type,git/submodule-config.c,9,2

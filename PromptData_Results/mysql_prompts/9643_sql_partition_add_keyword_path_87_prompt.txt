@@ -1,0 +1,55 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'temp_path_p' at line 14
+2. Pointer 'temp_path' at line 13
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int add_keyword_path(File fptr, const char *keyword, const char *path) {
+  if (strlen(path) >= FN_REFLEN) {
+    my_error(ER_PATH_LENGTH, MYF(0), keyword);
+    return 1;
+  }
+
+  int err = add_string(fptr, keyword);
+
+  err += add_space(fptr);
+  err += add_equal(fptr);
+  err += add_space(fptr);
+
+  char temp_path[FN_REFLEN];
+  const char *temp_path_p[1];
+  temp_path_p[0] = temp_path;
+  strncpy(temp_path, path, FN_REFLEN - 1);
+  temp_path[FN_REFLEN - 1] = '\0';
+#ifdef _WIN32
+  /* Convert \ to / to be able to create table on unix */
+  char *pos, *end;
+  size_t length = strlen(temp_path);
+  for (pos = temp_path, end = pos + length; pos < end; pos++) {
+    if (*pos == '\\') *pos = '/';
+  }
+#endif
+
+  /*
+  If the partition file name with its "#P#" identifier
+  is found after the last slash, truncate that filename.
+  */
+  truncate_partition_filename(nullptr, temp_path_p);
+
+  err += add_quoted_string(fptr, temp_path);
+
+  return err + add_space(fptr);
+}
+
+
+// Source: sql_partition.cc
+// Lines 1830-1865
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,152 @@
+find_bb_boundaries (basic_block bb)
+{
+  basic_block orig_bb = bb;
+  rtx_insn *insn = BB_HEAD (bb);
+  rtx_insn *end = BB_END (bb), *x;
+  rtx_jump_table_data *table;
+  rtx_insn *flow_transfer_insn = NULL;
+  rtx_insn *debug_insn = NULL;
+  edge fallthru = NULL;
+  bool skip_purge;
+
+  if (insn == end)
+    return;
+
+  if (DEBUG_INSN_P (insn) || DEBUG_INSN_P (end))
+    {
+      /* Check whether, without debug insns, the insn==end test above
+	 would have caused us to return immediately, and behave the
+	 same way even with debug insns.  If we don't do this, debug
+	 insns could cause us to purge dead edges at different times,
+	 which could in turn change the cfg and affect codegen
+	 decisions in subtle but undesirable ways.  */
+      while (insn != end && DEBUG_INSN_P (insn))
+	insn = NEXT_INSN (insn);
+      rtx_insn *e = end;
+      while (insn != e && DEBUG_INSN_P (e))
+	e = PREV_INSN (e);
+      if (insn == e)
+	{
+	  /* If there are debug insns after a single insn that is a
+	     control flow insn in the block, we'd have left right
+	     away, but we should clean up the debug insns after the
+	     control flow insn, because they can't remain in the same
+	     block.  So, do the debug insn cleaning up, but then bail
+	     out without purging dead edges as we would if the debug
+	     insns hadn't been there.  */
+	  if (e != end && !DEBUG_INSN_P (e) && control_flow_insn_p (e))
+	    {
+	      skip_purge = true;
+	      flow_transfer_insn = e;
+	      goto clean_up_debug_after_control_flow;
+	    }
+	  return;
+	}
+    }
+
+  if (LABEL_P (insn))
+    insn = NEXT_INSN (insn);
+
+  /* Scan insn chain and try to find new basic block boundaries.  */
+  while (1)
+    {
+      enum rtx_code code = GET_CODE (insn);
+
+      if (code == DEBUG_INSN)
+	{
+	  if (flow_transfer_insn && !debug_insn)
+	    debug_insn = insn;
+	}
+      /* In case we've previously seen an insn that effects a control
+	 flow transfer, split the block.  */
+      else if ((flow_transfer_insn || code == CODE_LABEL)
+	       && inside_basic_block_p (insn))
+	{
+	  rtx_insn *prev = PREV_INSN (insn);
+
+	  /* If the first non-debug inside_basic_block_p insn after a control
+	     flow transfer is not a label, split the block before the debug
+	     insn instead of before the non-debug insn, so that the debug
+	     insns are not lost.  */
+	  if (debug_insn && code != CODE_LABEL && code != BARRIER)
+	    prev = PREV_INSN (debug_insn);
+	  fallthru = split_block (bb, prev);
+	  if (flow_transfer_insn)
+	    {
+	      BB_END (bb) = flow_transfer_insn;
+
+	      rtx_insn *next;
+	      /* Clean up the bb field for the insns between the blocks.  */
+	      for (x = NEXT_INSN (flow_transfer_insn);
+		   x != BB_HEAD (fallthru->dest);
+		   x = next)
+		{
+		  next = NEXT_INSN (x);
+		  /* Debug insns should not be in between basic blocks,
+		     drop them on the floor.  */
+		  if (DEBUG_INSN_P (x))
+		    delete_insn (x);
+		  else if (!BARRIER_P (x))
+		    set_block_for_insn (x, NULL);
+		}
+	    }
+
+	  bb = fallthru->dest;
+	  remove_edge (fallthru);
+	  /* BB is unreachable at this point - we need to determine its profile
+	     once edges are built.  */
+	  bb->count = profile_count::uninitialized ();
+	  flow_transfer_insn = NULL;
+	  debug_insn = NULL;
+	  if (code == CODE_LABEL && LABEL_ALT_ENTRY_P (insn))
+	    make_edge (ENTRY_BLOCK_PTR_FOR_FN (cfun), bb, 0);
+	}
+      else if (code == BARRIER)
+	{
+	  /* __builtin_unreachable () may cause a barrier to be emitted in
+	     the middle of a BB.  We need to split it in the same manner as
+	     if the barrier were preceded by a control_flow_insn_p insn.  */
+	  if (!flow_transfer_insn)
+	    flow_transfer_insn = prev_nonnote_nondebug_insn_bb (insn);
+	  debug_insn = NULL;
+	}
+
+      if (control_flow_insn_p (insn))
+	flow_transfer_insn = insn;
+      if (insn == end)
+	break;
+      insn = NEXT_INSN (insn);
+    }
+
+  /* In case expander replaced normal insn by sequence terminating by
+     return and barrier, or possibly other sequence not behaving like
+     ordinary jump, we need to take care and move basic block boundary.  */
+  if (flow_transfer_insn && flow_transfer_insn != end)
+    {
+      skip_purge = false;
+
+    clean_up_debug_after_control_flow:
+      BB_END (bb) = flow_transfer_insn;
+
+      /* Clean up the bb field for the insns that do not belong to BB.  */
+      rtx_insn *next;
+      for (x = NEXT_INSN (flow_transfer_insn); ; x = next)
+	{
+	  next = NEXT_INSN (x);
+	  /* Debug insns should not be in between basic blocks,
+	     drop them on the floor.  */
+	  if (DEBUG_INSN_P (x))
+	    delete_insn (x);
+	  else if (!BARRIER_P (x))
+	    set_block_for_insn (x, NULL);
+	  if (x == end)
+	    break;
+	}
+
+      if (skip_purge)
+	return;
+    }
+
+
+// Source: cfgbuild.c
+// Lines 438-585

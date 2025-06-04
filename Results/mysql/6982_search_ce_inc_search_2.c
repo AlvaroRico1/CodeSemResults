@@ -1,0 +1,245 @@
+ce_inc_search(EditLine *el, int dir)
+{
+	static const wchar_t STRfwd[] = L"fwd", STRbck[] = L"bck";
+	static wchar_t pchar = L':';  /* ':' = normal, '?' = failed */
+	static wchar_t endcmd[2] = {'\0', '\0'};
+	wchar_t *ocursor = el->el_line.cursor, oldpchar = pchar, ch;
+	const wchar_t *cp;
+
+	el_action_t ret = CC_NORM;
+
+	int ohisteventno = el->el_history.eventno;
+	size_t oldpatlen = el->el_search.patlen;
+	int newdir = dir;
+	int done, redo;
+
+	if (el->el_line.lastchar + sizeof(STRfwd) /
+	    sizeof(*el->el_line.lastchar) + 2 +
+	    el->el_search.patlen >= el->el_line.limit)
+		return CC_ERROR;
+
+	for (;;) {
+
+		if (el->el_search.patlen == 0) {	/* first round */
+			pchar = ':';
+#ifdef ANCHOR
+#define	LEN	2
+			el->el_search.patbuf[el->el_search.patlen++] = '.';
+			el->el_search.patbuf[el->el_search.patlen++] = '*';
+#else
+#define	LEN	0
+#endif
+		}
+		done = redo = 0;
+		*el->el_line.lastchar++ = '\n';
+		for (cp = (newdir == ED_SEARCH_PREV_HISTORY) ? STRbck : STRfwd;
+		    *cp; *el->el_line.lastchar++ = *cp++)
+			continue;
+		*el->el_line.lastchar++ = pchar;
+		for (cp = &el->el_search.patbuf[LEN];
+		    cp < &el->el_search.patbuf[el->el_search.patlen];
+		    *el->el_line.lastchar++ = *cp++)
+			continue;
+		*el->el_line.lastchar = '\0';
+		re_refresh(el);
+
+		if (el_wgetc(el, &ch) != 1)
+			return ed_end_of_file(el, 0);
+
+		switch (el->el_map.current[(unsigned char) ch]) {
+		case ED_INSERT:
+		case ED_DIGIT:
+			if (el->el_search.patlen >= EL_BUFSIZ - LEN)
+				terminal_beep(el);
+			else {
+				el->el_search.patbuf[el->el_search.patlen++] =
+				    ch;
+				*el->el_line.lastchar++ = ch;
+				*el->el_line.lastchar = '\0';
+				re_refresh(el);
+			}
+			break;
+
+		case EM_INC_SEARCH_NEXT:
+			newdir = ED_SEARCH_NEXT_HISTORY;
+			redo++;
+			break;
+
+		case EM_INC_SEARCH_PREV:
+			newdir = ED_SEARCH_PREV_HISTORY;
+			redo++;
+			break;
+
+		case EM_DELETE_PREV_CHAR:
+		case ED_DELETE_PREV_CHAR:
+			if (el->el_search.patlen > LEN)
+				done++;
+			else
+				terminal_beep(el);
+			break;
+
+		default:
+			switch (ch) {
+			case 0007:	/* ^G: Abort */
+				ret = CC_ERROR;
+				done++;
+				break;
+
+			case 0027:	/* ^W: Append word */
+			/* No can do if globbing characters in pattern */
+				for (cp = &el->el_search.patbuf[LEN];; cp++)
+				    if (cp >= &el->el_search.patbuf[
+					el->el_search.patlen]) {
+					el->el_line.cursor +=
+					    el->el_search.patlen - LEN - 1;
+					cp = c__next_word(el->el_line.cursor,
+					    el->el_line.lastchar, 1,
+					    ce__isword);
+					while (el->el_line.cursor < cp &&
+					    *el->el_line.cursor != '\n') {
+						if (el->el_search.patlen >=
+						    EL_BUFSIZ - LEN) {
+							terminal_beep(el);
+							break;
+						}
+						el->el_search.patbuf[el->el_search.patlen++] =
+						    *el->el_line.cursor;
+						*el->el_line.lastchar++ =
+						    *el->el_line.cursor++;
+					}
+					el->el_line.cursor = ocursor;
+					*el->el_line.lastchar = '\0';
+					re_refresh(el);
+					break;
+				    } else if (isglob(*cp)) {
+					    terminal_beep(el);
+					    break;
+				    }
+				break;
+
+			default:	/* Terminate and execute cmd */
+				endcmd[0] = ch;
+				el_wpush(el, endcmd);
+				/* FALLTHROUGH */
+
+			case 0033:	/* ESC: Terminate */
+				ret = CC_REFRESH;
+				done++;
+				break;
+			}
+			break;
+		}
+
+		while (el->el_line.lastchar > el->el_line.buffer &&
+		    *el->el_line.lastchar != '\n')
+			*el->el_line.lastchar-- = '\0';
+		*el->el_line.lastchar = '\0';
+
+		if (!done) {
+
+			/* Can't search if unmatched '[' */
+			for (cp = &el->el_search.patbuf[el->el_search.patlen-1],
+			    ch = L']';
+			    cp >= &el->el_search.patbuf[LEN];
+			    cp--)
+				if (*cp == '[' || *cp == ']') {
+					ch = *cp;
+					break;
+				}
+			if (el->el_search.patlen > LEN && ch != L'[') {
+				if (redo && newdir == dir) {
+					if (pchar == '?') { /* wrap around */
+						el->el_history.eventno =
+						    newdir == ED_SEARCH_PREV_HISTORY ? 0 : 0x7fffffff;
+						if (hist_get(el) == CC_ERROR)
+							/* el->el_history.event
+							 * no was fixed by
+							 * first call */
+							(void) hist_get(el);
+						el->el_line.cursor = newdir ==
+						    ED_SEARCH_PREV_HISTORY ?
+						    el->el_line.lastchar :
+						    el->el_line.buffer;
+					} else
+						el->el_line.cursor +=
+						    newdir ==
+						    ED_SEARCH_PREV_HISTORY ?
+						    -1 : 1;
+				}
+#ifdef ANCHOR
+				el->el_search.patbuf[el->el_search.patlen++] =
+				    '.';
+				el->el_search.patbuf[el->el_search.patlen++] =
+				    '*';
+#endif
+				el->el_search.patbuf[el->el_search.patlen] =
+				    '\0';
+				if (el->el_line.cursor < el->el_line.buffer ||
+				    el->el_line.cursor > el->el_line.lastchar ||
+				    (ret = ce_search_line(el, newdir))
+				    == CC_ERROR) {
+					/* avoid c_setpat */
+					el->el_state.lastcmd =
+					    (el_action_t) newdir;
+					ret = (el_action_t)
+					    (newdir == ED_SEARCH_PREV_HISTORY ?
+					    ed_search_prev_history(el, 0) :
+					    ed_search_next_history(el, 0));
+					if (ret != CC_ERROR) {
+						el->el_line.cursor = newdir ==
+						    ED_SEARCH_PREV_HISTORY ?
+						    el->el_line.lastchar :
+						    el->el_line.buffer;
+						(void) ce_search_line(el,
+						    newdir);
+					}
+				}
+				el->el_search.patlen -= LEN;
+				el->el_search.patbuf[el->el_search.patlen] =
+				    '\0';
+				if (ret == CC_ERROR) {
+					terminal_beep(el);
+					if (el->el_history.eventno !=
+					    ohisteventno) {
+						el->el_history.eventno =
+						    ohisteventno;
+						if (hist_get(el) == CC_ERROR)
+							return CC_ERROR;
+					}
+					el->el_line.cursor = ocursor;
+					pchar = '?';
+				} else {
+					pchar = ':';
+				}
+			}
+			ret = ce_inc_search(el, newdir);
+
+			if (ret == CC_ERROR && pchar == '?' && oldpchar == ':')
+				/*
+				 * break abort of failed search at last
+				 * non-failed
+				 */
+				ret = CC_NORM;
+
+		}
+		if (ret == CC_NORM || (ret == CC_ERROR && oldpatlen == 0)) {
+			/* restore on normal return or error exit */
+			pchar = oldpchar;
+			el->el_search.patlen = oldpatlen;
+			if (el->el_history.eventno != ohisteventno) {
+				el->el_history.eventno = ohisteventno;
+				if (hist_get(el) == CC_ERROR)
+					return CC_ERROR;
+			}
+			el->el_line.cursor = ocursor;
+			if (ret == CC_ERROR)
+				re_refresh(el);
+		}
+		if (done || ret != CC_NORM)
+			return ret;
+	}
+}
+
+
+// Source: search.c
+// Lines 210-450

@@ -1,0 +1,238 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'size' at line 1
+2. Pointer 'data' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool EpsCopyOutputStream::GetDirectBufferPointer(void** data, int* size,
+                                                 uint8_t** pp) {
+  if (had_error_) {
+    *pp = buffer_;
+    return false;
+  }
+  *size = Flush(*pp);
+  if (had_error_) {
+    *pp = buffer_;
+    return false;
+  }
+  *data = buffer_end_;
+  while (*size == 0) {
+    if (!stream_->Next(data, size)) {
+      *pp = Error();
+      return false;
+    }
+  }
+  *pp = SetInitialBuffer(*data, *size);
+  return true;
+}
+
+uint8_t* EpsCopyOutputStream::GetDirectBufferForNBytesAndAdvance(int size,
+                                                               uint8_t** pp) {
+  if (had_error_) {
+    *pp = buffer_;
+    return nullptr;
+  }
+  int s = Flush(*pp);
+  if (had_error_) {
+    *pp = buffer_;
+    return nullptr;
+  }
+  if (s >= size) {
+    auto res = buffer_end_;
+    *pp = SetInitialBuffer(buffer_end_ + size, s - size);
+    return res;
+  } else {
+    *pp = SetInitialBuffer(buffer_end_, s);
+    return nullptr;
+  }
+}
+
+uint8_t* EpsCopyOutputStream::Next() {
+  GOOGLE_DCHECK(!had_error_);  // NOLINT
+  if (PROTOBUF_PREDICT_FALSE(stream_ == nullptr)) return Error();
+  if (buffer_end_) {
+    // We're in the patch buffer and need to fill up the previous buffer.
+    std::memcpy(buffer_end_, buffer_, end_ - buffer_);
+    uint8_t* ptr;
+    int size;
+    do {
+      void* data;
+      if (PROTOBUF_PREDICT_FALSE(!stream_->Next(&data, &size))) {
+        // Stream has an error, we use the patch buffer to continue to be
+        // able to write.
+        return Error();
+      }
+      ptr = static_cast<uint8_t*>(data);
+    } while (size == 0);
+    if (PROTOBUF_PREDICT_TRUE(size > kSlopBytes)) {
+      std::memcpy(ptr, end_, kSlopBytes);
+      end_ = ptr + size - kSlopBytes;
+      buffer_end_ = nullptr;
+      return ptr;
+    } else {
+      GOOGLE_DCHECK(size > 0);  // NOLINT
+      // Buffer to small
+      std::memmove(buffer_, end_, kSlopBytes);
+      buffer_end_ = ptr;
+      end_ = buffer_ + size;
+      return buffer_;
+    }
+  } else {
+    std::memcpy(buffer_, end_, kSlopBytes);
+    buffer_end_ = end_;
+    end_ = buffer_ + kSlopBytes;
+    return buffer_;
+  }
+}
+
+uint8_t* EpsCopyOutputStream::EnsureSpaceFallback(uint8_t* ptr) {
+  do {
+    if (PROTOBUF_PREDICT_FALSE(had_error_)) return buffer_;
+    int overrun = ptr - end_;
+    GOOGLE_DCHECK(overrun >= 0);           // NOLINT
+    GOOGLE_DCHECK(overrun <= kSlopBytes);  // NOLINT
+    ptr = Next() + overrun;
+  } while (ptr >= end_);
+  GOOGLE_DCHECK(ptr < end_);  // NOLINT
+  return ptr;
+}
+
+uint8_t* EpsCopyOutputStream::WriteRawFallback(const void* data, int size,
+                                             uint8_t* ptr) {
+  int s = GetSize(ptr);
+  while (s < size) {
+    std::memcpy(ptr, data, s);
+    size -= s;
+    data = static_cast<const uint8_t*>(data) + s;
+    ptr = EnsureSpaceFallback(ptr + s);
+    s = GetSize(ptr);
+  }
+  std::memcpy(ptr, data, size);
+  return ptr + size;
+}
+
+uint8_t* EpsCopyOutputStream::WriteAliasedRaw(const void* data, int size,
+                                            uint8_t* ptr) {
+  if (size < GetSize(ptr)
+  ) {
+    return WriteRaw(data, size, ptr);
+  } else {
+    ptr = Trim(ptr);
+    if (stream_->WriteAliasedRaw(data, size)) return ptr;
+    return Error();
+  }
+}
+
+#ifndef PROTOBUF_LITTLE_ENDIAN
+uint8_t* EpsCopyOutputStream::WriteRawLittleEndian32(const void* data, int size,
+                                                   uint8_t* ptr) {
+  auto p = static_cast<const uint8_t*>(data);
+  auto end = p + size;
+  while (end - p >= kSlopBytes) {
+    ptr = EnsureSpace(ptr);
+    uint32_t buffer[4];
+    static_assert(sizeof(buffer) == kSlopBytes, "Buffer must be kSlopBytes");
+    std::memcpy(buffer, p, kSlopBytes);
+    p += kSlopBytes;
+    for (auto x : buffer)
+      ptr = CodedOutputStream::WriteLittleEndian32ToArray(x, ptr);
+  }
+  while (p < end) {
+    ptr = EnsureSpace(ptr);
+    uint32_t buffer;
+    std::memcpy(&buffer, p, 4);
+    p += 4;
+    ptr = CodedOutputStream::WriteLittleEndian32ToArray(buffer, ptr);
+  }
+  return ptr;
+}
+
+uint8_t* EpsCopyOutputStream::WriteRawLittleEndian64(const void* data, int size,
+                                                   uint8_t* ptr) {
+  auto p = static_cast<const uint8_t*>(data);
+  auto end = p + size;
+  while (end - p >= kSlopBytes) {
+    ptr = EnsureSpace(ptr);
+    uint64_t buffer[2];
+    static_assert(sizeof(buffer) == kSlopBytes, "Buffer must be kSlopBytes");
+    std::memcpy(buffer, p, kSlopBytes);
+    p += kSlopBytes;
+    for (auto x : buffer)
+      ptr = CodedOutputStream::WriteLittleEndian64ToArray(x, ptr);
+  }
+  while (p < end) {
+    ptr = EnsureSpace(ptr);
+    uint64_t buffer;
+    std::memcpy(&buffer, p, 8);
+    p += 8;
+    ptr = CodedOutputStream::WriteLittleEndian64ToArray(buffer, ptr);
+  }
+  return ptr;
+}
+#endif
+
+
+uint8_t* EpsCopyOutputStream::WriteStringMaybeAliasedOutline(uint32_t num,
+                                                           const std::string& s,
+                                                           uint8_t* ptr) {
+  ptr = EnsureSpace(ptr);
+  uint32_t size = s.size();
+  ptr = WriteLengthDelim(num, size, ptr);
+  return WriteRawMaybeAliased(s.data(), size, ptr);
+}
+
+uint8_t* EpsCopyOutputStream::WriteStringOutline(uint32_t num, const std::string& s,
+                                               uint8_t* ptr) {
+  ptr = EnsureSpace(ptr);
+  uint32_t size = s.size();
+  ptr = WriteLengthDelim(num, size, ptr);
+  return WriteRaw(s.data(), size, ptr);
+}
+
+std::atomic<bool> CodedOutputStream::default_serialization_deterministic_{
+    false};
+
+CodedOutputStream::~CodedOutputStream() { Trim(); }
+
+
+uint8_t* CodedOutputStream::WriteStringWithSizeToArray(const std::string& str,
+                                                     uint8_t* target) {
+  GOOGLE_DCHECK_LE(str.size(), std::numeric_limits<uint32_t>::max());
+  target = WriteVarint32ToArray(str.size(), target);
+  return WriteStringToArray(str, target);
+}
+
+uint8_t* CodedOutputStream::WriteVarint32ToArrayOutOfLineHelper(uint32_t value,
+                                                              uint8_t* target) {
+  GOOGLE_DCHECK_GE(value, 0x80);
+  target[0] |= static_cast<uint8_t>(0x80);
+  value >>= 7;
+  target[1] = static_cast<uint8_t>(value);
+  if (value < 0x80) {
+    return target + 2;
+  }
+  target += 2;
+  do {
+    // Turn on continuation bit in the byte we just wrote.
+    target[-1] |= static_cast<uint8_t>(0x80);
+    value >>= 7;
+    *target = static_cast<uint8_t>(value);
+    ++target;
+  } while (value >= 0x80);
+  return target;
+}
+
+}  // namespace io
+
+
+// Source: coded_stream.cc
+// Lines 745-963
+
+
+[ANSWER]
+MAY

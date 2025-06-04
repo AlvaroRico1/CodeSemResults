@@ -1,0 +1,1 @@
+copy,tmux/format.c,6,left,tmux/format.c,9,2

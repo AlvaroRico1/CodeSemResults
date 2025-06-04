@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'iter' at line 6\n2. Pointer 'entry' at line 7\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint git_config_get_multivar_foreach(\n\tconst git_config *cfg, const char *name, const char *regexp,\n\tgit_config_foreach_cb cb, void *payload)\n{\n\tint err, found;\n\tgit_config_iterator *iter;\n\tgit_config_entry *entry;\n\n\tif ((err = git_config_multivar_iterator_new(&iter, cfg, name, regexp)) < 0)\n\t\treturn err;\n\n\tfound = 0;\n\twhile ((err = iter->next(&entry, iter)) == 0) {\n\t\tfound = 1;\n\n\t\tif ((err = cb(entry, payload)) != 0) {\n\t\t\tgit_error_set_after_callback(err);\n\t\t\tbreak;\n\t\t}\n\t}\n\n\titer->free(iter);\n\tif (err == GIT_ITEROVER)\n\t\terr = 0;\n\n\tif (found == 0 && err == 0)\n\t\terr = config_error_notfound(name);\n\n\treturn err;\n}\n\n\n// Source: config.c\n// Lines 988-1017\n",
+  "ANSWER": "MAY"
+}

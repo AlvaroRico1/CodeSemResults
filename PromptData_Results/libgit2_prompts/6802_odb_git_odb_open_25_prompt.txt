@@ -1,0 +1,39 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'out' at line 1
+2. Pointer 'db' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_odb_open(git_odb **out, const char *objects_dir)
+{
+	git_odb *db;
+
+	GIT_ASSERT_ARG(out);
+	GIT_ASSERT_ARG(objects_dir);
+
+	*out = NULL;
+
+	if (git_odb_new(&db) < 0)
+		return -1;
+
+	if (git_odb__add_default_backends(db, objects_dir, 0, 0) < 0) {
+		git_odb_free(db);
+		return -1;
+	}
+
+	*out = db;
+	return 0;
+}
+
+
+// Source: odb.c
+// Lines 710-729
+
+
+[ANSWER]
+MUST

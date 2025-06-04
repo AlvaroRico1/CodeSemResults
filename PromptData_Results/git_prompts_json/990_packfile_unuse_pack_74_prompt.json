@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'w' at line 3\n2. Pointer 'w_cursor' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid unuse_pack(struct pack_window **w_cursor)\n{\n\tstruct pack_window *w = *w_cursor;\n\tif (w) {\n\t\tw->inuse_cnt--;\n\t\t*w_cursor = NULL;\n\t}\n}\n\n\n// Source: packfile.c\n// Lines 682-689\n",
+  "ANSWER": "MUST"
+}

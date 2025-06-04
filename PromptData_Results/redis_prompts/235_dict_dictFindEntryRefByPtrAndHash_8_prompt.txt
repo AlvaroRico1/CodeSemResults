@@ -1,0 +1,36 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'heref' at line 2
+2. Pointer 'he' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+dictEntry **dictFindEntryRefByPtrAndHash(dict *d, const void *oldptr, uint64_t hash) {
+    dictEntry *he, **heref;
+    unsigned long idx, table;
+
+    if (dictSize(d) == 0) return NULL; /* dict is empty */
+    for (table = 0; table <= 1; table++) {
+        idx = hash & d->ht[table].sizemask;
+        heref = &d->ht[table].table[idx];
+        he = *heref;
+        while(he) {
+            if (oldptr==he->key)
+                return heref;
+            heref = &he->next;
+            he = *heref;
+        }
+        if (!dictIsRehashing(d)) return NULL;
+    }
+
+
+// Source: dict.c
+// Lines 1077-1093
+
+
+[ANSWER]
+MUST

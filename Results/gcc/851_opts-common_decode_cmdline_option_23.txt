@@ -1,0 +1,1 @@
+error,gcc/gcc/opts-common.c,263,new_prefix,gcc/gcc/opts-common.c,28,2

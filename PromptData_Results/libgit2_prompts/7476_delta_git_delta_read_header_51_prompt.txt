@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'delta_end' at line 7
+2. Pointer 'delta' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_delta_read_header(
+	size_t *base_out,
+	size_t *result_out,
+	const unsigned char *delta,
+	size_t delta_len)
+{
+	const unsigned char *delta_end = delta + delta_len;
+	if ((hdr_sz(base_out, &delta, delta_end) < 0) ||
+		(hdr_sz(result_out, &delta, delta_end) < 0))
+		return -1;
+	return 0;
+}
+
+
+// Source: delta.c
+// Lines 489-500
+
+
+[ANSWER]
+MUST

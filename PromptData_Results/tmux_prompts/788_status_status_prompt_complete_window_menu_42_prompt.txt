@@ -1,0 +1,109 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'list' at line 8
+2. Pointer 'tmp' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+status_prompt_complete_window_menu(struct client *c, struct session *s,
+    const char *word, u_int offset, char flag)
+{
+	struct menu			 *menu;
+	struct menu_item		  item;
+	struct status_prompt_menu	 *spm;
+	struct winlink			 *wl;
+	char				**list = NULL, *tmp;
+	u_int				  lines = status_line_size(c), height;
+	u_int				  py, size = 0;
+
+	if (c->tty.sy - lines < 3)
+		return (NULL);
+
+	spm = xmalloc(sizeof *spm);
+	spm->c = c;
+	spm->flag = flag;
+
+	height = c->tty.sy - lines - 2;
+	if (height > 10)
+		height = 10;
+	spm->start = 0;
+
+	menu = menu_create("");
+	RB_FOREACH(wl, winlinks, &s->windows) {
+		if (word != NULL && *word != '\0') {
+			xasprintf(&tmp, "%d", wl->idx);
+			if (strncmp(tmp, word, strlen(word)) != 0) {
+				free(tmp);
+				continue;
+			}
+			free(tmp);
+		}
+
+		list = xreallocarray(list, size + 1, sizeof *list);
+		if (c->prompt_type == PROMPT_TYPE_WINDOW_TARGET) {
+			xasprintf(&tmp, "%d (%s)", wl->idx, wl->window->name);
+			xasprintf(&list[size++], "%d", wl->idx);
+		} else {
+			xasprintf(&tmp, "%s:%d (%s)", s->name, wl->idx,
+			    wl->window->name);
+			xasprintf(&list[size++], "%s:%d", s->name, wl->idx);
+		}
+		item.name = tmp;
+		item.key = '0' + size - 1;
+		item.command = NULL;
+		menu_add_item(menu, &item, NULL, NULL, NULL);
+		free(tmp);
+
+		if (size == height)
+			break;
+	}
+	if (size == 0) {
+		menu_free(menu);
+		return (NULL);
+	}
+	if (size == 1) {
+		menu_free(menu);
+		if (flag != '\0') {
+			xasprintf(&tmp, "-%c%s", flag, list[0]);
+			free(list[0]);
+		} else
+			tmp = list[0];
+		free(list);
+		return (tmp);
+	}
+	if (height > size)
+		height = size;
+
+	spm->size = size;
+	spm->list = list;
+
+	if (options_get_number(c->session->options, "status-position") == 0)
+		py = lines;
+	else
+		py = c->tty.sy - 3 - height;
+	offset += utf8_cstrwidth(c->prompt_string);
+	if (offset > 2)
+		offset -= 2;
+	else
+		offset = 0;
+
+	if (menu_display(menu, MENU_NOMOUSE|MENU_TAB, NULL, offset,
+	    py, c, NULL, status_prompt_menu_callback, spm) != 0) {
+		menu_free(menu);
+		free(spm);
+		return (NULL);
+	}
+	return (NULL);
+}
+
+
+// Source: status.c
+// Lines 1741-1830
+
+
+[ANSWER]
+MAY

@@ -1,0 +1,1 @@
+spm,tmux/status.c,6,list,tmux/status.c,1,1

@@ -1,0 +1,1 @@
+plugin,gcc/gcc/plugin.c,16,slot,gcc/gcc/plugin.c,6,1

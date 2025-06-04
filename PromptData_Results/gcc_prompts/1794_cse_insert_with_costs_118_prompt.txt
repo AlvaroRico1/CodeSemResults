@@ -1,0 +1,72 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'p' at line 46
+2. Pointer 'elt' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+insert_with_costs (rtx x, struct table_elt *classp, unsigned int hash,
+		   machine_mode mode, int cost, int reg_cost)
+{
+  struct table_elt *elt;
+
+  /* If X is a register and we haven't made a quantity for it,
+     something is wrong.  */
+  gcc_assert (!REG_P (x) || REGNO_QTY_VALID_P (REGNO (x)));
+
+  /* If X is a hard register, show it is being put in the table.  */
+  if (REG_P (x) && REGNO (x) < FIRST_PSEUDO_REGISTER)
+    add_to_hard_reg_set (&hard_regs_in_table, GET_MODE (x), REGNO (x));
+
+  /* Put an element for X into the right hash bucket.  */
+
+  elt = free_element_chain;
+  if (elt)
+    free_element_chain = elt->next_same_hash;
+  else
+    elt = XNEW (struct table_elt);
+
+  elt->exp = x;
+  elt->canon_exp = NULL_RTX;
+  elt->cost = cost;
+  elt->regcost = reg_cost;
+  elt->next_same_value = 0;
+  elt->prev_same_value = 0;
+  elt->next_same_hash = table[hash];
+  elt->prev_same_hash = 0;
+  elt->related_value = 0;
+  elt->in_memory = 0;
+  elt->mode = mode;
+  elt->is_const = (CONSTANT_P (x) || fixed_base_plus_p (x));
+
+  if (table[hash])
+    table[hash]->prev_same_hash = elt;
+  table[hash] = elt;
+
+  /* Put it into the proper value-class.  */
+  if (classp)
+    {
+      classp = classp->first_same_value;
+      if (CHEAPER (elt, classp))
+	/* Insert at the head of the class.  */
+	{
+	  struct table_elt *p;
+	  elt->next_same_value = classp;
+	  classp->prev_same_value = elt;
+	  elt->first_same_value = elt;
+
+	  for (p = classp; p; p = p->next_same_value)
+	    p->first_same_value = elt;
+	}
+
+
+// Source: cse.c
+// Lines 1548-1600
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,33 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'stride' at line 11
+2. Pointer 'dr' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+tree_loop_interchange::update_data_info (unsigned i_idx, unsigned o_idx,
+					 vec<data_reference_p> datarefs,
+					 vec<ddr_p> ddrs)
+{
+  struct data_reference *dr;
+  struct data_dependence_relation *ddr;
+
+  /* Update strides of data references.  */
+  for (unsigned i = 0; datarefs.iterate (i, &dr); ++i)
+    {
+      vec<tree> *stride = DR_ACCESS_STRIDE (dr);
+      gcc_assert (stride->length () > i_idx);
+      std::swap ((*stride)[i_idx], (*stride)[o_idx]);
+    }
+
+
+// Source: gimple-loop-interchange.cc
+// Lines 985-998
+
+
+[ANSWER]
+MUST

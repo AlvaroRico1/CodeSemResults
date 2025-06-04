@@ -1,0 +1,1 @@
+last_new_lineno,libgit2/tests/libgit2/diff/patch.c,51,expected,libgit2/tests/libgit2/diff/patch.c,4,0

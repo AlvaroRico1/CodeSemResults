@@ -1,0 +1,38 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'expected' at line 1
+2. Pointer 'actual_len' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void assert_name_is(const char *expected)
+{
+	char *actual;
+	size_t actual_len, expected_len, start;
+
+	cl_assert(actual = get_filename(expected));
+
+	expected_len = strlen(expected);
+	actual_len = strlen(actual);
+	cl_assert(actual_len >= expected_len);
+
+	start = actual_len - expected_len;
+	cl_assert_equal_s(expected, actual + start);
+
+	if (start)
+		cl_assert_equal_strn("/", actual + (start - 1), 1);
+
+	free(actual);
+}
+
+
+// Source: icase.c
+// Lines 75-93
+
+
+[ANSWER]
+MUST-NOT

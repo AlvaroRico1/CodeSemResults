@@ -1,0 +1,1 @@
+arg,gcc/gcc/gcc.c,48,temp1,gcc/gcc/gcc.c,5,2

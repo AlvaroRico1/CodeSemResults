@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'buf' at line 1\n2. Pointer 'siglen' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void find_subpos(const char *buf,\n\t\t\tconst char **sub, size_t *sublen,\n\t\t\tconst char **body, size_t *bodylen,\n\t\t\tsize_t *nonsiglen,\n\t\t\tconst char **sig, size_t *siglen)\n{\n\tstruct strbuf payload = STRBUF_INIT;\n\tstruct strbuf signature = STRBUF_INIT;\n\tconst char *eol;\n\tconst char *end = buf + strlen(buf);\n\tconst char *sigstart;\n\n\t/* parse signature first; we might not even have a subject line */\n\tparse_signature(buf, end - buf, &payload, &signature);\n\n\t/* skip past header until we hit empty line */\n\twhile (*buf && *buf != '\\n') {\n\t\teol = strchrnul(buf, '\\n');\n\t\tif (*eol)\n\t\t\teol++;\n\t\tbuf = eol;\n\t}\n\n\n// Source: ref-filter.c\n// Lines 1346-1367\n",
+  "ANSWER": "MAY"
+}

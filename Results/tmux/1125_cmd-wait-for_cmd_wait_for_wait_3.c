@@ -1,0 +1,31 @@
+cmd_wait_for_wait(struct cmdq_item *item, const char *name,
+    struct wait_channel *wc)
+{
+	struct client		*c = cmdq_get_client(item);
+	struct wait_item	*wi;
+
+	if (c == NULL) {
+		cmdq_error(item, "not able to wait");
+		return (CMD_RETURN_ERROR);
+	}
+
+	if (wc == NULL)
+		wc = cmd_wait_for_add(name);
+
+	if (wc->woken) {
+		log_debug("wait channel %s already woken (%p)", wc->name, c);
+		cmd_wait_for_remove(wc);
+		return (CMD_RETURN_NORMAL);
+	}
+	log_debug("wait channel %s not woken (%p)", wc->name, c);
+
+	wi = xcalloc(1, sizeof *wi);
+	wi->item = item;
+	TAILQ_INSERT_TAIL(&wc->waiters, wi, entry);
+
+	return (CMD_RETURN_WAIT);
+}
+
+
+// Source: cmd-wait-for.c
+// Lines 167-193

@@ -1,0 +1,14 @@
+static void encode_record_header(void *p, uint8_t type, uint16_t reqId, uint16_t sz)
+{
+    struct st_fcgi_record_header_t *header = p;
+    header->version = FCGI_VERSION_1;
+    header->type = type;
+    encode_uint16(&header->requestId, reqId);
+    encode_uint16(&header->contentLength, sz);
+    header->paddingLength = 0;
+    header->reserved = 0;
+}
+
+
+// Source: fastcgi.c
+// Lines 92-101

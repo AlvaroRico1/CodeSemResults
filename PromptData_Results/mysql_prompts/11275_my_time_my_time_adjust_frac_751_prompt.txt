@@ -1,0 +1,30 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'warnings' at line 2
+2. Pointer 'truncate' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool my_time_adjust_frac(MYSQL_TIME *ltime, uint dec, bool truncate) {
+  int warnings = 0;
+  assert(dec <= DATETIME_MAX_DECIMALS);
+  /* Add half away from zero */
+  bool rc = time_add_nanoseconds_adjust_frac(ltime, msec_round_add[dec],
+                                             &warnings, truncate);
+
+  /* Truncate non-significant digits */
+  my_time_trunc(ltime, dec);
+  return rc;
+}
+
+
+// Source: my_time.cc
+// Lines 2577-2587
+
+
+[ANSWER]
+MUST-NOT

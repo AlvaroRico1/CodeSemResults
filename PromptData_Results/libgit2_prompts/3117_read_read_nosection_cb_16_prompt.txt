@@ -1,0 +1,26 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'entry' at line 1
+2. Pointer 'seen' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int read_nosection_cb(const git_config_entry *entry, void *payload) {
+	int *seen = (int*)payload;
+	if (strcmp(entry->name, "key") == 0) {
+		(*seen)++;
+	}
+	return 0;
+}
+
+
+// Source: read.c
+// Lines 933-939
+
+
+[ANSWER]
+MUST-NOT

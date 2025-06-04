@@ -1,0 +1,1 @@
+func,libgit2/tests/clar/clar_libgit2.c,7,bytes,libgit2/tests/clar/clar_libgit2.c,11,0

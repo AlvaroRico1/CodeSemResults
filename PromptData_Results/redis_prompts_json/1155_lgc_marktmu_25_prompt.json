@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'u' at line 2\n2. Pointer 'g' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void marktmu (global_State *g) {\n  GCObject *u = g->tmudata;\n  if (u) {\n    do {\n      u = u->gch.next;\n      makewhite(g, u);  /* may be marked, if left from previous GC */\n      reallymarkobject(g, u);\n    } while (u != g->tmudata);\n  }\n}\n\n\n// Source: lgc.c\n// Lines 115-124\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,1 @@
+str,gcc/gcc/gimple-fold.c,36,fmt_str,gcc/gcc/gimple-fold.c,6,1

@@ -1,0 +1,53 @@
+static uint32 get_list_array_idx_for_endpoint(partition_info *part_info,
+                                              bool left_endpoint,
+                                              bool include_endpoint) {
+  LIST_PART_ENTRY *list_array = part_info->list_array;
+  uint list_index;
+  uint min_list_index = 0, max_list_index = part_info->num_list_values - 1;
+  longlong list_value;
+  /* Get the partitioning function value for the endpoint */
+  longlong part_func_value =
+      part_info->part_expr->val_int_endpoint(left_endpoint, &include_endpoint);
+  bool unsigned_flag = part_info->part_expr->unsigned_flag;
+  DBUG_TRACE;
+
+  if (part_info->part_expr->null_value) {
+    /*
+      Special handling for MONOTONIC functions that can return NULL for
+      values that are comparable. I.e.
+      '2000-00-00' can be compared to '2000-01-01' but TO_DAYS('2000-00-00')
+      returns NULL which cannot be compared used <, >, <=, >= etc.
+
+      Otherwise, just return the the first index (lowest value).
+    */
+    enum_monotonicity_info monotonic;
+    monotonic = part_info->part_expr->get_monotonicity_info();
+    if (monotonic != MONOTONIC_INCREASING_NOT_NULL &&
+        monotonic != MONOTONIC_STRICT_INCREASING_NOT_NULL) {
+      /* F(col) can not return NULL, return index with lowest value */
+      return 0;
+    }
+  }
+
+  if (unsigned_flag) part_func_value -= 0x8000000000000000ULL;
+  assert(part_info->num_list_values);
+  do {
+    list_index = (max_list_index + min_list_index) >> 1;
+    list_value = list_array[list_index].list_value;
+    if (list_value < part_func_value)
+      min_list_index = list_index + 1;
+    else if (list_value > part_func_value) {
+      if (!list_index) goto notfound;
+      max_list_index = list_index - 1;
+    } else {
+      return list_index + ((left_endpoint ^ include_endpoint) ? 1 : 0);
+    }
+  } while (max_list_index >= min_list_index);
+notfound:
+  if (list_value < part_func_value) list_index++;
+  return list_index;
+}
+
+
+// Source: sql_partition.cc
+// Lines 2982-3030

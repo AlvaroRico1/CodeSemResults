@@ -1,0 +1,30 @@
+omp_find_stores_op (tree *tp, int *walk_subtrees, void *data)
+{
+  struct walk_stmt_info *wi = (struct walk_stmt_info *) data;
+
+  *walk_subtrees = 0;
+  if (!wi->is_lhs)
+    return NULL_TREE;
+
+  tree op = *tp;
+  do
+    {
+      if (handled_component_p (op))
+	op = TREE_OPERAND (op, 0);
+      else if ((TREE_CODE (op) == MEM_REF || TREE_CODE (op) == TARGET_MEM_REF)
+	       && TREE_CODE (TREE_OPERAND (op, 0)) == ADDR_EXPR)
+	op = TREE_OPERAND (TREE_OPERAND (op, 0), 0);
+      else
+	break;
+    }
+  while (1);
+  if (!DECL_P (op) || !omp_shared_to_firstprivate_optimizable_decl_p (op))
+    return NULL_TREE;
+
+  omp_mark_stores (gimplify_omp_ctxp, op);
+  return NULL_TREE;
+}
+
+
+// Source: gimplify.c
+// Lines 9828-9853

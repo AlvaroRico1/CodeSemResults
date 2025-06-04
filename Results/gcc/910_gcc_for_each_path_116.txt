@@ -1,0 +1,1 @@
+this_multi,gcc/gcc/gcc.c,95,multiarch_suffix,gcc/gcc/gcc.c,10,2

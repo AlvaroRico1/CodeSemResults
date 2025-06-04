@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'diff' at line 4\n2. Pointer 'count' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid test_diff_diffiter__iterate_files_2(void)\n{\n\tgit_repository *repo = cl_git_sandbox_init(\"status\");\n\tgit_diff *diff;\n\tsize_t d, num_d;\n\tint count = 0;\n\n\tcl_git_pass(git_diff_index_to_workdir(&diff, repo, NULL, NULL));\n\n\tnum_d = git_diff_num_deltas(diff);\n\tcl_assert_equal_i(8, (int)num_d);\n\n\tfor (d = 0; d < num_d; ++d) {\n\t\tconst git_diff_delta *delta = git_diff_get_delta(diff, d);\n\t\tcl_assert(delta != NULL);\n\t\tcount++;\n\t}\n\tcl_assert_equal_i(8, count);\n\n\tgit_diff_free(diff);\n}\n\n\n// Source: diffiter.c\n// Lines 54-74\n",
+  "ANSWER": "MUST-NOT"
+}

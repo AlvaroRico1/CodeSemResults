@@ -1,0 +1,34 @@
+int git_note_remove(git_repository *repo, const char *notes_ref_in,
+		const git_signature *author, const git_signature *committer,
+		const git_oid *oid)
+{
+	int error;
+	git_str notes_ref_target = GIT_STR_INIT;
+	git_commit *existing_notes_commit = NULL;
+	git_oid new_notes_commit;
+	git_reference *notes_ref = NULL;
+
+	error = retrieve_note_commit(&existing_notes_commit, &notes_ref_target,
+			repo, notes_ref_in);
+
+	if (error < 0)
+		goto cleanup;
+
+	error = git_note_commit_remove(&new_notes_commit, repo,
+			existing_notes_commit, author, committer, oid);
+	if (error < 0)
+		goto cleanup;
+
+	error = git_reference_create(&notes_ref, repo, notes_ref_target.ptr,
+			&new_notes_commit, 1, NULL);
+
+cleanup:
+	git_str_dispose(&notes_ref_target);
+	git_reference_free(notes_ref);
+	git_commit_free(existing_notes_commit);
+	return error;
+}
+
+
+// Source: notes.c
+// Lines 596-625

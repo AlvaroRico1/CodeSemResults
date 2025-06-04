@@ -1,0 +1,51 @@
+int nfs4_update_server(struct nfs_server *server, const char *hostname,
+		       struct sockaddr *sap, size_t salen, struct net *net)
+{
+	struct nfs_client *clp = server->nfs_client;
+	struct rpc_clnt *clnt = server->client;
+	struct xprt_create xargs = {
+		.ident		= clp->cl_proto,
+		.net		= net,
+		.dstaddr	= sap,
+		.addrlen	= salen,
+		.servername	= hostname,
+	};
+	char buf[INET6_ADDRSTRLEN + 1];
+	struct sockaddr_storage address;
+	struct sockaddr *localaddr = (struct sockaddr *)&address;
+	int error;
+
+	error = rpc_switch_client_transport(clnt, &xargs, clnt->cl_timeout);
+	if (error != 0)
+		return error;
+
+	error = rpc_localaddr(clnt, localaddr, sizeof(address));
+	if (error != 0)
+		return error;
+
+	if (rpc_ntop(localaddr, buf, sizeof(buf)) == 0)
+		return -EAFNOSUPPORT;
+
+	nfs_server_remove_lists(server);
+	set_bit(NFS_MIG_TSM_POSSIBLE, &server->mig_status);
+	error = nfs4_set_client(server, hostname, sap, salen, buf,
+				clp->cl_proto, clnt->cl_timeout,
+				clp->cl_minorversion,
+				clp->cl_nconnect, net);
+	clear_bit(NFS_MIG_TSM_POSSIBLE, &server->mig_status);
+	if (error != 0) {
+		nfs_server_insert_lists(server);
+		return error;
+	}
+	nfs_put_client(clp);
+
+	if (server->nfs_client->cl_hostname == NULL)
+		server->nfs_client->cl_hostname = kstrdup(hostname, GFP_KERNEL);
+	nfs_server_insert_lists(server);
+
+	return nfs_probe_destination(server);
+}
+
+
+// Source: nfs4client.c
+// Lines 1254-1300

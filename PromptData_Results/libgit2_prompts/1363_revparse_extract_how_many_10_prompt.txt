@@ -1,0 +1,49 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'parsed' at line 4
+2. Pointer 'end_ptr' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int extract_how_many(int *n, const char *spec, size_t *pos)
+{
+	const char *end_ptr;
+	int parsed, accumulated;
+	char kind = spec[*pos];
+
+	GIT_ASSERT_ARG(spec[*pos] == '^' || spec[*pos] == '~');
+
+	accumulated = 0;
+
+	do {
+		do {
+			(*pos)++;
+			accumulated++;
+		} while (spec[(*pos)] == kind && kind == '~');
+
+		if (git__isdigit(spec[*pos])) {
+			if (git__strntol32(&parsed, spec + *pos, strlen(spec + *pos), &end_ptr, 10) < 0)
+				return GIT_EINVALIDSPEC;
+
+			accumulated += (parsed - 1);
+			*pos = end_ptr - spec;
+		}
+
+	} while (spec[(*pos)] == kind && kind == '~');
+
+	*n = accumulated;
+
+	return 0;
+}
+
+
+// Source: revparse.c
+// Lines 575-604
+
+
+[ANSWER]
+MAY

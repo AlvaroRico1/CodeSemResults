@@ -1,0 +1,43 @@
+void show_submodule_diff_summary(struct diff_options *o, const char *path,
+		struct object_id *one, struct object_id *two,
+		unsigned dirty_submodule)
+{
+	struct rev_info rev;
+	struct commit *left = NULL, *right = NULL;
+	struct commit_list *merge_bases = NULL;
+	struct repository *sub;
+
+	sub = open_submodule(path);
+	show_submodule_header(o, path, one, two, dirty_submodule,
+			      sub, &left, &right, &merge_bases);
+
+	/*
+	 * If we don't have both a left and a right pointer, there is no
+	 * reason to try and display a summary. The header line should contain
+	 * all the information the user needs.
+	 */
+	if (!left || !right || !sub)
+		goto out;
+
+	/* Treat revision walker failure the same as missing commits */
+	if (prepare_submodule_diff_summary(sub, &rev, path, left, right, merge_bases)) {
+		diff_emit_submodule_error(o, "(revision walker failed)\n");
+		goto out;
+	}
+
+	print_submodule_diff_summary(sub, &rev, o);
+
+out:
+	if (merge_bases)
+		free_commit_list(merge_bases);
+	clear_commit_marks(left, ~0);
+	clear_commit_marks(right, ~0);
+	if (sub) {
+		repo_clear(sub);
+		free(sub);
+	}
+}
+
+
+// Source: submodule.c
+// Lines 628-666

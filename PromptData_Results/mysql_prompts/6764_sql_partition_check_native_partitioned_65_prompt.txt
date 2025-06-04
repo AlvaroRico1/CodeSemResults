@@ -1,0 +1,63 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'engine_type' at line 4
+2. Pointer 'engine_type' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static bool check_native_partitioned(HA_CREATE_INFO *create_info, bool *ret_val,
+                                     partition_info *part_info, THD *thd) {
+  bool table_engine_set;
+  handlerton *engine_type = part_info->default_engine_type;
+  handlerton *old_engine_type = engine_type;
+  DBUG_TRACE;
+
+  if (create_info->used_fields & HA_CREATE_USED_ENGINE) {
+    table_engine_set = true;
+    engine_type = create_info->db_type;
+  } else {
+    table_engine_set = false;
+    if (thd->lex->sql_command != SQLCOM_CREATE_TABLE) {
+      table_engine_set = true;
+    }
+  }
+  DBUG_PRINT("info",
+             ("engine_type = %s, table_engine_set = %u",
+              ha_resolve_storage_engine_name(engine_type), table_engine_set));
+  if (part_info->check_engine_mix(engine_type, table_engine_set)) goto error;
+
+  /*
+    All engines are of the same type. Check if this engine supports
+    native partitioning.
+  */
+
+  if (!engine_type) engine_type = old_engine_type;
+  DBUG_PRINT("info",
+             ("engine_type = %s", ha_resolve_storage_engine_name(engine_type)));
+  if (engine_type->partition_flags) {
+    create_info->db_type = engine_type;
+    DBUG_PRINT("info", ("Changed to native partitioning"));
+    *ret_val = true;
+  }
+  return false;
+error:
+  /*
+    Mixed engines not yet supported but when supported it will need
+    the partition handler
+  */
+  my_error(ER_MIX_HANDLER_ERROR, MYF(0));
+  *ret_val = false;
+  return true;
+}
+
+
+// Source: sql_partition.cc
+// Lines 4068-4111
+
+
+[ANSWER]
+MUST

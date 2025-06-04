@@ -1,0 +1,74 @@
+struct commit_list *get_reachable_subset(struct commit **from, int nr_from,
+					 struct commit **to, int nr_to,
+					 unsigned int reachable_flag)
+{
+	struct commit **item;
+	struct commit *current;
+	struct commit_list *found_commits = NULL;
+	struct commit **to_last = to + nr_to;
+	struct commit **from_last = from + nr_from;
+	timestamp_t min_generation = GENERATION_NUMBER_INFINITY;
+	int num_to_find = 0;
+
+	struct prio_queue queue = { compare_commits_by_gen_then_commit_date };
+
+	for (item = to; item < to_last; item++) {
+		timestamp_t generation;
+		struct commit *c = *item;
+
+		parse_commit(c);
+		generation = commit_graph_generation(c);
+		if (generation < min_generation)
+			min_generation = generation;
+
+		if (!(c->object.flags & PARENT1)) {
+			c->object.flags |= PARENT1;
+			num_to_find++;
+		}
+	}
+
+	for (item = from; item < from_last; item++) {
+		struct commit *c = *item;
+		if (!(c->object.flags & PARENT2)) {
+			c->object.flags |= PARENT2;
+			parse_commit(c);
+
+			prio_queue_put(&queue, *item);
+		}
+	}
+
+	while (num_to_find && (current = prio_queue_get(&queue)) != NULL) {
+		struct commit_list *parents;
+
+		if (current->object.flags & PARENT1) {
+			current->object.flags &= ~PARENT1;
+			current->object.flags |= reachable_flag;
+			commit_list_insert(current, &found_commits);
+			num_to_find--;
+		}
+
+		for (parents = current->parents; parents; parents = parents->next) {
+			struct commit *p = parents->item;
+
+			parse_commit(p);
+
+			if (commit_graph_generation(p) < min_generation)
+				continue;
+
+			if (p->object.flags & PARENT2)
+				continue;
+
+			p->object.flags |= PARENT2;
+			prio_queue_put(&queue, p);
+		}
+	}
+
+	clear_commit_marks_many(nr_to, to, PARENT1);
+	clear_commit_marks_many(nr_from, from, PARENT2);
+
+	return found_commits;
+}
+
+
+// Source: commit-reach.c
+// Lines 875-944

@@ -1,0 +1,208 @@
+static int cs_value(MY_XML_PARSER *st, const char *attr, size_t len) {
+  struct my_cs_file_info *i = (struct my_cs_file_info *)st->user_data;
+  struct my_cs_file_section_st *s;
+  int state =
+      (int)((s = cs_file_sec(st->attr.start, st->attr.end - st->attr.start))
+                ? s->state
+                : 0);
+  int rc = MY_XML_OK;
+
+  switch (state) {
+    case _CS_MISC:
+    case _CS_FAMILY:
+    case _CS_ORDER:
+      break;
+    case _CS_ID:
+      i->cs.number = strtol(attr, (char **)nullptr, 10);
+      break;
+    case _CS_BINARY_ID:
+      i->cs.binary_number = strtol(attr, (char **)nullptr, 10);
+      break;
+    case _CS_PRIMARY_ID:
+      i->cs.primary_number = strtol(attr, (char **)nullptr, 10);
+      break;
+    case _CS_COLNAME:
+      i->cs.name = mstr(i->name, attr, len, MY_CS_NAME_SIZE - 1);
+      break;
+    case _CS_CSNAME:
+      i->cs.csname = mstr(i->csname, attr, len, MY_CS_NAME_SIZE - 1);
+      break;
+    case _CS_CSDESCRIPT:
+      i->cs.comment = mstr(i->comment, attr, len, MY_CS_CSDESCR_SIZE - 1);
+      break;
+    case _CS_FLAG:
+      if (!strncmp("primary", attr, len))
+        i->cs.state |= MY_CS_PRIMARY;
+      else if (!strncmp("binary", attr, len))
+        i->cs.state |= MY_CS_BINSORT;
+      else if (!strncmp("compiled", attr, len))
+        i->cs.state |= MY_CS_COMPILED;
+      break;
+    case _CS_UPPERMAP:
+      fill_uchar(i->to_upper, MY_CS_TO_UPPER_TABLE_SIZE, attr, len);
+      i->cs.to_upper = i->to_upper;
+      break;
+    case _CS_LOWERMAP:
+      fill_uchar(i->to_lower, MY_CS_TO_LOWER_TABLE_SIZE, attr, len);
+      i->cs.to_lower = i->to_lower;
+      break;
+    case _CS_UNIMAP:
+      fill_uint16(i->tab_to_uni, MY_CS_TO_UNI_TABLE_SIZE, attr, len);
+      i->cs.tab_to_uni = i->tab_to_uni;
+      break;
+    case _CS_COLLMAP:
+      fill_uchar(i->sort_order, MY_CS_SORT_ORDER_TABLE_SIZE, attr, len);
+      i->cs.sort_order = i->sort_order;
+      break;
+    case _CS_CTYPEMAP:
+      fill_uchar(i->ctype, MY_CS_CTYPE_TABLE_SIZE, attr, len);
+      i->cs.ctype = i->ctype;
+      break;
+
+    /* Special purpose commands */
+    case _CS_UCA_VERSION:
+      rc = tailoring_append(st, "[version %.*s]", len, attr);
+      break;
+
+    case _CS_CL_SUPPRESS_CONTRACTIONS:
+      rc = tailoring_append(st, "[suppress contractions %.*s]", len, attr);
+      break;
+
+    case _CS_CL_OPTIMIZE:
+      rc = tailoring_append(st, "[optimize %.*s]", len, attr);
+      break;
+
+    case _CS_CL_SHIFT_AFTER_METHOD:
+      rc = tailoring_append(st, "[shift-after-method %.*s]", len, attr);
+      break;
+
+    /* Collation Settings */
+    case _CS_ST_STRENGTH:
+      /* 1, 2, 3, 4, 5, or primary, secondary, tertiary, quaternary, identical
+       */
+      rc = tailoring_append(st, "[strength %.*s]", len, attr);
+      break;
+
+    case _CS_ST_ALTERNATE:
+      /* non-ignorable, shifted */
+      rc = tailoring_append(st, "[alternate %.*s]", len, attr);
+      break;
+
+    case _CS_ST_BACKWARDS:
+      /* on, off, 2 */
+      rc = tailoring_append(st, "[backwards %.*s]", len, attr);
+      break;
+
+    case _CS_ST_NORMALIZATION:
+      /*
+        TODO for WL#896: check collations for normalization: vi.xml
+        We want precomposed characters work well at this point.
+      */
+      /* on, off */
+      rc = tailoring_append(st, "[normalization %.*s]", len, attr);
+      break;
+
+    case _CS_ST_CASE_LEVEL:
+      /* on, off */
+      rc = tailoring_append(st, "[caseLevel %.*s]", len, attr);
+      break;
+
+    case _CS_ST_CASE_FIRST:
+      /* upper, lower, off */
+      rc = tailoring_append(st, "[caseFirst %.*s]", len, attr);
+      break;
+
+    case _CS_ST_HIRAGANA_QUATERNARY:
+      /* on, off */
+      rc = tailoring_append(st, "[hiraganaQ %.*s]", len, attr);
+      break;
+
+    case _CS_ST_NUMERIC:
+      /* on, off */
+      rc = tailoring_append(st, "[numeric %.*s]", len, attr);
+      break;
+
+    case _CS_ST_VARIABLE_TOP:
+      /* TODO for WL#896: check value format */
+      rc = tailoring_append(st, "[variableTop %.*s]", len, attr);
+      break;
+
+    case _CS_ST_MATCH_BOUNDARIES:
+      /* none, whole-character, whole-word */
+      rc = tailoring_append(st, "[match-boundaries %.*s]", len, attr);
+      break;
+
+    case _CS_ST_MATCH_STYLE:
+      /* minimal, medial, maximal */
+      rc = tailoring_append(st, "[match-style %.*s]", len, attr);
+      break;
+
+    /* Rules */
+    case _CS_RESET:
+      rc = tailoring_append(st, "%.*s", len, attr);
+      break;
+
+    case _CS_DIFF1:
+    case _CS_DIFF2:
+    case _CS_DIFF3:
+    case _CS_DIFF4:
+    case _CS_IDENTICAL:
+      rc = tailoring_append(st, diff_fmt[state - _CS_DIFF1], len, attr);
+      break;
+
+    /* Rules: Expansion */
+    case _CS_EXP_EXTEND:
+      rc = tailoring_append(st, " / %.*s", len, attr);
+      break;
+
+    case _CS_EXP_DIFF1:
+    case _CS_EXP_DIFF2:
+    case _CS_EXP_DIFF3:
+    case _CS_EXP_DIFF4:
+    case _CS_EXP_IDENTICAL:
+      if (i->context[0]) {
+        rc = tailoring_append2(st, context_diff_fmt[state - _CS_EXP_DIFF1],
+                               strlen(i->context), i->context, len, attr);
+        i->context[0] = 0;
+      } else
+        rc = tailoring_append(st, diff_fmt[state - _CS_EXP_DIFF1], len, attr);
+      break;
+
+    /* Rules: Context */
+    case _CS_CONTEXT:
+      if (len < sizeof(i->context)) {
+        memcpy(i->context, attr, len);
+        i->context[len] = '\0';
+      }
+      break;
+
+    /* Rules: Abbreviating Ordering Specifications */
+    case _CS_A_DIFF1:
+    case _CS_A_DIFF2:
+    case _CS_A_DIFF3:
+    case _CS_A_DIFF4:
+    case _CS_A_IDENTICAL:
+      rc = tailoring_append_abbreviation(st, diff_fmt[state - _CS_A_DIFF1], len,
+                                         attr);
+      break;
+
+    /* Rules: Placing Characters Before Others */
+    case _CS_RESET_BEFORE:
+      /*
+        TODO for WL#896: Add this check into text customization parser:
+        It is an error if the strength of the before relation is not identical
+        to the relation after the reset. We'll need this for WL#896.
+      */
+      rc = tailoring_append(st, "[before %.*s]", len, attr);
+      break;
+
+    default:
+      break;
+  }
+
+  return rc;
+}
+
+
+// Source: ctype.cc
+// Lines 532-735

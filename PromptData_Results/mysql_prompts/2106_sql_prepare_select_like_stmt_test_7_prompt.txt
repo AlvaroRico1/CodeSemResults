@@ -1,0 +1,33 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'lex' at line 4
+2. Pointer 'thd' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static bool select_like_stmt_test(THD *thd, Query_result *result,
+                                  ulonglong added_options) {
+  DBUG_TRACE;
+  LEX *const lex = thd->lex;
+
+  lex->query_block->context.resolve_in_select_list = true;
+
+  if (lex->unit->prepare(thd, result, nullptr, added_options, 0)) {
+    return true;
+  }
+  lex->save_cmd_properties(thd);
+
+  return false;
+}
+
+
+// Source: sql_prepare.cc
+// Lines 1100-1113
+
+
+[ANSWER]
+MUST

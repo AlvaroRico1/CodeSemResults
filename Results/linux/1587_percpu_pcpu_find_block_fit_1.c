@@ -1,0 +1,37 @@
+static int pcpu_find_block_fit(struct pcpu_chunk *chunk, int alloc_bits,
+			       size_t align, bool pop_only)
+{
+	struct pcpu_block_md *chunk_md = &chunk->chunk_md;
+	int bit_off, bits, next_off;
+
+	/*
+	 * Check to see if the allocation can fit in the chunk's contig hint.
+	 * This is an optimization to prevent scanning by assuming if it
+	 * cannot fit in the global hint, there is memory pressure and creating
+	 * a new chunk would happen soon.
+	 */
+	bit_off = ALIGN(chunk_md->contig_hint_start, align) -
+		  chunk_md->contig_hint_start;
+	if (bit_off + alloc_bits > chunk_md->contig_hint)
+		return -1;
+
+	bit_off = pcpu_next_hint(chunk_md, alloc_bits);
+	bits = 0;
+	pcpu_for_each_fit_region(chunk, alloc_bits, align, bit_off, bits) {
+		if (!pop_only || pcpu_is_populated(chunk, bit_off, bits,
+						   &next_off))
+			break;
+
+		bit_off = next_off;
+		bits = 0;
+	}
+
+	if (bit_off == pcpu_chunk_map_bits(chunk))
+		return -1;
+
+	return bit_off;
+}
+
+
+// Source: percpu.c
+// Lines 1077-1109

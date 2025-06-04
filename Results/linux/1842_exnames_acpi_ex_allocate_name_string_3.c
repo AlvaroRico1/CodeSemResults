@@ -1,0 +1,73 @@
+static char *acpi_ex_allocate_name_string(u32 prefix_count, u32 num_name_segs)
+{
+	char *temp_ptr;
+	char *name_string;
+	u32 size_needed;
+
+	ACPI_FUNCTION_TRACE(ex_allocate_name_string);
+
+	/*
+	 * Allow room for all \ and ^ prefixes, all segments and a multi_name_prefix.
+	 * Also, one byte for the null terminator.
+	 * This may actually be somewhat longer than needed.
+	 */
+	if (prefix_count == ACPI_UINT32_MAX) {
+
+		/* Special case for root */
+
+		size_needed = 1 + (ACPI_NAMESEG_SIZE * num_name_segs) + 2 + 1;
+	} else {
+		size_needed =
+		    prefix_count + (ACPI_NAMESEG_SIZE * num_name_segs) + 2 + 1;
+	}
+
+	/*
+	 * Allocate a buffer for the name.
+	 * This buffer must be deleted by the caller!
+	 */
+	name_string = ACPI_ALLOCATE(size_needed);
+	if (!name_string) {
+		ACPI_ERROR((AE_INFO,
+			    "Could not allocate size %u", size_needed));
+		return_PTR(NULL);
+	}
+
+	temp_ptr = name_string;
+
+	/* Set up Root or Parent prefixes if needed */
+
+	if (prefix_count == ACPI_UINT32_MAX) {
+		*temp_ptr++ = AML_ROOT_PREFIX;
+	} else {
+		while (prefix_count--) {
+			*temp_ptr++ = AML_PARENT_PREFIX;
+		}
+	}
+
+	/* Set up Dual or Multi prefixes if needed */
+
+	if (num_name_segs > 2) {
+
+		/* Set up multi prefixes   */
+
+		*temp_ptr++ = AML_MULTI_NAME_PREFIX;
+		*temp_ptr++ = (char)num_name_segs;
+	} else if (2 == num_name_segs) {
+
+		/* Set up dual prefixes */
+
+		*temp_ptr++ = AML_DUAL_NAME_PREFIX;
+	}
+
+	/*
+	 * Terminate string following prefixes. acpi_ex_name_segment() will
+	 * append the segment(s)
+	 */
+	*temp_ptr = 0;
+
+	return_PTR(name_string);
+}
+
+
+// Source: exnames.c
+// Lines 39-107

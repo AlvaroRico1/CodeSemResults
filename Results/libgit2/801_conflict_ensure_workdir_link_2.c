@@ -1,0 +1,34 @@
+static void ensure_workdir_link(
+	git_repository *repo,
+	const char *path,
+	const char *target)
+{
+	int symlinks;
+
+	cl_git_pass(git_repository__configmap_lookup(&symlinks, repo, GIT_CONFIGMAP_SYMLINKS));
+
+	if (!symlinks) {
+		ensure_workdir_contents(path, target);
+	} else {
+		git_str fullpath = GIT_STR_INIT;
+		char actual[1024];
+		struct stat st;
+		int len;
+
+		cl_git_pass(
+			git_str_joinpath(&fullpath, git_repository_workdir(g_repo), path));
+
+		cl_git_pass(p_lstat(git_str_cstr(&fullpath), &st));
+		cl_assert(S_ISLNK(st.st_mode));
+
+		cl_assert((len = p_readlink(git_str_cstr(&fullpath), actual, 1024)) > 0);
+		actual[len] = '\0';
+		cl_assert(strcmp(actual, target) == 0);
+
+		git_str_dispose(&fullpath);
+	}
+}
+
+
+// Source: conflict.c
+// Lines 188-217

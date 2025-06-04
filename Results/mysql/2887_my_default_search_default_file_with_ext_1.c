@@ -1,0 +1,264 @@
+static int search_default_file_with_ext(Process_option_func opt_handler,
+                                        void *handler_ctx, const char *dir,
+                                        const char *ext,
+                                        const char *config_file,
+                                        int recursion_level,
+                                        bool is_login_file) {
+  char name[FN_REFLEN + 10], buff[4096], curr_gr[4096], *ptr, *end;
+  const char **tmp_ext;
+  char *value, tmp[FN_REFLEN];
+  static const char includedir_keyword[] = "includedir";
+  static const char include_keyword[] = "include";
+  const int max_recursion_level = 10;
+  MYSQL_FILE *fp;
+  uint line = 0;
+  bool found_group = false;
+  uint i, rc;
+  MY_DIR *search_dir;
+  FILEINFO *search_file;
+
+  if ((dir ? strlen(dir) : 0) + strlen(config_file) >= FN_REFLEN - 3)
+    return 0; /* Ignore wrong paths */
+  if (dir) {
+    end = convert_dirname(name, dir, NullS);
+    if (dir[0] == FN_HOMELIB) /* Add . to filenames in home */
+      *end++ = '.';
+    strxmov(end, config_file, ext, NullS);
+  } else {
+    my_stpcpy(name, config_file);
+  }
+  fn_format(name, name, "", "", MY_UNPACK_FILENAME);
+
+  if ((rc = check_file_permissions(name, is_login_file)) < 2) return (int)rc;
+
+  if (is_login_file) {
+    if (!(fp = mysql_file_fopen(key_file_cnf, name, O_RDONLY | MY_FOPEN_BINARY,
+                                MYF(0))))
+      return 1; /* Ignore wrong files. */
+  } else {
+    if (!(fp = mysql_file_fopen(key_file_cnf, name, O_RDONLY, MYF(0))))
+      return 1; /* Ignore wrong files */
+  }
+
+  while (true) {
+    auto fileline = mysql_file_getline(buff, sizeof(buff), fp, is_login_file);
+    char *linebuff = fileline.get();
+    if (linebuff == nullptr) break;
+
+    line++;
+    /* Ignore comment and empty lines */
+    for (ptr = linebuff; my_isspace(&my_charset_latin1, *ptr); ptr++) {
+    }
+
+    if (*ptr == '#' || *ptr == ';' || !*ptr) continue;
+
+    /* Configuration File Directives */
+    if (*ptr == '!') {
+      if (recursion_level >= max_recursion_level) {
+        for (end = ptr + strlen(ptr) - 1;
+             my_isspace(&my_charset_latin1, *(end - 1)); end--) {
+        }
+        end[0] = 0;
+        my_message_local(WARNING_LEVEL,
+                         EE_SKIPPING_DIRECTIVE_DUE_TO_MAX_INCLUDE_RECURSION,
+                         ptr, name, line);
+        continue;
+      }
+
+      /* skip over `!' and following whitespace */
+      for (++ptr; my_isspace(&my_charset_latin1, ptr[0]); ptr++) {
+      }
+
+      if ((!strncmp(ptr, includedir_keyword, sizeof(includedir_keyword) - 1)) &&
+          my_isspace(&my_charset_latin1, ptr[sizeof(includedir_keyword) - 1])) {
+        if (!(ptr = get_argument(includedir_keyword, sizeof(includedir_keyword),
+                                 ptr, name, line)))
+          goto err;
+
+        if (!(search_dir = my_dir(ptr, MYF(MY_WME)))) goto err;
+
+        for (i = 0; i < search_dir->number_off_files; i++) {
+          search_file = search_dir->dir_entry + i;
+          ext = fn_ext(search_file->name);
+
+          /* check extension */
+          for (tmp_ext = f_extensions; *tmp_ext; tmp_ext++) {
+            if (!strcmp(ext, *tmp_ext)) break;
+          }
+
+          if (*tmp_ext) {
+            fn_format(tmp, search_file->name, ptr, "",
+                      MY_UNPACK_FILENAME | MY_SAFE_PATH);
+
+            /* add the include file to the paths list with the class of the
+             * including file */
+            std::map<string, enum_variable_source>::iterator it =
+                default_paths.find(name);
+            /*
+              The current file should always be a part of the paths.
+              But that applies only for the server.
+              For direct load_defaults() use all bets are off.
+              Hence keeping it as a dynamic condition.
+            */
+            if (it != default_paths.end()) default_paths[tmp] = it->second;
+
+            search_default_file_with_ext(opt_handler, handler_ctx, nullptr,
+                                         nullptr, tmp, recursion_level + 1,
+                                         is_login_file);
+          }
+        }
+
+        my_dirend(search_dir);
+      } else if ((!strncmp(ptr, include_keyword,
+                           sizeof(include_keyword) - 1)) &&
+                 my_isspace(&my_charset_latin1,
+                            ptr[sizeof(include_keyword) - 1])) {
+        if (!(ptr = get_argument(include_keyword, sizeof(include_keyword), ptr,
+                                 name, line)))
+          goto err;
+
+        /* add the include file to the paths list with the class of the
+         * including file */
+        std::map<string, enum_variable_source>::iterator it =
+            default_paths.find(name);
+        /*
+          The current file should always be a part of the paths.
+          But that applies only for the server.
+          For direct load_defaults() use all bets are off.
+          Hence keeping it as a dynamic condition.
+        */
+        if (it != default_paths.end() &&
+            fn_format(tmp, ptr, "", "", MY_UNPACK_FILENAME | MY_SAFE_PATH))
+          default_paths[tmp] = it->second;
+
+        search_default_file_with_ext(opt_handler, handler_ctx, nullptr, nullptr,
+                                     ptr, recursion_level + 1, is_login_file);
+      }
+
+      continue;
+    }
+
+    if (*ptr == '[') /* Group name */
+    {
+      found_group = true;
+      if (!(end = strchr(++ptr, ']'))) {
+        my_message_local(ERROR_LEVEL,
+                         EE_INCORRECT_GRP_DEFINITION_IN_CONFIG_FILE, name,
+                         line);
+        goto err;
+      }
+      /* Remove end space */
+      for (; my_isspace(&my_charset_latin1, end[-1]); end--) {
+      }
+
+      end[0] = 0;
+
+      strmake(curr_gr, ptr,
+              std::min<size_t>((end - ptr) + 1, sizeof(curr_gr) - 1));
+
+      /* signal that a new group is found */
+      opt_handler(handler_ctx, curr_gr, nullptr, nullptr);
+
+      continue;
+    }
+    if (!found_group) {
+      my_message_local(ERROR_LEVEL, EE_OPTION_WITHOUT_GRP_IN_CONFIG_FILE, name,
+                       line);
+      goto err;
+    }
+
+    /* comments are not supported in login file */
+    if (!is_login_file)
+      end = remove_end_comment(ptr);
+    else
+      end = ptr + strlen(ptr);
+
+    if ((value = strchr(ptr, '='))) end = value; /* Option without argument */
+    for (; my_isspace(&my_charset_latin1, end[-1]); end--) {
+    }
+
+    /* Self freeing option buffer */
+    std::unique_ptr<char[]> optionBuffer{new char[strlen(linebuff) + 3]};
+    char *option = optionBuffer.get();
+
+    if (!value) {
+      strmake(my_stpcpy(option, "--"), ptr, (size_t)(end - ptr));
+      if (opt_handler(handler_ctx, curr_gr, option, name)) goto err;
+    } else {
+      /* Remove pre- and end space */
+      char *value_end;
+      for (value++; my_isspace(&my_charset_latin1, *value); value++) {
+      }
+
+      value_end = strend(value);
+      /*
+        We don't have to test for value_end >= value as we know there is
+        an '=' before
+      */
+      for (; my_isspace(&my_charset_latin1, value_end[-1]); value_end--) {
+      }
+
+      if (value_end < value) /* Empty string */
+        value_end = value;
+
+      /* remove quotes around argument */
+      if ((*value == '\"' || *value == '\'') && /* First char is quote */
+          (value + 1 < value_end) &&            /* String is longer than 1 */
+          *value == value_end[-1]) /* First char is equal to last char */
+      {
+        value++;
+        value_end--;
+      }
+      ptr = my_stpnmov(my_stpcpy(option, "--"), ptr, (size_t)(end - ptr));
+      *ptr++ = '=';
+
+      for (; value != value_end; value++) {
+        if (*value == '\\' && value != value_end - 1) {
+          switch (*++value) {
+            case 'n':
+              *ptr++ = '\n';
+              break;
+            case 't':
+              *ptr++ = '\t';
+              break;
+            case 'r':
+              *ptr++ = '\r';
+              break;
+            case 'b':
+              *ptr++ = '\b';
+              break;
+            case 's':
+              *ptr++ = ' '; /* space */
+              break;
+            case '\"':
+              *ptr++ = '\"';
+              break;
+            case '\'':
+              *ptr++ = '\'';
+              break;
+            case '\\':
+              *ptr++ = '\\';
+              break;
+            default: /* Unknown; Keep '\' */
+              *ptr++ = '\\';
+              *ptr++ = *value;
+              break;
+          }
+        } else
+          *ptr++ = *value;
+      }
+      *ptr = 0;
+      if (opt_handler(handler_ctx, curr_gr, option, name)) goto err;
+    }
+  }
+  mysql_file_fclose(fp, MYF(0));
+  return (0);
+
+err:
+  mysql_file_fclose(fp, MYF(0));
+  return -1; /* Fatal error */
+}
+
+
+// Source: my_default.cc
+// Lines 876-1135

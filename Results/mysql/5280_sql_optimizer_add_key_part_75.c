@@ -1,0 +1,31 @@
+static bool add_key_part(Key_use_array *keyuse_array, Key_field *key_field) {
+  if (key_field->eq_func && !(key_field->optimize & KEY_OPTIMIZE_EXISTS)) {
+    const Field *const field = key_field->item_field->field;
+    TABLE_LIST *const tl = key_field->item_field->table_ref;
+    TABLE *const table = tl->table;
+
+    for (uint key = 0; key < table->s->keys; key++) {
+      if (!(table->keys_in_use_for_query.is_set(key))) continue;
+      if (table->key_info[key].flags & (HA_FULLTEXT | HA_SPATIAL))
+        continue;  // ToDo: ft-keys in non-ft queries.   SerG
+
+      uint key_parts = actual_key_parts(&table->key_info[key]);
+      for (uint part = 0; part < key_parts; part++) {
+        if (field->eq(table->key_info[key].key_part[part].field)) {
+          const Key_use keyuse(tl, key_field->val,
+                               key_field->val->used_tables(), key, part,
+                               key_field->optimize & KEY_OPTIMIZE_REF_OR_NULL,
+                               (key_part_map)1 << part,
+                               ~(ha_rows)0,  // will be set in optimize_keyuse
+                               key_field->null_rejecting, key_field->cond_guard,
+                               key_field->sj_pred_no);
+          if (keyuse_array->push_back(keyuse))
+            return true; /* purecov: inspected */
+        }
+      }
+    }
+  }
+
+
+// Source: sql_optimizer.cc
+// Lines 7407-7433

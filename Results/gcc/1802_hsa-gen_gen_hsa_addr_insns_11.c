@@ -1,0 +1,43 @@
+gen_hsa_addr_insns (tree val, hsa_op_reg *dest, hsa_bb *hbb)
+{
+  /* Handle cases like tmp = NULL, where we just emit a move instruction
+     to a register.  */
+  if (TREE_CODE (val) == INTEGER_CST)
+    {
+      hsa_op_immed *c = new hsa_op_immed (val);
+      hsa_insn_basic *insn = new hsa_insn_basic (2, BRIG_OPCODE_MOV,
+						 dest->m_type, dest, c);
+      hbb->append_insn (insn);
+      return;
+    }
+
+  hsa_op_address *addr;
+
+  gcc_assert (dest->m_type == hsa_get_segment_addr_type (BRIG_SEGMENT_FLAT));
+  if (TREE_CODE (val) == ADDR_EXPR)
+    val = TREE_OPERAND (val, 0);
+  addr = gen_hsa_addr (val, hbb);
+
+  if (TREE_CODE (val) == CONST_DECL
+      && is_gimple_reg_type (TREE_TYPE (val)))
+    {
+      gcc_assert (addr->m_symbol
+		  && addr->m_symbol->m_segment == BRIG_SEGMENT_READONLY);
+      /* CONST_DECLs are in readonly segment which however does not have
+	 addresses convertible to flat segments.  So copy it to a private one
+	 and take address of that.  */
+      BrigType16_t csttype
+	= mem_type_for_type (hsa_type_for_scalar_tree_type (TREE_TYPE (val),
+							    false));
+      hsa_op_reg *r = new hsa_op_reg (csttype);
+      hbb->append_insn (new hsa_insn_mem (BRIG_OPCODE_LD, csttype, r,
+					  new hsa_op_address (addr->m_symbol)));
+      hsa_symbol *copysym = hsa_cfun->create_hsa_temporary (csttype);
+      hbb->append_insn (new hsa_insn_mem (BRIG_OPCODE_ST, csttype, r,
+					  new hsa_op_address (copysym)));
+      addr->m_symbol = copysym;
+    }
+
+
+// Source: hsa-gen.c
+// Lines 2224-2262

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'endptr' at line 1\n2. Pointer 'tmp_endptr' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint git__strntol32(int32_t *result, const char *nptr, size_t nptr_len, const char **endptr, int base)\n{\n\tconst char *tmp_endptr;\n\tint32_t tmp_int;\n\tint64_t tmp_long;\n\tint error;\n\n\tif ((error = git__strntol64(&tmp_long, nptr, nptr_len, &tmp_endptr, base)) < 0)\n\t\treturn error;\n\n\ttmp_int = tmp_long & 0xFFFFFFFF;\n\tif (tmp_int != tmp_long) {\n\t\tint len = (int)(tmp_endptr - nptr);\n\t\tgit_error_set(GIT_ERROR_INVALID, \"failed to convert: '%.*s' is too large\", len, nptr);\n\t\treturn -1;\n\t}\n\n\t*result = tmp_int;\n\tif (endptr)\n\t\t*endptr = tmp_endptr;\n\n\treturn error;\n}\n\n\n// Source: util.c\n// Lines 138-160\n",
+  "ANSWER": "MUST"
+}

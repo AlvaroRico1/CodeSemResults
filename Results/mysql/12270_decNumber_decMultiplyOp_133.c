@@ -1,0 +1,95 @@
+static decNumber * decMultiplyOp(decNumber *res, const decNumber *lhs,
+                                 const decNumber *rhs, decContext *set,
+                                 uInt *status) {
+  Int    accunits;                 /* Units of accumulator in use  */
+  Int    exponent;                 /* work  */
+  Int    residue=0;                /* rounding residue  */
+  uByte  bits;                     /* result sign  */
+  Unit  *acc;                      /* -> accumulator Unit array  */
+  Int    needbytes;                /* size calculator  */
+  void  *allocacc=NULL;            /* -> allocated accumulator, iff allocated  */
+  Unit  accbuff[SD2U(DECBUFFER*4+1)]; /* buffer (+1 for DECBUFFER==0,  */
+                                   /* *4 for calls from other operations)  */
+  const Unit *mer, *mermsup;       /* work  */
+  Int   madlength;                 /* Units in multiplicand  */
+  Int   shift;                     /* Units to shift multiplicand by  */
+
+  #if FASTMUL
+    /* if DECDPUN is 1 or 3 work in base 10**9, otherwise  */
+    /* (DECDPUN is 2 or 4) then work in base 10**8  */
+    #if DECDPUN & 1                /* odd  */
+      #define FASTBASE 1000000000  /* base  */
+      #define FASTDIGS          9  /* digits in base  */
+      #define FASTLAZY         18  /* carry resolution point [1->18]  */
+    #else
+      #define FASTBASE  100000000
+      #define FASTDIGS          8
+      #define FASTLAZY       1844  /* carry resolution point [1->1844]  */
+    #endif
+    /* three buffers are used, two for chunked copies of the operands  */
+    /* (base 10**8 or base 10**9) and one base 2**64 accumulator with  */
+    /* lazy carry evaluation  */
+    uInt   zlhibuff[(DECBUFFER*2+1)/8+1]; /* buffer (+1 for DECBUFFER==0)  */
+    uInt  *zlhi=zlhibuff;                 /* -> lhs array  */
+    uInt  *alloclhi=NULL;                 /* -> allocated buffer, iff allocated  */
+    uInt   zrhibuff[(DECBUFFER*2+1)/8+1]; /* buffer (+1 for DECBUFFER==0)  */
+    uInt  *zrhi=zrhibuff;                 /* -> rhs array  */
+    uInt  *allocrhi=NULL;                 /* -> allocated buffer, iff allocated  */
+    uLong  zaccbuff[(DECBUFFER*2+1)/4+2]; /* buffer (+1 for DECBUFFER==0)  */
+    /* [allocacc is shared for both paths, as only one will run]  */
+    uLong *zacc=zaccbuff;          /* -> accumulator array for exact result  */
+    #if DECDPUN==1
+    Int    zoff;                   /* accumulator offset  */
+    #endif
+    uInt  *lip, *rip;              /* item pointers  */
+    uInt  *lmsi, *rmsi;            /* most significant items  */
+    Int    ilhs, irhs, iacc;       /* item counts in the arrays  */
+    Int    lazy;                   /* lazy carry counter  */
+    uLong  lcarry;                 /* uLong carry  */
+    uInt   carry;                  /* carry (NB not uLong)  */
+    Int    count;                  /* work  */
+    const  Unit *cup;              /* ..  */
+    Unit  *up;                     /* ..  */
+    uLong *lp;                     /* ..  */
+    Int    p;                      /* ..  */
+  #endif
+
+  #if DECSUBSET
+    decNumber *alloclhs=NULL;      /* -> allocated buffer, iff allocated  */
+    decNumber *allocrhs=NULL;      /* -> allocated buffer, iff allocated  */
+  #endif
+
+  #if DECCHECK
+  if (decCheckOperands(res, lhs, rhs, set)) return res;
+  #endif
+
+  /* precalculate result sign  */
+  bits=(uByte)((lhs->bits^rhs->bits)&DECNEG);
+
+  /* handle infinities and NaNs  */
+  if (SPECIALARGS) {               /* a special bit set  */
+    if (SPECIALARGS & (DECSNAN | DECNAN)) { /* one or two NaNs  */
+      decNaNs(res, lhs, rhs, set, status);
+      return res;}
+    /* one or two infinities; Infinity * 0 is invalid  */
+    if (((lhs->bits & DECINF)==0 && ISZERO(lhs))
+      ||((rhs->bits & DECINF)==0 && ISZERO(rhs))) {
+      *status|=DEC_Invalid_operation;
+      return res;}
+    uprv_decNumberZero(res);
+    res->bits=bits|DECINF;         /* infinity  */
+    return res;}
+
+  /* For best speed, as in DMSRCN [the original Rexx numerics  */
+  /* module], use the shorter number as the multiplier (rhs) and  */
+  /* the longer as the multiplicand (lhs) to minimise the number of  */
+  /* adds (partial products)  */
+  if (lhs->digits<rhs->digits) {   /* swap...  */
+    const decNumber *hold=lhs;
+    lhs=rhs;
+    rhs=hold;
+    }
+
+
+// Source: decNumber.cpp
+// Lines 4872-4962

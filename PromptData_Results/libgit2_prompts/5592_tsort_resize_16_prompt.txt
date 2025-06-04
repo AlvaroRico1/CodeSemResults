@@ -1,0 +1,37 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'store' at line 1
+2. Pointer 'tempstore' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int resize(struct tsort_store *store, size_t new_size)
+{
+	if (store->alloc < new_size) {
+		void **tempstore;
+
+		tempstore = git__reallocarray(store->storage, new_size, sizeof(void *));
+
+		/**
+		 * Do not propagate on OOM; this will abort the sort and
+		 * leave the array unsorted, but no error code will be
+		 * raised
+		 */
+		if (tempstore == NULL)
+			return -1;
+
+		store->storage = tempstore;
+		store->alloc = new_size;
+	}
+
+
+// Source: tsort.c
+// Lines 182-199
+
+
+[ANSWER]
+MUST

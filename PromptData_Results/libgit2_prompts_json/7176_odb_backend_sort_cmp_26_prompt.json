@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'backend_a' at line 3\n2. Pointer 'a' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int backend_sort_cmp(const void *a, const void *b)\n{\n\tconst backend_internal *backend_a = (const backend_internal *)(a);\n\tconst backend_internal *backend_b = (const backend_internal *)(b);\n\n\tif (backend_b->priority == backend_a->priority) {\n\t\tif (backend_a->is_alternate)\n\t\t\treturn -1;\n\t\tif (backend_b->is_alternate)\n\t\t\treturn 1;\n\t\treturn 0;\n\t}\n\treturn (backend_b->priority - backend_a->priority);\n}\n\n\n// Source: odb.c\n// Lines 430-443\n",
+  "ANSWER": "MUST"
+}

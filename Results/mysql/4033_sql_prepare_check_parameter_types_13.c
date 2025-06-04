@@ -1,0 +1,146 @@
+bool Prepared_statement::check_parameter_types() {
+  Item_param **end = param_array + param_count;
+
+  for (Item_param **it = param_array; it < end; ++it) {
+    Item_param *const item = *it;
+
+    assert(item->param_state() != Item_param::NO_VALUE);
+
+    /*
+      - An inherited type is always accepted, it is like a dynamic cast and
+        a runtime check is needed.
+      - A pinned type is always accepted and not force a reprepare. However,
+        the actual type must be checked for consistency when parameters values
+        are analyzed.
+      - The NULL value is accepted for all parameter types.
+    */
+    if (item->is_type_inherited() || item->is_type_pinned() ||
+        item->param_state() == Item_param::NULL_VALUE)
+      continue;
+
+    /*
+      It is expected that all string values may be cast to the desired data
+      type (but errors may be reported during this conversion).
+      So we do not reprepare in that case, with one exception. Consider:
+      col = param, where 'col' is of an signed integer type; and so 'param' is
+      BIGINT SIGNED. Assume that a string is passed for 'param', like
+      '18446744073709551615'. In a conventional, non-prepared execution,
+      comparison would be done as DOUBLE and would yield FALSE. In prepared
+      execution, conversion of this string to signed BIGINT means that 'param'
+      would be -1, and the comparison could yield TRUE. This is dealt with
+      below.
+    */
+    if (item->param_state() == Item_param::STRING_VALUE) {
+      if (item->result_type() == INT_RESULT) {
+        // First evaluate as DECIMAL
+        String *s = item->val_str(nullptr);
+        my_decimal decimal_value;
+        int result = str2my_decimal(0, s->ptr(), s->length(), s->charset(),
+                                    &decimal_value);
+        if (result == E_DEC_TRUNCATED || result == E_DEC_BAD_NUM) {
+          // Garbage in string, execution proceeds; at evaluation time val_int()
+          // will send a warning/error, which is not the present function's job.
+          continue;
+        }
+        // If result==E_DEC_OVERFLOW, decimal_value was rounded to a value
+        // (+-9999...) which is larger than any integer, so the comparison with
+        // 'col' will be correct. So we needn't handle this case
+        // specially.
+        if (result == E_DEC_OK) {
+          longlong i;  // Convert to integer, just to see if it is in range
+          result = my_decimal2int(0, &decimal_value, item->unsigned_flag, &i);
+        }
+        if (result != E_DEC_OK) {
+          // Value is outside integer range; re-prepare as DECIMAL
+          item->set_decimal(&decimal_value);
+          return false;
+        }
+      }
+      continue;
+    }
+
+    switch (item->result_type()) {
+      case INT_RESULT:
+        /*
+          When resolved type is integer, accept only integer values.
+          Accept only values of same signedness, otherwise actual values may
+          be out of range.
+          Exception: YEAR values must be range-checked anyway, so they are
+          allowed, regardless of signedness.
+        */
+        if (item->param_state() != Item_param::INT_VALUE ||
+            (item->data_type() != MYSQL_TYPE_YEAR &&
+             item->unsigned_flag != item->is_unsigned_actual()))
+          return false;
+        break;
+      case DECIMAL_RESULT:
+        /*
+          Parameters of type DECIMAL have large precisions, so they can
+          also accomodate any integer values, both signed and unsigned.
+        */
+        assert(item->decimal_precision() - item->decimals >= 20);
+        if (item->param_state() != Item_param::INT_VALUE &&
+            item->param_state() != Item_param::DECIMAL_VALUE)
+          return false;
+        break;
+      case REAL_RESULT:
+        /*
+          Parameters of floating-point type accept also integer and
+          decimal values. Rounding errors may occur during conversion to
+          DOUBLE, but this is acceptable since it has already been inferred
+          that the function using the parameter treats its arguments as
+          floating-point.
+        */
+        if (item->param_state() != Item_param::INT_VALUE &&
+            item->param_state() != Item_param::DECIMAL_VALUE &&
+            item->param_state() != Item_param::REAL_VALUE)
+          return false;
+        break;
+      case STRING_RESULT:
+        /*
+          Allow temporal values to be provided as numbers.
+          (a) date_expr = numeric *literal* has a special behaviour, the
+          numeric literal is converted to a date (e.g. 20010101 -> 2001-01-01)
+          and arguments are compared as DATE.
+          (b) date_expr = other numeric expression, doesn't have this (so
+          arguments get compared as DOUBLE).
+          (a) and (b) differ in this subtle case: if the number is 00010101 it
+          is 10101 and thus as date it is a two-year date so converted to
+          20010101. While as DOUBLE it is 10101. So in one case it matches
+          the date 2001-01-01 and in the other it matches 0001-01-01.
+          We want {date_expr = ? , pass a number for ?}
+          to behave like (a). Without the special case below, it would cause a
+          re-preparation and then be treated like (b).
+        */
+        if ((item->data_type() == MYSQL_TYPE_DATE ||
+             item->data_type() == MYSQL_TYPE_TIME ||
+             item->data_type() == MYSQL_TYPE_DATETIME) &&
+            (item->param_state() == Item_param::INT_VALUE ||
+             item->param_state() == Item_param::DECIMAL_VALUE ||
+             item->param_state() == Item_param::REAL_VALUE))
+          continue;
+        if (item->param_state() != Item_param::STRING_VALUE &&
+            item->param_state() != Item_param::LONG_DATA_VALUE &&
+            item->param_state() != Item_param::TIME_VALUE)
+          return false;
+        if (item->param_state() == Item_param::TIME_VALUE &&
+            ((item->value.time.time_type == MYSQL_TIMESTAMP_DATE &&
+              item->data_type() != MYSQL_TYPE_DATE) ||
+             (item->value.time.time_type == MYSQL_TIMESTAMP_TIME &&
+              item->data_type() != MYSQL_TYPE_TIME) ||
+             (item->value.time.time_type == MYSQL_TIMESTAMP_DATETIME &&
+              item->data_type() != MYSQL_TYPE_DATETIME &&
+              item->data_type() != MYSQL_TYPE_TIME &&
+              item->data_type() != MYSQL_TYPE_DATE)))
+          return false;
+
+        break;
+      case INVALID_RESULT:
+      case ROW_RESULT:
+        assert(false);
+    }
+  }
+
+
+// Source: sql_prepare.cc
+// Lines 2762-2903

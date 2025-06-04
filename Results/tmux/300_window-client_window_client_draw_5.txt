@@ -1,0 +1,1 @@
+s,tmux/window-client.c,6,ctx,tmux/window-client.c,2,1

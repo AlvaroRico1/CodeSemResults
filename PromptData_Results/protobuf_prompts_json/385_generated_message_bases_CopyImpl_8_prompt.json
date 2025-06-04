@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'to' at line 2\n2. Pointer 'to_param' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid ZeroFieldsBase::CopyImpl(Message* to_param, const Message& from_param) {\n  auto* to = static_cast<ZeroFieldsBase*>(to_param);\n  const auto* from = static_cast<const ZeroFieldsBase*>(&from_param);\n  if (from == to) return;\n  to->_internal_metadata_.Clear<UnknownFieldSet>();\n  to->_internal_metadata_.MergeFrom<UnknownFieldSet>(from->_internal_metadata_);\n}\n\n\n// Source: generated_message_bases.cc\n// Lines 108-114\n",
+  "ANSWER": "MUST"
+}

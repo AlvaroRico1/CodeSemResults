@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'b' at line 3\n2. Pointer 'buf' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nssize_t p_read(git_file fd, void *buf, size_t cnt)\n{\n\tchar *b = buf;\n\n\tif (!git__is_ssizet(cnt)) {\n#ifdef GIT_WIN32\n\t\tSetLastError(ERROR_INVALID_PARAMETER);\n#endif\n\t\terrno = EINVAL;\n\t\treturn -1;\n\t}\n\n\twhile (cnt) {\n\t\tssize_t r;\n#ifdef GIT_WIN32\n\t\tr = read(fd, b, cnt > INT_MAX ? INT_MAX : (unsigned int)cnt);\n#else\n\t\tr = read(fd, b, cnt);\n#endif\n\t\tif (r < 0) {\n\t\t\tif (errno == EINTR || errno == EAGAIN)\n\t\t\t\tcontinue;\n\t\t\treturn -1;\n\t\t}\n\t\tif (!r)\n\t\t\tbreak;\n\t\tcnt -= r;\n\t\tb += r;\n\t}\n\treturn (b - (char *)buf);\n}\n\n\n// Source: posix.c\n// Lines 168-198\n",
+  "ANSWER": "MUST"
+}

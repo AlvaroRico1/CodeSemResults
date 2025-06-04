@@ -1,0 +1,1 @@
+cp,tmux/colour.c,4,s,tmux/colour.c,1,1

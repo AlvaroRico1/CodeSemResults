@@ -1,0 +1,1 @@
+visible,git/mailinfo.c,6,last_nonblank,git/mailinfo.c,5,1

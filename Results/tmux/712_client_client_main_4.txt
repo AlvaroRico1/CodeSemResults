@@ -1,0 +1,1 @@
+linesize,tmux/client.c,11,termname,tmux/client.c,7,0

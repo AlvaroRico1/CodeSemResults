@@ -1,0 +1,1 @@
+capath,mysql/sql-common/client.cc,5,cert,mysql/sql-common/client.cc,3,0

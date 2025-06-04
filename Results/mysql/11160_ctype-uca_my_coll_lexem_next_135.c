@@ -1,0 +1,108 @@
+static my_coll_lexem_num my_coll_lexem_next(MY_COLL_LEXEM *lexem) {
+  const char *beg;
+  my_coll_lexem_num rc;
+
+  for (beg = lexem->beg; beg < lexem->end; beg++) {
+    switch (*beg) {
+      case ' ':
+      case '\t':
+      case '\r':
+      case '\n':
+        continue;
+
+      case '[': /* Bracket expression, e.g. "[optimize [a-z]]" */
+      {
+        size_t nbrackets; /* Indicates nested recursion level */
+        for (beg++, nbrackets = 1; beg < lexem->end; beg++) {
+          if (*beg == '[') /* Enter nested bracket expression */
+            nbrackets++;
+          else if (*beg == ']') {
+            if (--nbrackets == 0) {
+              rc = MY_COLL_LEXEM_OPTION;
+              beg++;
+              goto ex;
+            }
+          }
+        }
+        rc = MY_COLL_LEXEM_ERROR;
+        goto ex;
+      }
+
+      case '&':
+        beg++;
+        rc = MY_COLL_LEXEM_RESET;
+        goto ex;
+
+      case '=':
+        beg++;
+        lexem->diff = 0;
+        rc = MY_COLL_LEXEM_SHIFT;
+        goto ex;
+
+      case '/':
+        beg++;
+        rc = MY_COLL_LEXEM_EXTEND;
+        goto ex;
+
+      case '|':
+        beg++;
+        rc = MY_COLL_LEXEM_CONTEXT;
+        goto ex;
+
+      case '<': /* Shift: '<' or '<<' or '<<<' or '<<<<' */
+      {
+        /* Scan up to 3 additional '<' characters */
+        for (beg++, lexem->diff = 1;
+             (beg < lexem->end) && (*beg == '<') && (lexem->diff <= 3);
+             beg++, lexem->diff++)
+          ;
+        rc = MY_COLL_LEXEM_SHIFT;
+        goto ex;
+      }
+      default:
+        break;
+    }
+
+    /* Escaped character, e.g. \u1234 */
+    if ((*beg == '\\') && (beg + 2 < lexem->end) && (beg[1] == 'u') &&
+        my_isxdigit(&my_charset_utf8_general_ci, beg[2])) {
+      int ch;
+
+      beg += 2;
+      lexem->code = 0;
+      while ((beg < lexem->end) && ((ch = ch2x(beg[0])) >= 0)) {
+        lexem->code = (lexem->code << 4) + ch;
+        beg++;
+      }
+      rc = MY_COLL_LEXEM_CHAR;
+      goto ex;
+    }
+
+    /*
+      Unescaped single byte character:
+        allow printable ASCII range except SPACE and
+        special characters parsed above []<&/|=
+    */
+    if (*beg >= 0x21 && *beg <= 0x7E) {
+      lexem->code = *beg++;
+      rc = MY_COLL_LEXEM_CHAR;
+      goto ex;
+    }
+
+    if (((uchar)*beg) > 0x7F) /* Unescaped multibyte character */
+    {
+      CHARSET_INFO *cs = &my_charset_utf8_general_ci;
+      my_wc_t wc;
+      int nbytes = cs->cset->mb_wc(cs, &wc, pointer_cast<const uchar *>(beg),
+                                   pointer_cast<const uchar *>(lexem->end));
+      if (nbytes > 0) {
+        rc = MY_COLL_LEXEM_CHAR;
+        beg += nbytes;
+        lexem->code = (int)wc;
+        goto ex;
+      }
+    }
+
+
+// Source: ctype-uca.cc
+// Lines 2607-2710

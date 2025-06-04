@@ -1,0 +1,67 @@
+static int read_entry(
+	git_index_entry **out,
+	size_t *out_size,
+	git_index *index,
+	const void *buffer,
+	size_t buffer_size,
+	const char *last)
+{
+	size_t path_length, entry_size;
+	const char *path_ptr;
+	struct entry_short source;
+	git_index_entry entry = {{0}};
+	bool compressed = index->version >= INDEX_VERSION_NUMBER_COMP;
+	char *tmp_path = NULL;
+	size_t checksum_size = GIT_HASH_SHA1_SIZE;
+
+	if (checksum_size + minimal_entry_size > buffer_size)
+		return -1;
+
+	/* buffer is not guaranteed to be aligned */
+	memcpy(&source, buffer, sizeof(struct entry_short));
+
+	entry.ctime.seconds = (git_time_t)ntohl(source.ctime.seconds);
+	entry.ctime.nanoseconds = ntohl(source.ctime.nanoseconds);
+	entry.mtime.seconds = (git_time_t)ntohl(source.mtime.seconds);
+	entry.mtime.nanoseconds = ntohl(source.mtime.nanoseconds);
+	entry.dev = ntohl(source.dev);
+	entry.ino = ntohl(source.ino);
+	entry.mode = ntohl(source.mode);
+	entry.uid = ntohl(source.uid);
+	entry.gid = ntohl(source.gid);
+	entry.file_size = ntohl(source.file_size);
+	git_oid_cpy(&entry.id, &source.oid);
+	entry.flags = ntohs(source.flags);
+
+	if (entry.flags & GIT_INDEX_ENTRY_EXTENDED) {
+		uint16_t flags_raw;
+		size_t flags_offset;
+
+		flags_offset = offsetof(struct entry_long, flags_extended);
+		memcpy(&flags_raw, (const char *) buffer + flags_offset,
+			sizeof(flags_raw));
+		flags_raw = ntohs(flags_raw);
+
+		memcpy(&entry.flags_extended, &flags_raw, sizeof(flags_raw));
+		path_ptr = (const char *) buffer + offsetof(struct entry_long, path);
+	} else
+		path_ptr = (const char *) buffer + offsetof(struct entry_short, path);
+
+	if (!compressed) {
+		path_length = entry.flags & GIT_INDEX_ENTRY_NAMEMASK;
+
+		/* if this is a very long string, we must find its
+		 * real length without overflowing */
+		if (path_length == 0xFFF) {
+			const char *path_end;
+
+			path_end = memchr(path_ptr, '\0', buffer_size);
+			if (path_end == NULL)
+				return -1;
+
+			path_length = path_end - path_ptr;
+		}
+
+
+// Source: index.c
+// Lines 2451-2513

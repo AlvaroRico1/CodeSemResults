@@ -1,0 +1,1 @@
+emb_sj_nest,mysql/sql/sql_planner.cc,5,new_join_tab,mysql/sql/sql_planner.cc,2,1

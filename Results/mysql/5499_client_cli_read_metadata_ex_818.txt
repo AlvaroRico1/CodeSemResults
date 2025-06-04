@@ -1,0 +1,1 @@
+pos,mysql/sql-common/client.cc,5,result,mysql/sql-common/client.cc,6,0

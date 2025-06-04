@@ -1,0 +1,124 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'result' at line 8
+2. Pointer 'fields' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+MYSQL_DATA *cli_read_rows(MYSQL *mysql, MYSQL_FIELD *mysql_fields,
+                          unsigned int fields) {
+  uint field;
+  ulong pkt_len;
+  ulong len;
+  uchar *cp;
+  char *to, *end_to;
+  MYSQL_DATA *result;
+  MYSQL_ROWS **prev_ptr, *cur;
+  NET *net = &mysql->net;
+  bool is_data_packet;
+  DBUG_TRACE;
+
+  if ((pkt_len = cli_safe_read(mysql, &is_data_packet)) == packet_error)
+    return nullptr;
+
+  if (pkt_len == 0) return nullptr;
+  if (!(result =
+            (MYSQL_DATA *)my_malloc(key_memory_MYSQL_DATA, sizeof(MYSQL_DATA),
+                                    MYF(MY_WME | MY_ZEROFILL))) ||
+      !(result->alloc =
+            (MEM_ROOT *)my_malloc(key_memory_MYSQL_DATA, sizeof(MEM_ROOT),
+                                  MYF(MY_WME | MY_ZEROFILL)))) {
+    set_mysql_error(mysql, CR_OUT_OF_MEMORY, unknown_sqlstate);
+    free_rows(result);
+    return nullptr;
+  }
+  init_alloc_root(PSI_NOT_INSTRUMENTED, result->alloc, 8192,
+                  0); /* Assume rowlength < 8192 */
+  prev_ptr = &result->data;
+  result->rows = 0;
+  result->fields = fields;
+
+  /*
+    The last EOF packet is either a single 254 character or (in MySQL 4.1)
+    254 followed by 1-7 status bytes or an OK packet starting with 0xFE
+  */
+
+  while (*(cp = net->read_pos) == 0 || is_data_packet) {
+    result->rows++;
+    if (!(cur = (MYSQL_ROWS *)result->alloc->Alloc(sizeof(MYSQL_ROWS))) ||
+        !(cur->data = ((MYSQL_ROW)result->alloc->Alloc(
+              (fields + 1) * sizeof(char *) + pkt_len)))) {
+      free_rows(result);
+      set_mysql_error(mysql, CR_OUT_OF_MEMORY, unknown_sqlstate);
+      return nullptr;
+    }
+    *prev_ptr = cur;
+    prev_ptr = &cur->next;
+    to = (char *)(cur->data + fields + 1);
+    end_to = to + pkt_len - 1;
+    for (field = 0; field < fields; field++) {
+      if ((len = (ulong)net_field_length(&cp)) ==
+          NULL_LENGTH) { /* null field */
+        cur->data[field] = nullptr;
+      } else {
+        cur->data[field] = to;
+        DBUG_EXECUTE_IF("simulate_invalid_packet_data", {
+          to = end_to + 1;
+          len = ULONG_MAX - 1;
+        });
+        if (to > end_to || len > (ulong)(end_to - to)) {
+          free_rows(result);
+          set_mysql_error(mysql, CR_MALFORMED_PACKET, unknown_sqlstate);
+          return nullptr;
+        }
+        memcpy(to, (char *)cp, len);
+        to[len] = 0;
+        to += len + 1;
+        cp += len;
+        if (mysql_fields) {
+          if (mysql_fields[field].max_length < len)
+            mysql_fields[field].max_length = len;
+        }
+      }
+    }
+    cur->data[field] = to; /* End of last field */
+    if ((pkt_len = cli_safe_read(mysql, &is_data_packet)) == packet_error) {
+      free_rows(result);
+      return nullptr;
+    }
+  }
+  *prev_ptr = nullptr; /* last pointer is null */
+  /* read EOF packet or OK packet if it is new client */
+  if (pkt_len > 1) {
+    if (mysql->server_capabilities & CLIENT_DEPRECATE_EOF && !is_data_packet)
+      read_ok_ex(mysql, pkt_len);
+    else {
+      mysql->warning_count = uint2korr(cp + 1);
+      mysql->server_status = uint2korr(cp + 3);
+    }
+
+    DBUG_PRINT("info", ("status: %u  warning_count:  %u", mysql->server_status,
+                        mysql->warning_count));
+  }
+
+#if defined(CLIENT_PROTOCOL_TRACING)
+  if (mysql->server_status & SERVER_MORE_RESULTS_EXISTS)
+    MYSQL_TRACE_STAGE(mysql, WAIT_FOR_RESULT);
+  else
+    MYSQL_TRACE_STAGE(mysql, READY_FOR_COMMAND);
+#endif
+  DBUG_PRINT("exit", ("Got %lu rows", (ulong)result->rows));
+  return result;
+}
+
+
+// Source: client.cc
+// Lines 2924-3028
+
+
+[ANSWER]
+MUST-NOT

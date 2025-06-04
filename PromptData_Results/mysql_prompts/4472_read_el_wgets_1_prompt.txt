@@ -1,0 +1,167 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'el' at line 1
+2. Pointer 'cmdnum' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+el_wgets(EditLine *el, int *nread)
+{
+	int retval;
+	el_action_t cmdnum = 0;
+	int num;		/* how many chars we have read at NL */
+	wchar_t ch;
+	int nrb;
+
+	if (nread == NULL)
+		nread = &nrb;
+	*nread = 0;
+	el->el_read->read_errno = 0;
+
+	if (el->el_flags & NO_TTY) {
+		el->el_line.lastchar = el->el_line.buffer;
+		return noedit_wgets(el, nread);
+	}
+
+#ifdef FIONREAD
+	if (el->el_tty.t_mode == EX_IO && el->el_read->macros.level < 0) {
+		int chrs = 0;
+
+		(void) ioctl(el->el_infd, FIONREAD, &chrs);
+		if (chrs == 0) {
+			if (tty_rawmode(el) < 0) {
+				errno = 0;
+				*nread = 0;
+				return NULL;
+			}
+		}
+	}
+#endif /* FIONREAD */
+
+	if ((el->el_flags & UNBUFFERED) == 0)
+		read_prepare(el);
+
+	if (el->el_flags & EDIT_DISABLED) {
+		if ((el->el_flags & UNBUFFERED) == 0)
+			el->el_line.lastchar = el->el_line.buffer;
+		terminal__flush(el);
+		return noedit_wgets(el, nread);
+	}
+
+	for (num = -1; num == -1;) {  /* while still editing this line */
+		/* if EOF or error */
+		if (read_getcmd(el, &cmdnum, &ch) == -1)
+			break;
+		if ((size_t)cmdnum >= el->el_map.nfunc) /* BUG CHECK command */
+			continue;	/* try again */
+		/* now do the real command */
+		/* vi redo needs these way down the levels... */
+		el->el_state.thiscmd = cmdnum;
+		el->el_state.thisch = ch;
+		if (el->el_map.type == MAP_VI &&
+		    el->el_map.current == el->el_map.key &&
+		    el->el_chared.c_redo.pos < el->el_chared.c_redo.lim) {
+			if (cmdnum == VI_DELETE_PREV_CHAR &&
+			    el->el_chared.c_redo.pos != el->el_chared.c_redo.buf
+			    && iswprint(el->el_chared.c_redo.pos[-1]))
+				el->el_chared.c_redo.pos--;
+			else
+				*el->el_chared.c_redo.pos++ = ch;
+		}
+		retval = (*el->el_map.func[cmdnum]) (el, ch);
+
+		/* save the last command here */
+		el->el_state.lastcmd = cmdnum;
+
+		/* use any return value */
+		switch (retval) {
+		case CC_CURSOR:
+			re_refresh_cursor(el);
+			break;
+
+		case CC_REDISPLAY:
+			re_clear_lines(el);
+			re_clear_display(el);
+			/* FALLTHROUGH */
+
+		case CC_REFRESH:
+			re_refresh(el);
+			break;
+
+		case CC_REFRESH_BEEP:
+			re_refresh(el);
+			terminal_beep(el);
+			break;
+
+		case CC_NORM:	/* normal char */
+			break;
+
+		case CC_ARGHACK:	/* Suggested by Rich Salz */
+			/* <rsalz@pineapple.bbn.com> */
+			continue;	/* keep going... */
+
+		case CC_EOF:	/* end of file typed */
+			if ((el->el_flags & UNBUFFERED) == 0)
+				num = 0;
+			else if (num == -1) {
+				*el->el_line.lastchar++ = CONTROL('d');
+				el->el_line.cursor = el->el_line.lastchar;
+				num = 1;
+			}
+			break;
+
+		case CC_NEWLINE:	/* normal end of line */
+			num = (int)(el->el_line.lastchar - el->el_line.buffer);
+			break;
+
+		case CC_FATAL:	/* fatal error, reset to known state */
+			/* put (real) cursor in a known place */
+			re_clear_display(el);	/* reset the display stuff */
+			ch_reset(el);	/* reset the input pointers */
+			read_clearmacros(&el->el_read->macros);
+			re_refresh(el); /* print the prompt again */
+			break;
+
+		case CC_ERROR:
+		default:	/* functions we don't know about */
+			terminal_beep(el);
+			terminal__flush(el);
+			break;
+		}
+		el->el_state.argument = 1;
+		el->el_state.doingarg = 0;
+		el->el_chared.c_vcmd.action = NOP;
+		if (el->el_flags & UNBUFFERED)
+			break;
+	}
+
+	terminal__flush(el);		/* flush any buffered output */
+	/* make sure the tty is set up correctly */
+	if ((el->el_flags & UNBUFFERED) == 0) {
+		read_finish(el);
+		*nread = num != -1 ? num : 0;
+	} else
+		*nread = (int)(el->el_line.lastchar - el->el_line.buffer);
+
+	if (*nread == 0) {
+		if (num == -1) {
+			*nread = -1;
+			if (el->el_read->read_errno)
+				errno = el->el_read->read_errno;
+		}
+		return NULL;
+	} else
+		return el->el_line.buffer;
+}
+
+
+// Source: read.c
+// Lines 477-624
+
+
+[ANSWER]
+MAY

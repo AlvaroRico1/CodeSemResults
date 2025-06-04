@@ -1,0 +1,1 @@
+list,tmux/window-customize.c,1,name,tmux/window-customize.c,5,2

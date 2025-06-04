@@ -1,0 +1,79 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'lhs_sub' at line 5
+2. Pointer 'rhs_sub' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void SwapFieldHelper::SwapMessage(const Reflection* r, Message* lhs,
+                                  Arena* lhs_arena, Message* rhs,
+                                  Arena* rhs_arena,
+                                  const FieldDescriptor* field) {
+  Message** lhs_sub = r->MutableRaw<Message*>(lhs, field);
+  Message** rhs_sub = r->MutableRaw<Message*>(rhs, field);
+
+  if (*lhs_sub == *rhs_sub) return;
+
+#ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+  if (lhs_arena != nullptr && lhs_arena == rhs_arena) {
+#else   // PROTOBUF_FORCE_COPY_IN_SWAP
+  if (lhs_arena == rhs_arena) {
+#endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+    std::swap(*lhs_sub, *rhs_sub);
+    return;
+  }
+
+  if (*lhs_sub != nullptr && *rhs_sub != nullptr) {
+    (*lhs_sub)->GetReflection()->Swap(*lhs_sub, *rhs_sub);
+  } else if (*lhs_sub == nullptr && r->HasBit(*rhs, field)) {
+    *lhs_sub = (*rhs_sub)->New(lhs_arena);
+    (*lhs_sub)->CopyFrom(**rhs_sub);
+    r->ClearField(rhs, field);
+    // Ensures has bit is unchanged after ClearField.
+    r->SetBit(rhs, field);
+  } else if (*rhs_sub == nullptr && r->HasBit(*lhs, field)) {
+    *rhs_sub = (*lhs_sub)->New(rhs_arena);
+    (*rhs_sub)->CopyFrom(**lhs_sub);
+    r->ClearField(lhs, field);
+    // Ensures has bit is unchanged after ClearField.
+    r->SetBit(lhs, field);
+  }
+}
+
+void SwapFieldHelper::SwapNonMessageNonStringField(
+    const Reflection* r, Message* lhs, Message* rhs,
+    const FieldDescriptor* field) {
+  switch (field->cpp_type()) {
+#define SWAP_VALUES(CPPTYPE, TYPE)               \
+  case FieldDescriptor::CPPTYPE_##CPPTYPE:       \
+    std::swap(*r->MutableRaw<TYPE>(lhs, field),  \
+              *r->MutableRaw<TYPE>(rhs, field)); \
+    break;
+
+    SWAP_VALUES(INT32, int32_t);
+    SWAP_VALUES(INT64, int64_t);
+    SWAP_VALUES(UINT32, uint32_t);
+    SWAP_VALUES(UINT64, uint64_t);
+    SWAP_VALUES(FLOAT, float);
+    SWAP_VALUES(DOUBLE, double);
+    SWAP_VALUES(BOOL, bool);
+    SWAP_VALUES(ENUM, int);
+#undef SWAP_VALUES
+    default:
+      GOOGLE_LOG(FATAL) << "Unimplemented type: " << field->cpp_type();
+  }
+}
+
+}  // namespace internal
+
+
+// Source: generated_message_reflection.cc
+// Lines 648-707
+
+
+[ANSWER]
+MAY

@@ -1,0 +1,93 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'empty_theirs' at line 11
+2. Pointer 'resolved' at line 59
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_merge__iterators(
+	git_index **out,
+	git_repository *repo,
+	git_iterator *ancestor_iter,
+	git_iterator *our_iter,
+	git_iterator *theirs_iter,
+	const git_merge_options *given_opts)
+{
+	git_iterator *empty_ancestor = NULL,
+		*empty_ours = NULL,
+		*empty_theirs = NULL;
+	git_merge_diff_list *diff_list;
+	git_merge_options opts;
+	git_merge_file_options file_opts = GIT_MERGE_FILE_OPTIONS_INIT;
+	git_merge_diff *conflict;
+	git_vector changes;
+	size_t i;
+	int error = 0;
+
+	GIT_ASSERT_ARG(out);
+	GIT_ASSERT_ARG(repo);
+
+	*out = NULL;
+
+	GIT_ERROR_CHECK_VERSION(
+		given_opts, GIT_MERGE_OPTIONS_VERSION, "git_merge_options");
+
+	if ((error = merge_normalize_opts(repo, &opts, given_opts)) < 0)
+		return error;
+
+	file_opts.favor = opts.file_favor;
+	file_opts.flags = opts.file_flags;
+
+	/* use the git-inspired labels when virtual base building */
+	if (opts.flags & GIT_MERGE_VIRTUAL_BASE) {
+		file_opts.ancestor_label = "merged common ancestors";
+		file_opts.our_label = "Temporary merge branch 1";
+		file_opts.their_label = "Temporary merge branch 2";
+		file_opts.flags |= GIT_MERGE_FILE_ACCEPT_CONFLICTS;
+		file_opts.marker_size = GIT_MERGE_CONFLICT_MARKER_SIZE + 2;
+	}
+
+	diff_list = git_merge_diff_list__alloc(repo);
+	GIT_ERROR_CHECK_ALLOC(diff_list);
+
+	ancestor_iter = iterator_given_or_empty(&empty_ancestor, ancestor_iter);
+	our_iter = iterator_given_or_empty(&empty_ours, our_iter);
+	theirs_iter = iterator_given_or_empty(&empty_theirs, theirs_iter);
+
+	if ((error = git_merge_diff_list__find_differences(
+			diff_list, ancestor_iter, our_iter, theirs_iter)) < 0 ||
+		(error = git_merge_diff_list__find_renames(repo, diff_list, &opts)) < 0)
+		goto done;
+
+	memcpy(&changes, &diff_list->conflicts, sizeof(git_vector));
+	git_vector_clear(&diff_list->conflicts);
+
+	git_vector_foreach(&changes, i, conflict) {
+		int resolved = 0;
+
+		if ((error = merge_conflict_resolve(
+			&resolved, diff_list, conflict, &opts, &file_opts)) < 0)
+			goto done;
+
+		if (!resolved) {
+			if ((opts.flags & GIT_MERGE_FAIL_ON_CONFLICT)) {
+				git_error_set(GIT_ERROR_MERGE, "merge conflicts exist");
+				error = GIT_EMERGECONFLICT;
+				goto done;
+			}
+
+			git_vector_insert(&diff_list->conflicts, conflict);
+		}
+	}
+
+
+// Source: merge.c
+// Lines 2085-2158
+
+
+[ANSWER]
+MAY

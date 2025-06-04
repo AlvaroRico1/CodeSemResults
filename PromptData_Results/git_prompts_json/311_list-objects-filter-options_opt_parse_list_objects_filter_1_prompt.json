@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'filter_options' at line 4\n2. Pointer 'opt' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint opt_parse_list_objects_filter(const struct option *opt,\n\t\t\t\t  const char *arg, int unset)\n{\n\tstruct list_objects_filter_options *filter_options = opt->value;\n\n\tif (unset || !arg)\n\t\tlist_objects_filter_set_no_filter(filter_options);\n\telse\n\t\tparse_list_objects_filter(filter_options, arg);\n\treturn 0;\n}\n\n\n// Source: list-objects-filter-options.c\n// Lines 299-309\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,117 @@
+Symbol DescriptorPool::NewPlaceholderWithMutexHeld(
+    StringPiece name, PlaceholderType placeholder_type) const {
+  if (mutex_) {
+    mutex_->AssertHeld();
+  }
+  // Compute names.
+  StringPiece placeholder_full_name;
+  StringPiece placeholder_name;
+  const std::string* placeholder_package;
+
+  if (!ValidateQualifiedName(name)) return Symbol();
+  if (name[0] == '.') {
+    // Fully-qualified.
+    placeholder_full_name = name.substr(1);
+  } else {
+    placeholder_full_name = name;
+  }
+
+  // Create the placeholders.
+  internal::FlatAllocator alloc;
+  alloc.PlanArray<FileDescriptor>(1);
+  alloc.PlanArray<std::string>(2);
+  if (placeholder_type == PLACEHOLDER_ENUM) {
+    alloc.PlanArray<EnumDescriptor>(1);
+    alloc.PlanArray<EnumValueDescriptor>(1);
+    alloc.PlanArray<std::string>(2);  // names for the descriptor.
+    alloc.PlanArray<std::string>(2);  // names for the value.
+  } else {
+    alloc.PlanArray<Descriptor>(1);
+    alloc.PlanArray<std::string>(2);  // names for the descriptor.
+    if (placeholder_type == PLACEHOLDER_EXTENDABLE_MESSAGE) {
+      alloc.PlanArray<Descriptor::ExtensionRange>(1);
+    }
+  }
+  alloc.FinalizePlanning(tables_);
+
+  const std::string::size_type dotpos = placeholder_full_name.find_last_of('.');
+  if (dotpos != std::string::npos) {
+    placeholder_package =
+        alloc.AllocateStrings(placeholder_full_name.substr(0, dotpos));
+    placeholder_name = placeholder_full_name.substr(dotpos + 1);
+  } else {
+    placeholder_package = alloc.AllocateStrings("");
+    placeholder_name = placeholder_full_name;
+  }
+
+  FileDescriptor* placeholder_file = NewPlaceholderFileWithMutexHeld(
+      StrCat(placeholder_full_name, ".placeholder.proto"), alloc);
+  placeholder_file->package_ = placeholder_package;
+
+  if (placeholder_type == PLACEHOLDER_ENUM) {
+    placeholder_file->enum_type_count_ = 1;
+    placeholder_file->enum_types_ = alloc.AllocateArray<EnumDescriptor>(1);
+
+    EnumDescriptor* placeholder_enum = &placeholder_file->enum_types_[0];
+    memset(static_cast<void*>(placeholder_enum), 0, sizeof(*placeholder_enum));
+
+    placeholder_enum->all_names_ =
+        alloc.AllocateStrings(placeholder_name, placeholder_full_name);
+    placeholder_enum->file_ = placeholder_file;
+    placeholder_enum->options_ = &EnumOptions::default_instance();
+    placeholder_enum->is_placeholder_ = true;
+    placeholder_enum->is_unqualified_placeholder_ = (name[0] != '.');
+
+    // Enums must have at least one value.
+    placeholder_enum->value_count_ = 1;
+    placeholder_enum->values_ = alloc.AllocateArray<EnumValueDescriptor>(1);
+    // Disable fast-path lookup for this enum.
+    placeholder_enum->sequential_value_limit_ = -1;
+
+    EnumValueDescriptor* placeholder_value = &placeholder_enum->values_[0];
+    memset(static_cast<void*>(placeholder_value), 0,
+           sizeof(*placeholder_value));
+
+    // Note that enum value names are siblings of their type, not children.
+    placeholder_value->all_names_ = alloc.AllocateStrings(
+        "PLACEHOLDER_VALUE", placeholder_package->empty()
+                                 ? "PLACEHOLDER_VALUE"
+                                 : *placeholder_package + ".PLACEHOLDER_VALUE");
+
+    placeholder_value->number_ = 0;
+    placeholder_value->type_ = placeholder_enum;
+    placeholder_value->options_ = &EnumValueOptions::default_instance();
+
+    return Symbol(placeholder_enum);
+  } else {
+    placeholder_file->message_type_count_ = 1;
+    placeholder_file->message_types_ = alloc.AllocateArray<Descriptor>(1);
+
+    Descriptor* placeholder_message = &placeholder_file->message_types_[0];
+    memset(static_cast<void*>(placeholder_message), 0,
+           sizeof(*placeholder_message));
+
+    placeholder_message->all_names_ =
+        alloc.AllocateStrings(placeholder_name, placeholder_full_name);
+    placeholder_message->file_ = placeholder_file;
+    placeholder_message->options_ = &MessageOptions::default_instance();
+    placeholder_message->is_placeholder_ = true;
+    placeholder_message->is_unqualified_placeholder_ = (name[0] != '.');
+
+    if (placeholder_type == PLACEHOLDER_EXTENDABLE_MESSAGE) {
+      placeholder_message->extension_range_count_ = 1;
+      placeholder_message->extension_ranges_ =
+          alloc.AllocateArray<Descriptor::ExtensionRange>(1);
+      placeholder_message->extension_ranges_[0].start = 1;
+      // kMaxNumber + 1 because ExtensionRange::end is exclusive.
+      placeholder_message->extension_ranges_[0].end =
+          FieldDescriptor::kMaxNumber + 1;
+      placeholder_message->extension_ranges_[0].options_ = nullptr;
+    }
+
+    return Symbol(placeholder_message);
+  }
+
+
+// Source: descriptor.cc
+// Lines 4441-4553

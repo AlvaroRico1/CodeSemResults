@@ -1,0 +1,27 @@
+void test_checkout_crlf__autocrlf_true_index_size_is_filtered_size(void)
+{
+	git_index *index;
+	const git_index_entry *entry;
+	git_checkout_options opts = GIT_CHECKOUT_OPTIONS_INIT;
+	opts.checkout_strategy = GIT_CHECKOUT_FORCE;
+
+	cl_repo_set_bool(g_repo, "core.autocrlf", true);
+
+	git_repository_index(&index, g_repo);
+	tick_index(index);
+
+	git_checkout_head(g_repo, &opts);
+
+	cl_assert((entry = git_index_get_bypath(index, "all-lf", 0)) != NULL);
+
+	cl_assert_equal_sz(strlen(ALL_LF_TEXT_AS_CRLF), entry->file_size);
+
+	cl_assert((entry = git_index_get_bypath(index, "all-crlf", 0)) != NULL);
+	cl_assert_equal_sz(strlen(ALL_CRLF_TEXT_RAW), entry->file_size);
+
+	git_index_free(index);
+}
+
+
+// Source: crlf.c
+// Lines 286-308

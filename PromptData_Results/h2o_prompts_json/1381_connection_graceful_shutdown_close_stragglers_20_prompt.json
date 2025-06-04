@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'node' at line 4\n2. Pointer 'next' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void graceful_shutdown_close_stragglers(h2o_timer_t *entry)\n{\n    h2o_context_t *ctx = H2O_STRUCT_FROM_MEMBER(h2o_context_t, http2._graceful_shutdown_timeout, entry);\n    h2o_linklist_t *node, *next;\n\n    /* We've sent two GOAWAY frames, close the remaining connections */\n    for (node = ctx->http2._conns.next; node != &ctx->http2._conns; node = next) {\n        h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _conns, node);\n        next = node->next;\n        close_connection(conn);\n    }\n}\n\n\n// Source: connection.c\n// Lines 83-94\n",
+  "ANSWER": "MUST"
+}

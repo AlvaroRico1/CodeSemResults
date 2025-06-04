@@ -1,0 +1,108 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ops' at line 4
+2. Pointer 'clp' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int nfs4_discover_server_trunking(struct nfs_client *clp,
+				  struct nfs_client **result)
+{
+	const struct nfs4_state_recovery_ops *ops =
+				clp->cl_mvops->reboot_recovery_ops;
+	struct rpc_clnt *clnt;
+	const struct cred *cred;
+	int i, status;
+
+	dprintk("NFS: %s: testing '%s'\n", __func__, clp->cl_hostname);
+
+	clnt = clp->cl_rpcclient;
+	i = 0;
+
+	mutex_lock(&nfs_clid_init_mutex);
+again:
+	status  = -ENOENT;
+	cred = nfs4_get_clid_cred(clp);
+	if (cred == NULL)
+		goto out_unlock;
+
+	status = ops->detect_trunking(clp, result, cred);
+	put_cred(cred);
+	switch (status) {
+	case 0:
+	case -EINTR:
+	case -ERESTARTSYS:
+		break;
+	case -ETIMEDOUT:
+		if (clnt->cl_softrtry)
+			break;
+		/* Fall through */
+	case -NFS4ERR_DELAY:
+	case -EAGAIN:
+		ssleep(1);
+		/* Fall through */
+	case -NFS4ERR_STALE_CLIENTID:
+		dprintk("NFS: %s after status %d, retrying\n",
+			__func__, status);
+		goto again;
+	case -EACCES:
+		if (i++ == 0) {
+			nfs4_root_machine_cred(clp);
+			goto again;
+		}
+		if (clnt->cl_auth->au_flavor == RPC_AUTH_UNIX)
+			break;
+		/* Fall through */
+	case -NFS4ERR_CLID_INUSE:
+	case -NFS4ERR_WRONGSEC:
+		/* No point in retrying if we already used RPC_AUTH_UNIX */
+		if (clnt->cl_auth->au_flavor == RPC_AUTH_UNIX) {
+			status = -EPERM;
+			break;
+		}
+		clnt = rpc_clone_client_set_auth(clnt, RPC_AUTH_UNIX);
+		if (IS_ERR(clnt)) {
+			status = PTR_ERR(clnt);
+			break;
+		}
+		/* Note: this is safe because we haven't yet marked the
+		 * client as ready, so we are the only user of
+		 * clp->cl_rpcclient
+		 */
+		clnt = xchg(&clp->cl_rpcclient, clnt);
+		rpc_shutdown_client(clnt);
+		clnt = clp->cl_rpcclient;
+		goto again;
+
+	case -NFS4ERR_MINOR_VERS_MISMATCH:
+		status = -EPROTONOSUPPORT;
+		break;
+
+	case -EKEYEXPIRED:
+	case -NFS4ERR_NOT_SAME: /* FixMe: implement recovery
+				 * in nfs4_exchange_id */
+		status = -EKEYEXPIRED;
+		break;
+	default:
+		pr_warn("NFS: %s unhandled error %d. Exiting with error EIO\n",
+				__func__, status);
+		status = -EIO;
+	}
+
+out_unlock:
+	mutex_unlock(&nfs_clid_init_mutex);
+	dprintk("NFS: %s: status = %d\n", __func__, status);
+	return status;
+}
+
+
+// Source: nfs4state.c
+// Lines 2227-2315
+
+
+[ANSWER]
+MUST

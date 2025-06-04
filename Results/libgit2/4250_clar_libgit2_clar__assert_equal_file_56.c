@@ -1,0 +1,38 @@
+void clar__assert_equal_file(
+	const char *expected_data,
+	size_t expected_bytes,
+	int ignore_cr,
+	const char *path,
+	const char *file,
+	const char *func,
+	int line)
+{
+	char buf[4000];
+	ssize_t bytes, total_bytes = 0;
+	int fd = p_open(path, O_RDONLY | O_BINARY);
+	cl_assert(fd >= 0);
+
+	if (expected_data && !expected_bytes)
+		expected_bytes = strlen(expected_data);
+
+	while ((bytes = p_read(fd, buf, sizeof(buf))) != 0) {
+		clar__assert(
+			bytes > 0, file, func, line, "error reading from file", path, 1);
+
+		if (ignore_cr)
+			bytes = strip_cr_from_buf(buf, bytes);
+
+		if (memcmp(expected_data, buf, bytes) != 0) {
+			int pos;
+			for (pos = 0; pos < bytes && expected_data[pos] == buf[pos]; ++pos)
+				/* find differing byte offset */;
+			p_snprintf(
+				buf, sizeof(buf), "file content mismatch at byte %"PRIdZ,
+				(ssize_t)(total_bytes + pos));
+			p_close(fd);
+			clar__fail(file, func, line, path, buf, 1);
+		}
+
+
+// Source: clar_libgit2.c
+// Lines 505-538

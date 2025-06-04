@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ctxt' at line 3\n2. Pointer 'md5params' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstruct MD5_context *Curl_MD5_init(const struct MD5_params *md5params)\n{\n  struct MD5_context *ctxt;\n\n  /* Create MD5 context */\n  ctxt = malloc(sizeof(*ctxt));\n\n  if(!ctxt)\n    return ctxt;\n\n  ctxt->md5_hashctx = malloc(md5params->md5_ctxtsize);\n\n  if(!ctxt->md5_hashctx) {\n    free(ctxt);\n    return NULL;\n  }\n\n  ctxt->md5_hash = md5params;\n\n  (*md5params->md5_init_func)(ctxt->md5_hashctx);\n\n  return ctxt;\n}\n\n\n// Source: md5.c\n// Lines 554-576\n",
+  "ANSWER": "MUST"
+}

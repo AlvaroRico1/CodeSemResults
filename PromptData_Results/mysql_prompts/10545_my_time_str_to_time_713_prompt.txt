@@ -1,0 +1,115 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'len' at line 92
+2. Pointer 'seen_colon' at line 11
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool str_to_time(const char *str, std::size_t length, MYSQL_TIME *l_time,
+                 MYSQL_TIME_STATUS *status, my_time_flags_t flags) {
+  ulong date[5];
+  ulonglong value;
+  const char *end = str + length;
+  const char *end_of_days;
+  bool found_days;
+  bool found_hours;
+  uint state;
+  const char *start;
+  bool seen_colon = false;
+
+  assert(status->warnings == 0 && status->fractional_digits == 0 &&
+         status->nanoseconds == 0);
+
+  l_time->neg = false;
+  for (; str != end && isspace_char(*str); str++) length--;
+  if (str != end && *str == '-') {
+    l_time->neg = true;
+    str++;
+    length--;
+  }
+  if (str == end) return true;
+
+  // Remember beginning of first non-space/- char.
+  start = str;
+
+  /* Check first if this is a full TIMESTAMP */
+  if (length >= 12) { /* Probably full timestamp */
+    MYSQL_TIME_STATUS tmpstatus;
+    (void)str_to_datetime(str, length, l_time,
+                          (TIME_FUZZY_DATE | TIME_DATETIME_ONLY), &tmpstatus);
+    if (l_time->time_type >= MYSQL_TIMESTAMP_ERROR) {
+      *status = tmpstatus;
+      return l_time->time_type == MYSQL_TIMESTAMP_ERROR;
+    }
+    assert(status->warnings == 0 && status->fractional_digits == 0 &&
+           status->nanoseconds == 0);
+  }
+
+  /* Not a timestamp. Try to get this as a DAYS_TO_SECOND string */
+  for (value = 0; str != end && isdigit_char(*str); str++)
+    value = value * 10L + static_cast<long>(*str - '0');
+
+  if (value > UINT_MAX) return true;
+
+  /* Skip all space after 'days' */
+  end_of_days = str;
+  for (; str != end && isspace_char(str[0]); str++)
+    ;
+
+  state = 0;
+  found_days = found_hours = false;
+  if (static_cast<uint>(end - str) > 1 && str != end_of_days &&
+      isdigit_char(*str)) { /* Found days part */
+    date[0] = static_cast<ulong>(value);
+    state = 1; /* Assume next is hours */
+    found_days = true;
+  } else if ((end - str) > 1 && *str == time_separator &&
+             isdigit_char(str[1])) {
+    date[0] = 0; /* Assume we found hours */
+    date[1] = static_cast<ulong>(value);
+    state = 2;
+    found_hours = true;
+    str++; /* skip ':' */
+    seen_colon = true;
+  } else {
+    /* String given as one number; assume HHMMSS format */
+    date[0] = 0;
+    date[1] = static_cast<ulong>(value / 10000);
+    date[2] = static_cast<ulong>(value / 100 % 100);
+    date[3] = static_cast<ulong>(value % 100);
+    state = 4;
+    goto fractional;
+  }
+
+  /* Read hours, minutes and seconds */
+  for (;;) {
+    for (value = 0; str != end && isdigit_char(*str); str++)
+      value = value * 10L + static_cast<long>(*str - '0');
+    date[state++] = static_cast<ulong>(value);
+    if (state == 4 || (end - str) < 2 || *str != time_separator ||
+        !isdigit_char(str[1]))
+      break;
+    str++; /* Skip time_separator (':') */
+    seen_colon = true;
+  }
+
+  if (state != 4) { /* Not HH:MM:SS */
+    /* Fix the date to assume that seconds was given */
+    if (!found_hours && !found_days) {
+      std::size_t len = sizeof(long) * (state - 1);
+      memmove(pointer_cast<uchar *>(date + 4) - len,
+              pointer_cast<uchar *>(date + state) - len, len);
+      memset(date, 0, sizeof(long) * (4 - state));
+    } else
+
+
+// Source: my_time.cc
+// Lines 744-839
+
+
+[ANSWER]
+MUST-NOT

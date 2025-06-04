@@ -1,0 +1,50 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'pathinfo' at line 24
+2. Pointer 'fattr' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int nfs_probe_fsinfo(struct nfs_server *server, struct nfs_fh *mntfh, struct nfs_fattr *fattr)
+{
+	struct nfs_fsinfo fsinfo;
+	struct nfs_client *clp = server->nfs_client;
+	int error;
+
+	if (clp->rpc_ops->set_capabilities != NULL) {
+		error = clp->rpc_ops->set_capabilities(server, mntfh);
+		if (error < 0)
+			return error;
+	}
+
+	fsinfo.fattr = fattr;
+	fsinfo.nlayouttypes = 0;
+	memset(fsinfo.layouttype, 0, sizeof(fsinfo.layouttype));
+	error = clp->rpc_ops->fsinfo(server, mntfh, &fsinfo);
+	if (error < 0)
+		return error;
+
+	nfs_server_set_fsinfo(server, &fsinfo);
+
+	/* Get some general file system info */
+	if (server->namelen == 0) {
+		struct nfs_pathconf pathinfo;
+
+		pathinfo.fattr = fattr;
+		nfs_fattr_init(fattr);
+
+		if (clp->rpc_ops->pathconf(server, mntfh, &pathinfo) >= 0)
+			server->namelen = pathinfo.max_namelen;
+	}
+
+
+// Source: client.c
+// Lines 787-817
+
+
+[ANSWER]
+MUST

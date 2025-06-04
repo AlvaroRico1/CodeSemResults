@@ -1,0 +1,43 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'srcptr' at line 3
+2. Pointer 'source' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static inline bool isLegalUTF8(const UTF8 *source, int length) {
+    UTF8 a;
+    const UTF8 *srcptr = source+length;
+    switch (length) {
+    default: return false;
+        /* Everything else falls through when "true"... */
+    case 4: if ((a = (*--srcptr)) < 0x80 || a > 0xBF) return false;
+    case 3: if ((a = (*--srcptr)) < 0x80 || a > 0xBF) return false;
+    case 2: if ((a = (*--srcptr)) < 0x80 || a > 0xBF) return false;
+
+        switch (*source) {
+            /* no fall-through in this inner switch */
+            case 0xE0: if (a < 0xA0) return false; break;
+            case 0xED: if (a > 0x9F) return false; break;
+            case 0xF0: if (a < 0x90) return false; break;
+            case 0xF4: if (a > 0x8F) return false; break;
+            default:   if (a < 0x80) return false;
+        }
+
+    case 1: if (*source >= 0x80 && *source < 0xC2) return false;
+    }
+    if (*source > 0xF4) return false;
+    return true;
+}
+
+
+// Source: unicode_builtin.c
+// Lines 183-206
+
+
+[ANSWER]
+MUST

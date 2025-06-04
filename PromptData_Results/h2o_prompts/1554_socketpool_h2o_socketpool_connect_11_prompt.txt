@@ -1,0 +1,117 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer '_req' at line 1
+2. Pointer 'req' at line 81
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketpool_t *pool, h2o_url_t *url, h2o_loop_t *loop,
+                            h2o_multithread_receiver_t *getaddr_receiver, h2o_iovec_t alpn_protos, h2o_socketpool_connect_cb cb,
+                            void *data)
+{
+    struct pool_entry_t *entry = NULL;
+    struct on_close_data_t *close_data;
+
+    if (_req != NULL)
+        *_req = NULL;
+
+    size_t target = SIZE_MAX;
+    h2o_linklist_t *sockets = NULL;
+
+    /* fetch an entry and return it */
+    pthread_mutex_lock(&pool->_shared.mutex);
+    check_pool_expired_locked(pool, loop);
+
+    /* TODO lookup outside this critical section */
+    if (h2o_socketpool_is_global(pool)) {
+        target = lookup_target(pool, url);
+        if (target == SIZE_MAX) {
+            h2o_vector_reserve(NULL, &pool->targets, pool->targets.size + 1);
+            pool->targets.entries[pool->targets.size++] = h2o_socketpool_create_target(url, NULL);
+            target = pool->targets.size - 1;
+        }
+        sockets = &pool->targets.entries[target]->_shared.sockets;
+    } else {
+        sockets = &pool->_shared.sockets;
+    }
+    assert(pool->targets.size != 0);
+
+    while (!h2o_linklist_is_empty(sockets)) {
+        if (h2o_socketpool_is_global(pool)) {
+            entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, target_link, sockets->next);
+        } else {
+            entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, all_link, sockets->next);
+        }
+        h2o_linklist_unlink(&entry->all_link);
+        h2o_linklist_unlink(&entry->target_link);
+        pthread_mutex_unlock(&pool->_shared.mutex);
+
+        __sync_sub_and_fetch(&pool->_shared.pooled_count, 1);
+
+        /* test if the connection is still alive */
+        char buf[1];
+        ssize_t rret = recv(entry->sockinfo.fd, buf, 1, MSG_PEEK);
+        if (rret == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            /* yes! return it */
+            size_t entry_target = entry->target;
+            h2o_socket_t *sock = h2o_socket_import(loop, &entry->sockinfo);
+            free(entry);
+            close_data = h2o_mem_alloc(sizeof(*close_data));
+            close_data->pool = pool;
+            close_data->target = entry_target;
+            sock->on_close.cb = on_close;
+            sock->on_close.data = close_data;
+            __sync_add_and_fetch(&pool->targets.entries[entry_target]->_shared.leased_count, 1);
+            cb(sock, NULL, data, &pool->targets.entries[entry_target]->url);
+            return;
+        }
+
+        /* connection is dead, report, close, and retry */
+        if (rret <= 0) {
+            static long counter = 0;
+            if (__sync_fetch_and_add(&counter, 1) == 0)
+                h2o_error_printf("[WARN] detected close by upstream before the expected timeout (see issue #679)\n");
+        } else {
+            static long counter = 0;
+            if (__sync_fetch_and_add(&counter, 1) == 0)
+                h2o_error_printf("[WARN] unexpectedly received data to a pooled socket (see issue #679)\n");
+        }
+        destroy_detached(entry);
+        pthread_mutex_lock(&pool->_shared.mutex);
+    }
+    pthread_mutex_unlock(&pool->_shared.mutex);
+
+    /* FIXME repsect `capacity` */
+    __sync_add_and_fetch(&pool->_shared.count, 1);
+
+    /* prepare request object */
+    h2o_socketpool_connect_request_t *req = h2o_mem_alloc(sizeof(*req));
+    *req = (h2o_socketpool_connect_request_t){data, cb, pool, loop};
+
+    if (_req != NULL)
+        *_req = req;
+    req->getaddr_receiver = getaddr_receiver;
+    req->alpn_protos = alpn_protos;
+
+    req->selected_target = target;
+    if (target == SIZE_MAX) {
+        req->lb.tried = h2o_mem_alloc(sizeof(req->lb.tried[0]) * pool->targets.size);
+        memset(req->lb.tried, 0, sizeof(req->lb.tried[0]) * pool->targets.size);
+        req->remaining_try_count = pool->targets.size;
+    } else {
+        req->remaining_try_count = 1;
+    }
+    try_connect(req);
+}
+
+
+// Source: socketpool.c
+// Lines 461-558
+
+
+[ANSWER]
+MUST

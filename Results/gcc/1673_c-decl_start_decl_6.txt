@@ -1,0 +1,1 @@
+attributes,gcc/gcc/c/c-decl.c,2,expr,gcc/gcc/c/c-decl.c,6,0

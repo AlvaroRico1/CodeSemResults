@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'path' at line 4\n2. Pointer 'config' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid test_config_stress__complex(void)\n{\n\tgit_config *config;\n\tconst char *path = \"./config-immediate-multiline\";\n\n\tcl_git_mkfile(path, \"[imm]\\n multi = \\\"\\\\\\nfoo\\\"\");\n\tcl_git_pass(git_config_open_ondisk(&config, path));\n\tassert_config_value(config, \"imm.multi\", \"foo\");\n\n\tgit_config_free(config);\n}\n\n\n// Source: stress.c\n// Lines 104-114\n",
+  "ANSWER": "MUST-NOT"
+}

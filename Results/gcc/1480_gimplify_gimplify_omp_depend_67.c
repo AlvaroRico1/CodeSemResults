@@ -1,0 +1,183 @@
+gimplify_omp_depend (tree *list_p, gimple_seq *pre_p)
+{
+  tree c;
+  gimple *g;
+  size_t n[4] = { 0, 0, 0, 0 };
+  bool unused[4];
+  tree counts[4] = { NULL_TREE, NULL_TREE, NULL_TREE, NULL_TREE };
+  tree last_iter = NULL_TREE, last_count = NULL_TREE;
+  size_t i, j;
+  location_t first_loc = UNKNOWN_LOCATION;
+
+  for (c = *list_p; c; c = OMP_CLAUSE_CHAIN (c))
+    if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_DEPEND)
+      {
+	switch (OMP_CLAUSE_DEPEND_KIND (c))
+	  {
+	  case OMP_CLAUSE_DEPEND_IN:
+	    i = 2;
+	    break;
+	  case OMP_CLAUSE_DEPEND_OUT:
+	  case OMP_CLAUSE_DEPEND_INOUT:
+	    i = 0;
+	    break;
+	  case OMP_CLAUSE_DEPEND_MUTEXINOUTSET:
+	    i = 1;
+	    break;
+	  case OMP_CLAUSE_DEPEND_DEPOBJ:
+	    i = 3;
+	    break;
+	  case OMP_CLAUSE_DEPEND_SOURCE:
+	  case OMP_CLAUSE_DEPEND_SINK:
+	    continue;
+	  default:
+	    gcc_unreachable ();
+	  }
+	tree t = OMP_CLAUSE_DECL (c);
+	if (first_loc == UNKNOWN_LOCATION)
+	  first_loc = OMP_CLAUSE_LOCATION (c);
+	if (TREE_CODE (t) == TREE_LIST
+	    && TREE_PURPOSE (t)
+	    && TREE_CODE (TREE_PURPOSE (t)) == TREE_VEC)
+	  {
+	    if (TREE_PURPOSE (t) != last_iter)
+	      {
+		tree tcnt = size_one_node;
+		for (tree it = TREE_PURPOSE (t); it; it = TREE_CHAIN (it))
+		  {
+		    if (gimplify_expr (&TREE_VEC_ELT (it, 1), pre_p, NULL,
+				       is_gimple_val, fb_rvalue) == GS_ERROR
+			|| gimplify_expr (&TREE_VEC_ELT (it, 2), pre_p, NULL,
+					  is_gimple_val, fb_rvalue) == GS_ERROR
+			|| gimplify_expr (&TREE_VEC_ELT (it, 3), pre_p, NULL,
+					  is_gimple_val, fb_rvalue) == GS_ERROR
+			|| (gimplify_expr (&TREE_VEC_ELT (it, 4), pre_p, NULL,
+					   is_gimple_val, fb_rvalue)
+			    == GS_ERROR))
+		      return 2;
+		    tree var = TREE_VEC_ELT (it, 0);
+		    tree begin = TREE_VEC_ELT (it, 1);
+		    tree end = TREE_VEC_ELT (it, 2);
+		    tree step = TREE_VEC_ELT (it, 3);
+		    tree orig_step = TREE_VEC_ELT (it, 4);
+		    tree type = TREE_TYPE (var);
+		    tree stype = TREE_TYPE (step);
+		    location_t loc = DECL_SOURCE_LOCATION (var);
+		    tree endmbegin;
+		    /* Compute count for this iterator as
+		       orig_step > 0
+		       ? (begin < end ? (end - begin + (step - 1)) / step : 0)
+		       : (begin > end ? (end - begin + (step + 1)) / step : 0)
+		       and compute product of those for the entire depend
+		       clause.  */
+		    if (POINTER_TYPE_P (type))
+		      endmbegin = fold_build2_loc (loc, POINTER_DIFF_EXPR,
+						   stype, end, begin);
+		    else
+		      endmbegin = fold_build2_loc (loc, MINUS_EXPR, type,
+						   end, begin);
+		    tree stepm1 = fold_build2_loc (loc, MINUS_EXPR, stype,
+						   step,
+						   build_int_cst (stype, 1));
+		    tree stepp1 = fold_build2_loc (loc, PLUS_EXPR, stype, step,
+						   build_int_cst (stype, 1));
+		    tree pos = fold_build2_loc (loc, PLUS_EXPR, stype,
+						unshare_expr (endmbegin),
+						stepm1);
+		    pos = fold_build2_loc (loc, TRUNC_DIV_EXPR, stype,
+					   pos, step);
+		    tree neg = fold_build2_loc (loc, PLUS_EXPR, stype,
+						endmbegin, stepp1);
+		    if (TYPE_UNSIGNED (stype))
+		      {
+			neg = fold_build1_loc (loc, NEGATE_EXPR, stype, neg);
+			step = fold_build1_loc (loc, NEGATE_EXPR, stype, step);
+		      }
+		    neg = fold_build2_loc (loc, TRUNC_DIV_EXPR, stype,
+					   neg, step);
+		    step = NULL_TREE;
+		    tree cond = fold_build2_loc (loc, LT_EXPR,
+						 boolean_type_node,
+						 begin, end);
+		    pos = fold_build3_loc (loc, COND_EXPR, stype, cond, pos,
+					   build_int_cst (stype, 0));
+		    cond = fold_build2_loc (loc, LT_EXPR, boolean_type_node,
+					    end, begin);
+		    neg = fold_build3_loc (loc, COND_EXPR, stype, cond, neg,
+					   build_int_cst (stype, 0));
+		    tree osteptype = TREE_TYPE (orig_step);
+		    cond = fold_build2_loc (loc, GT_EXPR, boolean_type_node,
+					    orig_step,
+					    build_int_cst (osteptype, 0));
+		    tree cnt = fold_build3_loc (loc, COND_EXPR, stype,
+						cond, pos, neg);
+		    cnt = fold_convert_loc (loc, sizetype, cnt);
+		    if (gimplify_expr (&cnt, pre_p, NULL, is_gimple_val,
+				       fb_rvalue) == GS_ERROR)
+		      return 2;
+		    tcnt = size_binop_loc (loc, MULT_EXPR, tcnt, cnt);
+		  }
+		if (gimplify_expr (&tcnt, pre_p, NULL, is_gimple_val,
+				   fb_rvalue) == GS_ERROR)
+		  return 2;
+		last_iter = TREE_PURPOSE (t);
+		last_count = tcnt;
+	      }
+	    if (counts[i] == NULL_TREE)
+	      counts[i] = last_count;
+	    else
+	      counts[i] = size_binop_loc (OMP_CLAUSE_LOCATION (c),
+					  PLUS_EXPR, counts[i], last_count);
+	  }
+	else
+	  n[i]++;
+      }
+  for (i = 0; i < 4; i++)
+    if (counts[i])
+      break;
+  if (i == 4)
+    return 0;
+
+  tree total = size_zero_node;
+  for (i = 0; i < 4; i++)
+    {
+      unused[i] = counts[i] == NULL_TREE && n[i] == 0;
+      if (counts[i] == NULL_TREE)
+	counts[i] = size_zero_node;
+      if (n[i])
+	counts[i] = size_binop (PLUS_EXPR, counts[i], size_int (n[i]));
+      if (gimplify_expr (&counts[i], pre_p, NULL, is_gimple_val,
+			 fb_rvalue) == GS_ERROR)
+	return 2;
+      total = size_binop (PLUS_EXPR, total, counts[i]);
+    }
+
+  if (gimplify_expr (&total, pre_p, NULL, is_gimple_val, fb_rvalue)
+      == GS_ERROR)
+    return 2;
+  bool is_old = unused[1] && unused[3];
+  tree totalpx = size_binop (PLUS_EXPR, unshare_expr (total),
+			     size_int (is_old ? 1 : 4));
+  tree type = build_array_type (ptr_type_node, build_index_type (totalpx));
+  tree array = create_tmp_var_raw (type);
+  TREE_ADDRESSABLE (array) = 1;
+  if (!poly_int_tree_p (totalpx))
+    {
+      if (!TYPE_SIZES_GIMPLIFIED (TREE_TYPE (array)))
+	gimplify_type_sizes (TREE_TYPE (array), pre_p);
+      if (gimplify_omp_ctxp)
+	{
+	  struct gimplify_omp_ctx *ctx = gimplify_omp_ctxp;
+	  while (ctx
+		 && (ctx->region_type == ORT_WORKSHARE
+		     || ctx->region_type == ORT_TASKGROUP
+		     || ctx->region_type == ORT_SIMD
+		     || ctx->region_type == ORT_ACC))
+	    ctx = ctx->outer_context;
+	  if (ctx)
+	    omp_add_variable (ctx, array, GOVD_LOCAL | GOVD_SEEN);
+	}
+
+
+// Source: gimplify.c
+// Lines 7780-7958

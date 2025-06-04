@@ -1,0 +1,161 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tl' at line 15
+2. Pointer 'tab' at line 13
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool JOIN::extract_func_dependent_tables() {
+  // loop until no more const tables are found
+  bool ref_changed;
+  // Tables referenced by others; if they're const the others may be too.
+  table_map found_ref;
+  do {
+  more_const_tables_found:
+    ref_changed = false;
+    found_ref = 0;
+
+    // Loop over all tables that are not already determined to be const
+    for (JOIN_TAB **pos = best_ref + const_tables; *pos; pos++) {
+      JOIN_TAB *const tab = *pos;
+      TABLE *const table = tab->table();
+      TABLE_LIST *const tl = tab->table_ref;
+      /*
+        If equi-join condition by a key is null rejecting and after a
+        substitution of a const table the key value happens to be null
+        then we can state that there are no matches for this equi-join.
+      */
+      Key_use *keyuse = tab->keyuse();
+      if (keyuse && tab->join_cond() && !tab->embedding_map) {
+        /*
+          When performing an outer join operation if there are no matching rows
+          for the single row of the outer table all the inner tables are to be
+          null complemented and thus considered as constant tables.
+          Here we apply this consideration to the case of outer join operations
+          with a single inner table only because the case with nested tables
+          would require a more thorough analysis.
+          TODO. Apply single row substitution to null complemented inner tables
+          for nested outer join operations.
+        */
+        while (keyuse->table_ref == tl) {
+          if (!(keyuse->val->used_tables() & ~const_table_map) &&
+              keyuse->val->is_null() && keyuse->null_rejecting &&
+              (tl->embedding == nullptr ||
+               !tl->embedding->is_sj_or_aj_nest())) {
+            table->set_null_row();
+            table->const_table = true;
+            found_const_table_map |= tl->map();
+            mark_const_table(tab, keyuse);
+            goto more_const_tables_found;
+          }
+          keyuse++;
+        }
+      }
+
+      if (tab->dependent)  // If dependent on some table
+      {
+        // All dependent tables must be const
+        if (tab->dependent & ~const_table_map) {
+          found_ref |= tab->dependent;
+          continue;
+        }
+        /*
+          Mark a dependent table as constant if
+           1. it has exactly zero or one rows (it is a system table), and
+           2. it is not within a nested outer join, and
+           3. it does not have an expensive outer join condition.
+              This is because we have to determine whether an outer-joined table
+              has a real row or a null-extended row in the optimizer phase.
+              We have no possibility to evaluate its join condition at
+              execution time, when it is marked as a system table.
+        */
+        if (table->file->stats.records <= 1L &&                             // 1
+            (table->file->ha_table_flags() & HA_STATS_RECORDS_IS_EXACT) &&  // 1
+            !tl->outer_join_nest() &&                                       // 2
+            !(tab->join_cond() && tab->join_cond()->is_expensive()))        // 3
+        {  // system table
+          mark_const_table(tab, nullptr);
+          const int status =
+              join_read_const_table(tab, positions + const_tables - 1);
+          if (status > 0)
+            return true;
+          else if (status == 0)
+            found_const_table_map |= tl->map();
+          continue;
+        }
+      }
+
+      // Check if table can be read by key or table only uses const refs
+
+      if ((keyuse = tab->keyuse())) {
+        while (keyuse->table_ref == tl) {
+          Key_use *const start_keyuse = keyuse;
+          const uint key = keyuse->key;
+          tab->keys().set_bit(key);  // QQ: remove this ?
+
+          table_map refs = 0;
+          Key_map const_ref, eq_part;
+          do {
+            if (keyuse->val->type() != Item::NULL_ITEM && !keyuse->optimize) {
+              if (!((~found_const_table_map) & keyuse->used_tables))
+                const_ref.set_bit(keyuse->keypart);
+              else
+                refs |= keyuse->used_tables;
+              eq_part.set_bit(keyuse->keypart);
+            }
+            keyuse++;
+          } while (keyuse->table_ref == tl && keyuse->key == key);
+
+          /*
+            Extract const tables with proper key dependencies.
+            Exclude tables that
+             1. are full-text searched, or
+             2. are part of nested outer join, or
+             3. are part of semi-join, or
+             4. have an expensive outer join condition.
+             5. are blocked by handler for const table optimize.
+             6. are not going to be used, typically because they are streamed
+                instead of materialized
+                (see Query_expression::can_materialize_directly_into_result()).
+          */
+          if (eq_part.is_prefix(table->key_info[key].user_defined_key_parts) &&
+              !tl->is_fulltext_searched() &&                              // 1
+              !tl->outer_join_nest() &&                                   // 2
+              !(tl->embedding && tl->embedding->is_sj_or_aj_nest()) &&    // 3
+              !(tab->join_cond() && tab->join_cond()->is_expensive()) &&  // 4
+              !(table->file->ha_table_flags() & HA_BLOCK_CONST_TABLE) &&  // 5
+              table->is_created()) {                                      // 6
+            if (table->key_info[key].flags & HA_NOSAME) {
+              if (const_ref == eq_part) {  // Found everything for ref.
+                ref_changed = true;
+                mark_const_table(tab, start_keyuse);
+                if (create_ref_for_key(this, tab, start_keyuse,
+                                       found_const_table_map))
+                  return true;
+                const int status =
+                    join_read_const_table(tab, positions + const_tables - 1);
+                if (status > 0)
+                  return true;
+                else if (status == 0)
+                  found_const_table_map |= tl->map();
+                break;
+              } else
+                found_ref |= refs;  // Table is const if all refs are const
+            } else if (const_ref == eq_part)
+              tab->const_keys.set_bit(key);
+          }
+        }
+      }
+    }
+
+
+// Source: sql_optimizer.cc
+// Lines 5387-5528
+
+
+[ANSWER]
+MUST

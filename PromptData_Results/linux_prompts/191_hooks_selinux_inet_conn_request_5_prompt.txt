@@ -1,0 +1,39 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'connsid' at line 7
+2. Pointer 'peersid' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int selinux_inet_conn_request(struct sock *sk, struct sk_buff *skb,
+				     struct request_sock *req)
+{
+	struct sk_security_struct *sksec = sk->sk_security;
+	int err;
+	u16 family = req->rsk_ops->family;
+	u32 connsid;
+	u32 peersid;
+
+	err = selinux_skb_peerlbl_sid(skb, family, &peersid);
+	if (err)
+		return err;
+	err = selinux_conn_sid(sksec->sid, peersid, &connsid);
+	if (err)
+		return err;
+	req->secid = connsid;
+	req->peer_secid = peersid;
+
+	return selinux_netlbl_inet_conn_request(req, family);
+}
+
+
+// Source: hooks.c
+// Lines 5303-5322
+
+
+[ANSWER]
+MAY

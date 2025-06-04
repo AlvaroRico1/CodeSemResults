@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'plugin' at line 4\n2. Pointer 'slot' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nprint_version_one_plugin (void **slot, void *data)\n{\n  struct print_options *opt = (struct print_options *) data;\n  struct plugin_name_args *plugin = (struct plugin_name_args *) *slot;\n  const char *version = plugin->version ? plugin->version : \"Unknown version.\";\n\n  fprintf (opt->file, \" %s%s: %s\\n\", opt->indent, plugin->base_name, version);\n  return 1;\n}\n\n\n// Source: plugin.c\n// Lines 827-835\n",
+  "ANSWER": "MUST"
+}

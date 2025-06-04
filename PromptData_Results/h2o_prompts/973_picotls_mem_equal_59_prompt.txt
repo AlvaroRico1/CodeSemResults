@@ -1,0 +1,29 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'y' at line 3
+2. Pointer '_y' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int mem_equal(const void *_x, const void *_y, size_t len)
+{
+    const volatile uint8_t *x = _x, *y = _y;
+    uint8_t t = 0;
+
+    for (; len != 0; --len)
+        t |= *x++ ^ *y++;
+
+    return t == 0;
+}
+
+
+// Source: picotls.c
+// Lines 5288-5297
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,1 @@
+error,libgit2/src/libgit2/transports/smart_protocol.c,8,pkt_type,libgit2/src/libgit2/transports/smart_protocol.c,9,2

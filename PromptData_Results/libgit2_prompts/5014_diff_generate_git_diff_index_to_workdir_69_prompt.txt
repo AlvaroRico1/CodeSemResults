@@ -1,0 +1,61 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'index' at line 4
+2. Pointer 'diff' at line 10
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_diff_index_to_workdir(
+	git_diff **out,
+	git_repository *repo,
+	git_index *index,
+	const git_diff_options *opts)
+{
+	git_iterator_options a_opts = GIT_ITERATOR_OPTIONS_INIT,
+		b_opts = GIT_ITERATOR_OPTIONS_INIT;
+	git_iterator *a = NULL, *b = NULL;
+	git_diff *diff = NULL;
+	char *prefix = NULL;
+	int error = 0;
+
+	GIT_ASSERT_ARG(out);
+	GIT_ASSERT_ARG(repo);
+
+	*out = NULL;
+
+	if (!index && (error = diff_load_index(&index, repo)) < 0)
+		return error;
+
+	if ((error = diff_prepare_iterator_opts(&prefix, &a_opts, GIT_ITERATOR_INCLUDE_CONFLICTS,
+						&b_opts, GIT_ITERATOR_DONT_AUTOEXPAND, opts)) < 0 ||
+	    (error = git_iterator_for_index(&a, repo, index, &a_opts)) < 0 ||
+	    (error = git_iterator_for_workdir(&b, repo, index, NULL, &b_opts)) < 0 ||
+	    (error = git_diff__from_iterators(&diff, repo, a, b, opts)) < 0)
+		goto out;
+
+	if ((diff->opts.flags & GIT_DIFF_UPDATE_INDEX) && ((git_diff_generated *)diff)->index_updated)
+		if ((error = git_index_write(index)) < 0)
+			goto out;
+
+	*out = diff;
+	diff = NULL;
+out:
+	git_iterator_free(a);
+	git_iterator_free(b);
+	git_diff_free(diff);
+	git__free(prefix);
+
+	return error;
+}
+
+
+// Source: diff_generate.c
+// Lines 1439-1480
+
+
+[ANSWER]
+MAY

@@ -1,0 +1,62 @@
+invalidate (rtx x, machine_mode full_mode)
+{
+  int i;
+  struct table_elt *p;
+  rtx addr;
+
+  switch (GET_CODE (x))
+    {
+    case REG:
+      invalidate_reg (x);
+      return;
+
+    case SUBREG:
+      invalidate (SUBREG_REG (x), VOIDmode);
+      return;
+
+    case PARALLEL:
+      for (i = XVECLEN (x, 0) - 1; i >= 0; --i)
+	invalidate (XVECEXP (x, 0, i), VOIDmode);
+      return;
+
+    case EXPR_LIST:
+      /* This is part of a disjoint return value; extract the location in
+	 question ignoring the offset.  */
+      invalidate (XEXP (x, 0), VOIDmode);
+      return;
+
+    case MEM:
+      addr = canon_rtx (get_addr (XEXP (x, 0)));
+      /* Calculate the canonical version of X here so that
+	 true_dependence doesn't generate new RTL for X on each call.  */
+      x = canon_rtx (x);
+
+      /* Remove all hash table elements that refer to overlapping pieces of
+	 memory.  */
+      if (full_mode == VOIDmode)
+	full_mode = GET_MODE (x);
+
+      for (i = 0; i < HASH_SIZE; i++)
+	{
+	  struct table_elt *next;
+
+	  for (p = table[i]; p; p = next)
+	    {
+	      next = p->next_same_hash;
+	      if (p->in_memory)
+		{
+		  /* Just canonicalize the expression once;
+		     otherwise each time we call invalidate
+		     true_dependence will canonicalize the
+		     expression again.  */
+		  if (!p->canon_exp)
+		    p->canon_exp = canon_rtx (p->exp);
+		  if (check_dependence (p->canon_exp, x, full_mode, addr))
+		    remove_from_table (p, i);
+		}
+	    }
+	}
+
+
+// Source: cse.c
+// Lines 1899-1956

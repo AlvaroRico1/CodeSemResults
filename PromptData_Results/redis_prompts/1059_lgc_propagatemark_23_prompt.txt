@@ -1,0 +1,32 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'g' at line 1
+2. Pointer 'h' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static l_mem propagatemark (global_State *g) {
+  GCObject *o = g->gray;
+  lua_assert(isgray(o));
+  gray2black(o);
+  switch (o->gch.tt) {
+    case LUA_TTABLE: {
+      Table *h = gco2h(o);
+      g->gray = h->gclist;
+      if (traversetable(g, h))  /* table is weak? */
+        black2gray(o);  /* keep it gray */
+      return sizeof(Table) + sizeof(TValue) * h->sizearray +
+                             sizeof(Node) * sizenode(h);
+    }
+
+
+// Source: lgc.c
+// Lines 277-289
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,51 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'data' at line 4
+2. Pointer 'refdb' at line 25
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void *create_refs(void *arg)
+{
+	int i, error;
+	struct th_data *data = (struct th_data *) arg;
+	git_oid head;
+	char name[128];
+	git_reference *ref[NREFS];
+	git_repository *repo;
+
+	cl_git_thread_pass(data, git_repository_open(&repo, data->path));
+
+	do {
+		error = git_reference_name_to_id(&head, repo, "HEAD");
+	} while (error == GIT_ELOCKED);
+	cl_git_thread_pass(data, error);
+
+	for (i = 0; i < NREFS; ++i) {
+		p_snprintf(name, sizeof(name), "refs/heads/thread-%03d-%02d", data->id, i);
+		do {
+			error = git_reference_create(&ref[i], repo, name, &head, 0, NULL);
+		} while (error == GIT_ELOCKED);
+		cl_git_thread_pass(data, error);
+
+		if (concurrent_compress && i == NREFS/2) {
+			git_refdb *refdb;
+			cl_git_thread_pass(data, git_repository_refdb(&refdb, repo));
+			do {
+				error = git_refdb_compress(refdb);
+			} while (error == GIT_ELOCKED);
+			cl_git_thread_pass(data, error);
+			git_refdb_free(refdb);
+		}
+
+
+// Source: refdb.c
+// Lines 65-96
+
+
+[ANSWER]
+MAY

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ictx' at line 3\n2. Pointer 'wp' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ninput_parse_buffer(struct window_pane *wp, u_char *buf, size_t len)\n{\n\tstruct input_ctx\t*ictx = wp->ictx;\n\tstruct screen_write_ctx\t*sctx = &ictx->ctx;\n\n\tif (len == 0)\n\t\treturn;\n\n\twindow_update_activity(wp->window);\n\twp->flags |= PANE_CHANGED;\n\n\t/* NULL wp if there is a mode set as don't want to update the tty. */\n\tif (TAILQ_EMPTY(&wp->modes))\n\t\tscreen_write_start_pane(sctx, wp, &wp->base);\n\telse\n\t\tscreen_write_start(sctx, &wp->base);\n\n\tlog_debug(\"%s: %%%u %s, %zu bytes: %.*s\", __func__, wp->id,\n\t    ictx->state->name, len, (int)len, buf);\n\n\tinput_parse(ictx, buf, len);\n\tscreen_write_stop(sctx);\n}\n\n\n// Source: input.c\n// Lines 960-982\n",
+  "ANSWER": "MUST"
+}

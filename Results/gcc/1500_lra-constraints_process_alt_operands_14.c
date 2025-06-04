@@ -1,0 +1,1010 @@
+process_alt_operands (int only_alternative)
+{
+  bool ok_p = false;
+  int nop, overall, nalt;
+  int n_alternatives = curr_static_id->n_alternatives;
+  int n_operands = curr_static_id->n_operands;
+  /* LOSERS counts the operands that don't fit this alternative and
+     would require loading.  */
+  int losers;
+  int addr_losers;
+  /* REJECT is a count of how undesirable this alternative says it is
+     if any reloading is required.  If the alternative matches exactly
+     then REJECT is ignored, but otherwise it gets this much counted
+     against it in addition to the reloading needed.  */
+  int reject;
+  /* This is defined by '!' or '?' alternative constraint and added to
+     reject.  But in some cases it can be ignored.  */
+  int static_reject;
+  int op_reject;
+  /* The number of elements in the following array.  */
+  int early_clobbered_regs_num;
+  /* Numbers of operands which are early clobber registers.  */
+  int early_clobbered_nops[MAX_RECOG_OPERANDS];
+  enum reg_class curr_alt[MAX_RECOG_OPERANDS];
+  HARD_REG_SET curr_alt_set[MAX_RECOG_OPERANDS];
+  bool curr_alt_match_win[MAX_RECOG_OPERANDS];
+  bool curr_alt_win[MAX_RECOG_OPERANDS];
+  bool curr_alt_offmemok[MAX_RECOG_OPERANDS];
+  int curr_alt_matches[MAX_RECOG_OPERANDS];
+  /* The number of elements in the following array.  */
+  int curr_alt_dont_inherit_ops_num;
+  /* Numbers of operands whose reload pseudos should not be inherited.	*/
+  int curr_alt_dont_inherit_ops[MAX_RECOG_OPERANDS];
+  rtx op;
+  /* The register when the operand is a subreg of register, otherwise the
+     operand itself.  */
+  rtx no_subreg_reg_operand[MAX_RECOG_OPERANDS];
+  /* The register if the operand is a register or subreg of register,
+     otherwise NULL.  */
+  rtx operand_reg[MAX_RECOG_OPERANDS];
+  int hard_regno[MAX_RECOG_OPERANDS];
+  machine_mode biggest_mode[MAX_RECOG_OPERANDS];
+  int reload_nregs, reload_sum;
+  bool costly_p;
+  enum reg_class cl;
+
+  /* Calculate some data common for all alternatives to speed up the
+     function.	*/
+  for (nop = 0; nop < n_operands; nop++)
+    {
+      rtx reg;
+
+      op = no_subreg_reg_operand[nop] = *curr_id->operand_loc[nop];
+      /* The real hard regno of the operand after the allocation.  */
+      hard_regno[nop] = get_hard_regno (op, true);
+
+      operand_reg[nop] = reg = op;
+      biggest_mode[nop] = GET_MODE (op);
+      if (GET_CODE (op) == SUBREG)
+	{
+	  biggest_mode[nop] = wider_subreg_mode (op);
+	  operand_reg[nop] = reg = SUBREG_REG (op);
+	}
+      if (! REG_P (reg))
+	operand_reg[nop] = NULL_RTX;
+      else if (REGNO (reg) >= FIRST_PSEUDO_REGISTER
+	       || ((int) REGNO (reg)
+		   == lra_get_elimination_hard_regno (REGNO (reg))))
+	no_subreg_reg_operand[nop] = reg;
+      else
+	operand_reg[nop] = no_subreg_reg_operand[nop]
+	  /* Just use natural mode for elimination result.  It should
+	     be enough for extra constraints hooks.  */
+	  = regno_reg_rtx[hard_regno[nop]];
+    }
+
+  /* The constraints are made of several alternatives.	Each operand's
+     constraint looks like foo,bar,... with commas separating the
+     alternatives.  The first alternatives for all operands go
+     together, the second alternatives go together, etc.
+
+     First loop over alternatives.  */
+  alternative_mask preferred = curr_id->preferred_alternatives;
+  if (only_alternative >= 0)
+    preferred &= ALTERNATIVE_BIT (only_alternative);
+
+  for (nalt = 0; nalt < n_alternatives; nalt++)
+    {
+      /* Loop over operands for one constraint alternative.  */
+      if (!TEST_BIT (preferred, nalt))
+	continue;
+
+      bool matching_early_clobber[MAX_RECOG_OPERANDS];
+      curr_small_class_check++;
+      overall = losers = addr_losers = 0;
+      static_reject = reject = reload_nregs = reload_sum = 0;
+      for (nop = 0; nop < n_operands; nop++)
+	{
+	  int inc = (curr_static_id
+		     ->operand_alternative[nalt * n_operands + nop].reject);
+	  if (lra_dump_file != NULL && inc != 0)
+	    fprintf (lra_dump_file,
+		     "            Staticly defined alt reject+=%d\n", inc);
+	  static_reject += inc;
+	  matching_early_clobber[nop] = 0;
+	}
+      reject += static_reject;
+      early_clobbered_regs_num = 0;
+
+      for (nop = 0; nop < n_operands; nop++)
+	{
+	  const char *p;
+	  char *end;
+	  int len, c, m, i, opalt_num, this_alternative_matches;
+	  bool win, did_match, offmemok, early_clobber_p;
+	  /* false => this operand can be reloaded somehow for this
+	     alternative.  */
+	  bool badop;
+	  /* true => this operand can be reloaded if the alternative
+	     allows regs.  */
+	  bool winreg;
+	  /* True if a constant forced into memory would be OK for
+	     this operand.  */
+	  bool constmemok;
+	  enum reg_class this_alternative, this_costly_alternative;
+	  HARD_REG_SET this_alternative_set, this_costly_alternative_set;
+	  bool this_alternative_match_win, this_alternative_win;
+	  bool this_alternative_offmemok;
+	  bool scratch_p;
+	  machine_mode mode;
+	  enum constraint_num cn;
+
+	  opalt_num = nalt * n_operands + nop;
+	  if (curr_static_id->operand_alternative[opalt_num].anything_ok)
+	    {
+	      /* Fast track for no constraints at all.	*/
+	      curr_alt[nop] = NO_REGS;
+	      CLEAR_HARD_REG_SET (curr_alt_set[nop]);
+	      curr_alt_win[nop] = true;
+	      curr_alt_match_win[nop] = false;
+	      curr_alt_offmemok[nop] = false;
+	      curr_alt_matches[nop] = -1;
+	      continue;
+	    }
+
+	  op = no_subreg_reg_operand[nop];
+	  mode = curr_operand_mode[nop];
+
+	  win = did_match = winreg = offmemok = constmemok = false;
+	  badop = true;
+
+	  early_clobber_p = false;
+	  p = curr_static_id->operand_alternative[opalt_num].constraint;
+
+	  this_costly_alternative = this_alternative = NO_REGS;
+	  /* We update set of possible hard regs besides its class
+	     because reg class might be inaccurate.  For example,
+	     union of LO_REGS (l), HI_REGS(h), and STACK_REG(k) in ARM
+	     is translated in HI_REGS because classes are merged by
+	     pairs and there is no accurate intermediate class.	 */
+	  CLEAR_HARD_REG_SET (this_alternative_set);
+	  CLEAR_HARD_REG_SET (this_costly_alternative_set);
+	  this_alternative_win = false;
+	  this_alternative_match_win = false;
+	  this_alternative_offmemok = false;
+	  this_alternative_matches = -1;
+
+	  /* An empty constraint should be excluded by the fast
+	     track.  */
+	  lra_assert (*p != 0 && *p != ',');
+
+	  op_reject = 0;
+	  /* Scan this alternative's specs for this operand; set WIN
+	     if the operand fits any letter in this alternative.
+	     Otherwise, clear BADOP if this operand could fit some
+	     letter after reloads, or set WINREG if this operand could
+	     fit after reloads provided the constraint allows some
+	     registers.	 */
+	  costly_p = false;
+	  do
+	    {
+	      switch ((c = *p, len = CONSTRAINT_LEN (c, p)), c)
+		{
+		case '\0':
+		  len = 0;
+		  break;
+		case ',':
+		  c = '\0';
+		  break;
+
+		case '&':
+		  early_clobber_p = true;
+		  break;
+
+		case '$':
+		  op_reject += LRA_MAX_REJECT;
+		  break;
+		case '^':
+		  op_reject += LRA_LOSER_COST_FACTOR;
+		  break;
+
+		case '#':
+		  /* Ignore rest of this alternative.  */
+		  c = '\0';
+		  break;
+
+		case '0':  case '1':  case '2':	 case '3':  case '4':
+		case '5':  case '6':  case '7':	 case '8':  case '9':
+		  {
+		    int m_hregno;
+		    bool match_p;
+
+		    m = strtoul (p, &end, 10);
+		    p = end;
+		    len = 0;
+		    lra_assert (nop > m);
+
+		    /* Reject matches if we don't know which operand is
+		       bigger.  This situation would arguably be a bug in
+		       an .md pattern, but could also occur in a user asm.  */
+		    if (!ordered_p (GET_MODE_SIZE (biggest_mode[m]),
+				    GET_MODE_SIZE (biggest_mode[nop])))
+		      break;
+
+		    /* Don't match wrong asm insn operands for proper
+		       diagnostic later.  */
+		    if (INSN_CODE (curr_insn) < 0
+			&& (curr_operand_mode[m] == BLKmode
+			    || curr_operand_mode[nop] == BLKmode)
+			&& curr_operand_mode[m] != curr_operand_mode[nop])
+		      break;
+		    
+		    m_hregno = get_hard_regno (*curr_id->operand_loc[m], false);
+		    /* We are supposed to match a previous operand.
+		       If we do, we win if that one did.  If we do
+		       not, count both of the operands as losers.
+		       (This is too conservative, since most of the
+		       time only a single reload insn will be needed
+		       to make the two operands win.  As a result,
+		       this alternative may be rejected when it is
+		       actually desirable.)  */
+		    match_p = false;
+		    if (operands_match_p (*curr_id->operand_loc[nop],
+					  *curr_id->operand_loc[m], m_hregno))
+		      {
+			/* We should reject matching of an early
+			   clobber operand if the matching operand is
+			   not dying in the insn.  */
+			if (!TEST_BIT (curr_static_id->operand[m]
+				       .early_clobber_alts, nalt)
+			    || operand_reg[nop] == NULL_RTX
+			    || (find_regno_note (curr_insn, REG_DEAD,
+						 REGNO (op))
+				|| REGNO (op) == REGNO (operand_reg[m])))
+			  match_p = true;
+		      }
+		    if (match_p)
+		      {
+			/* If we are matching a non-offsettable
+			   address where an offsettable address was
+			   expected, then we must reject this
+			   combination, because we can't reload
+			   it.	*/
+			if (curr_alt_offmemok[m]
+			    && MEM_P (*curr_id->operand_loc[m])
+			    && curr_alt[m] == NO_REGS && ! curr_alt_win[m])
+			  continue;
+		      }
+		    else
+		      {
+			/* If the operands do not match and one
+			   operand is INOUT, we can not match them.
+			   Try other possibilities, e.g. other
+			   alternatives or commutative operand
+			   exchange.  */
+			if (curr_static_id->operand[nop].type == OP_INOUT
+			    || curr_static_id->operand[m].type == OP_INOUT)
+			  break;
+			/* Operands don't match.  If the operands are
+			   different user defined explicit hard
+			   registers, then we cannot make them match
+			   when one is early clobber operand.  */
+			if ((REG_P (*curr_id->operand_loc[nop])
+			     || SUBREG_P (*curr_id->operand_loc[nop]))
+			    && (REG_P (*curr_id->operand_loc[m])
+				|| SUBREG_P (*curr_id->operand_loc[m])))
+			  {
+			    rtx nop_reg = *curr_id->operand_loc[nop];
+			    if (SUBREG_P (nop_reg))
+			      nop_reg = SUBREG_REG (nop_reg);
+			    rtx m_reg = *curr_id->operand_loc[m];
+			    if (SUBREG_P (m_reg))
+			      m_reg = SUBREG_REG (m_reg);
+
+			    if (REG_P (nop_reg)
+				&& HARD_REGISTER_P (nop_reg)
+				&& REG_USERVAR_P (nop_reg)
+				&& REG_P (m_reg)
+				&& HARD_REGISTER_P (m_reg)
+				&& REG_USERVAR_P (m_reg))
+			      {
+				int i;
+				
+				for (i = 0; i < early_clobbered_regs_num; i++)
+				  if (m == early_clobbered_nops[i])
+				    break;
+				if (i < early_clobbered_regs_num
+				    || early_clobber_p)
+				  break;
+			      }
+			  }
+			/* Both operands must allow a reload register,
+			   otherwise we cannot make them match.  */
+			if (curr_alt[m] == NO_REGS)
+			  break;
+			/* Retroactively mark the operand we had to
+			   match as a loser, if it wasn't already and
+			   it wasn't matched to a register constraint
+			   (e.g it might be matched by memory). */
+			if (curr_alt_win[m]
+			    && (operand_reg[m] == NULL_RTX
+				|| hard_regno[m] < 0))
+			  {
+			    losers++;
+			    reload_nregs
+			      += (ira_reg_class_max_nregs[curr_alt[m]]
+				  [GET_MODE (*curr_id->operand_loc[m])]);
+			  }
+
+			/* Prefer matching earlyclobber alternative as
+			   it results in less hard regs required for
+			   the insn than a non-matching earlyclobber
+			   alternative.  */
+			if (TEST_BIT (curr_static_id->operand[m]
+				      .early_clobber_alts, nalt))
+			  {
+			    if (lra_dump_file != NULL)
+			      fprintf
+				(lra_dump_file,
+				 "            %d Matching earlyclobber alt:"
+				 " reject--\n",
+				 nop);
+			    if (!matching_early_clobber[m])
+			      {
+				reject--;
+				matching_early_clobber[m] = 1;
+			      }
+			  }
+			/* Otherwise we prefer no matching
+			   alternatives because it gives more freedom
+			   in RA.  */
+			else if (operand_reg[nop] == NULL_RTX
+				 || (find_regno_note (curr_insn, REG_DEAD,
+						      REGNO (operand_reg[nop]))
+				     == NULL_RTX))
+			  {
+			    if (lra_dump_file != NULL)
+			      fprintf
+				(lra_dump_file,
+				 "            %d Matching alt: reject+=2\n",
+				 nop);
+			    reject += 2;
+			  }
+		      }
+		    /* If we have to reload this operand and some
+		       previous operand also had to match the same
+		       thing as this operand, we don't know how to do
+		       that.  */
+		    if (!match_p || !curr_alt_win[m])
+		      {
+			for (i = 0; i < nop; i++)
+			  if (curr_alt_matches[i] == m)
+			    break;
+			if (i < nop)
+			  break;
+		      }
+		    else
+		      did_match = true;
+
+		    this_alternative_matches = m;
+		    /* This can be fixed with reloads if the operand
+		       we are supposed to match can be fixed with
+		       reloads. */
+		    badop = false;
+		    this_alternative = curr_alt[m];
+		    this_alternative_set = curr_alt_set[m];
+		    winreg = this_alternative != NO_REGS;
+		    break;
+		  }
+
+		case 'g':
+		  if (MEM_P (op)
+		      || general_constant_p (op)
+		      || spilled_pseudo_p (op))
+		    win = true;
+		  cl = GENERAL_REGS;
+		  goto reg;
+
+		default:
+		  cn = lookup_constraint (p);
+		  switch (get_constraint_type (cn))
+		    {
+		    case CT_REGISTER:
+		      cl = reg_class_for_constraint (cn);
+		      if (cl != NO_REGS)
+			goto reg;
+		      break;
+
+		    case CT_CONST_INT:
+		      if (CONST_INT_P (op)
+			  && insn_const_int_ok_for_constraint (INTVAL (op), cn))
+			win = true;
+		      break;
+
+		    case CT_MEMORY:
+		      if (MEM_P (op)
+			  && satisfies_memory_constraint_p (op, cn))
+			win = true;
+		      else if (spilled_pseudo_p (op))
+			win = true;
+
+		      /* If we didn't already win, we can reload constants
+			 via force_const_mem or put the pseudo value into
+			 memory, or make other memory by reloading the
+			 address like for 'o'.  */
+		      if (CONST_POOL_OK_P (mode, op)
+			  || MEM_P (op) || REG_P (op)
+			  /* We can restore the equiv insn by a
+			     reload.  */
+			  || equiv_substition_p[nop])
+			badop = false;
+		      constmemok = true;
+		      offmemok = true;
+		      break;
+
+		    case CT_ADDRESS:
+		      /* An asm operand with an address constraint
+			 that doesn't satisfy address_operand has
+			 is_address cleared, so that we don't try to
+			 make a non-address fit.  */
+		      if (!curr_static_id->operand[nop].is_address)
+			break;
+		      /* If we didn't already win, we can reload the address
+			 into a base register.  */
+		      if (satisfies_address_constraint_p (op, cn))
+			win = true;
+		      cl = base_reg_class (VOIDmode, ADDR_SPACE_GENERIC,
+					   ADDRESS, SCRATCH);
+		      badop = false;
+		      goto reg;
+
+		    case CT_FIXED_FORM:
+		      if (constraint_satisfied_p (op, cn))
+			win = true;
+		      break;
+
+		    case CT_SPECIAL_MEMORY:
+		      if (MEM_P (op)
+			  && satisfies_memory_constraint_p (op, cn))
+			win = true;
+		      else if (spilled_pseudo_p (op))
+			win = true;
+		      break;
+		    }
+		  break;
+
+		reg:
+		  if (mode == BLKmode)
+		    break;
+		  this_alternative = reg_class_subunion[this_alternative][cl];
+		  this_alternative_set |= reg_class_contents[cl];
+		  if (costly_p)
+		    {
+		      this_costly_alternative
+			= reg_class_subunion[this_costly_alternative][cl];
+		      this_costly_alternative_set |= reg_class_contents[cl];
+		    }
+		  winreg = true;
+		  if (REG_P (op))
+		    {
+		      if (hard_regno[nop] >= 0
+			  && in_hard_reg_set_p (this_alternative_set,
+						mode, hard_regno[nop]))
+			win = true;
+		      else if (hard_regno[nop] < 0
+			       && in_class_p (op, this_alternative, NULL))
+			win = true;
+		    }
+		  break;
+		}
+	      if (c != ' ' && c != '\t')
+		costly_p = c == '*';
+	    }
+	  while ((p += len), c);
+
+	  scratch_p = (operand_reg[nop] != NULL_RTX
+		       && lra_former_scratch_p (REGNO (operand_reg[nop])));
+	  /* Record which operands fit this alternative.  */
+	  if (win)
+	    {
+	      this_alternative_win = true;
+	      if (operand_reg[nop] != NULL_RTX)
+		{
+		  if (hard_regno[nop] >= 0)
+		    {
+		      if (in_hard_reg_set_p (this_costly_alternative_set,
+					     mode, hard_regno[nop]))
+			{
+			  if (lra_dump_file != NULL)
+			    fprintf (lra_dump_file,
+				     "            %d Costly set: reject++\n",
+				     nop);
+			  reject++;
+			}
+		    }
+		  else
+		    {
+		      /* Prefer won reg to spilled pseudo under other
+			 equal conditions for possibe inheritance.  */
+		      if (! scratch_p)
+			{
+			  if (lra_dump_file != NULL)
+			    fprintf
+			      (lra_dump_file,
+			       "            %d Non pseudo reload: reject++\n",
+			       nop);
+			  reject++;
+			}
+		      if (in_class_p (operand_reg[nop],
+				      this_costly_alternative, NULL))
+			{
+			  if (lra_dump_file != NULL)
+			    fprintf
+			      (lra_dump_file,
+			       "            %d Non pseudo costly reload:"
+			       " reject++\n",
+			       nop);
+			  reject++;
+			}
+		    }
+		  /* We simulate the behavior of old reload here.
+		     Although scratches need hard registers and it
+		     might result in spilling other pseudos, no reload
+		     insns are generated for the scratches.  So it
+		     might cost something but probably less than old
+		     reload pass believes.  */
+		  if (scratch_p)
+		    {
+		      if (lra_dump_file != NULL)
+			fprintf (lra_dump_file,
+				 "            %d Scratch win: reject+=2\n",
+				 nop);
+		      reject += 2;
+		    }
+		}
+	    }
+	  else if (did_match)
+	    this_alternative_match_win = true;
+	  else
+	    {
+	      int const_to_mem = 0;
+	      bool no_regs_p;
+
+	      reject += op_reject;
+	      /* Never do output reload of stack pointer.  It makes
+		 impossible to do elimination when SP is changed in
+		 RTL.  */
+	      if (op == stack_pointer_rtx && ! frame_pointer_needed
+		  && curr_static_id->operand[nop].type != OP_IN)
+		goto fail;
+
+	      /* If this alternative asks for a specific reg class, see if there
+		 is at least one allocatable register in that class.  */
+	      no_regs_p
+		= (this_alternative == NO_REGS
+		   || (hard_reg_set_subset_p
+		       (reg_class_contents[this_alternative],
+			lra_no_alloc_regs)));
+
+	      /* For asms, verify that the class for this alternative is possible
+		 for the mode that is specified.  */
+	      if (!no_regs_p && INSN_CODE (curr_insn) < 0)
+		{
+		  int i;
+		  for (i = 0; i < FIRST_PSEUDO_REGISTER; i++)
+		    if (targetm.hard_regno_mode_ok (i, mode)
+			&& in_hard_reg_set_p (reg_class_contents[this_alternative],
+					      mode, i))
+		      break;
+		  if (i == FIRST_PSEUDO_REGISTER)
+		    winreg = false;
+		}
+
+	      /* If this operand accepts a register, and if the
+		 register class has at least one allocatable register,
+		 then this operand can be reloaded.  */
+	      if (winreg && !no_regs_p)
+		badop = false;
+
+	      if (badop)
+		{
+		  if (lra_dump_file != NULL)
+		    fprintf (lra_dump_file,
+			     "            alt=%d: Bad operand -- refuse\n",
+			     nalt);
+		  goto fail;
+		}
+
+	      if (this_alternative != NO_REGS)
+		{
+		  HARD_REG_SET available_regs
+		    = (reg_class_contents[this_alternative]
+		       & ~((ira_prohibited_class_mode_regs
+			    [this_alternative][mode])
+			   | lra_no_alloc_regs));
+		  if (hard_reg_set_empty_p (available_regs))
+		    {
+		      /* There are no hard regs holding a value of given
+			 mode.  */
+		      if (offmemok)
+			{
+			  this_alternative = NO_REGS;
+			  if (lra_dump_file != NULL)
+			    fprintf (lra_dump_file,
+				     "            %d Using memory because of"
+				     " a bad mode: reject+=2\n",
+				     nop);
+			  reject += 2;
+			}
+		      else
+			{
+			  if (lra_dump_file != NULL)
+			    fprintf (lra_dump_file,
+				     "            alt=%d: Wrong mode -- refuse\n",
+				     nalt);
+			  goto fail;
+			}
+		    }
+		}
+
+	      /* If not assigned pseudo has a class which a subset of
+		 required reg class, it is a less costly alternative
+		 as the pseudo still can get a hard reg of necessary
+		 class.  */
+	      if (! no_regs_p && REG_P (op) && hard_regno[nop] < 0
+		  && (cl = get_reg_class (REGNO (op))) != NO_REGS
+		  && ira_class_subset_p[this_alternative][cl])
+		{
+		  if (lra_dump_file != NULL)
+		    fprintf
+		      (lra_dump_file,
+		       "            %d Super set class reg: reject-=3\n", nop);
+		  reject -= 3;
+		}
+
+	      this_alternative_offmemok = offmemok;
+	      if (this_costly_alternative != NO_REGS)
+		{
+		  if (lra_dump_file != NULL)
+		    fprintf (lra_dump_file,
+			     "            %d Costly loser: reject++\n", nop);
+		  reject++;
+		}
+	      /* If the operand is dying, has a matching constraint,
+		 and satisfies constraints of the matched operand
+		 which failed to satisfy the own constraints, most probably
+		 the reload for this operand will be gone.  */
+	      if (this_alternative_matches >= 0
+		  && !curr_alt_win[this_alternative_matches]
+		  && REG_P (op)
+		  && find_regno_note (curr_insn, REG_DEAD, REGNO (op))
+		  && (hard_regno[nop] >= 0
+		      ? in_hard_reg_set_p (this_alternative_set,
+					   mode, hard_regno[nop])
+		      : in_class_p (op, this_alternative, NULL)))
+		{
+		  if (lra_dump_file != NULL)
+		    fprintf
+		      (lra_dump_file,
+		       "            %d Dying matched operand reload: reject++\n",
+		       nop);
+		  reject++;
+		}
+	      else
+		{
+		  /* Strict_low_part requires to reload the register
+		     not the sub-register.  In this case we should
+		     check that a final reload hard reg can hold the
+		     value mode.  */
+		  if (curr_static_id->operand[nop].strict_low
+		      && REG_P (op)
+		      && hard_regno[nop] < 0
+		      && GET_CODE (*curr_id->operand_loc[nop]) == SUBREG
+		      && ira_class_hard_regs_num[this_alternative] > 0
+		      && (!targetm.hard_regno_mode_ok
+			  (ira_class_hard_regs[this_alternative][0],
+			   GET_MODE (*curr_id->operand_loc[nop]))))
+		    {
+		      if (lra_dump_file != NULL)
+			fprintf
+			  (lra_dump_file,
+			   "            alt=%d: Strict low subreg reload -- refuse\n",
+			   nalt);
+		      goto fail;
+		    }
+		  losers++;
+		}
+	      if (operand_reg[nop] != NULL_RTX
+		  /* Output operands and matched input operands are
+		     not inherited.  The following conditions do not
+		     exactly describe the previous statement but they
+		     are pretty close.  */
+		  && curr_static_id->operand[nop].type != OP_OUT
+		  && (this_alternative_matches < 0
+		      || curr_static_id->operand[nop].type != OP_IN))
+		{
+		  int last_reload = (lra_reg_info[ORIGINAL_REGNO
+						  (operand_reg[nop])]
+				     .last_reload);
+
+		  /* The value of reload_sum has sense only if we
+		     process insns in their order.  It happens only on
+		     the first constraints sub-pass when we do most of
+		     reload work.  */
+		  if (lra_constraint_iter == 1 && last_reload > bb_reload_num)
+		    reload_sum += last_reload - bb_reload_num;
+		}
+	      /* If this is a constant that is reloaded into the
+		 desired class by copying it to memory first, count
+		 that as another reload.  This is consistent with
+		 other code and is required to avoid choosing another
+		 alternative when the constant is moved into memory.
+		 Note that the test here is precisely the same as in
+		 the code below that calls force_const_mem.  */
+	      if (CONST_POOL_OK_P (mode, op)
+		  && ((targetm.preferred_reload_class
+		       (op, this_alternative) == NO_REGS)
+		      || no_input_reloads_p))
+		{
+		  const_to_mem = 1;
+		  if (! no_regs_p)
+		    losers++;
+		}
+
+	      /* Alternative loses if it requires a type of reload not
+		 permitted for this insn.  We can always reload
+		 objects with a REG_UNUSED note.  */
+	      if ((curr_static_id->operand[nop].type != OP_IN
+		   && no_output_reloads_p
+		   && ! find_reg_note (curr_insn, REG_UNUSED, op))
+		  || (curr_static_id->operand[nop].type != OP_OUT
+		      && no_input_reloads_p && ! const_to_mem)
+		  || (this_alternative_matches >= 0
+		      && (no_input_reloads_p
+			  || (no_output_reloads_p
+			      && (curr_static_id->operand
+				  [this_alternative_matches].type != OP_IN)
+			      && ! find_reg_note (curr_insn, REG_UNUSED,
+						  no_subreg_reg_operand
+						  [this_alternative_matches])))))
+		{
+		  if (lra_dump_file != NULL)
+		    fprintf
+		      (lra_dump_file,
+		       "            alt=%d: No input/otput reload -- refuse\n",
+		       nalt);
+		  goto fail;
+		}
+
+	      /* Alternative loses if it required class pseudo cannot
+		 hold value of required mode.  Such insns can be
+		 described by insn definitions with mode iterators.  */
+	      if (GET_MODE (*curr_id->operand_loc[nop]) != VOIDmode
+		  && ! hard_reg_set_empty_p (this_alternative_set)
+		  /* It is common practice for constraints to use a
+		     class which does not have actually enough regs to
+		     hold the value (e.g. x86 AREG for mode requiring
+		     more one general reg).  Therefore we have 2
+		     conditions to check that the reload pseudo cannot
+		     hold the mode value.  */
+		  && (!targetm.hard_regno_mode_ok
+		      (ira_class_hard_regs[this_alternative][0],
+		       GET_MODE (*curr_id->operand_loc[nop])))
+		  /* The above condition is not enough as the first
+		     reg in ira_class_hard_regs can be not aligned for
+		     multi-words mode values.  */
+		  && (prohibited_class_reg_set_mode_p
+		      (this_alternative, this_alternative_set,
+		       GET_MODE (*curr_id->operand_loc[nop]))))
+		{
+		  if (lra_dump_file != NULL)
+		    fprintf (lra_dump_file,
+			     "            alt=%d: reload pseudo for op %d "
+			     "cannot hold the mode value -- refuse\n",
+			     nalt, nop);
+		  goto fail;
+		}
+
+	      /* Check strong discouragement of reload of non-constant
+		 into class THIS_ALTERNATIVE.  */
+	      if (! CONSTANT_P (op) && ! no_regs_p
+		  && (targetm.preferred_reload_class
+		      (op, this_alternative) == NO_REGS
+		      || (curr_static_id->operand[nop].type == OP_OUT
+			  && (targetm.preferred_output_reload_class
+			      (op, this_alternative) == NO_REGS))))
+		{
+		  if (offmemok && REG_P (op))
+		    {
+		      if (lra_dump_file != NULL)
+			fprintf
+			  (lra_dump_file,
+			   "            %d Spill pseudo into memory: reject+=3\n",
+			   nop);
+		      reject += 3;
+		    }
+		  else
+		    {
+		      if (lra_dump_file != NULL)
+			fprintf
+			  (lra_dump_file,
+			   "            %d Non-prefered reload: reject+=%d\n",
+			   nop, LRA_MAX_REJECT);
+		      reject += LRA_MAX_REJECT;
+		    }
+		}
+
+	      if (! (MEM_P (op) && offmemok)
+		  && ! (const_to_mem && constmemok))
+		{
+		  /* We prefer to reload pseudos over reloading other
+		     things, since such reloads may be able to be
+		     eliminated later.  So bump REJECT in other cases.
+		     Don't do this in the case where we are forcing a
+		     constant into memory and it will then win since
+		     we don't want to have a different alternative
+		     match then.  */
+		  if (! (REG_P (op) && REGNO (op) >= FIRST_PSEUDO_REGISTER))
+		    {
+		      if (lra_dump_file != NULL)
+			fprintf
+			  (lra_dump_file,
+			   "            %d Non-pseudo reload: reject+=2\n",
+			   nop);
+		      reject += 2;
+		    }
+
+		  if (! no_regs_p)
+		    reload_nregs
+		      += ira_reg_class_max_nregs[this_alternative][mode];
+
+		  if (SMALL_REGISTER_CLASS_P (this_alternative))
+		    {
+		      if (lra_dump_file != NULL)
+			fprintf
+			  (lra_dump_file,
+			   "            %d Small class reload: reject+=%d\n",
+			   nop, LRA_LOSER_COST_FACTOR / 2);
+		      reject += LRA_LOSER_COST_FACTOR / 2;
+		    }
+		}
+
+	      /* We are trying to spill pseudo into memory.  It is
+		 usually more costly than moving to a hard register
+		 although it might takes the same number of
+		 reloads.
+
+		 Non-pseudo spill may happen also.  Suppose a target allows both
+		 register and memory in the operand constraint alternatives,
+		 then it's typical that an eliminable register has a substition
+		 of "base + offset" which can either be reloaded by a simple
+		 "new_reg <= base + offset" which will match the register
+		 constraint, or a similar reg addition followed by further spill
+		 to and reload from memory which will match the memory
+		 constraint, but this memory spill will be much more costly
+		 usually.
+
+		 Code below increases the reject for both pseudo and non-pseudo
+		 spill.  */
+	      if (no_regs_p
+		  && !(MEM_P (op) && offmemok)
+		  && !(REG_P (op) && hard_regno[nop] < 0))
+		{
+		  if (lra_dump_file != NULL)
+		    fprintf
+		      (lra_dump_file,
+		       "            %d Spill %spseudo into memory: reject+=3\n",
+		       nop, REG_P (op) ? "" : "Non-");
+		  reject += 3;
+		  if (VECTOR_MODE_P (mode))
+		    {
+		      /* Spilling vectors into memory is usually more
+			 costly as they contain big values.  */
+		      if (lra_dump_file != NULL)
+			fprintf
+			  (lra_dump_file,
+			   "            %d Spill vector pseudo: reject+=2\n",
+			   nop);
+		      reject += 2;
+		    }
+		}
+
+	      /* When we use an operand requiring memory in given
+		 alternative, the insn should write *and* read the
+		 value to/from memory it is costly in comparison with
+		 an insn alternative which does not use memory
+		 (e.g. register or immediate operand).  We exclude
+		 memory operand for such case as we can satisfy the
+		 memory constraints by reloading address.  */
+	      if (no_regs_p && offmemok && !MEM_P (op))
+		{
+		  if (lra_dump_file != NULL)
+		    fprintf
+		      (lra_dump_file,
+		       "            Using memory insn operand %d: reject+=3\n",
+		       nop);
+		  reject += 3;
+		}
+	      
+	      /* If reload requires moving value through secondary
+		 memory, it will need one more insn at least.  */
+	      if (this_alternative != NO_REGS 
+		  && REG_P (op) && (cl = get_reg_class (REGNO (op))) != NO_REGS
+		  && ((curr_static_id->operand[nop].type != OP_OUT
+		       && targetm.secondary_memory_needed (GET_MODE (op), cl,
+							   this_alternative))
+		      || (curr_static_id->operand[nop].type != OP_IN
+			  && (targetm.secondary_memory_needed
+			      (GET_MODE (op), this_alternative, cl)))))
+		losers++;
+
+	      if (MEM_P (op) && offmemok)
+		addr_losers++;
+	      else
+		{
+		  /* Input reloads can be inherited more often than
+		     output reloads can be removed, so penalize output
+		     reloads.  */
+		  if (!REG_P (op) || curr_static_id->operand[nop].type != OP_IN)
+		    {
+		      if (lra_dump_file != NULL)
+			fprintf
+			  (lra_dump_file,
+			   "            %d Non input pseudo reload: reject++\n",
+			   nop);
+		      reject++;
+		    }
+
+		  if (curr_static_id->operand[nop].type == OP_INOUT)
+		    {
+		      if (lra_dump_file != NULL)
+			fprintf
+			  (lra_dump_file,
+			   "            %d Input/Output reload: reject+=%d\n",
+			   nop, LRA_LOSER_COST_FACTOR);
+		      reject += LRA_LOSER_COST_FACTOR;
+		    }
+		}
+	    }
+
+	  if (early_clobber_p && ! scratch_p)
+	    {
+	      if (lra_dump_file != NULL)
+		fprintf (lra_dump_file,
+			 "            %d Early clobber: reject++\n", nop);
+	      reject++;
+	    }
+	  /* ??? We check early clobbers after processing all operands
+	     (see loop below) and there we update the costs more.
+	     Should we update the cost (may be approximately) here
+	     because of early clobber register reloads or it is a rare
+	     or non-important thing to be worth to do it.  */
+	  overall = (losers * LRA_LOSER_COST_FACTOR + reject
+		     - (addr_losers == losers ? static_reject : 0));
+	  if ((best_losers == 0 || losers != 0) && best_overall < overall)
+            {
+              if (lra_dump_file != NULL)
+		fprintf (lra_dump_file,
+			 "            alt=%d,overall=%d,losers=%d -- refuse\n",
+			 nalt, overall, losers);
+              goto fail;
+            }
+
+	  if (update_and_check_small_class_inputs (nop, nalt,
+						   this_alternative))
+	    {
+	      if (lra_dump_file != NULL)
+		fprintf (lra_dump_file,
+			 "            alt=%d, not enough small class regs -- refuse\n",
+			 nalt);
+	      goto fail;
+	    }
+	  curr_alt[nop] = this_alternative;
+	  curr_alt_set[nop] = this_alternative_set;
+	  curr_alt_win[nop] = this_alternative_win;
+	  curr_alt_match_win[nop] = this_alternative_match_win;
+	  curr_alt_offmemok[nop] = this_alternative_offmemok;
+	  curr_alt_matches[nop] = this_alternative_matches;
+
+	  if (this_alternative_matches >= 0
+	      && !did_match && !this_alternative_win)
+	    curr_alt_win[this_alternative_matches] = false;
+
+	  if (early_clobber_p && operand_reg[nop] != NULL_RTX)
+	    early_clobbered_nops[early_clobbered_regs_num++] = nop;
+	}
+
+
+// Source: lra-constraints.c
+// Lines 1932-2937

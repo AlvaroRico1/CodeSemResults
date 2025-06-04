@@ -1,0 +1,58 @@
+char *parse_args(const char *doing,
+		 char *args,
+		 const struct kernel_param *params,
+		 unsigned num,
+		 s16 min_level,
+		 s16 max_level,
+		 void *arg,
+		 int (*unknown)(char *param, char *val,
+				const char *doing, void *arg))
+{
+	char *param, *val, *err = NULL;
+
+	/* Chew leading spaces */
+	args = skip_spaces(args);
+
+	if (*args)
+		pr_debug("doing %s, parsing ARGS: '%s'\n", doing, args);
+
+	while (*args) {
+		int ret;
+		int irq_was_disabled;
+
+		args = next_arg(args, &param, &val);
+		/* Stop at -- */
+		if (!val && strcmp(param, "--") == 0)
+			return err ?: args;
+		irq_was_disabled = irqs_disabled();
+		ret = parse_one(param, val, doing, params, num,
+				min_level, max_level, arg, unknown);
+		if (irq_was_disabled && !irqs_disabled())
+			pr_warn("%s: option '%s' enabled irq's!\n",
+				doing, param);
+
+		switch (ret) {
+		case 0:
+			continue;
+		case -ENOENT:
+			pr_err("%s: Unknown parameter `%s'\n", doing, param);
+			break;
+		case -ENOSPC:
+			pr_err("%s: `%s' too large for parameter `%s'\n",
+			       doing, val ?: "", param);
+			break;
+		default:
+			pr_err("%s: `%s' invalid for parameter `%s'\n",
+			       doing, val ?: "", param);
+			break;
+		}
+
+		err = ERR_PTR(ret);
+	}
+
+	return err;
+}
+
+
+// Source: params.c
+// Lines 152-205

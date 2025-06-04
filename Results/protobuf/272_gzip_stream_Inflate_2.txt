@@ -1,0 +1,1 @@
+in,protobuf/src/google/protobuf/io/gzip_stream.cc,5,in_size,protobuf/src/google/protobuf/io/gzip_stream.cc,6,2

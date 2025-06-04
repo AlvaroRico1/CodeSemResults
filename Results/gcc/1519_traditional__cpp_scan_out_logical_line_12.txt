@@ -1,0 +1,1 @@
+fmacro,gcc/libcpp/traditional.c,8,out,gcc/libcpp/traditional.c,7,2

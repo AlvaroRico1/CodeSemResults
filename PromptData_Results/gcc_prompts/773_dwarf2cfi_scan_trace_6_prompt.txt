@@ -1,0 +1,205 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'prev' at line 3
+2. Pointer 'insn' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+scan_trace (dw_trace_info *trace, bool entry)
+{
+  rtx_insn *prev, *insn = trace->head;
+  dw_cfa_location this_cfa;
+
+  if (dump_file)
+    fprintf (dump_file, "Processing trace %u : start at %s %d\n",
+	     trace->id, rtx_name[(int) GET_CODE (insn)],
+	     INSN_UID (insn));
+
+  trace->end_row = copy_cfi_row (trace->beg_row);
+  trace->end_true_args_size = trace->beg_true_args_size;
+
+  cur_trace = trace;
+  cur_row = trace->end_row;
+
+  this_cfa = cur_row->cfa;
+  cur_cfa = &this_cfa;
+
+  /* If the current function starts with a non-standard incoming frame
+     sp offset, emit a note before the first instruction.  */
+  if (entry
+      && DEFAULT_INCOMING_FRAME_SP_OFFSET != INCOMING_FRAME_SP_OFFSET)
+    {
+      add_cfi_insn = insn;
+      gcc_assert (NOTE_P (insn) && NOTE_KIND (insn) == NOTE_INSN_DELETED);
+      this_cfa.offset = INCOMING_FRAME_SP_OFFSET;
+      def_cfa_1 (&this_cfa);
+    }
+
+  for (prev = insn, insn = NEXT_INSN (insn);
+       insn;
+       prev = insn, insn = NEXT_INSN (insn))
+    {
+      rtx_insn *control;
+
+      /* Do everything that happens "before" the insn.  */
+      add_cfi_insn = prev;
+
+      /* Notice the end of a trace.  */
+      if (BARRIER_P (insn))
+	{
+	  /* Don't bother saving the unneeded queued registers at all.  */
+	  queued_reg_saves.truncate (0);
+	  break;
+	}
+      if (save_point_p (insn))
+	{
+	  /* Propagate across fallthru edges.  */
+	  dwarf2out_flush_queued_reg_saves ();
+	  maybe_record_trace_start (insn, NULL);
+	  break;
+	}
+
+      if (DEBUG_INSN_P (insn) || !inside_basic_block_p (insn))
+	continue;
+
+      /* Handle all changes to the row state.  Sequences require special
+	 handling for the positioning of the notes.  */
+      if (rtx_sequence *pat = dyn_cast <rtx_sequence *> (PATTERN (insn)))
+	{
+	  rtx_insn *elt;
+	  int i, n = pat->len ();
+
+	  control = pat->insn (0);
+	  if (can_throw_internal (control))
+	    notice_eh_throw (control);
+	  dwarf2out_flush_queued_reg_saves ();
+
+	  if (JUMP_P (control) && INSN_ANNULLED_BRANCH_P (control))
+	    {
+	      /* ??? Hopefully multiple delay slots are not annulled.  */
+	      gcc_assert (n == 2);
+	      gcc_assert (!RTX_FRAME_RELATED_P (control));
+	      gcc_assert (!find_reg_note (control, REG_ARGS_SIZE, NULL));
+
+	      elt = pat->insn (1);
+
+	      if (INSN_FROM_TARGET_P (elt))
+		{
+		  cfi_vec save_row_reg_save;
+
+		  /* If ELT is an instruction from target of an annulled
+		     branch, the effects are for the target only and so
+		     the args_size and CFA along the current path
+		     shouldn't change.  */
+		  add_cfi_insn = NULL;
+		  poly_int64 restore_args_size = cur_trace->end_true_args_size;
+		  cur_cfa = &cur_row->cfa;
+		  save_row_reg_save = vec_safe_copy (cur_row->reg_save);
+
+		  scan_insn_after (elt);
+
+		  /* ??? Should we instead save the entire row state?  */
+		  gcc_assert (!queued_reg_saves.length ());
+
+		  create_trace_edges (control);
+
+		  cur_trace->end_true_args_size = restore_args_size;
+		  cur_row->cfa = this_cfa;
+		  cur_row->reg_save = save_row_reg_save;
+		  cur_cfa = &this_cfa;
+		}
+	      else
+		{
+		  /* If ELT is a annulled branch-taken instruction (i.e.
+		     executed only when branch is not taken), the args_size
+		     and CFA should not change through the jump.  */
+		  create_trace_edges (control);
+
+		  /* Update and continue with the trace.  */
+		  add_cfi_insn = insn;
+		  scan_insn_after (elt);
+		  def_cfa_1 (&this_cfa);
+		}
+	      continue;
+	    }
+
+	  /* The insns in the delay slot should all be considered to happen
+	     "before" a call insn.  Consider a call with a stack pointer
+	     adjustment in the delay slot.  The backtrace from the callee
+	     should include the sp adjustment.  Unfortunately, that leaves
+	     us with an unavoidable unwinding error exactly at the call insn
+	     itself.  For jump insns we'd prefer to avoid this error by
+	     placing the notes after the sequence.  */
+	  if (JUMP_P (control))
+	    add_cfi_insn = insn;
+
+	  for (i = 1; i < n; ++i)
+	    {
+	      elt = pat->insn (i);
+	      scan_insn_after (elt);
+	    }
+
+	  /* Make sure any register saves are visible at the jump target.  */
+	  dwarf2out_flush_queued_reg_saves ();
+	  any_cfis_emitted = false;
+
+          /* However, if there is some adjustment on the call itself, e.g.
+	     a call_pop, that action should be considered to happen after
+	     the call returns.  */
+	  add_cfi_insn = insn;
+	  scan_insn_after (control);
+	}
+      else
+	{
+	  /* Flush data before calls and jumps, and of course if necessary.  */
+	  if (can_throw_internal (insn))
+	    {
+	      notice_eh_throw (insn);
+	      dwarf2out_flush_queued_reg_saves ();
+	    }
+	  else if (!NONJUMP_INSN_P (insn)
+		   || clobbers_queued_reg_save (insn)
+		   || find_reg_note (insn, REG_CFA_FLUSH_QUEUE, NULL))
+	    dwarf2out_flush_queued_reg_saves ();
+	  any_cfis_emitted = false;
+
+	  add_cfi_insn = insn;
+	  scan_insn_after (insn);
+	  control = insn;
+	}
+
+      /* Between frame-related-p and args_size we might have otherwise
+	 emitted two cfa adjustments.  Do it now.  */
+      def_cfa_1 (&this_cfa);
+
+      /* Minimize the number of advances by emitting the entire queue
+	 once anything is emitted.  */
+      if (any_cfis_emitted
+	  || find_reg_note (insn, REG_CFA_FLUSH_QUEUE, NULL))
+	dwarf2out_flush_queued_reg_saves ();
+
+      /* Note that a test for control_flow_insn_p does exactly the
+	 same tests as are done to actually create the edges.  So
+	 always call the routine and let it not create edges for
+	 non-control-flow insns.  */
+      create_trace_edges (control);
+    }
+
+  gcc_assert (!cfun->fde || !cfun->fde->rule18);
+  add_cfi_insn = NULL;
+  cur_row = NULL;
+  cur_trace = NULL;
+  cur_cfa = NULL;
+}
+
+
+// Source: dwarf2cfi.c
+// Lines 2576-2761
+
+
+[ANSWER]
+MUST

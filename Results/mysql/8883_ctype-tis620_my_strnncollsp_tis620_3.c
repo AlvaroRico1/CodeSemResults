@@ -1,0 +1,94 @@
+static int my_strnncollsp_tis620(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
+                                 const uchar *a0, size_t a_length,
+                                 const uchar *b0, size_t b_length) {
+  uchar buf[80], *end, *a, *b, *alloced = nullptr;
+  size_t length;
+  int res = 0;
+
+  a = buf;
+  if ((a_length + b_length + 2) > (int)sizeof(buf))
+    alloced = a = (uchar *)my_str_malloc(a_length + b_length + 2);
+
+  b = a + a_length + 1;
+  memcpy(a, a0, a_length);
+  a[a_length] = 0; /* if length(a0)> len1, need to put 'end of string' */
+  memcpy(b, b0, b_length);
+  b[b_length] = 0; /* put end of string */
+  a_length = thai2sortable(a, a_length);
+  b_length = thai2sortable(b, b_length);
+
+  end = a + (length = std::min(a_length, b_length));
+  while (a < end) {
+    if (*a++ != *b++) {
+      res = ((int)a[-1] - (int)b[-1]);
+      goto ret;
+    }
+  }
+  if (a_length != b_length) {
+    int swap = 1;
+    /*
+      Check the next not space character of the longer key. If it's < ' ',
+      then it's smaller than the other key.
+    */
+    if (a_length < b_length) {
+      /* put shorter key in s */
+      a_length = b_length;
+      a = b;
+      swap = -1; /* swap sign of result */
+      res = -res;
+    }
+    for (end = a + a_length - length; a < end; a++) {
+      if (*a != ' ') {
+        res = (*a < ' ') ? -swap : swap;
+        goto ret;
+      }
+    }
+  }
+
+ret:
+
+  if (alloced) my_str_free(alloced);
+  return res;
+}
+
+/*
+  strnxfrm replacment, convert Thai string to sortable string
+
+  Arg: Destination buffer, source string, dest length and source length
+  Ret: Conveted string size
+*/
+
+static size_t my_strnxfrm_tis620(const CHARSET_INFO *cs, uchar *dst,
+                                 size_t dstlen, uint nweights, const uchar *src,
+                                 size_t srclen, uint flags) {
+  size_t dstlen0 = dstlen;
+  size_t min_len = std::min(dstlen, srclen);
+  size_t len = 0;
+
+  /*
+    We don't use strmake here, since it requires one more character for
+    the terminating '\0', while this function itself and the following calling
+    functions do not require it
+  */
+  while (len < min_len) {
+    if (!(dst[len] = src[len])) break;
+    len++;
+  }
+
+  len = thai2sortable(dst, len);
+  dstlen = std::min(dstlen, size_t(nweights));
+  len = std::min(len, size_t(dstlen));
+  len = my_strxfrm_pad(cs, dst, dst + len, dst + dstlen, (uint)(dstlen - len),
+                       flags);
+  if ((flags & MY_STRXFRM_PAD_TO_MAXLEN) && len < dstlen0) {
+    size_t fill_length = dstlen0 - len;
+    cs->cset->fill(cs, (char *)dst + len, fill_length, cs->pad_char);
+    len = dstlen0;
+  }
+  return len;
+}
+}  // extern "C"
+
+
+// Source: ctype-tis620.cc
+// Lines 617-706

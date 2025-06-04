@@ -1,0 +1,110 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'octx' at line 79
+2. Pointer 'ctx' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+omp_notice_variable (struct gimplify_omp_ctx *ctx, tree decl, bool in_code)
+{
+  splay_tree_node n;
+  unsigned flags = in_code ? GOVD_SEEN : 0;
+  bool ret = false, shared;
+
+  if (error_operand_p (decl))
+    return false;
+
+  if (ctx->region_type == ORT_NONE)
+    return lang_hooks.decls.omp_disregard_value_expr (decl, false);
+
+  if (is_global_var (decl))
+    {
+      /* Threadprivate variables are predetermined.  */
+      if (DECL_THREAD_LOCAL_P (decl))
+	return omp_notice_threadprivate_variable (ctx, decl, NULL_TREE);
+
+      if (DECL_HAS_VALUE_EXPR_P (decl))
+	{
+	  if (ctx->region_type & ORT_ACC)
+	    /* For OpenACC, defer expansion of value to avoid transfering
+	       privatized common block data instead of im-/explicitly transfered
+	       variables which are in common blocks.  */
+	    ;
+	  else
+	    {
+	      tree value = get_base_address (DECL_VALUE_EXPR (decl));
+
+	      if (value && DECL_P (value) && DECL_THREAD_LOCAL_P (value))
+		return omp_notice_threadprivate_variable (ctx, decl, value);
+	    }
+	}
+
+      if (gimplify_omp_ctxp->outer_context == NULL
+	  && VAR_P (decl)
+	  && oacc_get_fn_attrib (current_function_decl))
+	{
+	  location_t loc = DECL_SOURCE_LOCATION (decl);
+
+	  if (lookup_attribute ("omp declare target link",
+				DECL_ATTRIBUTES (decl)))
+	    {
+	      error_at (loc,
+			"%qE with %<link%> clause used in %<routine%> function",
+			DECL_NAME (decl));
+	      return false;
+	    }
+	  else if (!lookup_attribute ("omp declare target",
+				      DECL_ATTRIBUTES (decl)))
+	    {
+	      error_at (loc,
+			"%qE requires a %<declare%> directive for use "
+			"in a %<routine%> function", DECL_NAME (decl));
+	      return false;
+	    }
+	}
+    }
+
+  n = splay_tree_lookup (ctx->variables, (splay_tree_key)decl);
+  if ((ctx->region_type & ORT_TARGET) != 0)
+    {
+      if (ctx->region_type & ORT_ACC)
+	/* For OpenACC, as remarked above, defer expansion.  */
+	shared = false;
+      else
+	shared = true;
+
+      ret = lang_hooks.decls.omp_disregard_value_expr (decl, shared);
+      if (n == NULL)
+	{
+	  unsigned nflags = flags;
+	  if ((ctx->region_type & ORT_ACC) == 0)
+	    {
+	      bool is_declare_target = false;
+	      if (is_global_var (decl)
+		  && varpool_node::get_create (decl)->offloadable)
+		{
+		  struct gimplify_omp_ctx *octx;
+		  for (octx = ctx->outer_context;
+		       octx; octx = octx->outer_context)
+		    {
+		      n = splay_tree_lookup (octx->variables,
+					     (splay_tree_key)decl);
+		      if (n
+			  && (n->value & GOVD_DATA_SHARE_CLASS) != GOVD_SHARED
+			  && (n->value & GOVD_DATA_SHARE_CLASS) != 0)
+			break;
+		    }
+		  is_declare_target = octx == NULL;
+		}
+
+
+// Source: gimplify.c
+// Lines 7372-7462
+
+
+[ANSWER]
+MUST

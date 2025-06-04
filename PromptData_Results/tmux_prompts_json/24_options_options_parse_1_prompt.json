@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'cp' at line 3\n2. Pointer 'idx' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\noptions_parse(const char *name, int *idx)\n{\n\tchar\t*copy, *cp, *end;\n\n\tif (*name == '\\0')\n\t\treturn (NULL);\n\tcopy = xstrdup(name);\n\tif ((cp = strchr(copy, '[')) == NULL) {\n\t\t*idx = -1;\n\t\treturn (copy);\n\t}\n\tend = strchr(cp + 1, ']');\n\tif (end == NULL || end[1] != '\\0' || !isdigit((u_char)end[-1])) {\n\t\tfree(copy);\n\t\treturn (NULL);\n\t}\n\tif (sscanf(cp, \"[%d]\", idx) != 1 || *idx < 0) {\n\t\tfree(copy);\n\t\treturn (NULL);\n\t}\n\t*cp = '\\0';\n\treturn (copy);\n}\n\n\n// Source: options.c\n// Lines 594-616\n",
+  "ANSWER": "MAY"
+}

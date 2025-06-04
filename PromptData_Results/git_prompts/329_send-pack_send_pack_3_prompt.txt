@@ -1,0 +1,102 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'len' at line 71
+2. Pointer 'advertise_sid' at line 18
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int send_pack(struct send_pack_args *args,
+	      int fd[], struct child_process *conn,
+	      struct ref *remote_refs,
+	      struct oid_array *extra_have)
+{
+	struct oid_array commons = OID_ARRAY_INIT;
+	int in = fd[0];
+	int out = fd[1];
+	struct strbuf req_buf = STRBUF_INIT;
+	struct strbuf cap_buf = STRBUF_INIT;
+	struct ref *ref;
+	int need_pack_data = 0;
+	int allow_deleting_refs = 0;
+	int status_report = 0;
+	int use_sideband = 0;
+	int quiet_supported = 0;
+	int agent_supported = 0;
+	int advertise_sid = 0;
+	int push_negotiate = 0;
+	int use_atomic = 0;
+	int atomic_supported = 0;
+	int use_push_options = 0;
+	int push_options_supported = 0;
+	int object_format_supported = 0;
+	unsigned cmds_sent = 0;
+	int ret;
+	struct async demux;
+	const char *push_cert_nonce = NULL;
+	struct packet_reader reader;
+
+	if (!remote_refs) {
+		fprintf(stderr, "No refs in common and none specified; doing nothing.\n"
+			"Perhaps you should specify a branch.\n");
+		return 0;
+	}
+
+	git_config_get_bool("push.negotiate", &push_negotiate);
+	if (push_negotiate)
+		get_commons_through_negotiation(args->url, remote_refs, &commons);
+
+	git_config_get_bool("transfer.advertisesid", &advertise_sid);
+
+	/* Does the other end support the reporting? */
+	if (server_supports("report-status-v2"))
+		status_report = 2;
+	else if (server_supports("report-status"))
+		status_report = 1;
+	if (server_supports("delete-refs"))
+		allow_deleting_refs = 1;
+	if (server_supports("ofs-delta"))
+		args->use_ofs_delta = 1;
+	if (server_supports("side-band-64k"))
+		use_sideband = 1;
+	if (server_supports("quiet"))
+		quiet_supported = 1;
+	if (server_supports("agent"))
+		agent_supported = 1;
+	if (!server_supports("session-id"))
+		advertise_sid = 0;
+	if (server_supports("no-thin"))
+		args->use_thin_pack = 0;
+	if (server_supports("atomic"))
+		atomic_supported = 1;
+	if (server_supports("push-options"))
+		push_options_supported = 1;
+
+	if (!server_supports_hash(the_hash_algo->name, &object_format_supported))
+		die(_("the receiving end does not support this repository's hash algorithm"));
+
+	if (args->push_cert != SEND_PACK_PUSH_CERT_NEVER) {
+		int len;
+		push_cert_nonce = server_feature_value("push-cert", &len);
+		if (push_cert_nonce) {
+			reject_invalid_nonce(push_cert_nonce, len);
+			push_cert_nonce = xmemdupz(push_cert_nonce, len);
+		} else if (args->push_cert == SEND_PACK_PUSH_CERT_ALWAYS) {
+			die(_("the receiving end does not support --signed push"));
+		} else if (args->push_cert == SEND_PACK_PUSH_CERT_IF_ASKED) {
+			warning(_("not sending a push certificate since the"
+				  " receiving end does not support --signed"
+				  " push"));
+		}
+	}
+
+
+// Source: send-pack.c
+// Lines 461-543
+
+
+[ANSWER]
+MAY

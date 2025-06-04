@@ -1,0 +1,16 @@
+static void find_short_packed_object(struct disambiguate_state *ds)
+{
+	struct multi_pack_index *m;
+	struct packed_git *p;
+
+	for (m = get_multi_pack_index(ds->repo); m && !ds->ambiguous;
+	     m = m->next)
+		unique_in_midx(m, ds);
+	for (p = get_packed_git(ds->repo); p && !ds->ambiguous;
+	     p = p->next)
+		unique_in_pack(p, ds);
+}
+
+
+// Source: object-name.c
+// Lines 176-187

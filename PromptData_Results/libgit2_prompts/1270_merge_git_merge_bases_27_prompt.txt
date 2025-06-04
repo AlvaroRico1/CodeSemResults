@@ -1,0 +1,52 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'list' at line 5
+2. Pointer 'result' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_merge_bases(git_oidarray *out, git_repository *repo, const git_oid *one, const git_oid *two)
+{
+	int error;
+	git_revwalk *walk;
+	git_commit_list *result, *list;
+	git_array_oid_t array;
+
+	git_array_init(array);
+
+	if ((error = merge_bases(&result, &walk, repo, one, two)) < 0)
+		return error;
+
+	list = result;
+	while (list) {
+		git_oid *id = git_array_alloc(array);
+		if (id == NULL)
+			goto on_error;
+
+		git_oid_cpy(id, &list->item->oid);
+		list = list->next;
+	}
+
+	git_oidarray__from_array(out, &array);
+	git_commit_list_free(&result);
+	git_revwalk_free(walk);
+
+	return 0;
+
+on_error:
+	git_commit_list_free(&result);
+	git_revwalk_free(walk);
+	return -1;
+}
+
+
+// Source: merge.c
+// Lines 282-314
+
+
+[ANSWER]
+MUST

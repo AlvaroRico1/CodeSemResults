@@ -1,0 +1,43 @@
+static int handle_unmatched_new_item(
+	git_diff_generated *diff, diff_in_progress *info)
+{
+	int error = 0;
+	const git_index_entry *nitem = info->nitem;
+	git_delta_t delta_type = GIT_DELTA_UNTRACKED;
+	bool contains_oitem;
+
+	/* check if this is a prefix of the other side */
+	contains_oitem = entry_is_prefixed(diff, info->oitem, nitem);
+
+	/* update delta_type if this item is conflicted */
+	if (git_index_entry_is_conflict(nitem))
+		delta_type = GIT_DELTA_CONFLICTED;
+
+	/* update delta_type if this item is ignored */
+	else if (git_iterator_current_is_ignored(info->new_iter))
+		delta_type = GIT_DELTA_IGNORED;
+
+	if (nitem->mode == GIT_FILEMODE_TREE) {
+		bool recurse_into_dir = contains_oitem;
+
+		/* check if user requests recursion into this type of dir */
+		recurse_into_dir = contains_oitem ||
+			(delta_type == GIT_DELTA_UNTRACKED &&
+			 DIFF_FLAG_IS_SET(diff, GIT_DIFF_RECURSE_UNTRACKED_DIRS)) ||
+			(delta_type == GIT_DELTA_IGNORED &&
+			 DIFF_FLAG_IS_SET(diff, GIT_DIFF_RECURSE_IGNORED_DIRS));
+
+		/* do not advance into directories that contain a .git file */
+		if (recurse_into_dir && !contains_oitem) {
+			git_str *full = NULL;
+			if (git_iterator_current_workdir_path(&full, info->new_iter) < 0)
+				return -1;
+			if (full && git_fs_path_contains(full, DOT_GIT)) {
+				/* TODO: warning if not a valid git repository */
+				recurse_into_dir = false;
+			}
+		}
+
+
+// Source: diff_generate.c
+// Lines 1019-1057

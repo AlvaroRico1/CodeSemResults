@@ -1,0 +1,49 @@
+kprobe_perf_func(struct trace_kprobe *tk, struct pt_regs *regs)
+{
+	struct trace_event_call *call = trace_probe_event_call(&tk->tp);
+	struct kprobe_trace_entry_head *entry;
+	struct hlist_head *head;
+	int size, __size, dsize;
+	int rctx;
+
+	if (bpf_prog_array_valid(call)) {
+		unsigned long orig_ip = instruction_pointer(regs);
+		int ret;
+
+		ret = trace_call_bpf(call, regs);
+
+		/*
+		 * We need to check and see if we modified the pc of the
+		 * pt_regs, and if so return 1 so that we don't do the
+		 * single stepping.
+		 */
+		if (orig_ip != instruction_pointer(regs))
+			return 1;
+		if (!ret)
+			return 0;
+	}
+
+	head = this_cpu_ptr(call->perf_events);
+	if (hlist_empty(head))
+		return 0;
+
+	dsize = __get_data_size(&tk->tp, regs);
+	__size = sizeof(*entry) + tk->tp.size + dsize;
+	size = ALIGN(__size + sizeof(u32), sizeof(u64));
+	size -= sizeof(u32);
+
+	entry = perf_trace_buf_alloc(size, NULL, &rctx);
+	if (!entry)
+		return 0;
+
+	entry->ip = (unsigned long)tk->rp.kp.addr;
+	memset(&entry[1], 0, dsize);
+	store_trace_args(&entry[1], &tk->tp, regs, sizeof(*entry), dsize);
+	perf_trace_buf_submit(entry, size, rctx, call->event.type, 1, regs,
+			      head, NULL);
+	return 0;
+}
+
+
+// Source: trace_kprobe.c
+// Lines 1171-1215

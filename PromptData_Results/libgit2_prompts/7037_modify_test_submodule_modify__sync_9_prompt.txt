@@ -1,0 +1,65 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'cfg' at line 4
+2. Pointer 'sm2' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_submodule_modify__sync(void)
+{
+	git_submodule *sm1, *sm2, *sm3;
+	git_config *cfg;
+	const char *str;
+
+#define SM1 "sm_unchanged"
+#define SM2 "sm_changed_head"
+#define SM3 "sm_added_and_uncommited"
+
+	/* look up some submodules */
+	cl_git_pass(git_submodule_lookup(&sm1, g_repo, SM1));
+	cl_git_pass(git_submodule_lookup(&sm2, g_repo, SM2));
+	cl_git_pass(git_submodule_lookup(&sm3, g_repo, SM3));
+
+	/* At this point, the .git/config URLs for the submodules have
+	 * not be rewritten with the absolute paths (although the
+	 * .gitmodules have.  Let's confirm that they DO NOT match
+	 * yet, then we can do a sync to make them match...
+	 */
+
+	/* check submodule info does not match before sync */
+	cl_git_pass(git_repository_config_snapshot(&cfg, g_repo));
+	cl_git_pass(git_config_get_string(&str, cfg, "submodule."SM1".url"));
+	cl_assert(strcmp(git_submodule_url(sm1), str) != 0);
+	cl_git_pass(git_config_get_string(&str, cfg, "submodule."SM2".url"));
+	cl_assert(strcmp(git_submodule_url(sm2), str) != 0);
+	cl_git_pass(git_config_get_string(&str, cfg, "submodule."SM3".url"));
+	cl_assert(strcmp(git_submodule_url(sm3), str) != 0);
+	git_config_free(cfg);
+
+	/* sync all the submodules */
+	cl_git_pass(git_submodule_foreach(g_repo, sync_one_submodule, NULL));
+
+	/* check that submodule config is updated */
+	assert_submodule_url_is_synced(
+		sm1, "submodule."SM1".url", "remote.origin.url");
+	assert_submodule_url_is_synced(
+		sm2, "submodule."SM2".url", "remote.origin.url");
+	assert_submodule_url_is_synced(
+		sm3, "submodule."SM3".url", "remote.origin.url");
+
+	git_submodule_free(sm1);
+	git_submodule_free(sm2);
+	git_submodule_free(sm3);
+}
+
+
+// Source: modify.c
+// Lines 84-129
+
+
+[ANSWER]
+MAY

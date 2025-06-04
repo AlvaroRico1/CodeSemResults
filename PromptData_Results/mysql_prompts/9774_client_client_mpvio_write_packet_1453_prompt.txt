@@ -1,0 +1,49 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'res' at line 3
+2. Pointer 'pkt_len' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int client_mpvio_write_packet(MYSQL_PLUGIN_VIO *mpv, const uchar *pkt,
+                                     int pkt_len) {
+  int res;
+  MCPVIO_EXT *mpvio = (MCPVIO_EXT *)mpv;
+
+  if (mpvio->packets_written == 0) {
+    if (mpvio->mysql_change_user)
+      res = send_change_user_packet(mpvio, pkt, pkt_len);
+    else
+      res = send_client_reply_packet(mpvio, pkt, pkt_len);
+  } else {
+    NET *net = &mpvio->mysql->net;
+
+    MYSQL_TRACE(SEND_AUTH_DATA, mpvio->mysql, ((size_t)pkt_len, pkt));
+
+    if (mpvio->mysql->thd)
+      res = 1; /* no chit-chat in embedded */
+    else
+      res = my_net_write(net, pkt, pkt_len) || net_flush(net);
+
+    if (!res) {
+      MYSQL_TRACE(PACKET_SENT, mpvio->mysql, ((size_t)pkt_len));
+    } else
+      set_mysql_extended_error(mpvio->mysql, CR_SERVER_LOST, unknown_sqlstate,
+                               ER_CLIENT(CR_SERVER_LOST_EXTENDED),
+                               "sending authentication information", errno);
+  }
+  mpvio->packets_written++;
+  return res;
+}
+
+
+// Source: client.cc
+// Lines 5082-5111
+
+
+[ANSWER]
+MUST-NOT

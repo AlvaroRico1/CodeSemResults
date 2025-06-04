@@ -1,0 +1,43 @@
+window_copy_init(struct window_mode_entry *wme,
+    __unused struct cmd_find_state *fs, struct args *args)
+{
+	struct window_pane		*wp = wme->swp;
+	struct window_copy_mode_data	*data;
+	struct screen			*base = &wp->base;
+	struct screen_write_ctx		 ctx;
+	u_int				 i, cx, cy;
+
+	data = window_copy_common_init(wme);
+	data->backing = window_copy_clone_screen(base, &data->screen, &cx, &cy,
+	    wme->swp != wme->wp);
+
+	data->cx = cx;
+	if (cy < screen_hsize(data->backing)) {
+		data->cy = 0;
+		data->oy = screen_hsize(data->backing) - cy;
+	} else {
+		data->cy = cy - screen_hsize(data->backing);
+		data->oy = 0;
+	}
+
+	data->scroll_exit = args_has(args, 'e');
+	data->hide_position = args_has(args, 'H');
+
+	data->screen.cx = data->cx;
+	data->screen.cy = data->cy;
+	data->mx = data->cx;
+	data->my = screen_hsize(data->backing) + data->cy - data->oy;
+	data->showmark = 0;
+
+	screen_write_start(&ctx, &data->screen);
+	for (i = 0; i < screen_size_y(&data->screen); i++)
+		window_copy_write_line(wme, &ctx, i);
+	screen_write_cursormove(&ctx, data->cx, data->cy, 0);
+	screen_write_stop(&ctx);
+
+	return (&data->screen);
+}
+
+
+// Source: window-copy.c
+// Lines 423-461

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'c' at line 5\n2. Pointer 'id' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nlookup_or_add_counter (stats_counter_table_type *hash, const char *id, int val,\n\t\t       bool histogram_p)\n{\n  statistics_counter **counter;\n  statistics_counter c;\n  c.id = id;\n  c.val = val;\n  counter = hash->find_slot (&c, INSERT);\n  if (!*counter)\n    {\n      *counter = XNEW (statistics_counter);\n      (*counter)->id = xstrdup (id);\n      (*counter)->val = val;\n      (*counter)->histogram_p = histogram_p;\n      (*counter)->prev_dumped_count = 0;\n      (*counter)->count = 0;\n    }\n  return *counter;\n}\n\n\n// Source: statistics.c\n// Lines 281-299\n",
+  "ANSWER": "MUST"
+}

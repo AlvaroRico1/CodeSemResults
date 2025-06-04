@@ -1,0 +1,1 @@
+line_ends,git/line-log.c,4,ends,git/line-log.c,8,1

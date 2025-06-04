@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'fmt' at line None\n2. Pointer 'us_elapsed_absolute' at line None\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void fn_repo_fl(const char *file, int line,\n\t\t       const struct repository *repo)\n{\n\tconst char *event_name = \"def_repo\";\n\tstruct strbuf buf_payload = STRBUF_INIT;\n\n\tstrbuf_addstr(&buf_payload, \"worktree:\");\n\tsq_quote_buf_pretty(&buf_payload, repo->worktree);\n\n\tperf_io_write_fl(file, line, event_name, repo, NULL, NULL, NULL,\n\t\t\t &buf_payload);\n\tstrbuf_release(&buf_payload);\n}\n\n\n// Source: tr2_tgt_perf.c\n// Lines 450-462\n",
+  "ANSWER": "MAY"
+}

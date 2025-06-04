@@ -1,0 +1,161 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'packed_commit_map' at line 8
+2. Pointer 'i' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int compute_generation_numbers(git_vector *commits)
+{
+	git_array_t(size_t) index_stack = GIT_ARRAY_INIT;
+	size_t i, j;
+	size_t *parent_idx;
+	enum generation_number_commit_state *commit_states = NULL;
+	struct packed_commit *child_packed_commit;
+	git_oidmap *packed_commit_map = NULL;
+	int error = 0;
+
+	/* First populate the parent indices fields */
+	error = git_oidmap_new(&packed_commit_map);
+	if (error < 0)
+		goto cleanup;
+	git_vector_foreach (commits, i, child_packed_commit) {
+		child_packed_commit->index = i;
+		error = git_oidmap_set(
+				packed_commit_map, &child_packed_commit->sha1, child_packed_commit);
+		if (error < 0)
+			goto cleanup;
+	}
+
+	git_vector_foreach (commits, i, child_packed_commit) {
+		size_t parent_i, *parent_idx_ptr;
+		struct packed_commit *parent_packed_commit;
+		git_oid *parent_id;
+		git_array_init_to_size(
+				child_packed_commit->parent_indices,
+				git_array_size(child_packed_commit->parents));
+		if (git_array_size(child_packed_commit->parents)
+		    && !child_packed_commit->parent_indices.ptr) {
+			error = -1;
+			goto cleanup;
+		}
+		git_array_foreach (child_packed_commit->parents, parent_i, parent_id) {
+			parent_packed_commit = git_oidmap_get(packed_commit_map, parent_id);
+			if (!parent_packed_commit) {
+				git_error_set(GIT_ERROR_ODB,
+					      "parent commit %s not found in commit graph",
+					      git_oid_tostr_s(parent_id));
+				error = GIT_ENOTFOUND;
+				goto cleanup;
+			}
+			parent_idx_ptr = git_array_alloc(child_packed_commit->parent_indices);
+			if (!parent_idx_ptr) {
+				error = -1;
+				goto cleanup;
+			}
+			*parent_idx_ptr = parent_packed_commit->index;
+		}
+	}
+
+	/*
+	 * We copy all the commits to the stack and then during visitation,
+	 * each node can be added up to two times to the stack.
+	 */
+	git_array_init_to_size(index_stack, 3 * git_vector_length(commits));
+	if (!index_stack.ptr) {
+		error = -1;
+		goto cleanup;
+	}
+
+	commit_states = (enum generation_number_commit_state *)git__calloc(
+			git_vector_length(commits), sizeof(enum generation_number_commit_state));
+	if (!commit_states) {
+		error = -1;
+		goto cleanup;
+	}
+
+	/*
+	 * Perform a Post-Order traversal so that all parent nodes are fully
+	 * visited before the child node.
+	 */
+	git_vector_foreach (commits, i, child_packed_commit)
+		*(size_t *)git_array_alloc(index_stack) = i;
+
+	while (git_array_size(index_stack)) {
+		size_t *index_ptr = git_array_pop(index_stack);
+		i = *index_ptr;
+		child_packed_commit = git_vector_get(commits, i);
+
+		if (commit_states[i] == GENERATION_NUMBER_COMMIT_STATE_VISITED) {
+			/* This commit has already been fully visited. */
+			continue;
+		}
+		if (commit_states[i] == GENERATION_NUMBER_COMMIT_STATE_EXPANDED) {
+			/* All of the commits parents have been visited. */
+			child_packed_commit->generation = 0;
+			git_array_foreach (child_packed_commit->parent_indices, j, parent_idx) {
+				struct packed_commit *parent = git_vector_get(commits, *parent_idx);
+				if (child_packed_commit->generation < parent->generation)
+					child_packed_commit->generation = parent->generation;
+			}
+			if (child_packed_commit->generation
+			    < GIT_COMMIT_GRAPH_GENERATION_NUMBER_MAX) {
+				++child_packed_commit->generation;
+			}
+			commit_states[i] = GENERATION_NUMBER_COMMIT_STATE_VISITED;
+			continue;
+		}
+
+		/*
+		 * This is the first time we see this commit. We need
+		 * to visit all its parents before we can fully visit
+		 * it.
+		 */
+		if (git_array_size(child_packed_commit->parent_indices) == 0) {
+			/*
+			 * Special case: if the commit has no parents, there's
+			 * no need to add it to the stack just to immediately
+			 * remove it.
+			 */
+			commit_states[i] = GENERATION_NUMBER_COMMIT_STATE_VISITED;
+			child_packed_commit->generation = 1;
+			continue;
+		}
+
+		/*
+		 * Add this current commit again so that it is visited
+		 * again once all its children have been visited.
+		 */
+		*(size_t *)git_array_alloc(index_stack) = i;
+		git_array_foreach (child_packed_commit->parent_indices, j, parent_idx) {
+			if (commit_states[*parent_idx]
+			    != GENERATION_NUMBER_COMMIT_STATE_UNVISITED) {
+				/* This commit has already been considered. */
+				continue;
+			}
+
+			commit_states[*parent_idx] = GENERATION_NUMBER_COMMIT_STATE_ADDED;
+			*(size_t *)git_array_alloc(index_stack) = *parent_idx;
+		}
+		commit_states[i] = GENERATION_NUMBER_COMMIT_STATE_EXPANDED;
+	}
+
+cleanup:
+	git_oidmap_free(packed_commit_map);
+	git__free(commit_states);
+	git_array_clear(index_stack);
+
+	return error;
+}
+
+
+// Source: commit_graph.c
+// Lines 764-905
+
+
+[ANSWER]
+MAY

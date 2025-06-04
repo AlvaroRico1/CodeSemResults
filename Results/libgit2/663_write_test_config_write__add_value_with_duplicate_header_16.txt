@@ -1,0 +1,1 @@
+new_val,libgit2/tests/libgit2/config/write.c,6,cfg,libgit2/tests/libgit2/config/write.c,8,0

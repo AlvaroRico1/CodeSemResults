@@ -1,0 +1,47 @@
+bitmap_tree_splay (bitmap head, bitmap_element *t, unsigned int indx)
+{
+  bitmap_element N, *l, *r;
+
+  if (t == NULL)
+    return NULL;
+
+  bitmap_usage *usage = NULL;
+  if (GATHER_STATISTICS)
+    usage = bitmap_mem_desc.get_descriptor_for_instance (head);
+
+  N.prev = N.next = NULL;
+  l = r = &N;
+
+  while (indx != t->indx)
+    {
+      if (GATHER_STATISTICS && usage)
+	usage->m_search_iter++;
+
+      if (indx < t->indx)
+	{
+	  if (t->prev != NULL && indx < t->prev->indx)
+	    bitmap_tree_rotate_right (t);
+	  if (t->prev == NULL)
+	    break;
+	  bitmap_tree_link_right (t, r);
+	}
+      else if (indx > t->indx)
+	{
+	  if (t->next != NULL && indx > t->next->indx)
+	    bitmap_tree_rotate_left (t);
+	  if (t->next == NULL)
+	    break;
+	  bitmap_tree_link_left (t, l);
+	}
+    }
+
+  l->next = t->prev;
+  r->prev = t->next;
+  t->prev = N.next;
+  t->next = N.prev;
+  return t;
+}
+
+
+// Source: bitmap.c
+// Lines 462-504

@@ -1,0 +1,142 @@
+ipa_merge_fn_summary_after_inlining (struct cgraph_edge *edge)
+{
+  ipa_fn_summary *callee_info = ipa_fn_summaries->get (edge->callee);
+  struct cgraph_node *to = (edge->caller->inlined_to
+			    ? edge->caller->inlined_to : edge->caller);
+  class ipa_fn_summary *info = ipa_fn_summaries->get (to);
+  clause_t clause = 0;	/* not_inline is known to be false.  */
+  size_time_entry *e;
+  auto_vec<int, 8> operand_map;
+  auto_vec<int, 8> offset_map;
+  int i;
+  predicate toplev_predicate;
+  class ipa_call_summary *es = ipa_call_summaries->get (edge);
+  class ipa_node_params *params_summary = (ipa_node_params_sum
+		 			   ? IPA_NODE_REF (to) : NULL);
+
+  if (es->predicate)
+    toplev_predicate = *es->predicate;
+  else
+    toplev_predicate = true;
+
+  info->fp_expressions |= callee_info->fp_expressions;
+
+  if (callee_info->conds)
+    {
+      auto_vec<tree, 32> known_vals;
+      auto_vec<ipa_agg_value_set, 32> known_aggs;
+      evaluate_properties_for_edge (edge, true, &clause, NULL,
+				    &known_vals, NULL, &known_aggs);
+    }
+  if (ipa_node_params_sum && callee_info->conds)
+    {
+      class ipa_edge_args *args = IPA_EDGE_REF (edge);
+      int count = args ? ipa_get_cs_argument_count (args) : 0;
+      int i;
+
+      if (count)
+	{
+	  operand_map.safe_grow_cleared (count);
+	  offset_map.safe_grow_cleared (count);
+	}
+      for (i = 0; i < count; i++)
+	{
+	  struct ipa_jump_func *jfunc = ipa_get_ith_jump_func (args, i);
+	  int map = -1;
+
+	  /* TODO: handle non-NOPs when merging.  */
+	  if (jfunc->type == IPA_JF_PASS_THROUGH)
+	    {
+	      if (ipa_get_jf_pass_through_operation (jfunc) == NOP_EXPR)
+		map = ipa_get_jf_pass_through_formal_id (jfunc);
+	      if (!ipa_get_jf_pass_through_agg_preserved (jfunc))
+		offset_map[i] = -1;
+	    }
+	  else if (jfunc->type == IPA_JF_ANCESTOR)
+	    {
+	      HOST_WIDE_INT offset = ipa_get_jf_ancestor_offset (jfunc);
+	      if (offset >= 0 && offset < INT_MAX)
+		{
+		  map = ipa_get_jf_ancestor_formal_id (jfunc);
+		  if (!ipa_get_jf_ancestor_agg_preserved (jfunc))
+		    offset = -1;
+		  offset_map[i] = offset;
+		}
+	    }
+	  operand_map[i] = map;
+	  gcc_assert (map < ipa_get_param_count (params_summary));
+	}
+    }
+  sreal freq =  edge->sreal_frequency ();
+  for (i = 0; vec_safe_iterate (callee_info->size_time_table, i, &e); i++)
+    {
+      predicate p;
+      p = e->exec_predicate.remap_after_inlining
+			     (info, params_summary,
+			      callee_info, operand_map,
+			      offset_map, clause,
+			      toplev_predicate);
+      predicate nonconstp;
+      nonconstp = e->nonconst_predicate.remap_after_inlining
+				     (info, params_summary,
+				      callee_info, operand_map,
+				      offset_map, clause,
+				      toplev_predicate);
+      if (p != false && nonconstp != false)
+	{
+	  sreal add_time = ((sreal)e->time * freq);
+	  int prob = e->nonconst_predicate.probability (callee_info->conds,
+							clause, es->param);
+	  if (prob != REG_BR_PROB_BASE)
+	    add_time = add_time * prob / REG_BR_PROB_BASE;
+	  if (prob != REG_BR_PROB_BASE
+	      && dump_file && (dump_flags & TDF_DETAILS))
+	    {
+	      fprintf (dump_file, "\t\tScaling time by probability:%f\n",
+		       (double) prob / REG_BR_PROB_BASE);
+	    }
+	  info->account_size_time (e->size, add_time, p, nonconstp);
+	}
+    }
+  remap_edge_summaries (edge, edge->callee, info, params_summary,
+		 	callee_info, operand_map,
+			offset_map, clause, &toplev_predicate);
+  remap_hint_predicate (info, params_summary, callee_info,
+			&callee_info->loop_iterations,
+			operand_map, offset_map, clause, &toplev_predicate);
+  remap_hint_predicate (info, params_summary, callee_info,
+			&callee_info->loop_stride,
+			operand_map, offset_map, clause, &toplev_predicate);
+
+  HOST_WIDE_INT stack_frame_offset = ipa_get_stack_frame_offset (edge->callee);
+  HOST_WIDE_INT peak = stack_frame_offset + callee_info->estimated_stack_size;
+
+  if (info->estimated_stack_size < peak)
+    info->estimated_stack_size = peak;
+
+  inline_update_callee_summaries (edge->callee, es->loop_depth);
+  if (info->call_size_time_table)
+    {
+      int edge_size = 0;
+      sreal edge_time = 0;
+
+      estimate_edge_size_and_time (edge, &edge_size, NULL, &edge_time, vNULL,
+		      		   vNULL, vNULL, 0);
+      /* Unaccount size and time of the optimized out call.  */
+      info->account_size_time (-edge_size, -edge_time,
+	 		       es->predicate ? *es->predicate : true,
+	 		       es->predicate ? *es->predicate : true,
+			       true);
+      /* Account new calls.  */
+      summarize_calls_size_and_time (edge->callee, info);
+    }
+
+  /* Free summaries that are not maintained for inline clones/edges.  */
+  ipa_call_summaries->remove (edge);
+  ipa_fn_summaries->remove (edge->callee);
+  ipa_remove_from_growth_caches (edge);
+}
+
+
+// Source: ipa-fnsummary.c
+// Lines 3894-4031

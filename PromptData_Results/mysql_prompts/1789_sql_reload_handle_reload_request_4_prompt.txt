@@ -1,0 +1,205 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tab' at line 179
+2. Pointer 'thd' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool handle_reload_request(THD *thd, unsigned long options, TABLE_LIST *tables,
+                           int *write_to_binlog) {
+  bool result = false;
+  select_errors = 0; /* Write if more errors */
+  int tmp_write_to_binlog = *write_to_binlog = 1;
+
+  assert(!thd || !thd->in_sub_stmt);
+
+  if (options & REFRESH_GRANT) {
+    THD *tmp_thd = nullptr;
+    /*
+      If handle_reload_request() is called from SIGHUP handler we have to
+      allocate temporary THD for execution of acl_reload()/grant_reload().
+    */
+    if (!thd && (thd = (tmp_thd = new THD))) {
+      thd->thread_stack = (char *)&tmp_thd;
+      thd->store_globals();
+    }
+
+    if (thd) {
+      bool reload_acl_failed = reload_acl_caches(thd, false);
+      bool reload_servers_failed = servers_reload(thd);
+      notify_flush_event(thd);
+      if (reload_acl_failed || reload_servers_failed) {
+        result = true;
+        /*
+          When an error is returned, my_message may have not been called and
+          the client will hang waiting for a response.
+        */
+        my_error(ER_UNKNOWN_ERROR, MYF(0));
+      }
+    }
+
+    reset_mqh(thd, (LEX_USER *)nullptr, true);
+    if (tmp_thd) {
+      delete tmp_thd;
+      thd = nullptr;
+    }
+  }
+
+  if (options & REFRESH_LOG) {
+    /*
+      Flush the normal query log, the update log, the binary log,
+      the slow query log, the relay log (if it exists) and the log
+      tables.
+    */
+
+    options |= REFRESH_BINARY_LOG;
+    options |= REFRESH_RELAY_LOG;
+    options |= REFRESH_SLOW_LOG;
+    options |= REFRESH_GENERAL_LOG;
+    options |= REFRESH_ENGINE_LOG;
+    options |= REFRESH_ERROR_LOG;
+  }
+
+  if (options & REFRESH_ERROR_LOG) {
+    if (reopen_error_log()) result = true;
+  }
+
+  if ((options & REFRESH_SLOW_LOG) && opt_slow_log &&
+      (log_output_options & LOG_FILE))
+    if (query_logger.reopen_log_file(QUERY_LOG_SLOW)) result = true;
+
+  if ((options & REFRESH_GENERAL_LOG) && opt_general_log &&
+      (log_output_options & LOG_FILE))
+    if (query_logger.reopen_log_file(QUERY_LOG_GENERAL)) result = true;
+
+  if (options & REFRESH_ENGINE_LOG) {
+    if (ha_flush_logs()) {
+      result = true;
+    }
+  }
+  if ((options & REFRESH_BINARY_LOG) || (options & REFRESH_RELAY_LOG)) {
+    /*
+      If handle_reload_request() is called from SIGHUP handler we have to
+      allocate temporary THD for execution of binlog/relay log rotation.
+     */
+    THD *tmp_thd = nullptr;
+    if (!thd && (thd = (tmp_thd = new THD))) {
+      thd->thread_stack = (char *)(&tmp_thd);
+      thd->store_globals();
+    }
+
+    if (options & REFRESH_BINARY_LOG) {
+      /*
+        Writing this command to the binlog may result in infinite loops
+        when doing mysqlbinlog|mysql, and anyway it does not really make
+        sense to log it automatically (would cause more trouble to users
+        than it would help them)
+       */
+      tmp_write_to_binlog = 0;
+      if (mysql_bin_log.is_open()) {
+        if (mysql_bin_log.rotate_and_purge(thd, true)) *write_to_binlog = -1;
+      }
+    }
+    if (options & REFRESH_RELAY_LOG) {
+      if (flush_relay_logs_cmd(thd)) *write_to_binlog = -1;
+    }
+    if (tmp_thd) {
+      delete tmp_thd;
+      /* Remember that we don't have a THD */
+      current_thd = nullptr;
+      thd = nullptr;
+    }
+  }
+
+  assert(!thd || thd->locked_tables_mode || !thd->mdl_context.has_locks() ||
+         !thd->handler_tables_hash.empty() ||
+         thd->mdl_context.has_locks(MDL_key::USER_LEVEL_LOCK) ||
+         thd->mdl_context.has_locks(MDL_key::LOCKING_SERVICE) ||
+         thd->mdl_context.has_locks(MDL_key::BACKUP_LOCK) ||
+         thd->global_read_lock.is_acquired());
+
+  /*
+    Note that if REFRESH_READ_LOCK bit is set then REFRESH_TABLES is set too
+    (see sql_yacc.yy)
+  */
+  if (options & (REFRESH_TABLES | REFRESH_READ_LOCK)) {
+    if ((options & REFRESH_READ_LOCK) && thd) {
+      /*
+        On the first hand we need write lock on the tables to be flushed,
+        on the other hand we must not try to aspire a global read lock
+        if we have a write locked table as this would lead to a deadlock
+        when trying to reopen (and re-lock) the table after the flush.
+      */
+      if (thd->locked_tables_mode) {
+        my_error(ER_LOCK_OR_ACTIVE_TRANSACTION, MYF(0));
+        return true;
+      }
+      /*
+        Writing to the binlog could cause deadlocks, as we don't log
+        UNLOCK TABLES
+      */
+      tmp_write_to_binlog = 0;
+      if (thd->global_read_lock.lock_global_read_lock(thd))
+        return true;  // Killed
+      if (close_cached_tables(thd, tables,
+                              ((options & REFRESH_FAST) ? false : true),
+                              thd->variables.lock_wait_timeout)) {
+        /*
+          NOTE: my_error() has been already called by reopen_tables() within
+          close_cached_tables().
+        */
+        result = true;
+      }
+
+      if (thd->global_read_lock.make_global_read_lock_block_commit(
+              thd))  // Killed
+      {
+        /* Don't leave things in a half-locked state */
+        thd->global_read_lock.unlock_global_read_lock(thd);
+        return true;
+      }
+    } else {
+      if (thd && thd->locked_tables_mode) {
+        /*
+          If we are under LOCK TABLES we should have a write
+          lock on tables which we are going to flush.
+        */
+        if (tables) {
+          for (TABLE_LIST *t = tables; t; t = t->next_local)
+            if (!find_table_for_mdl_upgrade(thd, t->db, t->table_name, false))
+              return true;
+        } else {
+          /*
+            It is not safe to upgrade the metadata lock without GLOBAL IX lock.
+            This can happen with FLUSH TABLES <list> WITH READ LOCK as we in
+            these cases don't take a GLOBAL IX lock in order to be compatible
+            with global read lock.
+          */
+          if (thd->open_tables &&
+              !thd->mdl_context.owns_equal_or_stronger_lock(
+                  MDL_key::GLOBAL, "", "", MDL_INTENTION_EXCLUSIVE)) {
+            my_error(ER_TABLE_NOT_LOCKED_FOR_WRITE, MYF(0),
+                     thd->open_tables->s->table_name.str);
+            return true;
+          }
+
+          for (TABLE *tab = thd->open_tables; tab; tab = tab->next) {
+            if (!tab->mdl_ticket->is_upgradable_or_exclusive()) {
+              my_error(ER_TABLE_NOT_LOCKED_FOR_WRITE, MYF(0),
+                       tab->s->table_name.str);
+              return true;
+            }
+          }
+        }
+
+
+// Source: sql_reload.cc
+// Lines 142-327
+
+
+[ANSWER]
+MUST

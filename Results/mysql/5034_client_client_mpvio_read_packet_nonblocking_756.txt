@@ -1,0 +1,1 @@
+error,mysql/sql-common/client.cc,7,buf,mysql/sql-common/client.cc,2,0

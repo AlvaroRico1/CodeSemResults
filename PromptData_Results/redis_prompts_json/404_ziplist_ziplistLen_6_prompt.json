@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'p' at line 6\n2. Pointer 'zl' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nunsigned int ziplistLen(unsigned char *zl) {\n    unsigned int len = 0;\n    if (intrev16ifbe(ZIPLIST_LENGTH(zl)) < UINT16_MAX) {\n        len = intrev16ifbe(ZIPLIST_LENGTH(zl));\n    } else {\n        unsigned char *p = zl+ZIPLIST_HEADER_SIZE;\n        size_t zlbytes = intrev32ifbe(ZIPLIST_BYTES(zl));\n        while (*p != ZIP_END) {\n            p += zipRawEntryLengthSafe(zl, zlbytes, p);\n            len++;\n        }\n\n        /* Re-store length if small enough */\n        if (len < UINT16_MAX) ZIPLIST_LENGTH(zl) = intrev16ifbe(len);\n    }\n\n\n// Source: ziplist.c\n// Lines 1408-1422\n",
+  "ANSWER": "MUST"
+}

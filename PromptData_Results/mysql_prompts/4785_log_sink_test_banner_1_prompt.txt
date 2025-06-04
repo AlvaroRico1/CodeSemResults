@@ -1,0 +1,187 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'li' at line 81
+2. Pointer 'my_item' at line 81
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void banner() {
+  /*
+    Use this if for some bizarre reason you really can't or won't use C++
+  */
+  log_bi->message(LOG_TYPE_ERROR, LOG_ITEM_LOG_PRIO,
+                  (longlong)INFORMATION_LEVEL, LOG_ITEM_SQL_ERRSYMBOL,
+                  "ER_PARSER_TRACE", LOG_ITEM_LOG_MESSAGE,
+                  "using log_message() in external service");
+
+  log_bi->message(LOG_TYPE_ERROR, LOG_ITEM_LOG_PRIO, (longlong)ERROR_LEVEL,
+                  LOG_ITEM_SQL_ERRSYMBOL, "ER_PARSER_TRACE", LOG_ITEM_SRC_LINE,
+                  (longlong)1234, LOG_ITEM_SRC_LINE, (longlong)9876,
+                  LOG_ITEM_LOG_MESSAGE,
+                  "using log_message() with duplicate source-line k/v pair");
+
+  log_bi->message(
+      LOG_TYPE_ERROR, LOG_ITEM_LOG_PRIO, (longlong)ERROR_LEVEL,
+      LOG_ITEM_SQL_ERRSYMBOL, "ER_PARSER_TRACE", LOG_ITEM_GEN_CSTRING, "key",
+      "val", LOG_ITEM_GEN_CSTRING, "key", "val", LOG_ITEM_LOG_MESSAGE,
+      "using log_message() with duplicate generic C-string k/v pair");
+
+  log_bi->message(LOG_TYPE_ERROR, LOG_ITEM_LOG_PRIO, (longlong)ERROR_LEVEL,
+                  LOG_ITEM_SQL_ERRSYMBOL, "ER_PARSER_TRACE",
+                  LOG_ITEM_GEN_CSTRING, "key", "val", LOG_ITEM_GEN_INTEGER,
+                  "key", (longlong)4711, LOG_ITEM_LOG_VERBATIM,
+                  "using log_message() with duplicate generic mixed k/v pair");
+
+  log_bi->message(LOG_TYPE_ERROR, LOG_ITEM_LOG_PRIO, (longlong)ERROR_LEVEL,
+                  LOG_ITEM_SQL_ERRSYMBOL, "ER_PARSER_TRACE", LOG_ITEM_SYS_ERRNO,
+                  (longlong)0, LOG_ITEM_LOG_VERBATIM,
+                  "using log_message() with errno 0");
+
+  log_bi->message(LOG_TYPE_ERROR, LOG_ITEM_LOG_PRIO, (longlong)ERROR_LEVEL,
+                  LOG_ITEM_LOG_LOOKUP, (longlong)ER_SERVER_TEST_MESSAGE);
+
+  log_bi->message(LOG_TYPE_ERROR, LOG_ITEM_LOG_PRIO, (longlong)ERROR_LEVEL,
+                  LOG_ITEM_SQL_ERRSYMBOL, "ER_SERVER_TEST_MESSAGE",
+                  LOG_ITEM_LOG_VERBATIM, "using log_message() with errsymbol");
+
+  char my_buff[LOG_BUFF_MAX + 32];
+  memset(my_buff, 'a', sizeof(my_buff));
+  my_buff[LOG_BUFF_MAX + 32 - 1] = 0;
+
+  log_bi->message(LOG_TYPE_ERROR, LOG_ITEM_LOG_VERBATIM, my_buff);
+
+  /*
+    Fluent C++ API.  Use this free-form constructor if-and-only-if
+    you do NOT have error messages registered with the server (and
+    therefore need to use ad hoc messages with message() or verbatim().
+  */
+  LogEvent()
+      .type(LOG_TYPE_ERROR)
+      .prio(INFORMATION_LEVEL)
+      .errcode(ER_PARSER_TRACE)
+      .subsys(LOG_SUBSYSTEM_TAG)
+      .component(LOG_COMPONENT_TAG)
+      .source_line(__LINE__)
+      .source_file(MY_NAME)
+      .float_value("test_float", 3.1415926927)
+      .int_value("test_int", 739241)
+      .string_value("test_cstring", "cstring")
+      .string_value("test_lexstring", "lexstring", 9)
+      .message("using LogEvent() object in external service");
+
+  // built-in API test: test "well-known" lookups
+#if !defined(NDEBUG)
+  {
+    int wellknown = log_bi->wellknown_by_type(LOG_ITEM_LOG_LABEL);
+    const char *label_key = log_bi->wellknown_get_name(wellknown);
+    int wellagain =
+        log_bi->wellknown_by_name(label_key, log_bs->length(label_key));
+
+    assert(wellknown == wellagain);
+
+    assert(LOG_ITEM_TYPE_NOT_FOUND == log_bi->wellknown_by_name("", 0));
+  }
+#endif
+
+  // built-in API test: test item_consistent() checks
+  {
+    log_item my_item, *li = &my_item;
+
+    const char *consistent[] = {
+        "OK",           "NOT_FOUND",   "RESERVED", "CLASS_MISMATCH",
+        "KEY_MISMATCH", "STRING_NULL", "KEY_NULL"};
+
+    // My_item is in some undefined, garbage state so far.
+
+    // LOG_ITEM_TYPE_NOT_FOUND
+    li->type = ((log_item_type)(LOG_ITEM_LOG_TYPE + LOG_ITEM_SQL_ERRCODE));
+    LogEvent()
+        .type(LOG_TYPE_ERROR)
+        .prio(INFORMATION_LEVEL)
+        .errcode(ER_PARSER_TRACE)
+        .subsys(LOG_SUBSYSTEM_TAG)
+        .component(LOG_COMPONENT_TAG)
+        .message("item_inconsistent(#%d): %s", 1,
+                 consistent[-log_bi->item_inconsistent(li)]);
+
+    // LOG_ITEM_CLASS_MISMATCH
+    li->type = LOG_ITEM_LOG_MESSAGE;
+    li->item_class = LOG_INTEGER;
+    LogEvent()
+        .type(LOG_TYPE_ERROR)
+        .prio(INFORMATION_LEVEL)
+        .errcode(ER_PARSER_TRACE)
+        .subsys(LOG_SUBSYSTEM_TAG)
+        .component(LOG_COMPONENT_TAG)
+        .message("item_inconsistent(#%d): %s", 2,
+                 consistent[-log_bi->item_inconsistent(li)]);
+
+    // LOG_ITEM_KEY_MISMATCH
+    li->type = LOG_ITEM_LOG_PRIO;
+    li->item_class = LOG_INTEGER;
+    li->key = "-fail-";
+    LogEvent()
+        .type(LOG_TYPE_ERROR)
+        .prio(INFORMATION_LEVEL)
+        .errcode(ER_PARSER_TRACE)
+        .subsys(LOG_SUBSYSTEM_TAG)
+        .component(LOG_COMPONENT_TAG)
+        .message("item_inconsistent(#%d): %s", 2,
+                 consistent[-log_bi->item_inconsistent(li)]);
+
+    // LOG_ITEM_KEY_NULL
+    li->type = LOG_ITEM_LOG_PRIO;
+    li->item_class = LOG_INTEGER;
+    li->key = nullptr;
+    LogEvent()
+        .type(LOG_TYPE_ERROR)
+        .prio(INFORMATION_LEVEL)
+        .errcode(ER_PARSER_TRACE)
+        .subsys(LOG_SUBSYSTEM_TAG)
+        .component(LOG_COMPONENT_TAG)
+        .message("item_inconsistent(#%d): %s", 3,
+                 consistent[-log_bi->item_inconsistent(li)]);
+
+    // LOG_ITEM_STRING_NULL
+    li->type = LOG_ITEM_LOG_MESSAGE;
+    li->item_class = LOG_LEX_STRING;
+    li->key = log_bi->wellknown_get_name(
+        log_bi->wellknown_by_type(LOG_ITEM_LOG_MESSAGE));
+    li->data.data_string.str = nullptr;
+    LogEvent()
+        .type(LOG_TYPE_ERROR)
+        .prio(INFORMATION_LEVEL)
+        .errcode(ER_PARSER_TRACE)
+        .subsys(LOG_SUBSYSTEM_TAG)
+        .component(LOG_COMPONENT_TAG)
+        .message("item_inconsistent(#%d): %s", 4,
+                 consistent[-log_bi->item_inconsistent(li)]);
+
+    // LOG_ITEM_OK
+    li->type = LOG_ITEM_LOG_MESSAGE;
+    li->item_class = LOG_LEX_STRING;
+    li->key = log_bi->wellknown_get_name(
+        log_bi->wellknown_by_type(LOG_ITEM_LOG_MESSAGE));
+    li->data.data_string.str = "";
+    li->data.data_string.length = 0;
+    LogEvent()
+        .type(LOG_TYPE_ERROR)
+        .prio(INFORMATION_LEVEL)
+        .errcode(ER_PARSER_TRACE)
+        .subsys(LOG_SUBSYSTEM_TAG)
+        .component(LOG_COMPONENT_TAG)
+        .message("item_inconsistent(#%d): %s", 5,
+                 consistent[-log_bi->item_inconsistent(li)]);
+  }
+
+
+// Source: log_sink_test.cc
+// Lines 604-771
+
+
+[ANSWER]
+MUST

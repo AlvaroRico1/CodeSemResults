@@ -1,0 +1,29 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'buffer' at line 6
+2. Pointer 'file' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+gimple_dump_bb (FILE *file, basic_block bb, int indent, dump_flags_t flags)
+{
+  dump_gimple_bb_header (file, bb, indent, flags);
+  if (bb->index >= NUM_FIXED_BLOCKS)
+    {
+      pretty_printer buffer;
+      pp_needs_newline (&buffer) = true;
+      buffer.buffer->stream = file;
+      gimple_dump_bb_buff (&buffer, bb, indent, flags);
+    }
+
+
+// Source: gimple-pretty-print.c
+// Lines 2980-2989
+
+
+[ANSWER]
+MUST

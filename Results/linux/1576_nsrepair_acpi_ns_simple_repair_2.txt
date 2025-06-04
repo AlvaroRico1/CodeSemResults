@@ -1,0 +1,1 @@
+new_object,linux/drivers/acpi/acpica/nsrepair.c,7,return_object_ptr,linux/drivers/acpi/acpica/nsrepair.c,4,2

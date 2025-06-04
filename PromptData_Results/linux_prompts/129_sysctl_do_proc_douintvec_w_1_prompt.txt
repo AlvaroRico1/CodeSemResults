@@ -1,0 +1,80 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'neg' at line 13
+2. Pointer 'left' at line 12
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int do_proc_douintvec_w(unsigned int *tbl_data,
+			       struct ctl_table *table,
+			       void __user *buffer,
+			       size_t *lenp, loff_t *ppos,
+			       int (*conv)(unsigned long *lvalp,
+					   unsigned int *valp,
+					   int write, void *data),
+			       void *data)
+{
+	unsigned long lval;
+	int err = 0;
+	size_t left;
+	bool neg;
+	char *kbuf = NULL, *p;
+
+	left = *lenp;
+
+	if (proc_first_pos_non_zero_ignore(ppos, table))
+		goto bail_early;
+
+	if (left > PAGE_SIZE - 1)
+		left = PAGE_SIZE - 1;
+
+	p = kbuf = memdup_user_nul(buffer, left);
+	if (IS_ERR(kbuf))
+		return -EINVAL;
+
+	left -= proc_skip_spaces(&p);
+	if (!left) {
+		err = -EINVAL;
+		goto out_free;
+	}
+
+	err = proc_get_long(&p, &left, &lval, &neg,
+			     proc_wspace_sep,
+			     sizeof(proc_wspace_sep), NULL);
+	if (err || neg) {
+		err = -EINVAL;
+		goto out_free;
+	}
+
+	if (conv(&lval, tbl_data, 1, data)) {
+		err = -EINVAL;
+		goto out_free;
+	}
+
+	if (!err && left)
+		left -= proc_skip_spaces(&p);
+
+out_free:
+	kfree(kbuf);
+	if (err)
+		return -EINVAL;
+
+	return 0;
+
+	/* This is in keeping with old __do_proc_dointvec() */
+bail_early:
+	*ppos += *lenp;
+	return err;
+}
+
+
+// Source: sysctl.c
+// Lines 2423-2483
+
+
+[ANSWER]
+MAY

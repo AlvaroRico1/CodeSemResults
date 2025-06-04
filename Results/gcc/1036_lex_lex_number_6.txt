@@ -1,0 +1,1 @@
+dest,gcc/libcpp/lex.c,6,cur,gcc/libcpp/lex.c,4,0

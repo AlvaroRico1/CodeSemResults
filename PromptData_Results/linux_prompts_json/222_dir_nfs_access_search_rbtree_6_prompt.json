@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'n' at line 3\n2. Pointer 'n' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic struct nfs_access_entry *nfs_access_search_rbtree(struct inode *inode, const struct cred *cred)\n{\n\tstruct rb_node *n = NFS_I(inode)->access_cache.rb_node;\n\n\twhile (n != NULL) {\n\t\tstruct nfs_access_entry *entry =\n\t\t\trb_entry(n, struct nfs_access_entry, rb_node);\n\t\tint cmp = cred_fscmp(cred, entry->cred);\n\n\t\tif (cmp < 0)\n\t\t\tn = n->rb_left;\n\t\telse if (cmp > 0)\n\t\t\tn = n->rb_right;\n\t\telse\n\t\t\treturn entry;\n\t}\n\treturn NULL;\n}\n\n\n// Source: dir.c\n// Lines 2269-2286\n",
+  "ANSWER": "MUST"
+}

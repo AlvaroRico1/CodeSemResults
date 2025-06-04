@@ -1,0 +1,1 @@
+index,libgit2/tests/libgit2/status/worktree.c,4,statuslist,libgit2/tests/libgit2/status/worktree.c,6,2

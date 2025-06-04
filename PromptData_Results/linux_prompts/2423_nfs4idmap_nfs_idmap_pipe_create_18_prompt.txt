@@ -1,0 +1,32 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'pipe' at line 5
+2. Pointer 'idmap' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int nfs_idmap_pipe_create(struct dentry *dir,
+		struct rpc_pipe_dir_object *pdo)
+{
+	struct idmap *idmap = pdo->pdo_data;
+	struct rpc_pipe *pipe = idmap->idmap_pipe;
+	struct dentry *dentry;
+
+	dentry = rpc_mkpipe_dentry(dir, "idmap", idmap, pipe);
+	if (IS_ERR(dentry))
+		return PTR_ERR(dentry);
+	pipe->dentry = dentry;
+	return 0;
+}
+
+
+// Source: nfs4idmap.c
+// Lines 434-446
+
+
+[ANSWER]
+MUST

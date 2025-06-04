@@ -1,0 +1,41 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'name' at line 2
+2. Pointer 'p' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int decode_filename_inline(struct xdr_stream *xdr,
+				  const char **name, u32 *length)
+{
+	__be32 *p;
+	u32 count;
+
+	p = xdr_inline_decode(xdr, 4);
+	if (unlikely(!p))
+		return -EIO;
+	count = be32_to_cpup(p);
+	if (count > NFS3_MAXNAMLEN)
+		goto out_nametoolong;
+	p = xdr_inline_decode(xdr, count);
+	if (unlikely(!p))
+		return -EIO;
+	*name = (const char *)p;
+	*length = count;
+	return 0;
+out_nametoolong:
+	dprintk("NFS: returned filename too long: %u\n", count);
+	return -ENAMETOOLONG;
+}
+
+
+// Source: nfs2xdr.c
+// Lines 397-418
+
+
+[ANSWER]
+MUST

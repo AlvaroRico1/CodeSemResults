@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'val' at line 4\n2. Pointer 'hdr_type' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void quirk_nvidia_hda(struct pci_dev *gpu)\n{\n\tu8 hdr_type;\n\tu32 val;\n\n\t/* There was no integrated HDA controller before MCP89 */\n\tif (gpu->device < PCI_DEVICE_ID_NVIDIA_GEFORCE_320M)\n\t\treturn;\n\n\t/* Bit 25 at offset 0x488 enables the HDA controller */\n\tpci_read_config_dword(gpu, 0x488, &val);\n\tif (val & BIT(25))\n\t\treturn;\n\n\tpci_info(gpu, \"Enabling HDA controller\\n\");\n\tpci_write_config_dword(gpu, 0x488, val | BIT(25));\n\n\t/* The GPU becomes a multi-function device when the HDA is enabled */\n\tpci_read_config_byte(gpu, PCI_HEADER_TYPE, &hdr_type);\n\tgpu->multifunction = !!(hdr_type & 0x80);\n}\n\n\n// Source: quirks.c\n// Lines 5018-5038\n",
+  "ANSWER": "MAY"
+}

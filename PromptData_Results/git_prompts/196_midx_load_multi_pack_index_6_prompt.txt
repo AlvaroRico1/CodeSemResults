@@ -1,0 +1,129 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'm' at line 3
+2. Pointer 'cur_pack_name' at line 11
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+struct multi_pack_index *load_multi_pack_index(const char *object_dir, int local)
+{
+	struct multi_pack_index *m = NULL;
+	int fd;
+	struct stat st;
+	size_t midx_size;
+	void *midx_map = NULL;
+	uint32_t hash_version;
+	char *midx_name = get_midx_filename(object_dir);
+	uint32_t i;
+	const char *cur_pack_name;
+	struct chunkfile *cf = NULL;
+
+	fd = git_open(midx_name);
+
+	if (fd < 0)
+		goto cleanup_fail;
+	if (fstat(fd, &st)) {
+		error_errno(_("failed to read %s"), midx_name);
+		goto cleanup_fail;
+	}
+
+	midx_size = xsize_t(st.st_size);
+
+	if (midx_size < MIDX_MIN_SIZE) {
+		error(_("multi-pack-index file %s is too small"), midx_name);
+		goto cleanup_fail;
+	}
+
+	FREE_AND_NULL(midx_name);
+
+	midx_map = xmmap(NULL, midx_size, PROT_READ, MAP_PRIVATE, fd, 0);
+	close(fd);
+
+	FLEX_ALLOC_STR(m, object_dir, object_dir);
+	m->data = midx_map;
+	m->data_len = midx_size;
+	m->local = local;
+
+	m->signature = get_be32(m->data);
+	if (m->signature != MIDX_SIGNATURE)
+		die(_("multi-pack-index signature 0x%08x does not match signature 0x%08x"),
+		      m->signature, MIDX_SIGNATURE);
+
+	m->version = m->data[MIDX_BYTE_FILE_VERSION];
+	if (m->version != MIDX_VERSION)
+		die(_("multi-pack-index version %d not recognized"),
+		      m->version);
+
+	hash_version = m->data[MIDX_BYTE_HASH_VERSION];
+	if (hash_version != oid_version()) {
+		error(_("multi-pack-index hash version %u does not match version %u"),
+		      hash_version, oid_version());
+		goto cleanup_fail;
+	}
+	m->hash_len = the_hash_algo->rawsz;
+
+	m->num_chunks = m->data[MIDX_BYTE_NUM_CHUNKS];
+
+	m->num_packs = get_be32(m->data + MIDX_BYTE_NUM_PACKS);
+
+	cf = init_chunkfile(NULL);
+
+	if (read_table_of_contents(cf, m->data, midx_size,
+				   MIDX_HEADER_SIZE, m->num_chunks))
+		goto cleanup_fail;
+
+	if (pair_chunk(cf, MIDX_CHUNKID_PACKNAMES, &m->chunk_pack_names) == CHUNK_NOT_FOUND)
+		die(_("multi-pack-index missing required pack-name chunk"));
+	if (read_chunk(cf, MIDX_CHUNKID_OIDFANOUT, midx_read_oid_fanout, m) == CHUNK_NOT_FOUND)
+		die(_("multi-pack-index missing required OID fanout chunk"));
+	if (pair_chunk(cf, MIDX_CHUNKID_OIDLOOKUP, &m->chunk_oid_lookup) == CHUNK_NOT_FOUND)
+		die(_("multi-pack-index missing required OID lookup chunk"));
+	if (pair_chunk(cf, MIDX_CHUNKID_OBJECTOFFSETS, &m->chunk_object_offsets) == CHUNK_NOT_FOUND)
+		die(_("multi-pack-index missing required object offsets chunk"));
+
+	pair_chunk(cf, MIDX_CHUNKID_LARGEOFFSETS, &m->chunk_large_offsets);
+
+	m->num_objects = ntohl(m->chunk_oid_fanout[255]);
+
+	CALLOC_ARRAY(m->pack_names, m->num_packs);
+	CALLOC_ARRAY(m->packs, m->num_packs);
+
+	cur_pack_name = (const char *)m->chunk_pack_names;
+	for (i = 0; i < m->num_packs; i++) {
+		m->pack_names[i] = cur_pack_name;
+
+		cur_pack_name += strlen(cur_pack_name) + 1;
+
+		if (i && strcmp(m->pack_names[i], m->pack_names[i - 1]) <= 0)
+			die(_("multi-pack-index pack names out of order: '%s' before '%s'"),
+			      m->pack_names[i - 1],
+			      m->pack_names[i]);
+	}
+
+	trace2_data_intmax("midx", the_repository, "load/num_packs", m->num_packs);
+	trace2_data_intmax("midx", the_repository, "load/num_objects", m->num_objects);
+
+	return m;
+
+cleanup_fail:
+	free(m);
+	free(midx_name);
+	free(cf);
+	if (midx_map)
+		munmap(midx_map, midx_size);
+	if (0 <= fd)
+		close(fd);
+	return NULL;
+}
+
+
+// Source: midx.c
+// Lines 84-193
+
+
+[ANSWER]
+MUST

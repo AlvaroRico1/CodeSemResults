@@ -1,0 +1,225 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'arg' at line 197
+2. Pointer 'help' at line 9
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+print_filtered_help (unsigned int include_flags,
+		     unsigned int exclude_flags,
+		     unsigned int any_flags,
+		     unsigned int columns,
+		     struct gcc_options *opts,
+		     unsigned int lang_mask)
+{
+  unsigned int i;
+  const char *help;
+  bool found = false;
+  bool displayed = false;
+  char new_help[256];
+
+  if (!opts->x_help_printed)
+    opts->x_help_printed = XCNEWVAR (char, cl_options_count);
+
+  if (!opts->x_help_enum_printed)
+    opts->x_help_enum_printed = XCNEWVAR (char, cl_enums_count);
+
+  auto_vec<option_help_tuple> help_tuples;
+
+  for (i = 0; i < cl_options_count; i++)
+    {
+      const struct cl_option *option = cl_options + i;
+      unsigned int len;
+      const char *opt;
+      const char *tab;
+
+      if (include_flags == 0
+	  || ((option->flags & include_flags) != include_flags))
+	{
+	  if ((option->flags & any_flags) == 0)
+	    continue;
+	}
+
+      /* Skip unwanted switches.  */
+      if ((option->flags & exclude_flags) != 0)
+	continue;
+
+      /* The driver currently prints its own help text.  */
+      if ((option->flags & CL_DRIVER) != 0
+	  && (option->flags & (((1U << cl_lang_count) - 1)
+			       | CL_COMMON | CL_TARGET)) == 0)
+	continue;
+
+      /* If an option contains a language specification,
+	 exclude it from common unless all languages are present.  */
+      if ((include_flags & CL_COMMON)
+	  && !(option->flags & CL_DRIVER)
+	  && (option->flags & CL_LANG_ALL)
+	  && (option->flags & CL_LANG_ALL) != CL_LANG_ALL)
+	continue;
+
+      found = true;
+      /* Skip switches that have already been printed.  */
+      if (opts->x_help_printed[i])
+	continue;
+
+      opts->x_help_printed[i] = true;
+
+      help = option->help;
+      if (help == NULL)
+	{
+	  if (exclude_flags & CL_UNDOCUMENTED)
+	    continue;
+
+	  help = undocumented_msg;
+	}
+
+      /* Get the translation.  */
+      help = _(help);
+
+      if (option->alias_target < N_OPTS
+	  && cl_options [option->alias_target].help)
+	{
+	  const struct cl_option *target = cl_options + option->alias_target;
+	  if (option->help == NULL)
+	    {
+	      /* The option is undocumented but is an alias for an option that
+		 is documented.  If the option has alias arguments, then its
+		 purpose is to provide certain arguments to the other option, so
+		 inform the reader of this.  Otherwise, point the reader to the
+		 other option in preference to the former.  */
+
+	      if (option->alias_arg)
+		{
+		  if (option->neg_alias_arg)
+		    snprintf (new_help, sizeof new_help,
+			      _("Same as %s%s (or, in negated form, %s%s)."),
+			      target->opt_text, option->alias_arg,
+			      target->opt_text, option->neg_alias_arg);
+		  else
+		    snprintf (new_help, sizeof new_help,
+			      _("Same as %s%s."),
+			      target->opt_text, option->alias_arg);
+		}
+	      else
+		snprintf (new_help, sizeof new_help,
+			  _("Same as %s."),
+			  target->opt_text);
+	    }
+	  else
+	    {
+	      /* For documented options with aliases, mention the aliased
+		 option's name for reference.  */
+	      snprintf (new_help, sizeof new_help,
+			_("%s  Same as %s."),
+			help, cl_options [option->alias_target].opt_text);
+	    }
+
+	  help = new_help;
+	}
+
+      if (option->warn_message)
+	{
+	  /* Mention that the use of the option will trigger a warning.  */
+	  if (help == new_help)
+	    snprintf (new_help + strlen (new_help),
+		      sizeof new_help - strlen (new_help),
+		      "  %s", _(use_diagnosed_msg));
+	  else
+	    snprintf (new_help, sizeof new_help,
+		      "%s  %s", help, _(use_diagnosed_msg));
+
+	  help = new_help;
+	}
+
+      /* Find the gap between the name of the
+	 option and its descriptive text.  */
+      tab = strchr (help, '\t');
+      if (tab)
+	{
+	  len = tab - help;
+	  opt = help;
+	  help = tab + 1;
+	}
+      else
+	{
+	  opt = option->opt_text;
+	  len = strlen (opt);
+	}
+
+      /* With the -Q option enabled we change the descriptive text associated
+	 with an option to be an indication of its current setting.  */
+      if (!opts->x_quiet_flag)
+	{
+	  void *flag_var = option_flag_var (i, opts);
+
+	  if (len < (LEFT_COLUMN + 2))
+	    strcpy (new_help, "\t\t");
+	  else
+	    strcpy (new_help, "\t");
+
+	  /* Set to print whether the option is enabled or disabled,
+	     or, if it's an alias for another option, the name of
+	     the aliased option.  */
+	  bool print_state = false;
+
+	  if (flag_var != NULL
+	      && option->var_type != CLVC_DEFER)
+	    {
+	      /* If OPTION is only available for a specific subset
+		 of languages other than this one, mention them.  */
+	      bool avail_for_lang = true;
+	      if (unsigned langset = option->flags & CL_LANG_ALL)
+		{
+		  if (!(langset & lang_mask))
+		    {
+		      avail_for_lang = false;
+		      strcat (new_help, _("[available in "));
+		      for (unsigned i = 0, n = 0; (1U << i) < CL_LANG_ALL; ++i)
+			if (langset & (1U << i))
+			  {
+			    if (n++)
+			      strcat (new_help, ", ");
+			    strcat (new_help, lang_names[i]);
+			  }
+		      strcat (new_help, "]");
+		    }
+		}
+	      if (!avail_for_lang)
+		; /* Print nothing else if the option is not available
+		     in the current language.  */
+	      else if (option->flags & CL_JOINED)
+		{
+		  if (option->var_type == CLVC_STRING)
+		    {
+		      if (* (const char **) flag_var != NULL)
+			snprintf (new_help + strlen (new_help),
+				  sizeof (new_help) - strlen (new_help),
+				  "%s", * (const char **) flag_var);
+		    }
+		  else if (option->var_type == CLVC_ENUM)
+		    {
+		      const struct cl_enum *e = &cl_enums[option->var_enum];
+		      int value;
+		      const char *arg = NULL;
+
+		      value = e->get (flag_var);
+		      enum_value_to_arg (e->values, &arg, value, lang_mask);
+		      if (arg == NULL)
+			arg = _("[default]");
+		      snprintf (new_help + strlen (new_help),
+				sizeof (new_help) - strlen (new_help),
+				"%s", arg);
+		    }
+
+
+// Source: opts.c
+// Lines 1253-1458
+
+
+[ANSWER]
+MUST-NOT

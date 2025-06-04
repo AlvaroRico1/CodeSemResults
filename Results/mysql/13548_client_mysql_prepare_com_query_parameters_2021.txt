@@ -1,0 +1,1 @@
+send_named_params,mysql/sql-common/client.cc,7,ext,mysql/sql-common/client.cc,5,0

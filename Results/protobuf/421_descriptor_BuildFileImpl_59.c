@@ -1,0 +1,159 @@
+FileDescriptor* DescriptorBuilder::BuildFileImpl(
+    const FileDescriptorProto& proto, internal::FlatAllocator& alloc) {
+  FileDescriptor* result = alloc.AllocateArray<FileDescriptor>(1);
+  file_ = result;
+
+  result->is_placeholder_ = false;
+  result->finished_building_ = false;
+  SourceCodeInfo* info = nullptr;
+  if (proto.has_source_code_info()) {
+    info = alloc.AllocateArray<SourceCodeInfo>(1);
+    info->CopyFrom(proto.source_code_info());
+    result->source_code_info_ = info;
+  } else {
+    result->source_code_info_ = &SourceCodeInfo::default_instance();
+  }
+
+  file_tables_ = alloc.AllocateArray<FileDescriptorTables>(1);
+  file_->tables_ = file_tables_;
+
+  if (!proto.has_name()) {
+    AddError("", proto, DescriptorPool::ErrorCollector::OTHER,
+             "Missing field: FileDescriptorProto.name.");
+  }
+
+  // TODO(liujisi): Report error when the syntax is empty after all the protos
+  // have added the syntax statement.
+  if (proto.syntax().empty() || proto.syntax() == "proto2") {
+    file_->syntax_ = FileDescriptor::SYNTAX_PROTO2;
+  } else if (proto.syntax() == "proto3") {
+    file_->syntax_ = FileDescriptor::SYNTAX_PROTO3;
+  } else {
+    file_->syntax_ = FileDescriptor::SYNTAX_UNKNOWN;
+    AddError(proto.name(), proto, DescriptorPool::ErrorCollector::OTHER,
+             "Unrecognized syntax: " + proto.syntax());
+  }
+
+  result->name_ = alloc.AllocateStrings(proto.name());
+  if (proto.has_package()) {
+    result->package_ = alloc.AllocateStrings(proto.package());
+  } else {
+    // We cannot rely on proto.package() returning a valid string if
+    // proto.has_package() is false, because we might be running at static
+    // initialization time, in which case default values have not yet been
+    // initialized.
+    result->package_ = alloc.AllocateStrings("");
+  }
+  result->pool_ = pool_;
+
+  if (result->name().find('\0') != std::string::npos) {
+    AddError(result->name(), proto, DescriptorPool::ErrorCollector::NAME,
+             "\"" + result->name() + "\" contains null character.");
+    return nullptr;
+  }
+
+  // Add to tables.
+  if (!tables_->AddFile(result)) {
+    AddError(proto.name(), proto, DescriptorPool::ErrorCollector::OTHER,
+             "A file with this name is already in the pool.");
+    // Bail out early so that if this is actually the exact same file, we
+    // don't end up reporting that every single symbol is already defined.
+    return nullptr;
+  }
+  if (!result->package().empty()) {
+    if (std::count(result->package().begin(), result->package().end(), '.') >
+        kPackageLimit) {
+      AddError(result->package(), proto, DescriptorPool::ErrorCollector::NAME,
+               "Exceeds Maximum Package Depth");
+      return nullptr;
+    }
+    AddPackage(result->package(), proto, result);
+  }
+
+  // Make sure all dependencies are loaded.
+  std::set<std::string> seen_dependencies;
+  result->dependency_count_ = proto.dependency_size();
+  result->dependencies_ =
+      alloc.AllocateArray<const FileDescriptor*>(proto.dependency_size());
+  result->dependencies_once_ = nullptr;
+  unused_dependency_.clear();
+  std::set<int> weak_deps;
+  for (int i = 0; i < proto.weak_dependency_size(); ++i) {
+    weak_deps.insert(proto.weak_dependency(i));
+  }
+
+  bool need_lazy_deps = false;
+  for (int i = 0; i < proto.dependency_size(); i++) {
+    if (!seen_dependencies.insert(proto.dependency(i)).second) {
+      AddTwiceListedError(proto, i);
+    }
+
+    const FileDescriptor* dependency = tables_->FindFile(proto.dependency(i));
+    if (dependency == nullptr && pool_->underlay_ != nullptr) {
+      dependency = pool_->underlay_->FindFileByName(proto.dependency(i));
+    }
+
+    if (dependency == result) {
+      // Recursive import.  dependency/result is not fully initialized, and it's
+      // dangerous to try to do anything with it.  The recursive import error
+      // will be detected and reported in DescriptorBuilder::BuildFile().
+      return nullptr;
+    }
+
+    if (dependency == nullptr) {
+      if (!pool_->lazily_build_dependencies_) {
+        if (pool_->allow_unknown_ ||
+            (!pool_->enforce_weak_ && weak_deps.find(i) != weak_deps.end())) {
+          internal::FlatAllocator lazy_dep_alloc;
+          lazy_dep_alloc.PlanArray<FileDescriptor>(1);
+          lazy_dep_alloc.PlanArray<std::string>(1);
+          lazy_dep_alloc.FinalizePlanning(tables_);
+          dependency = pool_->NewPlaceholderFileWithMutexHeld(
+              proto.dependency(i), lazy_dep_alloc);
+        } else {
+          AddImportError(proto, i);
+        }
+      }
+    } else {
+      // Add to unused_dependency_ to track unused imported files.
+      // Note: do not track unused imported files for public import.
+      if (pool_->enforce_dependencies_ &&
+          (pool_->unused_import_track_files_.find(proto.name()) !=
+           pool_->unused_import_track_files_.end()) &&
+          (dependency->public_dependency_count() == 0)) {
+        unused_dependency_.insert(dependency);
+      }
+    }
+
+    result->dependencies_[i] = dependency;
+    if (pool_->lazily_build_dependencies_ && !dependency) {
+      need_lazy_deps = true;
+    }
+  }
+  if (need_lazy_deps) {
+    int total_char_size = 0;
+    for (int i = 0; i < proto.dependency_size(); i++) {
+      if (result->dependencies_[i] == nullptr) {
+        total_char_size += static_cast<int>(proto.dependency(i).size());
+      }
+      ++total_char_size;  // For NUL char
+    }
+
+    void* data = tables_->AllocateBytes(
+        static_cast<int>(sizeof(internal::once_flag) + total_char_size));
+    result->dependencies_once_ = ::new (data) internal::once_flag{};
+    char* name_data = reinterpret_cast<char*>(result->dependencies_once_ + 1);
+
+    for (int i = 0; i < proto.dependency_size(); i++) {
+      if (result->dependencies_[i] == nullptr) {
+        memcpy(name_data, proto.dependency(i).c_str(),
+               proto.dependency(i).size());
+        name_data += proto.dependency(i).size();
+      }
+      *name_data++ = '\0';
+    }
+  }
+
+
+// Source: descriptor.cc
+// Lines 5047-5201

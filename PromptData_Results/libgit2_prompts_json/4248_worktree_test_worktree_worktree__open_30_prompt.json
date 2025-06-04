@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'wt' at line 3\n2. Pointer 'repo' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid test_worktree_worktree__open(void)\n{\n\tgit_worktree *wt;\n\tgit_repository *repo;\n\n\tcl_git_pass(git_worktree_lookup(&wt, fixture.repo, \"testrepo-worktree\"));\n\n\tcl_git_pass(git_repository_open_from_worktree(&repo, wt));\n\tcl_assert_equal_s(git_repository_workdir(repo),\n\t\tgit_repository_workdir(fixture.worktree));\n\n\tgit_repository_free(repo);\n\tgit_worktree_free(wt);\n}\n\n\n// Source: worktree.c\n// Lines 127-140\n",
+  "ANSWER": "MAY"
+}

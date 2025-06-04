@@ -1,0 +1,90 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'buf' at line 2
+2. Pointer 'new_ptr' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_str_try_grow(
+	git_str *buf, size_t target_size, bool mark_oom)
+{
+	char *new_ptr;
+	size_t new_size;
+
+	if (buf->ptr == git_str__oom)
+		return -1;
+
+	if (buf->asize == 0 && buf->size != 0) {
+		git_error_set(GIT_ERROR_INVALID, "cannot grow a borrowed buffer");
+		return GIT_EINVALID;
+	}
+
+	if (!target_size)
+		target_size = buf->size;
+
+	if (target_size <= buf->asize)
+		return 0;
+
+	if (buf->asize == 0) {
+		new_size = target_size;
+		new_ptr = NULL;
+	} else {
+		new_size = buf->asize;
+		/*
+		 * Grow the allocated buffer by 1.5 to allow
+		 * re-use of memory holes resulting from the
+		 * realloc. If this is still too small, then just
+		 * use the target size.
+		 */
+		if ((new_size = (new_size << 1) - (new_size >> 1)) < target_size)
+			new_size = target_size;
+		new_ptr = buf->ptr;
+	}
+
+	/* round allocation up to multiple of 8 */
+	new_size = (new_size + 7) & ~7;
+
+	if (new_size < buf->size) {
+		if (mark_oom) {
+			if (buf->ptr && buf->ptr != git_str__initstr)
+				git__free(buf->ptr);
+			buf->ptr = git_str__oom;
+		}
+
+		git_error_set_oom();
+		return -1;
+	}
+
+	new_ptr = git__realloc(new_ptr, new_size);
+
+	if (!new_ptr) {
+		if (mark_oom) {
+			if (buf->ptr && (buf->ptr != git_str__initstr))
+				git__free(buf->ptr);
+			buf->ptr = git_str__oom;
+		}
+		return -1;
+	}
+
+	buf->asize = new_size;
+	buf->ptr   = new_ptr;
+
+	/* truncate the existing buffer size if necessary */
+	if (buf->size >= buf->asize)
+		buf->size = buf->asize - 1;
+	buf->ptr[buf->size] = '\0';
+
+	return 0;
+}
+
+
+// Source: str.c
+// Lines 36-106
+
+
+[ANSWER]
+MUST

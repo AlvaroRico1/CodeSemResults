@@ -1,0 +1,46 @@
+void test_refs_create__symbolic(void)
+{
+	/* create a new symbolic reference */
+	git_reference *new_reference, *looked_up_ref, *resolved_ref;
+	git_repository *repo2;
+	git_oid id;
+
+	const char *new_head_tracker = "ANOTHER_HEAD_TRACKER";
+
+	git_oid_fromstr(&id, current_master_tip);
+
+	/* Create and write the new symbolic reference */
+	cl_git_pass(git_reference_symbolic_create(&new_reference, g_repo, new_head_tracker, current_head_target, 0, NULL));
+
+	/* Ensure the reference can be looked-up... */
+	cl_git_pass(git_reference_lookup(&looked_up_ref, g_repo, new_head_tracker));
+	cl_assert(git_reference_type(looked_up_ref) & GIT_REFERENCE_SYMBOLIC);
+	cl_assert(reference_is_packed(looked_up_ref) == 0);
+	cl_assert_equal_s(looked_up_ref->name, new_head_tracker);
+
+	/* ...peeled.. */
+	cl_git_pass(git_reference_resolve(&resolved_ref, looked_up_ref));
+	cl_assert(git_reference_type(resolved_ref) == GIT_REFERENCE_DIRECT);
+
+	/* ...and that it points to the current master tip */
+	cl_assert_equal_oid(&id, git_reference_target(resolved_ref));
+	git_reference_free(looked_up_ref);
+	git_reference_free(resolved_ref);
+
+	/* Similar test with a fresh new repository */
+	cl_git_pass(git_repository_open(&repo2, "testrepo"));
+
+	cl_git_pass(git_reference_lookup(&looked_up_ref, repo2, new_head_tracker));
+	cl_git_pass(git_reference_resolve(&resolved_ref, looked_up_ref));
+	cl_assert_equal_oid(&id, git_reference_target(resolved_ref));
+
+	git_repository_free(repo2);
+
+	git_reference_free(new_reference);
+	git_reference_free(looked_up_ref);
+	git_reference_free(resolved_ref);
+}
+
+
+// Source: create.c
+// Lines 28-69

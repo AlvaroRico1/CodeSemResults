@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'to' at line 5\n2. Pointer 'pos' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void set_param_time(Item_param *param, uchar **pos, ulong len) {\n  MYSQL_TIME tm;\n\n  if (len >= 8) {\n    uchar *to = *pos;\n    uint day;\n\n    tm.neg = (bool)to[0];\n    day = (uint)sint4korr(to + 1);\n    tm.hour = (uint)to[5] + day * 24;\n    tm.minute = (uint)to[6];\n    tm.second = (uint)to[7];\n    tm.second_part = (len > 8) ? (ulong)sint4korr(to + 8) : 0;\n    if (tm.hour > 838) {\n      /* TODO: add warning 'Data truncated' here */\n      tm.hour = 838;\n      tm.minute = 59;\n      tm.second = 59;\n    }\n    tm.day = tm.year = tm.month = 0;\n  } else\n\n\n// Source: sql_prepare.cc\n// Lines 551-571\n",
+  "ANSWER": "MUST"
+}

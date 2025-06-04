@@ -1,0 +1,1 @@
+gave_up_on,libgit2/src/libgit2/describe.c,10,c,libgit2/src/libgit2/describe.c,66,1

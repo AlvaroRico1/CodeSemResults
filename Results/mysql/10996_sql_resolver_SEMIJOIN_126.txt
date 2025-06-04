@@ -1,0 +1,1 @@
+prev_table,mysql/sql/sql_resolver.cc,8,table,mysql/sql/sql_resolver.cc,36,1

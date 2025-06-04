@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tmp' at line 3
+2. Pointer 'nls' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int unregister_nls(struct nls_table * nls)
+{
+	struct nls_table ** tmp = &tables;
+
+	spin_lock(&nls_lock);
+	while (*tmp) {
+		if (nls == *tmp) {
+			*tmp = nls->next;
+			spin_unlock(&nls_lock);
+			return 0;
+		}
+		tmp = &(*tmp)->next;
+	}
+	spin_unlock(&nls_lock);
+	return -EINVAL;
+}
+
+
+// Source: nls_base.c
+// Lines 258-273
+
+
+[ANSWER]
+MUST

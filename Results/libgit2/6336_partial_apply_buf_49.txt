@@ -1,0 +1,1 @@
+newsize,libgit2/tests/libgit2/apply/partial.c,19,error,libgit2/tests/libgit2/apply/partial.c,17,0

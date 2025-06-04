@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'path' at line 4\n2. Pointer 'limit' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic char *nfs4_path(struct dentry *dentry, char *buffer, ssize_t buflen)\n{\n\tchar *limit;\n\tchar *path = nfs_path(&limit, dentry, buffer, buflen,\n\t\t\t      NFS_PATH_CANONICAL);\n\tif (!IS_ERR(path)) {\n\t\tchar *path_component = nfs_path_component(path, limit);\n\t\tif (path_component)\n\t\t\treturn path_component;\n\t}\n\treturn path;\n}\n\n\n// Source: nfs4namespace.c\n// Lines 84-95\n",
+  "ANSWER": "MAY"
+}

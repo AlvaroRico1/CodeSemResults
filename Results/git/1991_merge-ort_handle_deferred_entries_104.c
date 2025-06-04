@@ -1,0 +1,64 @@
+static int handle_deferred_entries(struct merge_options *opt,
+				   struct traverse_info *info)
+{
+	struct rename_info *renames = &opt->priv->renames;
+	struct hashmap_iter iter;
+	struct strmap_entry *entry;
+	int side, ret = 0;
+	int path_count_before, path_count_after = 0;
+
+	path_count_before = strmap_get_size(&opt->priv->paths);
+	for (side = MERGE_SIDE1; side <= MERGE_SIDE2; side++) {
+		unsigned optimization_okay = 1;
+		struct strintmap copy;
+
+		/* Loop over the set of paths we need to know rename info for */
+		strset_for_each_entry(&renames->relevant_sources[side],
+				      &iter, entry) {
+			char *rename_target, *dir, *dir_marker;
+			struct strmap_entry *e;
+
+			/*
+			 * If we don't know delete/rename info for this path,
+			 * then we need to recurse into all trees to get all
+			 * adds to make sure we have it.
+			 */
+			if (strset_contains(&renames->cached_irrelevant[side],
+					    entry->key))
+				continue;
+			e = strmap_get_entry(&renames->cached_pairs[side],
+					     entry->key);
+			if (!e) {
+				optimization_okay = 0;
+				break;
+			}
+
+			/* If this is a delete, we have enough info already */
+			rename_target = e->value;
+			if (!rename_target)
+				continue;
+
+			/* If we already walked the rename target, we're good */
+			if (strmap_contains(&opt->priv->paths, rename_target))
+				continue;
+
+			/*
+			 * Otherwise, we need to get a list of directories that
+			 * will need to be recursed into to get this
+			 * rename_target.
+			 */
+			dir = xstrdup(rename_target);
+			while ((dir_marker = strrchr(dir, '/'))) {
+				*dir_marker = '\0';
+				if (strset_contains(&renames->deferred[side].target_dirs,
+						    dir))
+					break;
+				strset_add(&renames->deferred[side].target_dirs,
+					   dir);
+			}
+			free(dir);
+		}
+
+
+// Source: merge-ort.c
+// Lines 1283-1342

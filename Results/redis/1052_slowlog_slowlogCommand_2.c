@@ -1,0 +1,58 @@
+void slowlogCommand(client *c) {
+    if (c->argc == 2 && !strcasecmp(c->argv[1]->ptr,"help")) {
+        const char *help[] = {
+"GET [<count>]",
+"    Return top <count> entries from the slowlog (default: 10). Entries are",
+"    made of:",
+"    id, timestamp, time in microseconds, arguments array, client IP and port,",
+"    client name",
+"LEN",
+"    Return the length of the slowlog.",
+"RESET",
+"    Reset the slowlog.",
+NULL
+        };
+        addReplyHelp(c, help);
+    } else if (c->argc == 2 && !strcasecmp(c->argv[1]->ptr,"reset")) {
+        slowlogReset();
+        addReply(c,shared.ok);
+    } else if (c->argc == 2 && !strcasecmp(c->argv[1]->ptr,"len")) {
+        addReplyLongLong(c,listLength(server.slowlog));
+    } else if ((c->argc == 2 || c->argc == 3) &&
+               !strcasecmp(c->argv[1]->ptr,"get"))
+    {
+        long count = 10, sent = 0;
+        listIter li;
+        void *totentries;
+        listNode *ln;
+        slowlogEntry *se;
+
+        if (c->argc == 3 &&
+            getLongFromObjectOrReply(c,c->argv[2],&count,NULL) != C_OK)
+            return;
+
+        listRewind(server.slowlog,&li);
+        totentries = addReplyDeferredLen(c);
+        while(count-- && (ln = listNext(&li))) {
+            int j;
+
+            se = ln->value;
+            addReplyArrayLen(c,6);
+            addReplyLongLong(c,se->id);
+            addReplyLongLong(c,se->time);
+            addReplyLongLong(c,se->duration);
+            addReplyArrayLen(c,se->argc);
+            for (j = 0; j < se->argc; j++)
+                addReplyBulk(c,se->argv[j]);
+            addReplyBulkCBuffer(c,se->peerid,sdslen(se->peerid));
+            addReplyBulkCBuffer(c,se->cname,sdslen(se->cname));
+            sent++;
+        }
+        setDeferredArrayLen(c,totentries,sent);
+    } else {
+        addReplySubcommandSyntaxError(c);
+    }
+
+
+// Source: slowlog.c
+// Lines 142-195

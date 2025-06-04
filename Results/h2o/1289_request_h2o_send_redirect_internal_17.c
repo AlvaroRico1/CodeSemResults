@@ -1,0 +1,36 @@
+void h2o_send_redirect_internal(h2o_req_t *req, h2o_iovec_t method, const char *url_str, size_t url_len, int preserve_overrides)
+{
+    h2o_url_t url;
+
+    /* parse the location URL */
+    if (h2o_url_parse_relative(url_str, url_len, &url) != 0) {
+        /* TODO log h2o_error_printf("[proxy] cannot handle location header: %.*s\n", (int)url_len, url); */
+        h2o_send_error_deferred_502(req, "Gateway Error", "internal error", 0);
+        return;
+    }
+    /* convert the location to absolute (while creating copies of the values passed to the deferred call) */
+    if (url.scheme == NULL)
+        url.scheme = req->scheme;
+    if (url.authority.base == NULL) {
+        if (req->hostconf != NULL)
+            url.authority = req->hostconf->authority.hostport;
+        else
+            url.authority = req->authority;
+    } else {
+        if (h2o_lcstris(url.authority.base, url.authority.len, req->authority.base, req->authority.len)) {
+            url.authority = req->authority;
+        } else {
+            url.authority = h2o_strdup(&req->pool, url.authority.base, url.authority.len);
+            preserve_overrides = 0;
+        }
+    }
+    h2o_iovec_t base_path = req->path;
+    h2o_url_resolve_path(&base_path, &url.path);
+    url.path = h2o_concat(&req->pool, base_path, url.path);
+
+    h2o_reprocess_request_deferred(req, method, url.scheme, url.authority, url.path, preserve_overrides ? req->overrides : NULL, 1);
+}
+
+
+// Source: request.c
+// Lines 797-828

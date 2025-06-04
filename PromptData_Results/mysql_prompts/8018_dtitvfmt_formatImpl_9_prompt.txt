@@ -1,0 +1,132 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'firstCal' at line 89
+2. Pointer 'toCalendar' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+DateIntervalFormat::formatImpl(Calendar& fromCalendar,
+                           Calendar& toCalendar,
+                           UnicodeString& appendTo,
+                           int8_t& firstIndex,
+                           FieldPositionHandler& fphandler,
+                           UErrorCode& status) const {
+    if ( U_FAILURE(status) ) {
+        return appendTo;
+    }
+
+    // Initialize firstIndex to -1 (single date, no range)
+    firstIndex = -1;
+
+    // not support different calendar types and time zones
+    //if ( fromCalendar.getType() != toCalendar.getType() ) {
+    if ( !fromCalendar.isEquivalentTo(toCalendar) ) {
+        status = U_ILLEGAL_ARGUMENT_ERROR;
+        return appendTo;
+    }
+
+    // First, find the largest different calendar field.
+    UCalendarDateFields field = UCAL_FIELD_COUNT;
+
+    if ( fromCalendar.get(UCAL_ERA,status) != toCalendar.get(UCAL_ERA,status)) {
+        field = UCAL_ERA;
+    } else if ( fromCalendar.get(UCAL_YEAR, status) !=
+                toCalendar.get(UCAL_YEAR, status) ) {
+        field = UCAL_YEAR;
+    } else if ( fromCalendar.get(UCAL_MONTH, status) !=
+                toCalendar.get(UCAL_MONTH, status) ) {
+        field = UCAL_MONTH;
+    } else if ( fromCalendar.get(UCAL_DATE, status) !=
+                toCalendar.get(UCAL_DATE, status) ) {
+        field = UCAL_DATE;
+    } else if ( fromCalendar.get(UCAL_AM_PM, status) !=
+                toCalendar.get(UCAL_AM_PM, status) ) {
+        field = UCAL_AM_PM;
+    } else if ( fromCalendar.get(UCAL_HOUR, status) !=
+                toCalendar.get(UCAL_HOUR, status) ) {
+        field = UCAL_HOUR;
+    } else if ( fromCalendar.get(UCAL_MINUTE, status) !=
+                toCalendar.get(UCAL_MINUTE, status) ) {
+        field = UCAL_MINUTE;
+    } else if ( fromCalendar.get(UCAL_SECOND, status) !=
+                toCalendar.get(UCAL_SECOND, status) ) {
+        field = UCAL_SECOND;
+    }
+
+    if ( U_FAILURE(status) ) {
+        return appendTo;
+    }
+    if ( field == UCAL_FIELD_COUNT ) {
+        /* ignore the millisecond etc. small fields' difference.
+         * use single date when all the above are the same.
+         */
+        return fDateFormat->_format(fromCalendar, appendTo, fphandler, status);
+    }
+    UBool fromToOnSameDay = (field==UCAL_AM_PM || field==UCAL_HOUR || field==UCAL_MINUTE || field==UCAL_SECOND);
+
+    // following call should not set wrong status,
+    // all the pass-in fields are valid till here
+    int32_t itvPtnIndex = DateIntervalInfo::calendarFieldToIntervalIndex(field,
+                                                                        status);
+    const PatternInfo& intervalPattern = fIntervalPatterns[itvPtnIndex];
+
+    if ( intervalPattern.firstPart.isEmpty() &&
+         intervalPattern.secondPart.isEmpty() ) {
+        if ( fDateFormat->isFieldUnitIgnored(field) ) {
+            /* the largest different calendar field is small than
+             * the smallest calendar field in pattern,
+             * return single date format.
+             */
+            return fDateFormat->_format(fromCalendar, appendTo, fphandler, status);
+        }
+        return fallbackFormat(fromCalendar, toCalendar, fromToOnSameDay, appendTo, firstIndex, fphandler, status);
+    }
+    // If the first part in interval pattern is empty,
+    // the 2nd part of it saves the full-pattern used in fall-back.
+    // For a 'real' interval pattern, the first part will never be empty.
+    if ( intervalPattern.firstPart.isEmpty() ) {
+        // fall back
+        UnicodeString originalPattern;
+        fDateFormat->toPattern(originalPattern);
+        fDateFormat->applyPattern(intervalPattern.secondPart);
+        appendTo = fallbackFormat(fromCalendar, toCalendar, fromToOnSameDay, appendTo, firstIndex, fphandler, status);
+        fDateFormat->applyPattern(originalPattern);
+        return appendTo;
+    }
+    Calendar* firstCal;
+    Calendar* secondCal;
+    if ( intervalPattern.laterDateFirst ) {
+        firstCal = &toCalendar;
+        secondCal = &fromCalendar;
+        firstIndex = 1;
+    } else {
+        firstCal = &fromCalendar;
+        secondCal = &toCalendar;
+        firstIndex = 0;
+    }
+    // break the interval pattern into 2 parts,
+    // first part should not be empty,
+    UnicodeString originalPattern;
+    fDateFormat->toPattern(originalPattern);
+    fDateFormat->applyPattern(intervalPattern.firstPart);
+    fDateFormat->_format(*firstCal, appendTo, fphandler, status);
+
+    if ( !intervalPattern.secondPart.isEmpty() ) {
+        fDateFormat->applyPattern(intervalPattern.secondPart);
+        fDateFormat->_format(*secondCal, appendTo, fphandler, status);
+    }
+    fDateFormat->applyPattern(originalPattern);
+    return appendTo;
+}
+
+
+// Source: dtitvfmt.cpp
+// Lines 401-513
+
+
+[ANSWER]
+MUST

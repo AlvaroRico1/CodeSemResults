@@ -1,0 +1,100 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'info' at line 11
+2. Pointer 'files' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int collect_attr_files(
+	git_repository *repo,
+	git_attr_session *attr_session,
+	git_attr_options *opts,
+	const char *path,
+	git_vector *files)
+{
+	int error = 0;
+	git_str dir = GIT_STR_INIT, attrfile = GIT_STR_INIT;
+	const char *workdir = git_repository_workdir(repo);
+	attr_walk_up_info info = { NULL };
+
+	GIT_ASSERT(!git_fs_path_is_absolute(path));
+
+	if ((error = attr_setup(repo, attr_session, opts)) < 0)
+		return error;
+
+	/* Resolve path in a non-bare repo */
+	if (workdir != NULL) {
+		if (!(error = git_repository_workdir_path(&dir, repo, path)))
+			error = git_fs_path_find_dir(&dir);
+	}
+	else {
+		error = git_fs_path_dirname_r(&dir, path);
+	}
+
+	if (error < 0)
+		goto cleanup;
+
+	/* in precedence order highest to lowest:
+	 * - $GIT_DIR/info/attributes
+	 * - path components with .gitattributes
+	 * - config core.attributesfile
+	 * - $GIT_PREFIX/etc/gitattributes
+	 */
+
+	if ((error = git_repository__item_path(&attrfile, repo, GIT_REPOSITORY_ITEM_INFO)) < 0 ||
+	    (error = push_attr_file(repo, attr_session, files, attrfile.ptr, GIT_ATTR_FILE_INREPO)) < 0) {
+		if (error != GIT_ENOTFOUND)
+			goto cleanup;
+	}
+
+	info.repo = repo;
+	info.attr_session = attr_session;
+	info.opts = opts;
+	info.workdir = workdir;
+	if (git_repository_index__weakptr(&info.index, repo) < 0)
+		git_error_clear(); /* no error even if there is no index */
+	info.files = files;
+
+	if (!strcmp(dir.ptr, "."))
+		error = push_one_attr(&info, "");
+	else
+		error = git_fs_path_walk_up(&dir, workdir, push_one_attr, &info);
+
+	if (error < 0)
+		goto cleanup;
+
+	if (git_repository_attr_cache(repo)->cfg_attr_file != NULL) {
+		error = push_attr_file(repo, attr_session, files, NULL, git_repository_attr_cache(repo)->cfg_attr_file);
+		if (error < 0)
+			goto cleanup;
+	}
+
+	if (!opts || (opts->flags & GIT_ATTR_CHECK_NO_SYSTEM) == 0) {
+		error = system_attr_file(&dir, attr_session);
+
+		if (!error)
+			error = push_attr_file(repo, attr_session, files, NULL, dir.ptr);
+		else if (error == GIT_ENOTFOUND)
+			error = 0;
+	}
+
+ cleanup:
+	if (error < 0)
+		release_attr_files(files);
+	git_str_dispose(&attrfile);
+	git_str_dispose(&dir);
+
+	return error;
+}
+
+
+// Source: attr.c
+// Lines 620-700
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,39 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'refname' at line 1
+2. Pointer 'commit' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void test_checkout_fails(const char *refname, const char *filename)
+{
+	git_oid commit_id;
+	git_commit *commit;
+	git_checkout_options opts = GIT_CHECKOUT_OPTIONS_INIT;
+	git_str path = GIT_STR_INIT;
+
+	cl_git_pass(git_str_joinpath(&path, repo_name, filename));
+
+	cl_git_pass(git_reference_name_to_id(&commit_id, repo, refname));
+	cl_git_pass(git_commit_lookup(&commit, repo, &commit_id));
+
+	opts.checkout_strategy = GIT_CHECKOUT_FORCE;
+
+	cl_git_fail(git_checkout_tree(repo, (const git_object *)commit, &opts));
+	cl_assert(!git_fs_path_exists(path.ptr));
+
+	git_commit_free(commit);
+	git_str_dispose(&path);
+}
+
+
+// Source: nasty.c
+// Lines 47-66
+
+
+[ANSWER]
+MUST-NOT

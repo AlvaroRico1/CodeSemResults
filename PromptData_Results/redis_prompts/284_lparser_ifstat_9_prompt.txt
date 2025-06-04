@@ -1,0 +1,41 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'fs' at line 3
+2. Pointer 'ls' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void ifstat (LexState *ls, int line) {
+  /* ifstat -> IF cond THEN block {ELSEIF cond THEN block} [ELSE block] END */
+  FuncState *fs = ls->fs;
+  int flist;
+  int escapelist = NO_JUMP;
+  flist = test_then_block(ls);  /* IF cond THEN block */
+  while (ls->t.token == TK_ELSEIF) {
+    luaK_concat(fs, &escapelist, luaK_jump(fs));
+    luaK_patchtohere(fs, flist);
+    flist = test_then_block(ls);  /* ELSEIF cond THEN block */
+  }
+  if (ls->t.token == TK_ELSE) {
+    luaK_concat(fs, &escapelist, luaK_jump(fs));
+    luaK_patchtohere(fs, flist);
+    luaX_next(ls);  /* skip ELSE (after patch, for correct line info) */
+    block(ls);  /* `else' part */
+  }
+  else
+    luaK_concat(fs, &escapelist, flist);
+  luaK_patchtohere(fs, escapelist);
+  check_match(ls, TK_END, TK_IF, line);
+}
+
+
+// Source: lparser.c
+// Lines 1141-1162
+
+
+[ANSWER]
+MUST

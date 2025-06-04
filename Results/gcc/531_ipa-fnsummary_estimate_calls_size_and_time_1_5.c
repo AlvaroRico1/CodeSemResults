@@ -1,0 +1,57 @@
+estimate_calls_size_and_time_1 (struct cgraph_node *node, int *size,
+			        int *min_size, sreal *time,
+			        ipa_hints *hints,
+			        clause_t possible_truths,
+			        vec<tree> known_vals,
+			        vec<ipa_polymorphic_call_context> known_contexts,
+			        vec<ipa_agg_value_set> known_aggs)
+{
+  struct cgraph_edge *e;
+  for (e = node->callees; e; e = e->next_callee)
+    {
+      if (!e->inline_failed)
+	{
+	  gcc_checking_assert (!ipa_call_summaries->get (e));
+	  estimate_calls_size_and_time_1 (e->callee, size, min_size, time,
+					  hints,
+					  possible_truths,
+					  known_vals, known_contexts,
+					  known_aggs);
+	  continue;
+	}
+      class ipa_call_summary *es = ipa_call_summaries->get (e);
+
+      /* Do not care about zero sized builtins.  */
+      if (!es->call_stmt_size)
+	{
+	  gcc_checking_assert (!es->call_stmt_time);
+	  continue;
+	}
+      if (!es->predicate
+	  || es->predicate->evaluate (possible_truths))
+	{
+	  /* Predicates of calls shall not use NOT_CHANGED codes,
+	     so we do not need to compute probabilities.  */
+	  estimate_edge_size_and_time (e, size,
+				       es->predicate ? NULL : min_size,
+				       time,
+				       known_vals, known_contexts,
+				       known_aggs, hints);
+	}
+    }
+  for (e = node->indirect_calls; e; e = e->next_callee)
+    {
+      class ipa_call_summary *es = ipa_call_summaries->get (e);
+      if (!es->predicate
+	  || es->predicate->evaluate (possible_truths))
+	estimate_edge_size_and_time (e, size,
+				     es->predicate ? NULL : min_size,
+				     time,
+				     known_vals, known_contexts, known_aggs,
+				     hints);
+    }
+}
+
+
+// Source: ipa-fnsummary.c
+// Lines 3099-3151

@@ -1,0 +1,1 @@
+item,tmux/status.c,5,list,tmux/status.c,1,1

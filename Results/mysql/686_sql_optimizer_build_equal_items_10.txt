@@ -1,0 +1,1 @@
+cond_equal_ref,mysql/sql/sql_optimizer.cc,4,cond_equal,mysql/sql/sql_optimizer.cc,5,1

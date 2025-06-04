@@ -1,0 +1,38 @@
+struct commit_list *get_shallow_commits(struct object_array *heads, int depth,
+		int shallow_flag, int not_shallow_flag)
+{
+	int i = 0, cur_depth = 0;
+	struct commit_list *result = NULL;
+	struct object_array stack = OBJECT_ARRAY_INIT;
+	struct commit *commit = NULL;
+	struct commit_graft *graft;
+	struct commit_depth depths;
+
+	init_commit_depth(&depths);
+	while (commit || i < heads->nr || stack.nr) {
+		struct commit_list *p;
+		if (!commit) {
+			if (i < heads->nr) {
+				int **depth_slot;
+				commit = (struct commit *)
+					deref_tag(the_repository,
+						  heads->objects[i++].item,
+						  NULL, 0);
+				if (!commit || commit->object.type != OBJ_COMMIT) {
+					commit = NULL;
+					continue;
+				}
+				depth_slot = commit_depth_at(&depths, commit);
+				if (!*depth_slot)
+					*depth_slot = xmalloc(sizeof(int));
+				**depth_slot = 0;
+				cur_depth = 0;
+			} else {
+				commit = (struct commit *)
+					object_array_pop(&stack);
+				cur_depth = **commit_depth_at(&depths, commit);
+			}
+
+
+// Source: shallow.c
+// Lines 117-150

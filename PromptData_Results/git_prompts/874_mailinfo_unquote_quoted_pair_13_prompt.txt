@@ -1,0 +1,44 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'in' at line 4
+2. Pointer 'line' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void unquote_quoted_pair(struct strbuf *line)
+{
+	struct strbuf outbuf;
+	const char *in = line->buf;
+	int c;
+
+	strbuf_init(&outbuf, line->len);
+
+	while ((c = *in++) != 0) {
+		switch (c) {
+		case '"':
+			in = unquote_quoted_string(&outbuf, in);
+			continue;
+		case '(':
+			in = unquote_comment(&outbuf, in);
+			continue;
+		}
+
+		strbuf_addch(&outbuf, c);
+	}
+
+	strbuf_swap(&outbuf, line);
+	strbuf_release(&outbuf);
+
+}
+
+
+// Source: mailinfo.c
+// Lines 111-135
+
+
+[ANSWER]
+MUST

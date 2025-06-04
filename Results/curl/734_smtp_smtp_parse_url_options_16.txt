@@ -1,0 +1,1 @@
+value,curl/lib/smtp.c,11,ptr,curl/lib/smtp.c,5,1

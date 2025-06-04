@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'x' at line 3\n2. Pointer 'arg' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic enum cb_next iter(struct cb_node *n, void *arg)\n{\n\tstruct oidtree_iter_data *x = arg;\n\tstruct object_id k;\n\n\t/* Copy to provide 4-byte alignment needed by struct object_id. */\n\tmemcpy(&k, n->k, sizeof(k));\n\n\tif (x->algo != GIT_HASH_UNKNOWN && x->algo != k.algo)\n\t\treturn CB_CONTINUE;\n\n\tif (x->last_nibble_at) {\n\t\tif ((k.hash[*x->last_nibble_at] ^ x->last_byte) & 0xf0)\n\t\t\treturn CB_CONTINUE;\n\t}\n\n\treturn x->fn(&k, x->arg);\n}\n\n\n// Source: oidtree.c\n// Lines 75-92\n",
+  "ANSWER": "MUST"
+}

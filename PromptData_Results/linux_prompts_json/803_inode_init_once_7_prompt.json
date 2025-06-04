@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ei' at line 3\n2. Pointer 'foo' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void init_once(void *foo)\n{\n\tstruct proc_inode *ei = (struct proc_inode *) foo;\n\n\tinode_init_once(&ei->vfs_inode);\n}\n\n\n// Source: inode.c\n// Lines 80-85\n",
+  "ANSWER": "MUST"
+}

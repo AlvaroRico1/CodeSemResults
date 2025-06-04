@@ -1,0 +1,83 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 't' at line 3
+2. Pointer 'e' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bitmap_tree_listify_from (bitmap head, bitmap_element *e)
+{
+  bitmap_element *t, *erb;
+
+  /* Detach the right branch from E (all elements with indx > E->indx),
+     and splay E to the root.  */
+  erb = e->next;
+  e->next = NULL;
+  t = bitmap_tree_splay (head, head->first, e->indx);
+  gcc_checking_assert (t == e);
+
+  /* Because E has no right branch, and we rotated it to the root,
+     the left branch is the new root.  */
+  t = e->prev;
+  head->first = t;
+  head->current = t;
+  head->indx = (t != NULL) ? t->indx : 0;
+
+  /* Detach the tree from E, and re-attach the right branch of E.  */
+  e->prev = NULL;
+  e->next = erb;
+
+  /* The tree is now valid again.  Now we need to "un-tree" E.
+     It is imperative that a non-recursive implementation is used
+     for this, because splay trees have a worst case depth of O(N)
+     for a tree with N nodes.  A recursive implementation could
+     result in a stack overflow for a sufficiently large, unbalanced
+     bitmap tree.  */
+
+  auto_vec<bitmap_element *, 32> stack;
+  auto_vec<bitmap_element *, 32> sorted_elements;
+  bitmap_element *n = e;
+
+  while (true)
+    {
+      while (n != NULL)
+	{
+	  stack.safe_push (n);
+	  n = n->prev;
+	}
+
+      if (stack.is_empty ())
+	break;
+
+      n = stack.pop ();
+      sorted_elements.safe_push (n);
+      n = n->next;
+    }
+
+  gcc_assert (sorted_elements[0] == e);
+
+  bitmap_element *prev = NULL;
+  unsigned ix;
+  FOR_EACH_VEC_ELT (sorted_elements, ix, n)
+    {
+      if (prev != NULL)
+        prev->next = n;
+      n->prev = prev;
+      n->next = NULL;
+      prev = n;
+    }
+
+  return e;
+}
+
+
+// Source: bitmap.c
+// Lines 597-660
+
+
+[ANSWER]
+MUST

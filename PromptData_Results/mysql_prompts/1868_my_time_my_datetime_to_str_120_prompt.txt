@@ -1,0 +1,27 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tzd' at line 5
+2. Pointer 'to' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int my_datetime_to_str(const MYSQL_TIME &my_time, char *to, uint dec) {
+  int len = TIME_to_datetime_str(my_time, to);
+  if (dec) len += my_useconds_to_str(to + len, my_time.second_part, dec);
+  if (my_time.time_type == MYSQL_TIMESTAMP_DATETIME_TZ) {
+    int tzd = my_time.time_zone_displacement;
+    len += sprintf(to + len, "%+02i:%02i", tzd / SECS_PER_HOUR,
+                   std::abs(tzd) / SECS_PER_MIN % MINS_PER_HOUR);
+  } else
+
+
+// Source: my_time.cc
+// Lines 1377-1384
+
+
+[ANSWER]
+MUST-NOT

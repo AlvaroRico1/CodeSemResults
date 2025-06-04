@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'st' at line 1\n2. Pointer 'composed' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic struct ewah_bitmap *lookup_stored_bitmap(struct stored_bitmap *st)\n{\n\tstruct ewah_bitmap *parent;\n\tstruct ewah_bitmap *composed;\n\n\tif (st->xor == NULL)\n\t\treturn st->root;\n\n\tcomposed = ewah_pool_new();\n\tparent = lookup_stored_bitmap(st->xor);\n\tewah_xor(st->root, parent, composed);\n\n\tewah_pool_free(st->root);\n\tst->root = composed;\n\tst->xor = NULL;\n\n\treturn composed;\n}\n\n\n// Source: pack-bitmap.c\n// Lines 109-126\n",
+  "ANSWER": "MUST"
+}

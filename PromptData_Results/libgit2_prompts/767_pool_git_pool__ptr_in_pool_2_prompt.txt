@@ -1,0 +1,28 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'scan' at line 3
+2. Pointer 'pool' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool git_pool__ptr_in_pool(git_pool *pool, void *ptr)
+{
+	git_pool_page *scan;
+	for (scan = pool->pages; scan != NULL; scan = scan->next)
+		if ((void *)scan->data <= ptr &&
+			(void *)(((char *)scan->data) + scan->size) > ptr)
+			return true;
+	return false;
+}
+
+
+// Source: pool.c
+// Lines 102-110
+
+
+[ANSWER]
+MUST

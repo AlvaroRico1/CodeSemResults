@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'store_info' at line 7
+2. Pointer 'ptr' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+clear_rhs_from_active_local_stores (void)
+{
+  insn_info_t ptr = active_local_stores;
+
+  while (ptr)
+    {
+      store_info *store_info = ptr->store_rec;
+      /* Skip the clobbers.  */
+      while (!store_info->is_set)
+	store_info = store_info->next;
+
+      store_info->rhs = NULL;
+      store_info->const_rhs = NULL;
+
+      ptr = ptr->next_local_store;
+    }
+
+
+// Source: dse.c
+// Lines 1228-1243
+
+
+[ANSWER]
+MUST

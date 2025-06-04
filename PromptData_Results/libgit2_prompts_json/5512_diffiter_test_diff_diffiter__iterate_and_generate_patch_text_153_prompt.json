@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'patch' at line 13\n2. Pointer 'repo' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid test_diff_diffiter__iterate_and_generate_patch_text(void)\n{\n\tgit_repository *repo = cl_git_sandbox_init(\"status\");\n\tgit_diff *diff;\n\tsize_t d, num_d;\n\n\tcl_git_pass(git_diff_index_to_workdir(&diff, repo, NULL, NULL));\n\n\tnum_d = git_diff_num_deltas(diff);\n\tcl_assert_equal_i(8, (int)num_d);\n\n\tfor (d = 0; d < num_d; ++d) {\n\t\tgit_patch *patch;\n\t\tgit_buf buf = GIT_BUF_INIT;\n\n\t\tcl_git_pass(git_patch_from_diff(&patch, diff, d));\n\t\tcl_assert(patch != NULL);\n\n\t\tcl_git_pass(git_patch_to_buf(&buf, patch));\n\n\t\tcl_assert_equal_s(expected_patch_text[d], buf.ptr);\n\n\t\tgit_buf_dispose(&buf);\n\t\tgit_patch_free(patch);\n\t}\n\n\n// Source: diffiter.c\n// Lines 404-428\n",
+  "ANSWER": "MUST-NOT"
+}

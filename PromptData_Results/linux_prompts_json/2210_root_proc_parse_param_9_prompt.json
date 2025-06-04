@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ctx' at line 3\n2. Pointer 'fc' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int proc_parse_param(struct fs_context *fc, struct fs_parameter *param)\n{\n\tstruct proc_fs_context *ctx = fc->fs_private;\n\tstruct fs_parse_result result;\n\tint opt;\n\n\topt = fs_parse(fc, &proc_fs_parameters, param, &result);\n\tif (opt < 0)\n\t\treturn opt;\n\n\tswitch (opt) {\n\tcase Opt_gid:\n\t\tctx->gid = result.uint_32;\n\t\tbreak;\n\n\tcase Opt_hidepid:\n\t\tctx->hidepid = result.uint_32;\n\t\tif (ctx->hidepid < HIDEPID_OFF ||\n\t\t    ctx->hidepid > HIDEPID_INVISIBLE)\n\t\t\treturn invalf(fc, \"proc: hidepid value must be between 0 and 2.\\n\");\n\t\tbreak;\n\n\tdefault:\n\t\treturn -EINVAL;\n\t}\n\n\tctx->mask |= 1 << opt;\n\treturn 0;\n}\n\n\n// Source: root.c\n// Lines 55-83\n",
+  "ANSWER": "MUST"
+}

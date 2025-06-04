@@ -1,0 +1,1 @@
+buf,git/mailmap.c,1,end,git/mailmap.c,4,1

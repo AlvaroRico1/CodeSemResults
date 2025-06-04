@@ -1,0 +1,76 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'desc' at line 3
+2. Pointer 'dreq' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void nfs_direct_write_reschedule(struct nfs_direct_req *dreq)
+{
+	struct nfs_pageio_descriptor desc;
+	struct nfs_page *req, *tmp;
+	LIST_HEAD(reqs);
+	struct nfs_commit_info cinfo;
+	LIST_HEAD(failed);
+	int i;
+
+	nfs_init_cinfo_from_dreq(&cinfo, dreq);
+	nfs_direct_write_scan_commit_list(dreq->inode, &reqs, &cinfo);
+
+	dreq->count = 0;
+	dreq->verf.committed = NFS_INVALID_STABLE_HOW;
+	nfs_clear_pnfs_ds_commit_verifiers(&dreq->ds_cinfo);
+	for (i = 0; i < dreq->mirror_count; i++)
+		dreq->mirrors[i].count = 0;
+	get_dreq(dreq);
+
+	nfs_pageio_init_write(&desc, dreq->inode, FLUSH_STABLE, false,
+			      &nfs_direct_write_completion_ops);
+	desc.pg_dreq = dreq;
+
+	req = nfs_list_entry(reqs.next);
+	nfs_direct_setup_mirroring(dreq, &desc, req);
+	if (desc.pg_error < 0) {
+		list_splice_init(&reqs, &failed);
+		goto out_failed;
+	}
+
+	list_for_each_entry_safe(req, tmp, &reqs, wb_list) {
+		/* Bump the transmission count */
+		req->wb_nio++;
+		if (!nfs_pageio_add_request(&desc, req)) {
+			nfs_list_move_request(req, &failed);
+			spin_lock(&cinfo.inode->i_lock);
+			dreq->flags = 0;
+			if (desc.pg_error < 0)
+				dreq->error = desc.pg_error;
+			else
+				dreq->error = -EIO;
+			spin_unlock(&cinfo.inode->i_lock);
+		}
+		nfs_release_request(req);
+	}
+	nfs_pageio_complete(&desc);
+
+out_failed:
+	while (!list_empty(&failed)) {
+		req = nfs_list_entry(failed.next);
+		nfs_list_remove_request(req);
+		nfs_unlock_and_release_request(req);
+	}
+
+	if (put_dreq(dreq))
+		nfs_direct_write_complete(dreq);
+}
+
+
+// Source: direct.c
+// Lines 642-698
+
+
+[ANSWER]
+MUST

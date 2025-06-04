@@ -1,0 +1,85 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'a_elt' at line 3
+2. Pointer 'a' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bitmap_compl_and_into (bitmap a, const_bitmap b)
+{
+  bitmap_element *a_elt = a->first;
+  const bitmap_element *b_elt = b->first;
+  bitmap_element *a_prev = NULL;
+  bitmap_element *next;
+
+  gcc_checking_assert (!a->tree_form && !b->tree_form);
+  gcc_assert (a != b);
+
+  if (bitmap_empty_p (a))
+    {
+      bitmap_copy (a, b);
+      return;
+    }
+  if (bitmap_empty_p (b))
+    {
+      bitmap_clear (a);
+      return;
+    }
+
+  while (a_elt || b_elt)
+    {
+      if (!b_elt || (a_elt && a_elt->indx < b_elt->indx))
+	{
+	  /* A is before B.  Remove A */
+	  next = a_elt->next;
+	  a_prev = a_elt->prev;
+	  bitmap_list_unlink_element (a, a_elt);
+	  a_elt = next;
+	}
+      else if (!a_elt || b_elt->indx < a_elt->indx)
+	{
+	  /* B is before A.  Copy B. */
+	  next = bitmap_list_insert_element_after (a, a_prev, b_elt->indx);
+	  memcpy (next->bits, b_elt->bits, sizeof (next->bits));
+	  a_prev = next;
+	  b_elt = b_elt->next;
+	}
+      else
+	{
+	  /* Matching elts, generate A = ~A & B.  */
+	  unsigned ix;
+	  BITMAP_WORD ior = 0;
+
+	  for (ix = 0; ix < BITMAP_ELEMENT_WORDS; ix++)
+	    {
+	      BITMAP_WORD cleared = a_elt->bits[ix] & b_elt->bits[ix];
+	      BITMAP_WORD r = b_elt->bits[ix] ^ cleared;
+
+	      a_elt->bits[ix] = r;
+	      ior |= r;
+	    }
+	  next = a_elt->next;
+	  if (!ior)
+	    bitmap_list_unlink_element (a, a_elt);
+	  else
+	    a_prev = a_elt;
+	  a_elt = next;
+	  b_elt = b_elt->next;
+	}
+    }
+  gcc_checking_assert (!a->current == !a->first
+		       && (!a->current || a->indx == a->current->indx));
+  return;
+}
+
+
+// Source: bitmap.c
+// Lines 1815-1880
+
+
+[ANSWER]
+MUST

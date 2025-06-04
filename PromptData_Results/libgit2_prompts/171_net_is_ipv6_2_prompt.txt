@@ -1,0 +1,43 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'c' at line 3
+2. Pointer 'str' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static bool is_ipv6(const char *str)
+{
+	const char *c;
+	size_t colons = 0;
+
+	if (*str++ != '[')
+		return false;
+
+	for (c = str; *c; c++) {
+		if (*c  == ':')
+			colons++;
+
+		if (*c == ']')
+			return (colons > 1);
+
+		if (*c != ':' &&
+		    (*c < '0' || *c > '9') &&
+		    (*c < 'a' || *c > 'f') &&
+		    (*c < 'A' || *c > 'F'))
+			return false;
+	}
+
+	return false;
+}
+
+
+// Source: net.c
+// Lines 220-243
+
+
+[ANSWER]
+MUST

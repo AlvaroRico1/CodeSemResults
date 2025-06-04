@@ -1,0 +1,36 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'second' at line 3
+2. Pointer 'b' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool test_if_subpart(ORDER *a, ORDER *b) {
+  ORDER *first = a;
+  ORDER *second = b;
+  for (; first && second; first = first->next, second = second->next) {
+    if ((*first->item)->eq(*second->item, true))
+      continue;
+    else
+      return false;
+  }
+  // If the second argument is not subpart of the first return false
+  if (second) return false;
+  // Else assign the direction of the second argument to the first
+  else {
+    for (; a && b; a = a->next, b = b->next) a->direction = b->direction;
+    return true;
+  }
+}
+
+
+// Source: sql_select.cc
+// Lines 3861-3877
+
+
+[ANSWER]
+MUST

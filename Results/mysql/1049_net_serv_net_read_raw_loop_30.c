@@ -1,0 +1,64 @@
+static bool net_read_raw_loop(NET *net, size_t count) {
+  DBUG_TRACE;
+  bool eof = false;
+  unsigned int retry_count = 0;
+  uchar *buf = net->buff + net->where_b;
+
+  while (count) {
+    size_t recvcnt = vio_read(net->vio, buf, count);
+
+    /* VIO_SOCKET_ERROR (-1) indicates an error. */
+    if (recvcnt == VIO_SOCKET_ERROR) {
+      /* A recoverable I/O error occurred? */
+      if (net_should_retry(net, &retry_count))
+        continue;
+      else
+        break;
+    }
+    /* Zero indicates end of file. */
+    else if (!recvcnt) {
+      eof = true;
+      break;
+    }
+
+    count -= recvcnt;
+    buf += recvcnt;
+#ifdef MYSQL_SERVER
+    thd_increment_bytes_received(recvcnt);
+#endif
+  }
+
+  /* On failure, propagate the error code. */
+  if (count) {
+    /* Interrupted by a timeout? */
+    if (!eof && vio_was_timeout(net->vio))
+      net->last_errno = ER_NET_READ_INTERRUPTED;
+    else
+      net->last_errno = ER_NET_READ_ERROR;
+
+#ifdef MYSQL_SERVER
+    /* First packet always wait for net_wait_timeout */
+    if (net->pkt_nr == 0 && vio_was_timeout(net->vio)) {
+      net->last_errno = ER_CLIENT_INTERACTION_TIMEOUT;
+      /* Socket should be closed after trying to write/send error. */
+      LogErr(INFORMATION_LEVEL, ER_NET_WAIT_ERROR);
+    }
+    net->error = NET_ERROR_SOCKET_NOT_READABLE;
+    /*
+      Attempt to send error message to client although the client won't be
+      expecting messages. If later the client tries to send a command and fail
+      it will instead check if it can read an error message.
+    */
+    my_error(net->last_errno, MYF(0));
+#else
+    /* Socket should be closed. */
+    net->error = NET_ERROR_SOCKET_UNUSABLE;
+#endif
+  }
+
+  return count != 0;
+}
+
+
+// Source: net_serv.cc
+// Lines 1340-1399

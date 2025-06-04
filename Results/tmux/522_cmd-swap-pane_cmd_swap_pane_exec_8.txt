@@ -1,0 +1,1 @@
+dst_w,tmux/cmd-swap-pane.c,6,target,tmux/cmd-swap-pane.c,5,1

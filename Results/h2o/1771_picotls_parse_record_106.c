@@ -1,0 +1,63 @@
+static int parse_record(ptls_t *tls, struct st_ptls_record_t *rec, const uint8_t *src, size_t *len)
+{
+    int ret;
+
+    if (tls->recvbuf.rec.base == NULL && *len >= 5) {
+        /* fast path */
+        if ((ret = parse_record_header(rec, src)) != 0)
+            return ret;
+        if (5 + rec->length <= *len) {
+            rec->fragment = src + 5;
+            *len = rec->length + 5;
+            return 0;
+        }
+    }
+
+    /* slow path */
+    const uint8_t *const end = src + *len;
+    *rec = (struct st_ptls_record_t){0};
+
+    if (tls->recvbuf.rec.base == NULL) {
+        ptls_buffer_init(&tls->recvbuf.rec, "", 0);
+        if ((ret = ptls_buffer_reserve(&tls->recvbuf.rec, 5)) != 0)
+            return ret;
+    }
+
+    /* fill and parse the header */
+    while (tls->recvbuf.rec.off < 5) {
+        if (src == end)
+            return PTLS_ERROR_IN_PROGRESS;
+        tls->recvbuf.rec.base[tls->recvbuf.rec.off++] = *src++;
+    }
+    if ((ret = parse_record_header(rec, tls->recvbuf.rec.base)) != 0)
+        return ret;
+
+    /* fill the fragment */
+    size_t addlen = rec->length + 5 - tls->recvbuf.rec.off;
+    if (addlen != 0) {
+        if ((ret = ptls_buffer_reserve(&tls->recvbuf.rec, addlen)) != 0)
+            return ret;
+        if (addlen > (size_t)(end - src))
+            addlen = end - src;
+        if (addlen != 0) {
+            memcpy(tls->recvbuf.rec.base + tls->recvbuf.rec.off, src, addlen);
+            tls->recvbuf.rec.off += addlen;
+            src += addlen;
+        }
+    }
+
+    /* set rec->fragment if a complete record has been parsed */
+    if (tls->recvbuf.rec.off == rec->length + 5) {
+        rec->fragment = tls->recvbuf.rec.base + 5;
+        ret = 0;
+    } else {
+        ret = PTLS_ERROR_IN_PROGRESS;
+    }
+
+    *len -= end - src;
+    return ret;
+}
+
+
+// Source: picotls.c
+// Lines 4260-4318

@@ -1,0 +1,38 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'direct' at line 11
+2. Pointer 'direct' at line 11
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void h2o_mem_clear_pool(h2o_mem_pool_t *pool)
+{
+    /* release the refcounted chunks */
+    if (pool->shared_refs != NULL) {
+        struct st_h2o_mem_pool_shared_ref_t *ref = pool->shared_refs;
+        do {
+            h2o_mem_release_shared(ref->entry->bytes);
+        } while ((ref = ref->next) != NULL);
+        pool->shared_refs = NULL;
+    }
+    /* release the direct chunks */
+    if (pool->directs != NULL) {
+        struct st_h2o_mem_pool_direct_t *direct = pool->directs, *next;
+        do {
+            next = direct->next;
+            free(direct);
+        } while ((direct = next) != NULL);
+        pool->directs = NULL;
+    }
+
+
+// Source: memory.c
+// Lines 151-169
+
+
+[ANSWER]
+MUST

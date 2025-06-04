@@ -1,0 +1,1 @@
+plugin,mysql/sql-common/client_plugin.cc,7,plugindir,mysql/sql-common/client_plugin.cc,8,0

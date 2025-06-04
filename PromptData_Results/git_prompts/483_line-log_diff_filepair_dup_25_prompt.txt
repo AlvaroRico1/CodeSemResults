@@ -1,0 +1,28 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'new_filepair' at line 3
+2. Pointer 'pair' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static struct diff_filepair *diff_filepair_dup(struct diff_filepair *pair)
+{
+	struct diff_filepair *new_filepair = xmalloc(sizeof(struct diff_filepair));
+	new_filepair->one = pair->one;
+	new_filepair->two = pair->two;
+	new_filepair->one->count++;
+	new_filepair->two->count++;
+	return new_filepair;
+}
+
+
+// Source: line-log.c
+// Lines 1080-1088
+
+
+[ANSWER]
+MUST

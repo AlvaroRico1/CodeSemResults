@@ -1,0 +1,94 @@
+static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_len, int is_critical)
+{
+    h2o_http2_conn_t *conn = (void *)src_req->conn;
+    h2o_http2_stream_t *src_stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, src_req);
+
+    /* RFC 7540 8.2.1: PUSH_PROMISE frames can be sent by the server in response to any client-initiated stream */
+    if (h2o_http2_stream_is_push(src_stream->stream_id))
+        return;
+
+    if (!src_stream->req.hostconf->http2.push_preload || !conn->peer_settings.enable_push ||
+        conn->num_streams.push.open >= conn->peer_settings.max_concurrent_streams)
+        return;
+
+    if (conn->state >= H2O_HTTP2_CONN_STATE_IS_CLOSING)
+        return;
+    if (conn->push_stream_ids.max_open >= 0x7ffffff0)
+        return;
+    if (!(h2o_linklist_is_empty(&conn->_pending_reqs) && can_run_requests(conn)))
+        return;
+
+    if (h2o_find_header(&src_stream->req.headers, H2O_TOKEN_X_FORWARDED_FOR, -1) != -1)
+        return;
+
+    if (src_stream->cache_digests != NULL) {
+        h2o_iovec_t url = h2o_concat(&src_stream->req.pool, src_stream->req.input.scheme->name, h2o_iovec_init(H2O_STRLIT("://")),
+                                     src_stream->req.input.authority, h2o_iovec_init(abspath, abspath_len));
+        if (h2o_cache_digests_lookup_by_url(src_stream->cache_digests, url.base, url.len) == H2O_CACHE_DIGESTS_STATE_FRESH)
+            return;
+    }
+
+    /* delayed initialization of casper (cookie-based), that MAY be used together to cache-digests */
+    if (src_stream->req.hostconf->http2.casper.capacity_bits != 0) {
+        if (!src_stream->pull.casper_is_ready) {
+            src_stream->pull.casper_is_ready = 1;
+            if (conn->casper == NULL)
+                h2o_http2_conn_init_casper(conn, src_stream->req.hostconf->http2.casper.capacity_bits);
+            ssize_t header_index;
+            for (header_index = -1;
+                 (header_index = h2o_find_header(&src_stream->req.headers, H2O_TOKEN_COOKIE, header_index)) != -1;) {
+                h2o_header_t *header = src_stream->req.headers.entries + header_index;
+                h2o_http2_casper_consume_cookie(conn->casper, header->value.base, header->value.len);
+            }
+        }
+    }
+
+    /* update the push memo, and if it already pushed on the same connection, return */
+    if (update_push_memo(conn, &src_stream->req, abspath, abspath_len))
+        return;
+
+    /* open the stream */
+    h2o_http2_stream_t *stream = h2o_http2_stream_open(conn, conn->push_stream_ids.max_open + 2, NULL, &h2o_http2_default_priority);
+    stream->received_priority.dependency = src_stream->stream_id;
+    stream->push.parent_stream_id = src_stream->stream_id;
+    if (is_critical) {
+        h2o_http2_scheduler_open(&stream->_scheduler, &conn->scheduler, 257, 0);
+    } else {
+        h2o_http2_scheduler_open(&stream->_scheduler, &src_stream->_scheduler.node, 16, 0);
+    }
+    h2o_http2_stream_prepare_for_request(conn, stream);
+
+    /* setup request */
+    stream->req.input.method = (h2o_iovec_t){H2O_STRLIT("GET")};
+    stream->req.input.scheme = src_stream->req.input.scheme;
+    stream->req.input.authority =
+        h2o_strdup(&stream->req.pool, src_stream->req.input.authority.base, src_stream->req.input.authority.len);
+    stream->req.input.path = h2o_strdup(&stream->req.pool, abspath, abspath_len);
+    stream->req.version = 0x200;
+
+    { /* copy headers that may affect the response (of a cacheable response) */
+        size_t i;
+        for (i = 0; i != src_stream->req.headers.size; ++i) {
+            h2o_header_t *src_header = src_stream->req.headers.entries + i;
+            /* currently only predefined headers are copiable */
+            if (h2o_iovec_is_token(src_header->name)) {
+                h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, src_header->name);
+                if (token->flags.copy_for_push_request)
+                    h2o_add_header(&stream->req.pool, &stream->req.headers, token, NULL,
+                                   h2o_strdup(&stream->req.pool, src_header->value.base, src_header->value.len).base,
+                                   src_header->value.len);
+            }
+        }
+    }
+
+    execute_or_enqueue_request(conn, stream);
+
+    /* send push-promise ASAP (before the parent stream gets closed), even if execute_or_enqueue_request did not trigger the
+     * invocation of send_headers */
+    if (!stream->push.promise_sent && stream->state != H2O_HTTP2_STREAM_STATE_END_STREAM)
+        h2o_http2_stream_send_push_promise(conn, stream);
+}
+
+
+// Source: connection.c
+// Lines 1756-1845

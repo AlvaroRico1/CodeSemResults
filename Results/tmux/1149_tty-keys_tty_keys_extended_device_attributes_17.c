@@ -1,0 +1,65 @@
+tty_keys_extended_device_attributes(struct tty *tty, const char *buf,
+    size_t len, size_t *size)
+{
+	struct client	*c = tty->client;
+	u_int		 i;
+	char		 tmp[128];
+
+	*size = 0;
+	if (tty->flags & TTY_HAVEXDA)
+		return (-1);
+
+	/* First four bytes are always \033P>|. */
+	if (buf[0] != '\033')
+		return (-1);
+	if (len == 1)
+		return (1);
+	if (buf[1] != 'P')
+		return (-1);
+	if (len == 2)
+		return (1);
+	if (buf[2] != '>')
+		return (-1);
+	if (len == 3)
+		return (1);
+	if (buf[3] != '|')
+		return (-1);
+	if (len == 4)
+		return (1);
+
+	/* Copy the rest up to a '\033\\'. */
+	for (i = 0; i < (sizeof tmp) - 1; i++) {
+		if (4 + i == len)
+			return (1);
+		if (buf[4 + i - 1] == '\033' && buf[4 + i] == '\\')
+			break;
+		tmp[i] = buf[4 + i];
+	}
+	if (i == (sizeof tmp) - 1)
+		return (-1);
+	tmp[i - 1] = '\0';
+	*size = 5 + i;
+
+	/* Add terminal features. */
+	if (strncmp(tmp, "iTerm2 ", 7) == 0)
+		tty_default_features(&c->term_features, "iTerm2", 0);
+	else if (strncmp(tmp, "tmux ", 5) == 0)
+		tty_default_features(&c->term_features, "tmux", 0);
+	else if (strncmp(tmp, "XTerm(", 6) == 0)
+		tty_default_features(&c->term_features, "XTerm", 0);
+	else if (strncmp(tmp, "mintty ", 7) == 0)
+		tty_default_features(&c->term_features, "mintty", 0);
+	log_debug("%s: received extended DA %.*s", c->name, (int)*size, buf);
+
+	free(c->term_type);
+	c->term_type = xstrdup(tmp);
+
+	tty_update_features(tty);
+	tty->flags |= TTY_HAVEXDA;
+
+	return (0);
+}
+
+
+// Source: tty-keys.c
+// Lines 1329-1389

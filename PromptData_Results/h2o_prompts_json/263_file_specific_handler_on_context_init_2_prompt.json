@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'self' at line 3\n2. Pointer '_self' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void specific_handler_on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)\n{\n    struct st_h2o_specific_file_handler_t *self = (void *)_self;\n\n    if (self->mime_type->type == H2O_MIMEMAP_TYPE_DYNAMIC)\n        h2o_context_init_pathconf_context(ctx, &self->mime_type->data.dynamic.pathconf);\n}\n\n\n// Source: file.c\n// Lines 931-937\n",
+  "ANSWER": "MUST"
+}

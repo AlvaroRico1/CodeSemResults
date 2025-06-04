@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'c' at line 3\n2. Pointer 'tty' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ntty_redraw_region(struct tty *tty, const struct tty_ctx *ctx)\n{\n\tstruct client\t\t*c = tty->client;\n\tu_int\t\t\t i;\n\n\t/*\n\t * If region is large, schedule a redraw. In most cases this is likely\n\t * to be followed by some more scrolling.\n\t */\n\tif (tty_large_region(tty, ctx)) {\n\t\tlog_debug(\"%s: %s large redraw\", __func__, c->name);\n\t\tctx->redraw_cb(ctx);\n\t\treturn;\n\t}\n\n\tfor (i = ctx->orupper; i <= ctx->orlower; i++)\n\t\ttty_draw_pane(tty, ctx, i);\n}\n\n\n// Source: tty.c\n// Lines 973-990\n",
+  "ANSWER": "MUST"
+}

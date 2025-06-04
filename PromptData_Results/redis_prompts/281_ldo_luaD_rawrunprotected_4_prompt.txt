@@ -1,0 +1,30 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'lj' at line 2
+2. Pointer 'L' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int luaD_rawrunprotected (lua_State *L, Pfunc f, void *ud) {
+  struct lua_longjmp lj;
+  lj.status = 0;
+  lj.previous = L->errorJmp;  /* chain new error handler */
+  L->errorJmp = &lj;
+  LUAI_TRY(L, &lj,
+    (*f)(L, ud);
+  );
+  L->errorJmp = lj.previous;  /* restore old error handler */
+  return lj.status;
+}
+
+
+// Source: ldo.c
+// Lines 111-121
+
+
+[ANSWER]
+MUST

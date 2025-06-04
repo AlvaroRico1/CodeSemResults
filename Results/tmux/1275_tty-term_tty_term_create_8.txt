@@ -1,0 +1,1 @@
+term,tmux/tty-term.c,4,tty,tmux/tty-term.c,1,1

@@ -1,0 +1,25 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'end' at line 3
+2. Pointer 'start' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void remove_cntrl(String *buffer) {
+  const char *start = buffer->ptr();
+  const char *end = start + buffer->length();
+  while (start < end && !my_isgraph(charset_info, end[-1])) end--;
+  buffer->length((uint)(end - start));
+}
+
+
+// Source: mysql.cc
+// Lines 4925-4930
+
+
+[ANSWER]
+MUST-NOT

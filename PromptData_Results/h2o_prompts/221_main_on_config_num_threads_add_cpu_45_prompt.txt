@@ -1,0 +1,49 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'cpu_low' at line 9
+2. Pointer 'cpu_high' at line 9
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static inline int on_config_num_threads_add_cpu(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    if (node->type != YOML_TYPE_SCALAR) {
+        h2o_configurator_errprintf(cmd, node, "CPUs in cpu sequence must be a scalar");
+        return -1;
+    }
+
+    const char *cpu_spec = node->data.scalar;
+    unsigned cpu_low, cpu_high, cpu_num;
+    int pos;
+    if (index(cpu_spec, '-') == NULL) {
+        if (sscanf(cpu_spec, "%u%n", &cpu_low, &pos) != 1 || pos != strlen(cpu_spec))
+            goto Error;
+        cpu_high = cpu_low;
+    } else {
+        if (sscanf(cpu_spec, "%u-%u%n", &cpu_low, &cpu_high, &pos) != 2 || pos != strlen(cpu_spec))
+            goto Error;
+        if (cpu_low > cpu_high)
+            goto Error;
+    }
+    for (cpu_num = cpu_low; cpu_num <= cpu_high; cpu_num++) {
+        h2o_vector_reserve(NULL, &conf.thread_map, conf.thread_map.size + 1);
+        conf.thread_map.entries[conf.thread_map.size++] = cpu_num;
+    }
+    return 0;
+Error:
+    h2o_configurator_errprintf(
+        cmd, node, "Invalid CPU number: CPUs must be specified as a non-negative number or as a range of non-negative numbers");
+    return -1;
+}
+
+
+// Source: main.c
+// Lines 2172-2201
+
+
+[ANSWER]
+MAY

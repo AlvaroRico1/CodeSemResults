@@ -1,0 +1,84 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'block' at line 3
+2. Pointer 'edid' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void fb_edid_to_monspecs(unsigned char *edid, struct fb_monspecs *specs)
+{
+	unsigned char *block;
+	int i, found = 0;
+
+	if (edid == NULL)
+		return;
+
+	if (!(edid_checksum(edid)))
+		return;
+
+	if (!(edid_check_header(edid)))
+		return;
+
+	memset(specs, 0, sizeof(struct fb_monspecs));
+
+	specs->version = edid[EDID_STRUCT_VERSION];
+	specs->revision = edid[EDID_STRUCT_REVISION];
+
+	DPRINTK("========================================\n");
+	DPRINTK("Display Information (EDID)\n");
+	DPRINTK("========================================\n");
+	DPRINTK("   EDID Version %d.%d\n", (int) specs->version,
+	       (int) specs->revision);
+
+	parse_vendor_block(edid + ID_MANUFACTURER_NAME, specs);
+
+	block = edid + DETAILED_TIMING_DESCRIPTIONS_START;
+	for (i = 0; i < 4; i++, block += DETAILED_TIMING_DESCRIPTION_SIZE) {
+		if (edid_is_serial_block(block)) {
+			copy_string(block, specs->serial_no);
+			DPRINTK("   Serial Number: %s\n", specs->serial_no);
+		} else if (edid_is_ascii_block(block)) {
+			copy_string(block, specs->ascii);
+			DPRINTK("   ASCII Block: %s\n", specs->ascii);
+		} else if (edid_is_monitor_block(block)) {
+			copy_string(block, specs->monitor);
+			DPRINTK("   Monitor Name: %s\n", specs->monitor);
+		}
+	}
+
+	DPRINTK("   Display Characteristics:\n");
+	get_monspecs(edid, specs);
+
+	specs->modedb = fb_create_modedb(edid, &specs->modedb_len, specs);
+	if (!specs->modedb)
+		return;
+
+	/*
+	 * Workaround for buggy EDIDs that sets that the first
+	 * detailed timing is preferred but has not detailed
+	 * timing specified
+	 */
+	for (i = 0; i < specs->modedb_len; i++) {
+		if (specs->modedb[i].flag & FB_MODE_IS_DETAILED) {
+			found = 1;
+			break;
+		}
+	}
+
+	if (!found)
+		specs->misc &= ~FB_MISC_1ST_DETAIL;
+
+	DPRINTK("========================================\n");
+}
+
+
+// Source: fbmon.c
+// Lines 936-1000
+
+
+[ANSWER]
+MAY

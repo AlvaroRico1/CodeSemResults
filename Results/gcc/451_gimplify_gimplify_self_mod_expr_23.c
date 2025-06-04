@@ -1,0 +1,86 @@
+gimplify_self_mod_expr (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p,
+			bool want_value, tree arith_type)
+{
+  enum tree_code code;
+  tree lhs, lvalue, rhs, t1;
+  gimple_seq post = NULL, *orig_post_p = post_p;
+  bool postfix;
+  enum tree_code arith_code;
+  enum gimplify_status ret;
+  location_t loc = EXPR_LOCATION (*expr_p);
+
+  code = TREE_CODE (*expr_p);
+
+  gcc_assert (code == POSTINCREMENT_EXPR || code == POSTDECREMENT_EXPR
+	      || code == PREINCREMENT_EXPR || code == PREDECREMENT_EXPR);
+
+  /* Prefix or postfix?  */
+  if (code == POSTINCREMENT_EXPR || code == POSTDECREMENT_EXPR)
+    /* Faster to treat as prefix if result is not used.  */
+    postfix = want_value;
+  else
+    postfix = false;
+
+  /* For postfix, make sure the inner expression's post side effects
+     are executed after side effects from this expression.  */
+  if (postfix)
+    post_p = &post;
+
+  /* Add or subtract?  */
+  if (code == PREINCREMENT_EXPR || code == POSTINCREMENT_EXPR)
+    arith_code = PLUS_EXPR;
+  else
+    arith_code = MINUS_EXPR;
+
+  /* Gimplify the LHS into a GIMPLE lvalue.  */
+  lvalue = TREE_OPERAND (*expr_p, 0);
+  ret = gimplify_expr (&lvalue, pre_p, post_p, is_gimple_lvalue, fb_lvalue);
+  if (ret == GS_ERROR)
+    return ret;
+
+  /* Extract the operands to the arithmetic operation.  */
+  lhs = lvalue;
+  rhs = TREE_OPERAND (*expr_p, 1);
+
+  /* For postfix operator, we evaluate the LHS to an rvalue and then use
+     that as the result value and in the postqueue operation.  */
+  if (postfix)
+    {
+      ret = gimplify_expr (&lhs, pre_p, post_p, is_gimple_val, fb_rvalue);
+      if (ret == GS_ERROR)
+	return ret;
+
+      lhs = get_initialized_tmp_var (lhs, pre_p);
+    }
+
+  /* For POINTERs increment, use POINTER_PLUS_EXPR.  */
+  if (POINTER_TYPE_P (TREE_TYPE (lhs)))
+    {
+      rhs = convert_to_ptrofftype_loc (loc, rhs);
+      if (arith_code == MINUS_EXPR)
+	rhs = fold_build1_loc (loc, NEGATE_EXPR, TREE_TYPE (rhs), rhs);
+      t1 = fold_build2 (POINTER_PLUS_EXPR, TREE_TYPE (*expr_p), lhs, rhs);
+    }
+  else
+    t1 = fold_convert (TREE_TYPE (*expr_p),
+		       fold_build2 (arith_code, arith_type,
+				    fold_convert (arith_type, lhs),
+				    fold_convert (arith_type, rhs)));
+
+  if (postfix)
+    {
+      gimplify_assign (lvalue, t1, pre_p);
+      gimplify_seq_add_seq (orig_post_p, post);
+      *expr_p = lhs;
+      return GS_ALL_DONE;
+    }
+  else
+    {
+      *expr_p = build2 (MODIFY_EXPR, TREE_TYPE (lvalue), lvalue, t1);
+      return GS_OK;
+    }
+}
+
+
+// Source: gimplify.c
+// Lines 3126-3207

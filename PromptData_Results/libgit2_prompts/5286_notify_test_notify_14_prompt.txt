@@ -1,0 +1,46 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'expected_matched_pathspecs' at line 4
+2. Pointer 'diff' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void test_notify(
+	char **searched_pathspecs,
+	int pathspecs_count,
+	notify_expected *expected_matched_pathspecs,
+	int expected_diffed_files_count)
+{
+	git_diff_options opts = GIT_DIFF_OPTIONS_INIT;
+	git_diff *diff = NULL;
+	diff_expects exp;
+
+	g_repo = cl_git_sandbox_init("status");
+
+	opts.flags |= GIT_DIFF_INCLUDE_IGNORED | GIT_DIFF_INCLUDE_UNTRACKED;
+	opts.notify_cb = assert_called_notifications;
+	opts.pathspec.strings = searched_pathspecs;
+	opts.pathspec.count   = pathspecs_count;
+
+	opts.payload = expected_matched_pathspecs;
+	memset(&exp, 0, sizeof(exp));
+
+	cl_git_pass(git_diff_index_to_workdir(&diff, g_repo, NULL, &opts));
+	cl_git_pass(git_diff_foreach(diff, diff_file_cb, NULL, NULL, NULL, &exp));
+
+	cl_assert_equal_i(expected_diffed_files_count, exp.files);
+
+	git_diff_free(diff);
+}
+
+
+// Source: notify.c
+// Lines 41-67
+
+
+[ANSWER]
+MUST-NOT

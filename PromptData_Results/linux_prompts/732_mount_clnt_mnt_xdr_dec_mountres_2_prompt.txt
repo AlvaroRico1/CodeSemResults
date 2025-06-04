@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'res' at line 5
+2. Pointer 'data' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int mnt_xdr_dec_mountres(struct rpc_rqst *req,
+				struct xdr_stream *xdr,
+				void *data)
+{
+	struct mountres *res = data;
+	int status;
+
+	status = decode_status(xdr, res);
+	if (unlikely(status != 0 || res->errno != 0))
+		return status;
+	return decode_fhandle(xdr, res);
+}
+
+
+// Source: mount_clnt.c
+// Lines 361-372
+
+
+[ANSWER]
+MUST

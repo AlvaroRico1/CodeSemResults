@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'de' at line 2
+2. Pointer 'offset' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int fat_get_dotdot_entry(struct inode *dir, struct buffer_head **bh,
+			 struct msdos_dir_entry **de)
+{
+	loff_t offset = 0;
+
+	*de = NULL;
+	while (fat_get_short_entry(dir, &offset, bh, de) >= 0) {
+		if (!strncmp((*de)->name, MSDOS_DOTDOT, MSDOS_NAME))
+			return 0;
+	}
+	return -ENOENT;
+}
+
+
+// Source: dir.c
+// Lines 896-907
+
+
+[ANSWER]
+MAY

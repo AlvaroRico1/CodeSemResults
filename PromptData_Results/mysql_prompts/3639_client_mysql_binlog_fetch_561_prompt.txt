@@ -1,0 +1,51 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'net' at line 10
+2. Pointer 'mysql' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int STDCALL mysql_binlog_fetch(MYSQL *mysql, MYSQL_RPL *rpl) {
+  DBUG_TRACE;
+  assert(mysql);
+  assert(rpl);
+
+  for (;;) {
+    /* Read a packet from the server. */
+    ulong packet_len = cli_safe_read(mysql, nullptr);
+
+    NET *net = &mysql->net;
+
+    /* Check if error packet. */
+    if (packet_len == packet_error || packet_len == 0) {
+      return -1;
+    }
+    /* Check if EOF packet. */
+    else if (packet_len < 8 && net->read_pos[0] == 254) {
+      rpl->size = 0;
+      return 0;
+    }
+
+    /* Normal packet. */
+    if (rpl->flags & MYSQL_RPL_SKIP_HEARTBEAT) {
+      Log_event_type event_type =
+          (Log_event_type)net->read_pos[1 + EVENT_TYPE_OFFSET];
+      if (event_type == binary_log::HEARTBEAT_LOG_EVENT) continue;
+    }
+
+    rpl->buffer = net->read_pos;
+    rpl->size = packet_len;
+    return 0;
+  }
+
+
+// Source: client.cc
+// Lines 6798-6829
+
+
+[ANSWER]
+MUST-NOT

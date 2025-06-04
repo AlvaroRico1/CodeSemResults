@@ -1,0 +1,1 @@
+embedded,mysql/sql/sql_parse.cc,12,ptr,mysql/sql/sql_parse.cc,2,1

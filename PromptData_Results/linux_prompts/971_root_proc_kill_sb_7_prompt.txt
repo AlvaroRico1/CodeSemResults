@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ns' at line 3
+2. Pointer 'sb' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void proc_kill_sb(struct super_block *sb)
+{
+	struct pid_namespace *ns;
+
+	ns = (struct pid_namespace *)sb->s_fs_info;
+	if (ns->proc_self)
+		dput(ns->proc_self);
+	if (ns->proc_thread_self)
+		dput(ns->proc_thread_self);
+	kill_anon_super(sb);
+	put_pid_ns(ns);
+}
+
+
+// Source: root.c
+// Lines 195-206
+
+
+[ANSWER]
+MUST

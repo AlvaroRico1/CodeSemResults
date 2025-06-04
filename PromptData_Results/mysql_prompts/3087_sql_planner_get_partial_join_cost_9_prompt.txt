@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'pos' at line 8
+2. Pointer 'join' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void get_partial_join_cost(JOIN *join, uint n_tables, double *cost_arg,
+                           double *rowcount_arg) {
+  double rowcount = 1.0;
+  double cost = 0.0;
+  const Cost_model_server *const cost_model = join->cost_model();
+
+  for (uint i = join->const_tables; i < n_tables + join->const_tables; i++) {
+    POSITION *const pos = join->best_positions + i;
+
+    if (pos->rows_fetched > 0.0) {
+      rowcount *= pos->rows_fetched;
+      cost += pos->read_cost + cost_model->row_evaluate_cost(rowcount);
+      rowcount *= pos->filter_effect;
+    }
+  }
+
+
+// Source: sql_planner.cc
+// Lines 2406-2420
+
+
+[ANSWER]
+MUST

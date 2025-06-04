@@ -1,0 +1,1 @@
+hunk_count,libgit2/tests/libgit2/diff/diffiter.c,6,num_d,libgit2/tests/libgit2/diff/diffiter.c,7,0

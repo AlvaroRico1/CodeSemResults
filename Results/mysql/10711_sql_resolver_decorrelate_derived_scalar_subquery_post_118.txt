@@ -1,0 +1,1 @@
+cnt_f,mysql/sql/sql_resolver.cc,48,derived,mysql/sql/sql_resolver.cc,2,1

@@ -1,0 +1,167 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'dtype' at line 11
+2. Pointer 'cache' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int clear_ce_flags_dir(struct index_state *istate,
+			      struct cache_entry **cache, int nr,
+			      struct strbuf *prefix,
+			      char *basename,
+			      int select_mask, int clear_mask,
+			      struct pattern_list *pl,
+			      enum pattern_match_result default_match,
+			      int progress_nr)
+{
+	struct cache_entry **cache_end;
+	int dtype = DT_DIR;
+	int rc;
+	enum pattern_match_result ret, orig_ret;
+	orig_ret = path_matches_pattern_list(prefix->buf, prefix->len,
+					     basename, &dtype, pl, istate);
+
+	strbuf_addch(prefix, '/');
+
+	/* If undecided, use matching result of parent dir in defval */
+	if (orig_ret == UNDECIDED)
+		ret = default_match;
+	else
+		ret = orig_ret;
+
+	for (cache_end = cache; cache_end != cache + nr; cache_end++) {
+		struct cache_entry *ce = *cache_end;
+		if (strncmp(ce->name, prefix->buf, prefix->len))
+			break;
+	}
+
+	if (pl->use_cone_patterns && orig_ret == MATCHED_RECURSIVE) {
+		struct cache_entry **ce = cache;
+		rc = cache_end - cache;
+
+		while (ce < cache_end) {
+			(*ce)->ce_flags &= ~clear_mask;
+			ce++;
+		}
+	} else if (pl->use_cone_patterns && orig_ret == NOT_MATCHED) {
+		rc = cache_end - cache;
+	} else {
+		rc = clear_ce_flags_1(istate, cache, cache_end - cache,
+				      prefix,
+				      select_mask, clear_mask,
+				      pl, ret,
+				      progress_nr);
+	}
+
+	strbuf_setlen(prefix, prefix->len - 1);
+	return rc;
+}
+
+/*
+ * Traverse the index, find every entry that matches according to
+ * o->pl. Do "ce_flags &= ~clear_mask" on those entries. Return the
+ * number of traversed entries.
+ *
+ * If select_mask is non-zero, only entries whose ce_flags has on of
+ * those bits enabled are traversed.
+ *
+ * cache	: pointer to an index entry
+ * prefix_len	: an offset to its path
+ *
+ * The current path ("prefix") including the trailing '/' is
+ *   cache[0]->name[0..(prefix_len-1)]
+ * Top level path has prefix_len zero.
+ */
+static int clear_ce_flags_1(struct index_state *istate,
+			    struct cache_entry **cache, int nr,
+			    struct strbuf *prefix,
+			    int select_mask, int clear_mask,
+			    struct pattern_list *pl,
+			    enum pattern_match_result default_match,
+			    int progress_nr)
+{
+	struct cache_entry **cache_end = nr ? cache + nr : cache;
+
+	/*
+	 * Process all entries that have the given prefix and meet
+	 * select_mask condition
+	 */
+	while(cache != cache_end) {
+		struct cache_entry *ce = *cache;
+		const char *name, *slash;
+		int len, dtype;
+		enum pattern_match_result ret;
+
+		display_progress(istate->progress, progress_nr);
+
+		if (select_mask && !(ce->ce_flags & select_mask)) {
+			cache++;
+			progress_nr++;
+			continue;
+		}
+
+		if (prefix->len && strncmp(ce->name, prefix->buf, prefix->len))
+			break;
+
+		name = ce->name + prefix->len;
+		slash = strchr(name, '/');
+
+		/* If it's a directory, try whole directory match first */
+		if (slash) {
+			int processed;
+
+			len = slash - name;
+			strbuf_add(prefix, name, len);
+
+			processed = clear_ce_flags_dir(istate, cache, cache_end - cache,
+						       prefix,
+						       prefix->buf + prefix->len - len,
+						       select_mask, clear_mask,
+						       pl, default_match,
+						       progress_nr);
+
+			/* clear_c_f_dir eats a whole dir already? */
+			if (processed) {
+				cache += processed;
+				progress_nr += processed;
+				strbuf_setlen(prefix, prefix->len - len);
+				continue;
+			}
+
+			strbuf_addch(prefix, '/');
+			processed = clear_ce_flags_1(istate, cache, cache_end - cache,
+						     prefix,
+						     select_mask, clear_mask, pl,
+						     default_match, progress_nr);
+
+			cache += processed;
+			progress_nr += processed;
+
+			strbuf_setlen(prefix, prefix->len - len - 1);
+			continue;
+		}
+
+		/* Non-directory */
+		dtype = ce_to_dtype(ce);
+		ret = path_matches_pattern_list(ce->name,
+						ce_namelen(ce),
+						name, &dtype, pl, istate);
+		if (ret == UNDECIDED)
+			ret = default_match;
+		if (ret == MATCHED || ret == MATCHED_RECURSIVE)
+			ce->ce_flags &= ~clear_mask;
+		cache++;
+		progress_nr++;
+	}
+
+
+// Source: unpack-trees.c
+// Lines 1455-1602
+
+
+[ANSWER]
+MAY

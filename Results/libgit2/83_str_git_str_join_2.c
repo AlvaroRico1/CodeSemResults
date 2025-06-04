@@ -1,0 +1,52 @@
+int git_str_join(
+	git_str *buf,
+	char separator,
+	const char *str_a,
+	const char *str_b)
+{
+	size_t strlen_a = str_a ? strlen(str_a) : 0;
+	size_t strlen_b = strlen(str_b);
+	size_t alloc_len;
+	int need_sep = 0;
+	ssize_t offset_a = -1;
+
+	/* not safe to have str_b point internally to the buffer */
+	if (buf->size)
+		GIT_ASSERT_ARG(str_b < buf->ptr || str_b >= buf->ptr + buf->size);
+
+	/* figure out if we need to insert a separator */
+	if (separator && strlen_a) {
+		while (*str_b == separator) { str_b++; strlen_b--; }
+		if (str_a[strlen_a - 1] != separator)
+			need_sep = 1;
+	}
+
+	/* str_a could be part of the buffer */
+	if (buf->size && str_a >= buf->ptr && str_a < buf->ptr + buf->size)
+		offset_a = str_a - buf->ptr;
+
+	GIT_ERROR_CHECK_ALLOC_ADD(&alloc_len, strlen_a, strlen_b);
+	GIT_ERROR_CHECK_ALLOC_ADD(&alloc_len, alloc_len, need_sep);
+	GIT_ERROR_CHECK_ALLOC_ADD(&alloc_len, alloc_len, 1);
+	ENSURE_SIZE(buf, alloc_len);
+
+	/* fix up internal pointers */
+	if (offset_a >= 0)
+		str_a = buf->ptr + offset_a;
+
+	/* do the actual copying */
+	if (offset_a != 0 && str_a)
+		memmove(buf->ptr, str_a, strlen_a);
+	if (need_sep)
+		buf->ptr[strlen_a] = separator;
+	memcpy(buf->ptr + strlen_a + need_sep, str_b, strlen_b);
+
+	buf->size = strlen_a + strlen_b + need_sep;
+	buf->ptr[buf->size] = '\0';
+
+	return 0;
+}
+
+
+// Source: str.c
+// Lines 760-807

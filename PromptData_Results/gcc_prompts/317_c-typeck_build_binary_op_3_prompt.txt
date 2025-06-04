@@ -1,0 +1,260 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'maybe_const' at line 214
+2. Pointer 'maybe_const' at line 214
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+build_binary_op (location_t location, enum tree_code code,
+		 tree orig_op0, tree orig_op1, bool convert_p)
+{
+  tree type0, type1, orig_type0, orig_type1;
+  tree eptype;
+  enum tree_code code0, code1;
+  tree op0, op1;
+  tree ret = error_mark_node;
+  const char *invalid_op_diag;
+  bool op0_int_operands, op1_int_operands;
+  bool int_const, int_const_or_overflow, int_operands;
+
+  /* Expression code to give to the expression when it is built.
+     Normally this is CODE, which is what the caller asked for,
+     but in some special cases we change it.  */
+  enum tree_code resultcode = code;
+
+  /* Data type in which the computation is to be performed.
+     In the simplest cases this is the common type of the arguments.  */
+  tree result_type = NULL;
+
+  /* When the computation is in excess precision, the type of the
+     final EXCESS_PRECISION_EXPR.  */
+  tree semantic_result_type = NULL;
+
+  /* Nonzero means operands have already been type-converted
+     in whatever way is necessary.
+     Zero means they need to be converted to RESULT_TYPE.  */
+  int converted = 0;
+
+  /* Nonzero means create the expression with this type, rather than
+     RESULT_TYPE.  */
+  tree build_type = NULL_TREE;
+
+  /* Nonzero means after finally constructing the expression
+     convert it to this type.  */
+  tree final_type = NULL_TREE;
+
+  /* Nonzero if this is an operation like MIN or MAX which can
+     safely be computed in short if both args are promoted shorts.
+     Also implies COMMON.
+     -1 indicates a bitwise operation; this makes a difference
+     in the exact conditions for when it is safe to do the operation
+     in a narrower mode.  */
+  int shorten = 0;
+
+  /* Nonzero if this is a comparison operation;
+     if both args are promoted shorts, compare the original shorts.
+     Also implies COMMON.  */
+  int short_compare = 0;
+
+  /* Nonzero if this is a right-shift operation, which can be computed on the
+     original short and then promoted if the operand is a promoted short.  */
+  int short_shift = 0;
+
+  /* Nonzero means set RESULT_TYPE to the common type of the args.  */
+  int common = 0;
+
+  /* True means types are compatible as far as ObjC is concerned.  */
+  bool objc_ok;
+
+  /* True means this is an arithmetic operation that may need excess
+     precision.  */
+  bool may_need_excess_precision;
+
+  /* True means this is a boolean operation that converts both its
+     operands to truth-values.  */
+  bool boolean_op = false;
+
+  /* Remember whether we're doing / or %.  */
+  bool doing_div_or_mod = false;
+
+  /* Remember whether we're doing << or >>.  */
+  bool doing_shift = false;
+
+  /* Tree holding instrumentation expression.  */
+  tree instrument_expr = NULL;
+
+  if (location == UNKNOWN_LOCATION)
+    location = input_location;
+
+  op0 = orig_op0;
+  op1 = orig_op1;
+
+  op0_int_operands = EXPR_INT_CONST_OPERANDS (orig_op0);
+  if (op0_int_operands)
+    op0 = remove_c_maybe_const_expr (op0);
+  op1_int_operands = EXPR_INT_CONST_OPERANDS (orig_op1);
+  if (op1_int_operands)
+    op1 = remove_c_maybe_const_expr (op1);
+  int_operands = (op0_int_operands && op1_int_operands);
+  if (int_operands)
+    {
+      int_const_or_overflow = (TREE_CODE (orig_op0) == INTEGER_CST
+			       && TREE_CODE (orig_op1) == INTEGER_CST);
+      int_const = (int_const_or_overflow
+		   && !TREE_OVERFLOW (orig_op0)
+		   && !TREE_OVERFLOW (orig_op1));
+    }
+  else
+    int_const = int_const_or_overflow = false;
+
+  /* Do not apply default conversion in mixed vector/scalar expression.  */
+  if (convert_p
+      && VECTOR_TYPE_P (TREE_TYPE (op0)) == VECTOR_TYPE_P (TREE_TYPE (op1)))
+    {
+      op0 = default_conversion (op0);
+      op1 = default_conversion (op1);
+    }
+
+  orig_type0 = type0 = TREE_TYPE (op0);
+
+  orig_type1 = type1 = TREE_TYPE (op1);
+
+  /* The expression codes of the data types of the arguments tell us
+     whether the arguments are integers, floating, pointers, etc.  */
+  code0 = TREE_CODE (type0);
+  code1 = TREE_CODE (type1);
+
+  /* Strip NON_LVALUE_EXPRs, etc., since we aren't using as an lvalue.  */
+  STRIP_TYPE_NOPS (op0);
+  STRIP_TYPE_NOPS (op1);
+
+  /* If an error was already reported for one of the arguments,
+     avoid reporting another error.  */
+
+  if (code0 == ERROR_MARK || code1 == ERROR_MARK)
+    return error_mark_node;
+
+  if (code0 == POINTER_TYPE
+      && reject_gcc_builtin (op0, EXPR_LOCATION (orig_op0)))
+    return error_mark_node;
+
+  if (code1 == POINTER_TYPE
+      && reject_gcc_builtin (op1, EXPR_LOCATION (orig_op1)))
+    return error_mark_node;
+
+  if ((invalid_op_diag
+       = targetm.invalid_binary_op (code, type0, type1)))
+    {
+      error_at (location, invalid_op_diag);
+      return error_mark_node;
+    }
+
+  switch (code)
+    {
+    case PLUS_EXPR:
+    case MINUS_EXPR:
+    case MULT_EXPR:
+    case TRUNC_DIV_EXPR:
+    case CEIL_DIV_EXPR:
+    case FLOOR_DIV_EXPR:
+    case ROUND_DIV_EXPR:
+    case EXACT_DIV_EXPR:
+      may_need_excess_precision = true;
+      break;
+
+    case EQ_EXPR:
+    case NE_EXPR:
+    case LE_EXPR:
+    case GE_EXPR:
+    case LT_EXPR:
+    case GT_EXPR:
+      /* Excess precision for implicit conversions of integers to
+	 floating point in C11 and later.  */
+      may_need_excess_precision = (flag_isoc11
+				   && (ANY_INTEGRAL_TYPE_P (type0)
+				       || ANY_INTEGRAL_TYPE_P (type1)));
+      break;
+
+    default:
+      may_need_excess_precision = false;
+      break;
+    }
+  if (TREE_CODE (op0) == EXCESS_PRECISION_EXPR)
+    {
+      op0 = TREE_OPERAND (op0, 0);
+      type0 = TREE_TYPE (op0);
+    }
+  else if (may_need_excess_precision
+	   && (eptype = excess_precision_type (type0)) != NULL_TREE)
+    {
+      type0 = eptype;
+      op0 = convert (eptype, op0);
+    }
+  if (TREE_CODE (op1) == EXCESS_PRECISION_EXPR)
+    {
+      op1 = TREE_OPERAND (op1, 0);
+      type1 = TREE_TYPE (op1);
+    }
+  else if (may_need_excess_precision
+	   && (eptype = excess_precision_type (type1)) != NULL_TREE)
+    {
+      type1 = eptype;
+      op1 = convert (eptype, op1);
+    }
+
+  objc_ok = objc_compare_types (type0, type1, -3, NULL_TREE);
+
+  /* In case when one of the operands of the binary operation is
+     a vector and another is a scalar -- convert scalar to vector.  */
+  if ((gnu_vector_type_p (type0) && code1 != VECTOR_TYPE)
+      || (gnu_vector_type_p (type1) && code0 != VECTOR_TYPE))
+    {
+      enum stv_conv convert_flag = scalar_to_vector (location, code, op0, op1,
+						     true);
+
+      switch (convert_flag)
+	{
+	  case stv_error:
+	    return error_mark_node;
+	  case stv_firstarg:
+	    {
+              bool maybe_const = true;
+              tree sc;
+              sc = c_fully_fold (op0, false, &maybe_const);
+              sc = save_expr (sc);
+              sc = convert (TREE_TYPE (type1), sc);
+              op0 = build_vector_from_val (type1, sc);
+              if (!maybe_const)
+                op0 = c_wrap_maybe_const (op0, true);
+              orig_type0 = type0 = TREE_TYPE (op0);
+              code0 = TREE_CODE (type0);
+              converted = 1;
+              break;
+	    }
+	  case stv_secondarg:
+	    {
+	      bool maybe_const = true;
+	      tree sc;
+	      sc = c_fully_fold (op1, false, &maybe_const);
+	      sc = save_expr (sc);
+	      sc = convert (TREE_TYPE (type0), sc);
+	      op1 = build_vector_from_val (type0, sc);
+	      if (!maybe_const)
+		op1 = c_wrap_maybe_const (op1, true);
+	      orig_type1 = type1 = TREE_TYPE (op1);
+	      code1 = TREE_CODE (type1);
+	      converted = 1;
+	      break;
+	    }
+
+
+// Source: c-typeck.c
+// Lines 11495-11735
+
+
+[ANSWER]
+MUST-NOT

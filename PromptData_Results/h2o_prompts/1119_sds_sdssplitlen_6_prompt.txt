@@ -1,0 +1,42 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tokens' at line 3
+2. Pointer 'newtokens' at line 17
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+sds *sdssplitlen(const char *s, int len, const char *sep, int seplen, int *count) {
+    int elements = 0, slots = 5, start = 0, j;
+    sds *tokens;
+
+    if (seplen < 1 || len < 0) return NULL;
+
+    tokens = s_malloc(sizeof(sds)*slots);
+    if (tokens == NULL) return NULL;
+
+    if (len == 0) {
+        *count = 0;
+        return tokens;
+    }
+    for (j = 0; j < (len-(seplen-1)); j++) {
+        /* make sure there is room for the next element and the final one */
+        if (slots < elements+2) {
+            sds *newtokens;
+
+            slots *= 2;
+            newtokens = s_realloc(tokens,sizeof(sds)*slots);
+            if (newtokens == NULL) goto cleanup;
+            tokens = newtokens;
+        }
+
+
+// Source: sds.c
+// Lines 793-815
+
+
+[ANSWER]
+MUST

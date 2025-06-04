@@ -1,0 +1,220 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'reg' at line 108
+2. Pointer 'reg' at line 108
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+remove_inheritance_pseudos (bitmap remove_pseudos)
+{
+  basic_block bb;
+  int regno, sregno, prev_sregno, dregno;
+  rtx restore_rtx;
+  rtx set, prev_set;
+  rtx_insn *prev_insn;
+  bool change_p, done_p;
+
+  change_p = ! bitmap_empty_p (remove_pseudos);
+  /* We cannot finish the function right away if CHANGE_P is true
+     because we need to marks insns affected by previous
+     inheritance/split pass for processing by the subsequent
+     constraint pass.  */
+  FOR_EACH_BB_FN (bb, cfun)
+    {
+      fix_bb_live_info (df_get_live_in (bb), remove_pseudos);
+      fix_bb_live_info (df_get_live_out (bb), remove_pseudos);
+      FOR_BB_INSNS_REVERSE (bb, curr_insn)
+	{
+	  if (! INSN_P (curr_insn))
+	    continue;
+	  done_p = false;
+	  sregno = dregno = -1;
+	  if (change_p && NONDEBUG_INSN_P (curr_insn)
+	      && (set = single_set (curr_insn)) != NULL_RTX)
+	    {
+	      dregno = get_regno (SET_DEST (set));
+	      sregno = get_regno (SET_SRC (set));
+	    }
+
+	  if (sregno >= 0 && dregno >= 0)
+	    {
+	      if (bitmap_bit_p (remove_pseudos, dregno)
+		  && ! REG_P (lra_reg_info[dregno].restore_rtx))
+		{
+		  /* invariant inheritance pseudo <- original pseudo */
+		  if (lra_dump_file != NULL)
+		    {
+		      fprintf (lra_dump_file, "	   Removing invariant inheritance:\n");
+		      dump_insn_slim (lra_dump_file, curr_insn);
+		      fprintf (lra_dump_file, "\n");
+		    }
+		  delete_move_and_clobber (curr_insn, dregno);
+		  done_p = true;
+		}
+	      else if (bitmap_bit_p (remove_pseudos, sregno)
+		       && ! REG_P (lra_reg_info[sregno].restore_rtx))
+		{
+		  /* reload pseudo <- invariant inheritance pseudo */
+		  start_sequence ();
+		  /* We cannot just change the source.  It might be
+		     an insn different from the move.  */
+		  emit_insn (lra_reg_info[sregno].restore_rtx);
+		  rtx_insn *new_insns = get_insns ();
+		  end_sequence ();
+		  lra_assert (single_set (new_insns) != NULL
+			      && SET_DEST (set) == SET_DEST (single_set (new_insns)));
+		  lra_process_new_insns (curr_insn, NULL, new_insns,
+					 "Changing reload<-invariant inheritance");
+		  delete_move_and_clobber (curr_insn, dregno);
+		  done_p = true;
+		}
+	      else if ((bitmap_bit_p (remove_pseudos, sregno)
+			&& (get_regno (lra_reg_info[sregno].restore_rtx) == dregno
+			    || (bitmap_bit_p (remove_pseudos, dregno)
+				&& get_regno (lra_reg_info[sregno].restore_rtx) >= 0
+				&& (get_regno (lra_reg_info[sregno].restore_rtx)
+				    == get_regno (lra_reg_info[dregno].restore_rtx)))))
+		       || (bitmap_bit_p (remove_pseudos, dregno)
+			   && get_regno (lra_reg_info[dregno].restore_rtx) == sregno))
+		/* One of the following cases:
+		     original <- removed inheritance pseudo
+		     removed inherit pseudo <- another removed inherit pseudo
+		     removed inherit pseudo <- original pseudo
+		   Or
+		     removed_split_pseudo <- original_reg
+		     original_reg <- removed_split_pseudo */
+		{
+		  if (lra_dump_file != NULL)
+		    {
+		      fprintf (lra_dump_file, "	   Removing %s:\n",
+			       bitmap_bit_p (&lra_split_regs, sregno)
+			       || bitmap_bit_p (&lra_split_regs, dregno)
+			       ? "split" : "inheritance");
+		      dump_insn_slim (lra_dump_file, curr_insn);
+		    }
+		  delete_move_and_clobber (curr_insn, dregno);
+		  done_p = true;
+		}
+	      else if (bitmap_bit_p (remove_pseudos, sregno)
+		       && bitmap_bit_p (&lra_inheritance_pseudos, sregno))
+		{
+		  /* Search the following pattern:
+		       inherit_or_split_pseudo1 <- inherit_or_split_pseudo2
+		       original_pseudo <- inherit_or_split_pseudo1
+		    where the 2nd insn is the current insn and
+		    inherit_or_split_pseudo2 is not removed.  If it is found,
+		    change the current insn onto:
+		       original_pseudo <- inherit_or_split_pseudo2.  */
+		  for (prev_insn = PREV_INSN (curr_insn);
+		       prev_insn != NULL_RTX && ! NONDEBUG_INSN_P (prev_insn);
+		       prev_insn = PREV_INSN (prev_insn))
+		    ;
+		  if (prev_insn != NULL_RTX && BLOCK_FOR_INSN (prev_insn) == bb
+		      && (prev_set = single_set (prev_insn)) != NULL_RTX
+		      /* There should be no subregs in insn we are
+			 searching because only the original reg might
+			 be in subreg when we changed the mode of
+			 load/store for splitting.  */
+		      && REG_P (SET_DEST (prev_set))
+		      && REG_P (SET_SRC (prev_set))
+		      && (int) REGNO (SET_DEST (prev_set)) == sregno
+		      && ((prev_sregno = REGNO (SET_SRC (prev_set)))
+			  >= FIRST_PSEUDO_REGISTER)
+		      && (lra_reg_info[prev_sregno].restore_rtx == NULL_RTX
+			  ||
+			  /* As we consider chain of inheritance or
+			     splitting described in above comment we should
+			     check that sregno and prev_sregno were
+			     inheritance/split pseudos created from the
+			     same original regno.  */
+			  (get_regno (lra_reg_info[sregno].restore_rtx) >= 0
+			   && (get_regno (lra_reg_info[sregno].restore_rtx)
+			       == get_regno (lra_reg_info[prev_sregno].restore_rtx))))
+		      && ! bitmap_bit_p (remove_pseudos, prev_sregno))
+		    {
+		      lra_assert (GET_MODE (SET_SRC (prev_set))
+				  == GET_MODE (regno_reg_rtx[sregno]));
+		      /* Although we have a single set, the insn can
+			 contain more one sregno register occurrence
+			 as a source.  Change all occurrences.  */
+		      lra_substitute_pseudo_within_insn (curr_insn, sregno,
+							 SET_SRC (prev_set),
+							 false);
+		      /* As we are finishing with processing the insn
+			 here, check the destination too as it might
+			 inheritance pseudo for another pseudo.  */
+		      if (bitmap_bit_p (remove_pseudos, dregno)
+			  && bitmap_bit_p (&lra_inheritance_pseudos, dregno)
+			  && (restore_rtx
+			      = lra_reg_info[dregno].restore_rtx) != NULL_RTX)
+			{
+			  if (GET_CODE (SET_DEST (set)) == SUBREG)
+			    SUBREG_REG (SET_DEST (set)) = restore_rtx;
+			  else
+			    SET_DEST (set) = restore_rtx;
+			}
+		      lra_push_insn_and_update_insn_regno_info (curr_insn);
+		      lra_set_used_insn_alternative_by_uid
+			(INSN_UID (curr_insn), LRA_UNKNOWN_ALT);
+		      done_p = true;
+		      if (lra_dump_file != NULL)
+			{
+			  fprintf (lra_dump_file, "    Change reload insn:\n");
+			  dump_insn_slim (lra_dump_file, curr_insn);
+			}
+		    }
+		}
+	    }
+	  if (! done_p)
+	    {
+	      struct lra_insn_reg *reg;
+	      bool restored_regs_p = false;
+	      bool kept_regs_p = false;
+
+	      curr_id = lra_get_insn_recog_data (curr_insn);
+	      for (reg = curr_id->regs; reg != NULL; reg = reg->next)
+		{
+		  regno = reg->regno;
+		  restore_rtx = lra_reg_info[regno].restore_rtx;
+		  if (restore_rtx != NULL_RTX)
+		    {
+		      if (change_p && bitmap_bit_p (remove_pseudos, regno))
+			{
+			  lra_substitute_pseudo_within_insn
+			    (curr_insn, regno, restore_rtx, false);
+			  restored_regs_p = true;
+			}
+		      else
+			kept_regs_p = true;
+		    }
+		}
+	      if (NONDEBUG_INSN_P (curr_insn) && kept_regs_p)
+		{
+		  /* The instruction has changed since the previous
+		     constraints pass.  */
+		  lra_push_insn_and_update_insn_regno_info (curr_insn);
+		  lra_set_used_insn_alternative_by_uid
+		    (INSN_UID (curr_insn), LRA_UNKNOWN_ALT);
+		}
+	      else if (restored_regs_p)
+		/* The instruction has been restored to the form that
+		   it had during the previous constraints pass.  */
+		lra_update_insn_regno_info (curr_insn);
+	      if (restored_regs_p && lra_dump_file != NULL)
+		{
+		  fprintf (lra_dump_file, "   Insn after restoring regs:\n");
+		  dump_insn_slim (lra_dump_file, curr_insn);
+		}
+	    }
+
+
+// Source: lra-constraints.c
+// Lines 6871-7071
+
+
+[ANSWER]
+MUST

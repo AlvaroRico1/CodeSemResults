@@ -1,0 +1,43 @@
+terminal_overwrite(EditLine *el, const wchar_t *cp, size_t n)
+{
+	if (n == 0)
+		return;
+
+	if (n > (size_t)el->el_terminal.t_size.h) {
+#ifdef DEBUG_SCREEN
+		(void) fprintf(el->el_errfile,
+		    "%s: n is ridiculous: %zu\r\n", __func__, n);
+#endif /* DEBUG_SCREEN */
+		return;
+	}
+
+        do {
+                /* terminal__putc() ignores any MB_FILL_CHARs */
+                terminal__putc(el, *cp++);
+                el->el_cursor.h++;
+        } while (--n);
+
+	if (el->el_cursor.h >= el->el_terminal.t_size.h) {	/* wrap? */
+		if (EL_HAS_AUTO_MARGINS) {	/* yes */
+			el->el_cursor.h = 0;
+			if (el->el_cursor.v + 1 < el->el_terminal.t_size.v)
+				el->el_cursor.v++;
+			if (EL_HAS_MAGIC_MARGINS) {
+				/* force the wrap to avoid the "magic"
+				 * situation */
+				wchar_t c;
+				if ((c = el->el_display[el->el_cursor.v]
+				    [el->el_cursor.h]) != '\0') {
+					terminal_overwrite(el, &c, (size_t)1);
+					while (el->el_display[el->el_cursor.v]
+					    [el->el_cursor.h] == MB_FILL_CHAR)
+						el->el_cursor.h++;
+				} else {
+					terminal__putc(el, ' ');
+					el->el_cursor.h = 1;
+				}
+			}
+
+
+// Source: terminal.c
+// Lines 628-666

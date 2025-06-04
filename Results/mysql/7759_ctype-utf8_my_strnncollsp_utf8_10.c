@@ -1,0 +1,60 @@
+static int my_strnncollsp_utf8(const CHARSET_INFO *cs, const uchar *s,
+                               size_t slen, const uchar *t, size_t tlen) {
+  int s_res, t_res, res;
+  my_wc_t s_wc = 0, t_wc = 0;
+  const uchar *se = s + slen, *te = t + tlen;
+  const MY_UNICASE_INFO *uni_plane = cs->caseinfo;
+
+  while (s < se && t < te) {
+    s_res = my_mb_wc_utf8(&s_wc, s, se);
+    t_res = my_mb_wc_utf8(&t_wc, t, te);
+
+    if (s_res <= 0 || t_res <= 0) {
+      /* Incorrect string, compare byte by byte value */
+      return bincmp(s, se, t, te);
+    }
+
+    my_tosort_unicode(uni_plane, &s_wc, cs->state);
+    my_tosort_unicode(uni_plane, &t_wc, cs->state);
+
+    if (s_wc != t_wc) {
+      return s_wc > t_wc ? 1 : -1;
+    }
+
+    s += s_res;
+    t += t_res;
+  }
+
+  slen = (size_t)(se - s);
+  tlen = (size_t)(te - t);
+  res = 0;
+
+  if (slen != tlen) {
+    int swap = 1;
+    if (slen < tlen) {
+      slen = tlen;
+      s = t;
+      se = te;
+      swap = -1;
+      res = -res;
+    }
+    /*
+      This following loop uses the fact that in UTF-8
+      all multibyte characters are greater than space,
+      and all multibyte head characters are greater than
+      space. It means if we meet a character greater
+      than space, it always means that the longer string
+      is greater. So we can reuse the same loop from the
+      8bit version, without having to process full multibute
+      sequences.
+    */
+    for (; s < se; s++) {
+      if (*s != ' ') return (*s < ' ') ? -swap : swap;
+    }
+  }
+  return res;
+}
+
+
+// Source: ctype-utf8.cc
+// Lines 5526-5581

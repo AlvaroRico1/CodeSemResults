@@ -1,0 +1,55 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'info' at line 4
+2. Pointer 'patch' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int git_xdiff(git_patch_generated_output *output, git_patch_generated *patch)
+{
+	git_xdiff_output *xo = (git_xdiff_output *)output;
+	git_xdiff_info info;
+	git_diff_find_context_payload findctxt;
+
+	memset(&info, 0, sizeof(info));
+	info.patch = patch;
+	info.xo    = xo;
+
+	xo->callback.priv = &info;
+
+	git_diff_find_context_init(
+		&xo->config.find_func, &findctxt, git_patch_generated_driver(patch));
+	xo->config.find_func_priv = &findctxt;
+
+	if (xo->config.find_func != NULL)
+		xo->config.flags |= XDL_EMIT_FUNCNAMES;
+	else
+		xo->config.flags &= ~XDL_EMIT_FUNCNAMES;
+
+	/* TODO: check ofile.opts_flags to see if driver-specific per-file
+	 * updates are needed to xo->params.flags
+	 */
+
+	if (git_patch_generated_old_data(&info.xd_old_data.ptr, &info.xd_old_data.size, patch) < 0 ||
+	    git_patch_generated_new_data(&info.xd_new_data.ptr, &info.xd_new_data.size, patch) < 0)
+		return -1;
+
+	xdl_diff(&info.xd_old_data, &info.xd_new_data,
+		&xo->params, &xo->config, &xo->callback);
+
+	git_diff_find_context_clear(&findctxt);
+
+	return xo->output.error;
+}
+
+
+// Source: diff_xdiff.c
+// Lines 197-232
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,45 @@
+static void assert_ignore_case(
+	bool should_ignore_case,
+	int expected_lower_cased_file_status,
+	int expected_camel_cased_file_status)
+{
+	unsigned int status;
+	git_str lower_case_path = GIT_STR_INIT, camel_case_path = GIT_STR_INIT;
+	git_repository *repo, *repo2;
+
+	repo = cl_git_sandbox_init("empty_standard_repo");
+	cl_git_remove_placeholders(git_repository_path(repo), "dummy-marker.txt");
+
+	cl_repo_set_bool(repo, "core.ignorecase", should_ignore_case);
+
+	cl_git_pass(git_str_joinpath(&lower_case_path,
+		git_repository_workdir(repo), "plop"));
+
+	cl_git_mkfile(git_str_cstr(&lower_case_path), "");
+
+	stage_and_commit(repo, "plop");
+
+	cl_git_pass(git_repository_open(&repo2, "./empty_standard_repo"));
+
+	cl_git_pass(git_status_file(&status, repo2, "plop"));
+	cl_assert_equal_i(GIT_STATUS_CURRENT, status);
+
+	cl_git_pass(git_str_joinpath(&camel_case_path,
+		git_repository_workdir(repo), "Plop"));
+
+	cl_git_pass(p_rename(git_str_cstr(&lower_case_path), git_str_cstr(&camel_case_path)));
+
+	cl_git_pass(git_status_file(&status, repo2, "plop"));
+	cl_assert_equal_i(expected_lower_cased_file_status, status);
+
+	cl_git_pass(git_status_file(&status, repo2, "Plop"));
+	cl_assert_equal_i(expected_camel_cased_file_status, status);
+
+	git_repository_free(repo2);
+	git_str_dispose(&lower_case_path);
+	git_str_dispose(&camel_case_path);
+}
+
+
+// Source: worktree.c
+// Lines 786-826

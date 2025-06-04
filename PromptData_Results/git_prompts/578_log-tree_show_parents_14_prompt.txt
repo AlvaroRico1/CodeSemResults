@@ -1,0 +1,26 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'parent' at line 5
+2. Pointer 'p' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void show_parents(struct commit *commit, int abbrev, FILE *file)
+{
+	struct commit_list *p;
+	for (p = commit->parents; p ; p = p->next) {
+		struct commit *parent = p->item;
+		fprintf(file, " %s", find_unique_abbrev(&parent->object.oid, abbrev));
+	}
+
+
+// Source: log-tree.c
+// Lines 219-225
+
+
+[ANSWER]
+MUST

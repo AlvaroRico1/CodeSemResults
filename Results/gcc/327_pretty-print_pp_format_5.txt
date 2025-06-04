@@ -1,0 +1,1 @@
+errstr,gcc/gcc/pretty-print.c,91,colorstr,gcc/gcc/pretty-print.c,52,2

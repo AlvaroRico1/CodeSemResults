@@ -1,0 +1,84 @@
+prepare_perfect_loop_nest (class loop *loop, vec<loop_p> *loop_nest,
+			   vec<data_reference_p> *datarefs, vec<ddr_p> *ddrs)
+{
+  class loop *start_loop = NULL, *innermost = loop;
+  class loop *outermost = loops_for_fn (cfun)->tree_root;
+
+  /* Find loop nest from the innermost loop.  The outermost is the innermost
+     outer*/
+  while (loop->num != 0 && loop->inner == start_loop
+	 && flow_loop_nested_p (outermost, loop))
+    {
+      if (!proper_loop_form_for_interchange (loop, &outermost))
+	break;
+
+      start_loop = loop;
+      /* If this loop has sibling loop, the father loop won't be in perfect
+	 loop nest.  */
+      if (loop->next != NULL)
+	break;
+
+      loop = loop_outer (loop);
+    }
+  if (!start_loop || !start_loop->inner)
+    return false;
+
+  /* Prepare the data reference vector for the loop nest, pruning outer
+     loops we cannot handle.  */
+  start_loop = prepare_data_references (start_loop, datarefs);
+  if (!start_loop
+      /* Check if there is no data reference.  */
+      || datarefs->is_empty ()
+      /* Check if there are too many of data references.  */
+      || (int) datarefs->length () > MAX_DATAREFS)
+    return false;
+
+  /* Compute access strides for all data references, pruning outer
+     loops we cannot analyze refs in.  */
+  start_loop = compute_access_strides (start_loop, innermost, *datarefs);
+  if (!start_loop)
+    return false;
+
+  /* Check if any interchange is profitable in the loop nest.  */
+  if (!should_interchange_loop_nest (start_loop, innermost, *datarefs))
+    return false;
+
+  /* Check if data dependences can be computed for loop nest starting from
+     start_loop.  */
+  loop = start_loop;
+  do {
+    loop_nest->truncate (0);
+
+    if (loop != start_loop)
+      prune_datarefs_not_in_loop (start_loop, *datarefs);
+
+    if (find_loop_nest (start_loop, loop_nest)
+	&& tree_loop_interchange_compute_ddrs (*loop_nest, *datarefs, ddrs))
+      {
+	if (dump_file && (dump_flags & TDF_DETAILS))
+	  fprintf (dump_file,
+		   "\nConsider loop interchange for loop_nest<%d - %d>\n",
+		   start_loop->num, innermost->num);
+
+	if (loop != start_loop)
+	  prune_access_strides_not_in_loop (start_loop, innermost, *datarefs);
+
+	if (dump_file && (dump_flags & TDF_DETAILS))
+	  dump_access_strides (*datarefs);
+
+	return true;
+      }
+
+    free_dependence_relations (*ddrs);
+    *ddrs = vNULL;
+    /* Try to compute data dependences with the outermost loop stripped.  */
+    loop = start_loop;
+    start_loop = start_loop->inner;
+  } while (start_loop && start_loop->inner);
+
+  return false;
+}
+
+
+// Source: gimple-loop-interchange.cc
+// Lines 1981-2060

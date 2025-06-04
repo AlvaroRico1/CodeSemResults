@@ -1,0 +1,1 @@
+plugin,gcc/gcc/plugin.c,3,base_name,gcc/gcc/plugin.c,5,1

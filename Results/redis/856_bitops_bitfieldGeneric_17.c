@@ -1,0 +1,228 @@
+void bitfieldGeneric(client *c, int flags) {
+    robj *o;
+    uint64_t bitoffset;
+    int j, numops = 0, changes = 0;
+    struct bitfieldOp *ops = NULL; /* Array of ops to execute at end. */
+    int owtype = BFOVERFLOW_WRAP; /* Overflow type. */
+    int readonly = 1;
+    uint64_t highest_write_offset = 0;
+
+    for (j = 2; j < c->argc; j++) {
+        int remargs = c->argc-j-1; /* Remaining args other than current. */
+        char *subcmd = c->argv[j]->ptr; /* Current command name. */
+        int opcode; /* Current operation code. */
+        long long i64 = 0;  /* Signed SET value. */
+        int sign = 0; /* Signed or unsigned type? */
+        int bits = 0; /* Bitfield width in bits. */
+
+        if (!strcasecmp(subcmd,"get") && remargs >= 2)
+            opcode = BITFIELDOP_GET;
+        else if (!strcasecmp(subcmd,"set") && remargs >= 3)
+            opcode = BITFIELDOP_SET;
+        else if (!strcasecmp(subcmd,"incrby") && remargs >= 3)
+            opcode = BITFIELDOP_INCRBY;
+        else if (!strcasecmp(subcmd,"overflow") && remargs >= 1) {
+            char *owtypename = c->argv[j+1]->ptr;
+            j++;
+            if (!strcasecmp(owtypename,"wrap"))
+                owtype = BFOVERFLOW_WRAP;
+            else if (!strcasecmp(owtypename,"sat"))
+                owtype = BFOVERFLOW_SAT;
+            else if (!strcasecmp(owtypename,"fail"))
+                owtype = BFOVERFLOW_FAIL;
+            else {
+                addReplyError(c,"Invalid OVERFLOW type specified");
+                zfree(ops);
+                return;
+            }
+            continue;
+        } else {
+            addReplyErrorObject(c,shared.syntaxerr);
+            zfree(ops);
+            return;
+        }
+
+        /* Get the type and offset arguments, common to all the ops. */
+        if (getBitfieldTypeFromArgument(c,c->argv[j+1],&sign,&bits) != C_OK) {
+            zfree(ops);
+            return;
+        }
+
+        if (getBitOffsetFromArgument(c,c->argv[j+2],&bitoffset,1,bits) != C_OK){
+            zfree(ops);
+            return;
+        }
+
+        if (opcode != BITFIELDOP_GET) {
+            readonly = 0;
+            if (highest_write_offset < bitoffset + bits - 1)
+                highest_write_offset = bitoffset + bits - 1;
+            /* INCRBY and SET require another argument. */
+            if (getLongLongFromObjectOrReply(c,c->argv[j+3],&i64,NULL) != C_OK){
+                zfree(ops);
+                return;
+            }
+        }
+
+        /* Populate the array of operations we'll process. */
+        ops = zrealloc(ops,sizeof(*ops)*(numops+1));
+        ops[numops].offset = bitoffset;
+        ops[numops].i64 = i64;
+        ops[numops].opcode = opcode;
+        ops[numops].owtype = owtype;
+        ops[numops].bits = bits;
+        ops[numops].sign = sign;
+        numops++;
+
+        j += 3 - (opcode == BITFIELDOP_GET);
+    }
+
+    if (readonly) {
+        /* Lookup for read is ok if key doesn't exit, but errors
+         * if it's not a string. */
+        o = lookupKeyRead(c->db,c->argv[1]);
+        if (o != NULL && checkType(c,o,OBJ_STRING)) {
+            zfree(ops);
+            return;
+        }
+    } else {
+        if (flags & BITFIELD_FLAG_READONLY) {
+            zfree(ops);
+            addReplyError(c, "BITFIELD_RO only supports the GET subcommand");
+            return;
+        }
+
+        /* Lookup by making room up to the farest bit reached by
+         * this operation. */
+        if ((o = lookupStringForBitCommand(c,
+            highest_write_offset)) == NULL) {
+            zfree(ops);
+            return;
+        }
+    }
+
+    addReplyArrayLen(c,numops);
+
+    /* Actually process the operations. */
+    for (j = 0; j < numops; j++) {
+        struct bitfieldOp *thisop = ops+j;
+
+        /* Execute the operation. */
+        if (thisop->opcode == BITFIELDOP_SET ||
+            thisop->opcode == BITFIELDOP_INCRBY)
+        {
+            /* SET and INCRBY: We handle both with the same code path
+             * for simplicity. SET return value is the previous value so
+             * we need fetch & store as well. */
+
+            /* We need two different but very similar code paths for signed
+             * and unsigned operations, since the set of functions to get/set
+             * the integers and the used variables types are different. */
+            if (thisop->sign) {
+                int64_t oldval, newval, wrapped, retval;
+                int overflow;
+
+                oldval = getSignedBitfield(o->ptr,thisop->offset,
+                        thisop->bits);
+
+                if (thisop->opcode == BITFIELDOP_INCRBY) {
+                    newval = oldval + thisop->i64;
+                    overflow = checkSignedBitfieldOverflow(oldval,
+                            thisop->i64,thisop->bits,thisop->owtype,&wrapped);
+                    if (overflow) newval = wrapped;
+                    retval = newval;
+                } else {
+                    newval = thisop->i64;
+                    overflow = checkSignedBitfieldOverflow(newval,
+                            0,thisop->bits,thisop->owtype,&wrapped);
+                    if (overflow) newval = wrapped;
+                    retval = oldval;
+                }
+
+                /* On overflow of type is "FAIL", don't write and return
+                 * NULL to signal the condition. */
+                if (!(overflow && thisop->owtype == BFOVERFLOW_FAIL)) {
+                    addReplyLongLong(c,retval);
+                    setSignedBitfield(o->ptr,thisop->offset,
+                                      thisop->bits,newval);
+                } else {
+                    addReplyNull(c);
+                }
+            } else {
+                uint64_t oldval, newval, wrapped, retval;
+                int overflow;
+
+                oldval = getUnsignedBitfield(o->ptr,thisop->offset,
+                        thisop->bits);
+
+                if (thisop->opcode == BITFIELDOP_INCRBY) {
+                    newval = oldval + thisop->i64;
+                    overflow = checkUnsignedBitfieldOverflow(oldval,
+                            thisop->i64,thisop->bits,thisop->owtype,&wrapped);
+                    if (overflow) newval = wrapped;
+                    retval = newval;
+                } else {
+                    newval = thisop->i64;
+                    overflow = checkUnsignedBitfieldOverflow(newval,
+                            0,thisop->bits,thisop->owtype,&wrapped);
+                    if (overflow) newval = wrapped;
+                    retval = oldval;
+                }
+                /* On overflow of type is "FAIL", don't write and return
+                 * NULL to signal the condition. */
+                if (!(overflow && thisop->owtype == BFOVERFLOW_FAIL)) {
+                    addReplyLongLong(c,retval);
+                    setUnsignedBitfield(o->ptr,thisop->offset,
+                                        thisop->bits,newval);
+                } else {
+                    addReplyNull(c);
+                }
+            }
+            changes++;
+        } else {
+            /* GET */
+            unsigned char buf[9];
+            long strlen = 0;
+            unsigned char *src = NULL;
+            char llbuf[LONG_STR_SIZE];
+
+            if (o != NULL)
+                src = getObjectReadOnlyString(o,&strlen,llbuf);
+
+            /* For GET we use a trick: before executing the operation
+             * copy up to 9 bytes to a local buffer, so that we can easily
+             * execute up to 64 bit operations that are at actual string
+             * object boundaries. */
+            memset(buf,0,9);
+            int i;
+            uint64_t byte = thisop->offset >> 3;
+            for (i = 0; i < 9; i++) {
+                if (src == NULL || i+byte >= (uint64_t)strlen) break;
+                buf[i] = src[i+byte];
+            }
+
+            /* Now operate on the copied buffer which is guaranteed
+             * to be zero-padded. */
+            if (thisop->sign) {
+                int64_t val = getSignedBitfield(buf,thisop->offset-(byte*8),
+                                            thisop->bits);
+                addReplyLongLong(c,val);
+            } else {
+                uint64_t val = getUnsignedBitfield(buf,thisop->offset-(byte*8),
+                                            thisop->bits);
+                addReplyLongLong(c,val);
+            }
+        }
+    }
+
+    if (changes) {
+        signalModifiedKey(c,c->db,c->argv[1]);
+        notifyKeyspaceEvent(NOTIFY_STRING,"setbit",c->argv[1],c->db->id);
+        server.dirty += changes;
+    }
+    zfree(ops);
+}
+
+
+// Source: bitops.c
+// Lines 934-1157

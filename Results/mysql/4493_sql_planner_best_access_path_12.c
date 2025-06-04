@@ -1,0 +1,259 @@
+void Optimize_table_order::best_access_path(JOIN_TAB *tab,
+                                            const table_map remaining_tables,
+                                            const uint idx, bool disable_jbuf,
+                                            const double prefix_rowcount,
+                                            POSITION *pos) {
+  bool found_condition = false;
+  bool best_uses_jbuf = false;
+  Opt_trace_context *const trace = &thd->opt_trace;
+  TABLE *const table = tab->table();
+  const Cost_model_server *const cost_model = join->cost_model();
+
+  float filter_effect = 1.0;
+
+  thd->m_current_query_partial_plans++;
+
+  /*
+    Cannot use join buffering if either
+     1. This is the first table in the join sequence, or
+     2. Join buffering is not enabled
+        (Only Block Nested Loop is considered in this context)
+     3. If first-dependency-of-remaining-lateral-table < table-we-plan-for.
+     Reason for 3: @see setup_join_buffering().
+  */
+  disable_jbuf =
+      disable_jbuf || idx == join->const_tables ||  // 1
+      !hint_table_state(join->thd, tab->table_ref,  // 2
+                        BNL_HINT_ENUM, OPTIMIZER_SWITCH_BNL) ||
+      join->deps_of_remaining_lateral_derived_tables & ~remaining_tables;  // 3
+
+  DBUG_TRACE;
+
+  Opt_trace_object trace_wrapper(trace, "best_access_path");
+  Opt_trace_array trace_paths(trace, "considered_access_paths");
+
+  // The 'ref' access method with lowest cost as found by find_best_ref()
+  Key_use *best_ref = nullptr;
+
+  table_map ref_depend_map = 0;
+  uint used_key_parts = 0;
+
+  // Look for the best ref access if the storage engine supports index access.
+  if (tab->keyuse() != nullptr &&
+      (table->file->ha_table_flags() & HA_NO_INDEX_ACCESS) == 0)
+    best_ref =
+        find_best_ref(tab, remaining_tables, idx, prefix_rowcount,
+                      &found_condition, &ref_depend_map, &used_key_parts);
+
+  double rows_fetched = best_ref ? best_ref->fanout : DBL_MAX;
+  /*
+    Cost of executing the best access method prefix_rowcount
+    number of times
+  */
+  double best_read_cost = best_ref ? best_ref->read_cost : DBL_MAX;
+
+  double derived_mat_cost =
+      (tab->table_ref->is_derived() &&
+       tab->table_ref->derived_query_expression()->m_lateral_deps)
+          ? lateral_derived_cost(tab, idx, prefix_rowcount, cost_model)
+          : 0;
+
+  Opt_trace_object trace_access_scan(trace);
+  /*
+    Don't test table scan if it can't be better.
+    Prefer key lookup if we would use the same key for scanning.
+
+    Don't do a table scan on InnoDB tables, if we can read the used
+    parts of the row from any of the used index.
+    This is because table scans uses index and we would not win
+    anything by using a table scan. The only exception is INDEX_MERGE
+    quick select. We can not say for sure that INDEX_MERGE quick select
+    is always faster than ref access. So it's necessary to check if
+    ref access is more expensive.
+
+    We do not consider index/table scan or range access if:
+
+    1a) The best 'ref' access produces fewer records than a table scan
+        (or index scan, or range acces), and
+    1b) The best 'ref' executed for all partial row combinations, is
+        cheaper than a single scan. The rationale for comparing
+
+        COST(ref_per_partial_row) * E(#partial_rows)
+           vs
+        COST(single_scan)
+
+        is that if join buffering is used for the scan, then scan will
+        not be performed E(#partial_rows) times, but
+        E(#partial_rows)/E(#partial_rows_fit_in_buffer). At this point
+        in best_access_path() we don't know this ratio, but it is
+        somewhere between 1 and E(#partial_rows). To avoid
+        overestimating the total cost of scanning, the heuristic used
+        here has to assume that the ratio is 1. A more fine-grained
+        cost comparison will be done later in this function.
+    (2) The best way to perform table or index scan is to use 'range' access
+        using index IDX. If it is a 'tight range' scan (i.e not a loose index
+        scan' or 'index merge'), then ref access on the same index will
+        perform equal or better if ref access can use the same or more number
+        of key parts.
+    (3) See above note about InnoDB.
+    (4) NOT ("FORCE INDEX(...)" is used for table and there is 'ref' access
+             path, but there is no quick select)
+        If the condition in the above brackets holds, then the only possible
+        "table scan" access method is ALL/index (there is no quick select).
+        Since we have a 'ref' access path, and FORCE INDEX instructs us to
+        choose it over ALL/index, there is no need to consider a full table
+        scan.
+  */
+  if (rows_fetched < tab->found_records &&  // (1a)
+      best_read_cost <= tab->read_time)     // (1b)
+  {
+    // "scan" means (full) index scan or (full) table scan.
+    if (tab->quick()) {
+      trace_access_scan.add_alnum("access_type", "range");
+      tab->quick()->trace_quick_description(trace);
+    } else
+      trace_access_scan.add_alnum("access_type", "scan");
+
+    trace_access_scan
+        .add("cost",
+             tab->read_time + cost_model->row_evaluate_cost(
+                                  static_cast<double>(tab->found_records)))
+        .add("rows", tab->found_records)
+        .add("chosen", false)
+        .add_alnum("cause", "cost");
+  } else if (tab->quick() && best_ref &&              // (2)
+             tab->quick()->index == best_ref->key &&  // (2)
+             (used_key_parts >=
+              table->quick_key_parts[best_ref->key]) &&  // (2)
+             (tab->quick()->get_type() !=
+              QUICK_SELECT_I::QS_TYPE_GROUP_MIN_MAX) &&
+             (tab->quick()->get_type() !=
+              QUICK_SELECT_I::QS_TYPE_SKIP_SCAN))  // (2)
+  {
+    trace_access_scan.add_alnum("access_type", "range");
+    tab->quick()->trace_quick_description(trace);
+    trace_access_scan.add("chosen", false)
+        .add_alnum("cause", "heuristic_index_cheaper");
+  } else if ((table->file->ha_table_flags() & HA_TABLE_SCAN_ON_INDEX) &&  //(3)
+             !table->covering_keys.is_clear_all() && best_ref &&          //(3)
+             (!tab->quick() ||                                            //(3)
+              (tab->quick()->get_type() ==
+                   QUICK_SELECT_I::QS_TYPE_ROR_INTERSECT &&  //(3)
+               best_ref->read_cost <
+                   tab->quick()->cost_est.total_cost())))  //(3)
+  {
+    if (tab->quick()) {
+      trace_access_scan.add_alnum("access_type", "range");
+      tab->quick()->trace_quick_description(trace);
+    } else
+      trace_access_scan.add_alnum("access_type", "scan");
+
+    trace_access_scan.add("chosen", false)
+        .add_alnum("cause", "covering_index_better_than_full_scan");
+  } else if ((table->force_index && best_ref && !tab->quick()))  // (4)
+  {
+    trace_access_scan.add_alnum("access_type", "scan")
+        .add("chosen", false)
+        .add_alnum("cause", "force_index");
+  } else {
+    /*
+      None of the heuristics found that table/index/range scan is
+      obviously more expensive than 'ref' access. The 'ref' cost
+      therefore has to be compared to the cost of scanning.
+    */
+    double rows_after_filtering;
+
+    double scan_read_cost = calculate_scan_cost(
+        tab, idx, best_ref, prefix_rowcount, found_condition, disable_jbuf,
+        &rows_after_filtering, &trace_access_scan);
+
+    /*
+      We estimate the cost of evaluating WHERE clause for found
+      records as row_evaluate_cost(prefix_rowcount * rows_after_filtering).
+      This cost plus scan_cost gives us total cost of using
+      TABLE/INDEX/RANGE SCAN.
+    */
+    const double scan_total_cost =
+        scan_read_cost +
+        cost_model->row_evaluate_cost(prefix_rowcount * rows_after_filtering);
+
+    trace_access_scan.add("resulting_rows", rows_after_filtering);
+    trace_access_scan.add("cost", scan_total_cost);
+
+    if (best_ref == nullptr ||
+        (scan_total_cost <
+         best_read_cost +
+             cost_model->row_evaluate_cost(prefix_rowcount * rows_fetched))) {
+      /*
+        If the table has a range (tab->quick is set) make_join_query_block()
+        will ensure that this will be used
+      */
+      best_read_cost = scan_read_cost;
+      rows_fetched = rows_after_filtering;
+
+      if (tab->found_records) {
+        /*
+          Although join buffering may be used for this table, this
+          filter calculation is not done to calculate the cost of join
+          buffering itself (that is done inside
+          calculate_scan_cost()). The is_join_buffering parameter is
+          therefore 'false'.
+        */
+        const float full_filter = calculate_condition_filter(
+            tab, nullptr, ~remaining_tables & ~excluded_tables,
+            static_cast<double>(tab->found_records), false, false,
+            trace_access_scan);
+        filter_effect = static_cast<float>(std::min(
+            1.0, tab->found_records * full_filter / rows_after_filtering));
+      }
+      best_ref = nullptr;
+      best_uses_jbuf = !disable_jbuf;
+      ref_depend_map = 0;
+    }
+
+    trace_access_scan.add("chosen", best_ref == nullptr);
+  }
+
+  /*
+    Storage engines that track exact sizes may report an empty table
+    as having row count equal to 0.
+    If this table is an inner table of an outer join, adjust row count to 1,
+    so that the join planner can make a better fanout calculation for
+    the remaining tables of the join. (With size 0, the fanout would always
+    become 0, meaning that the cost of adding one more table would also
+    become 0, regardless of access method).
+  */
+  if (rows_fetched == 0.0 &&
+      (join->query_block->outer_join & tab->table_ref->map()))
+    rows_fetched = 1.0;
+
+  /*
+    Do not calculate condition filtering unless 'ref' access is
+    chosen. The filtering effect for all the scan types of access
+    (range/index scan/table scan) has already been calculated.
+  */
+  if (best_ref)
+    filter_effect = calculate_condition_filter(
+        tab, best_ref, ~remaining_tables & ~excluded_tables, rows_fetched,
+        false, false, trace_access_scan);
+
+  best_read_cost += derived_mat_cost;
+  pos->filter_effect = filter_effect;
+  pos->rows_fetched = rows_fetched;
+  pos->read_cost = best_read_cost;
+  pos->key = best_ref;
+  pos->table = tab;
+  pos->ref_depend_map = ref_depend_map;
+  pos->loosescan_key = MAX_KEY;
+  pos->use_join_buffer = best_uses_jbuf;
+
+  if (!best_ref && idx == join->const_tables && table == join->sort_by_table &&
+      join->query_expression()->select_limit_cnt >= rows_fetched) {
+    trace_access_scan.add("use_tmp_table", true);
+    join->sort_by_table = (TABLE *)1;  // Must use temporary table
+  }
+}
+
+
+// Source: sql_planner.cc
+// Lines 952-1206

@@ -1,0 +1,33 @@
+status_prompt_complete_session(char ***list, u_int *size, const char *s,
+    char flag)
+{
+	struct session	*loop;
+	char		*out, *tmp, n[11];
+
+	RB_FOREACH(loop, sessions, &sessions) {
+		if (*s == '\0' || strncmp(loop->name, s, strlen(s)) == 0) {
+			*list = xreallocarray(*list, (*size) + 2,
+			    sizeof **list);
+			xasprintf(&(*list)[(*size)++], "%s:", loop->name);
+		} else if (*s == '$') {
+			xsnprintf(n, sizeof n, "%u", loop->id);
+			if (s[1] == '\0' ||
+			    strncmp(n, s + 1, strlen(s) - 1) == 0) {
+				*list = xreallocarray(*list, (*size) + 2,
+				    sizeof **list);
+				xasprintf(&(*list)[(*size)++], "$%s:", n);
+			}
+		}
+	}
+	out = status_prompt_complete_prefix(*list, *size);
+	if (out != NULL && flag != '\0') {
+		xasprintf(&tmp, "-%c%s", flag, out);
+		free(out);
+		out = tmp;
+	}
+	return (out);
+}
+
+
+// Source: status.c
+// Lines 1843-1871

@@ -1,0 +1,61 @@
+ALWAYS_INLINE int uca_scanner_900<Mb_wc, LEVELS_FOR_COMPARE>::next_raw() {
+  int remain_weight = more_weight();
+  if (remain_weight >= 0) return remain_weight;
+
+  do {
+    my_wc_t wc = 0;
+
+    /* Get next code point */
+    int mblen = mb_wc(&wc, sbeg, send);
+    if (mblen <= 0) {
+      if (LEVELS_FOR_COMPARE == 1) {
+        ++weight_lv;
+        return -1;
+      }
+
+      if (++weight_lv < LEVELS_FOR_COMPARE) {
+        if (LEVELS_FOR_COMPARE == 4 && cs->coll_param == &ja_coll_param) {
+          // Return directly if we don't have quaternary weight.
+          if (weight_lv == 3 && !has_quaternary_weight) return -1;
+        }
+        /*
+          Restart scanning from the beginning of the string, and add
+          a level separator.
+        */
+        sbeg = sbeg_dup;
+        return 0;
+      }
+
+      // If we don't have any more levels left, we're done.
+      return -1;
+    }
+
+    sbeg += mblen;
+    assert(wc <= uca->maxchar);  // mb_wc() has already checked this.
+
+    if (my_uca_have_contractions(uca)) {
+      const uint16 *cweight;
+      /*
+        If we have scanned a code point which can have previous context,
+        and there were some more code points already before,
+        then verify that {prev_char, wc} together form
+        a real previous context pair.
+        Note, we support only 2-character long sequences with previous
+        context at the moment. CLDR does not have longer sequences.
+        CLDR doesn't have previous context rule whose first character is
+        0x0000, so the initial value (0) of prev_char won't break the logic.
+      */
+      if (my_uca_can_be_previous_context_tail(uca->contraction_flags, wc) &&
+          my_uca_can_be_previous_context_head(uca->contraction_flags,
+                                              prev_char) &&
+          (cweight = previous_context_find(prev_char, wc))) {
+        // For Japanese kana-sensitive collation.
+        if (LEVELS_FOR_COMPARE == 4 && cs->coll_param == &ja_coll_param) {
+          int quat_wt = handle_ja_contraction_quat_wt();
+          prev_char = 0;
+          if (quat_wt > 0) return quat_wt;
+        }
+
+
+// Source: ctype-uca.cc
+// Lines 1465-1521

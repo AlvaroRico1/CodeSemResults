@@ -1,0 +1,77 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'head' at line 32
+2. Pointer 'i' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_cherrypick_workdir__automerge(void)
+{
+	git_oid head_oid;
+	git_signature *signature = NULL;
+	size_t i;
+
+	const char *cherrypick_oids[] = {
+		"cfc4f0999a8367568e049af4f72e452d40828a15",
+		"964ea3da044d9083181a88ba6701de9e35778bf4",
+		"a43a050c588d4e92f11a6b139680923e9728477d",
+	};
+
+	struct merge_index_entry merge_index_entries[] = {
+		{ 0100644, "38c05a857e831a7e759d83778bfc85d003e21c45", 0, "file1.txt" },
+		{ 0100644, "a661b5dec1004e2c62654ded3762370c27cf266b", 0, "file2.txt" },
+		{ 0100644, "df6b290e0bd6a89b01d69f66687e8abf385283ca", 0, "file3.txt" },
+
+		{ 0100644, "38c05a857e831a7e759d83778bfc85d003e21c45", 0, "file1.txt" },
+		{ 0100644, "bd8fc3c59fb52d3c8b5907ace7defa5803f82419", 0, "file2.txt" },
+		{ 0100644, "df6b290e0bd6a89b01d69f66687e8abf385283ca", 0, "file3.txt" },
+
+		{ 0100644, "f06427bee380364bc7e0cb26a9245158e4726ce0", 0, "file1.txt" },
+		{ 0100644, "bd8fc3c59fb52d3c8b5907ace7defa5803f82419", 0, "file2.txt" },
+		{ 0100644, "df6b290e0bd6a89b01d69f66687e8abf385283ca", 0, "file3.txt" },
+	};
+
+	cl_git_pass(git_signature_new(&signature, "Picker", "picker@example.org", time(NULL), 0));
+
+	git_oid_fromstr(&head_oid, "d3d77487660ee3c0194ee01dc5eaf478782b1c7e");
+
+	for (i = 0; i < 3; ++i) {
+		git_commit *head = NULL, *commit = NULL;
+		git_oid cherry_oid, cherrypicked_oid, cherrypicked_tree_oid;
+		git_tree *cherrypicked_tree = NULL;
+
+		cl_git_pass(git_commit_lookup(&head, repo, &head_oid));
+		cl_git_pass(git_reset(repo, (git_object *)head, GIT_RESET_HARD, NULL));
+
+		git_oid_fromstr(&cherry_oid, cherrypick_oids[i]);
+		cl_git_pass(git_commit_lookup(&commit, repo, &cherry_oid));
+		cl_git_pass(git_cherrypick(repo, commit, NULL));
+
+		cl_assert(git_fs_path_exists(TEST_REPO_PATH "/.git/CHERRY_PICK_HEAD"));
+		cl_assert(git_fs_path_exists(TEST_REPO_PATH "/.git/MERGE_MSG"));
+
+		cl_git_pass(git_index_write_tree(&cherrypicked_tree_oid, repo_index));
+		cl_git_pass(git_tree_lookup(&cherrypicked_tree, repo, &cherrypicked_tree_oid));
+		cl_git_pass(git_commit_create(&cherrypicked_oid, repo, "HEAD", signature, signature, NULL,
+			"Cherry picked!", cherrypicked_tree, 1, (const git_commit **)&head));
+
+		cl_assert(merge_test_index(repo_index, merge_index_entries + i * 3, 3));
+
+		git_oid_cpy(&head_oid, &cherrypicked_oid);
+
+		git_tree_free(cherrypicked_tree);
+		git_commit_free(head);
+		git_commit_free(commit);
+	}
+
+
+// Source: workdir.c
+// Lines 32-89
+
+
+[ANSWER]
+MUST-NOT

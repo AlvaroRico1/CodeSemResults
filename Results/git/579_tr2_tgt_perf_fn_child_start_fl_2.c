@@ -1,0 +1,39 @@
+static void fn_child_start_fl(const char *file, int line,
+			      uint64_t us_elapsed_absolute,
+			      const struct child_process *cmd)
+{
+	const char *event_name = "child_start";
+	struct strbuf buf_payload = STRBUF_INIT;
+
+	if (cmd->trace2_hook_name) {
+		strbuf_addf(&buf_payload, "[ch%d] class:hook hook:%s",
+			    cmd->trace2_child_id, cmd->trace2_hook_name);
+	} else {
+		const char *child_class =
+			cmd->trace2_child_class ? cmd->trace2_child_class : "?";
+		strbuf_addf(&buf_payload, "[ch%d] class:%s",
+			    cmd->trace2_child_id, child_class);
+	}
+
+	if (cmd->dir) {
+		strbuf_addstr(&buf_payload, " cd:");
+		sq_quote_buf_pretty(&buf_payload, cmd->dir);
+	}
+
+	strbuf_addstr(&buf_payload, " argv:[");
+	if (cmd->git_cmd) {
+		strbuf_addstr(&buf_payload, "git");
+		if (cmd->argv[0])
+			strbuf_addch(&buf_payload, ' ');
+	}
+	sq_append_quote_argv_pretty(&buf_payload, cmd->argv);
+	strbuf_addch(&buf_payload, ']');
+
+	perf_io_write_fl(file, line, event_name, NULL, &us_elapsed_absolute,
+			 NULL, NULL, &buf_payload);
+	strbuf_release(&buf_payload);
+}
+
+
+// Source: tr2_tgt_perf.c
+// Lines 313-347

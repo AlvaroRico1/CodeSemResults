@@ -1,0 +1,1 @@
+w,tmux/cmd-kill-window.c,6,wl,tmux/cmd-kill-window.c,5,1

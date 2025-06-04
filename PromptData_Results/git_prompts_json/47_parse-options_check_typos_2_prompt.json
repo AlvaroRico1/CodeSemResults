@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'all_opts' at line None\n2. Pointer 'options' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void check_typos(const char *arg, const struct option *options)\n{\n\tif (strlen(arg) < 3)\n\t\treturn;\n\n\tif (starts_with(arg, \"no-\")) {\n\t\terror(_(\"did you mean `--%s` (with two dashes)?\"), arg);\n\t\texit(129);\n\t}\n\n\tfor (; options->type != OPTION_END; options++) {\n\t\tif (!options->long_name)\n\t\t\tcontinue;\n\t\tif (starts_with(options->long_name, arg)) {\n\t\t\terror(_(\"did you mean `--%s` (with two dashes)?\"), arg);\n\t\t\texit(129);\n\t\t}\n\t}\n}\n\n\n// Source: parse-options.c\n// Lines 401-419\n",
+  "ANSWER": "MUST"
+}

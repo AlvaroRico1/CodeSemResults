@@ -1,0 +1,48 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'expected' at line 1
+2. Pointer 'cfg' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void assert_condition_includes(const char *keyword, const char *path, bool expected)
+{
+	git_buf value = GIT_BUF_INIT;
+	git_str buf = GIT_STR_INIT;
+	git_config *cfg;
+
+	cl_git_pass(git_str_printf(&buf, "[includeIf \"%s:%s\"]\n", keyword, path));
+	cl_git_pass(git_str_puts(&buf, "path = other\n"));
+
+	cl_git_mkfile("empty_standard_repo/.git/config", buf.ptr);
+	cl_git_mkfile("empty_standard_repo/.git/other", "[foo]\nbar=baz\n");
+	_repo = cl_git_sandbox_reopen();
+
+	git_str_dispose(&buf);
+
+	cl_git_pass(git_repository_config(&cfg, _repo));
+
+	if (expected) {
+		cl_git_pass(git_config_get_string_buf(&value, cfg, "foo.bar"));
+		cl_assert_equal_s("baz", value.ptr);
+	} else {
+		cl_git_fail_with(GIT_ENOTFOUND,
+				 git_config_get_string_buf(&value, cfg, "foo.bar"));
+	}
+
+	git_str_dispose(&buf);
+	git_buf_dispose(&value);
+	git_config_free(cfg);
+}
+
+
+// Source: conditionals.c
+// Lines 23-51
+
+
+[ANSWER]
+MUST-NOT

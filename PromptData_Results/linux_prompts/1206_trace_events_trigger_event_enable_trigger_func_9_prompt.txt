@@ -1,0 +1,164 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'glob' at line 3
+2. Pointer 'trigger' at line 13
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int event_enable_trigger_func(struct event_command *cmd_ops,
+			      struct trace_event_file *file,
+			      char *glob, char *cmd, char *param)
+{
+	struct trace_event_file *event_enable_file;
+	struct enable_trigger_data *enable_data;
+	struct event_trigger_data *trigger_data;
+	struct event_trigger_ops *trigger_ops;
+	struct trace_array *tr = file->tr;
+	const char *system;
+	const char *event;
+	bool hist = false;
+	char *trigger;
+	char *number;
+	bool enable;
+	int ret;
+
+	if (!param)
+		return -EINVAL;
+
+	/* separate the trigger from the filter (s:e:n [if filter]) */
+	trigger = strsep(&param, " \t");
+	if (!trigger)
+		return -EINVAL;
+
+	system = strsep(&trigger, ":");
+	if (!trigger)
+		return -EINVAL;
+
+	event = strsep(&trigger, ":");
+
+	ret = -EINVAL;
+	event_enable_file = find_event_file(tr, system, event);
+	if (!event_enable_file)
+		goto out;
+
+#ifdef CONFIG_HIST_TRIGGERS
+	hist = ((strcmp(cmd, ENABLE_HIST_STR) == 0) ||
+		(strcmp(cmd, DISABLE_HIST_STR) == 0));
+
+	enable = ((strcmp(cmd, ENABLE_EVENT_STR) == 0) ||
+		  (strcmp(cmd, ENABLE_HIST_STR) == 0));
+#else
+	enable = strcmp(cmd, ENABLE_EVENT_STR) == 0;
+#endif
+	trigger_ops = cmd_ops->get_trigger_ops(cmd, trigger);
+
+	ret = -ENOMEM;
+	trigger_data = kzalloc(sizeof(*trigger_data), GFP_KERNEL);
+	if (!trigger_data)
+		goto out;
+
+	enable_data = kzalloc(sizeof(*enable_data), GFP_KERNEL);
+	if (!enable_data) {
+		kfree(trigger_data);
+		goto out;
+	}
+
+	trigger_data->count = -1;
+	trigger_data->ops = trigger_ops;
+	trigger_data->cmd_ops = cmd_ops;
+	INIT_LIST_HEAD(&trigger_data->list);
+	RCU_INIT_POINTER(trigger_data->filter, NULL);
+
+	enable_data->hist = hist;
+	enable_data->enable = enable;
+	enable_data->file = event_enable_file;
+	trigger_data->private_data = enable_data;
+
+	if (glob[0] == '!') {
+		cmd_ops->unreg(glob+1, trigger_ops, trigger_data, file);
+		kfree(trigger_data);
+		kfree(enable_data);
+		ret = 0;
+		goto out;
+	}
+
+	/* Up the trigger_data count to make sure nothing frees it on failure */
+	event_trigger_init(trigger_ops, trigger_data);
+
+	if (trigger) {
+		number = strsep(&trigger, ":");
+
+		ret = -EINVAL;
+		if (!strlen(number))
+			goto out_free;
+
+		/*
+		 * We use the callback data field (which is a pointer)
+		 * as our counter.
+		 */
+		ret = kstrtoul(number, 0, &trigger_data->count);
+		if (ret)
+			goto out_free;
+	}
+
+	if (!param) /* if param is non-empty, it's supposed to be a filter */
+		goto out_reg;
+
+	if (!cmd_ops->set_filter)
+		goto out_reg;
+
+	ret = cmd_ops->set_filter(param, trigger_data, file);
+	if (ret < 0)
+		goto out_free;
+
+ out_reg:
+	/* Don't let event modules unload while probe registered */
+	ret = try_module_get(event_enable_file->event_call->mod);
+	if (!ret) {
+		ret = -EBUSY;
+		goto out_free;
+	}
+
+	ret = trace_event_enable_disable(event_enable_file, 1, 1);
+	if (ret < 0)
+		goto out_put;
+	ret = cmd_ops->reg(glob, trigger_ops, trigger_data, file);
+	/*
+	 * The above returns on success the # of functions enabled,
+	 * but if it didn't find any functions it returns zero.
+	 * Consider no functions a failure too.
+	 */
+	if (!ret) {
+		ret = -ENOENT;
+		goto out_disable;
+	} else if (ret < 0)
+		goto out_disable;
+	/* Just return zero, not the number of enabled functions */
+	ret = 0;
+	event_trigger_free(trigger_ops, trigger_data);
+ out:
+	return ret;
+
+ out_disable:
+	trace_event_enable_disable(event_enable_file, 0, 1);
+ out_put:
+	module_put(event_enable_file->event_call->mod);
+ out_free:
+	if (cmd_ops->set_filter)
+		cmd_ops->set_filter(NULL, trigger_data, NULL);
+	event_trigger_free(trigger_ops, trigger_data);
+	kfree(enable_data);
+	goto out;
+}
+
+
+// Source: trace_events_trigger.c
+// Lines 1338-1482
+
+
+[ANSWER]
+MAY

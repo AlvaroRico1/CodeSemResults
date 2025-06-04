@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'head_tree' at line 3\n2. Pointer 'index_diff' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int ensure_clean_index(git_repository *repo, git_index *index)\n{\n\tgit_tree *head_tree = NULL;\n\tgit_diff *index_diff = NULL;\n\tint error = 0;\n\n\tif ((error = git_repository_head_tree(&head_tree, repo)) < 0 ||\n\t\t(error = git_diff_tree_to_index(\n\t\t\t&index_diff, repo, head_tree, index, NULL)) < 0)\n\t\tgoto done;\n\n\tif (git_diff_num_deltas(index_diff) > 0) {\n\t\tgit_error_set(GIT_ERROR_STASH, \"%\" PRIuZ \" uncommitted changes exist in the index\",\n\t\t\tgit_diff_num_deltas(index_diff));\n\t\terror = GIT_EUNCOMMITTED;\n\t}\n\ndone:\n\tgit_diff_free(index_diff);\n\tgit_tree_free(head_tree);\n\treturn error;\n}\n\n\n// Source: stash.c\n// Lines 796-817\n",
+  "ANSWER": "MAY"
+}

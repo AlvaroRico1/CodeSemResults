@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'str' at line 1\n2. Pointer 'scan' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int git_xdiff_scan_int(const char **str, int *value)\n{\n\tconst char *scan = *str;\n\tint v = 0, digits = 0;\n\t/* find next digit */\n\tfor (scan = *str; *scan && !git__isdigit(*scan); scan++);\n\t/* parse next number */\n\tfor (; git__isdigit(*scan); scan++, digits++)\n\t\tv = (v * 10) + (*scan - '0');\n\t*str = scan;\n\t*value = v;\n\treturn (digits > 0) ? 0 : -1;\n}\n\n\n// Source: diff_xdiff.c\n// Lines 16-28\n",
+  "ANSWER": "MUST"
+}

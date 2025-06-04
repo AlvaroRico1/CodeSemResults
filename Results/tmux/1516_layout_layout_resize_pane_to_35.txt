@@ -1,0 +1,1 @@
+lc,tmux/layout.c,4,lcparent,tmux/layout.c,4,1

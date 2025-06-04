@@ -1,0 +1,1 @@
+devid,linux/drivers/acpi/acpi_pnp.c,3,idstr,linux/drivers/acpi/acpi_pnp.c,1,2

@@ -1,0 +1,27 @@
+static struct dentry *proc_fd_instantiate(struct dentry *dentry,
+	struct task_struct *task, const void *ptr)
+{
+	const struct fd_data *data = ptr;
+	struct proc_inode *ei;
+	struct inode *inode;
+
+	inode = proc_pid_make_inode(dentry->d_sb, task, S_IFLNK);
+	if (!inode)
+		return ERR_PTR(-ENOENT);
+
+	ei = PROC_I(inode);
+	ei->fd = data->fd;
+
+	inode->i_op = &proc_pid_link_inode_operations;
+	inode->i_size = 64;
+
+	ei->op.proc_get_link = proc_fd_link;
+	tid_fd_update_inode(task, inode, data->mode);
+
+	d_set_d_op(dentry, &tid_fd_dentry_operations);
+	return d_splice_alias(inode, dentry);
+}
+
+
+// Source: fd.c
+// Lines 182-204

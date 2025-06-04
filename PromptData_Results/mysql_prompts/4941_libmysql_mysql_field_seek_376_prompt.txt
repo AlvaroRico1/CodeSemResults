@@ -1,0 +1,25 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'return_value' at line 3
+2. Pointer 'result' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+MYSQL_FIELD_OFFSET STDCALL mysql_field_seek(MYSQL_RES *result,
+                                            MYSQL_FIELD_OFFSET field_offset) {
+  MYSQL_FIELD_OFFSET return_value = result->current_field;
+  result->current_field = field_offset;
+  return return_value;
+}
+
+
+// Source: libmysql.cc
+// Lines 699-704
+
+
+[ANSWER]
+MUST-NOT

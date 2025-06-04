@@ -1,0 +1,59 @@
+#define EXPECT_STATUS_ADM(ADDS,DELS,MODS) { 0, ADDS, DELS, MODS, 0, 0, 0, 0, 0 }
+
+	diff_expects test_expects[] = {
+		/* a vs b tests */
+		{ 5, 0, EXPECT_STATUS_ADM(3, 0, 2), 4, 0, 0, 51, 2, 46, 3 },
+		{ 5, 0, EXPECT_STATUS_ADM(3, 0, 2), 4, 0, 0, 53, 4, 46, 3 },
+		{ 5, 0, EXPECT_STATUS_ADM(0, 3, 2), 4, 0, 0, 52, 3, 3, 46 },
+		{ 5, 0, EXPECT_STATUS_ADM(3, 0, 2), 5, 0, 0, 54, 3, 47, 4 },
+		/* c vs d tests */
+		{ 1, 0, EXPECT_STATUS_ADM(0, 0, 1), 1, 0, 0, 22, 9, 10, 3 },
+		{ 1, 0, EXPECT_STATUS_ADM(0, 0, 1), 1, 0, 0, 19, 12, 7, 0 },
+		{ 1, 0, EXPECT_STATUS_ADM(0, 0, 1), 1, 0, 0, 20, 11, 8, 1 },
+		{ 1, 0, EXPECT_STATUS_ADM(0, 0, 1), 1, 0, 0, 20, 11, 8, 1 },
+		{ 1, 0, EXPECT_STATUS_ADM(0, 0, 1), 1, 0, 0, 18, 11, 0, 7 },
+		{ 0 },
+	};
+	diff_expects *expected;
+	int i, j;
+
+	g_repo = cl_git_sandbox_init("attr");
+
+	cl_assert((a = resolve_commit_oid_to_tree(g_repo, a_commit)) != NULL);
+	cl_assert((b = resolve_commit_oid_to_tree(g_repo, b_commit)) != NULL);
+	cl_assert((c = resolve_commit_oid_to_tree(g_repo, c_commit)) != NULL);
+	cl_assert((d = resolve_commit_oid_to_tree(g_repo, d_commit)) != NULL);
+
+	for (i = 0; test_expects[i].files > 0; i++) {
+		memset(&actual, 0, sizeof(actual)); /* clear accumulator */
+		opts = test_options[i];
+
+		if (test_ab_or_cd[i] == 0)
+			cl_git_pass(git_diff_tree_to_tree(&diff, g_repo, a, b, &opts));
+		else
+			cl_git_pass(git_diff_tree_to_tree(&diff, g_repo, c, d, &opts));
+
+		cl_git_pass(git_diff_foreach(
+			diff, diff_file_cb, diff_binary_cb, diff_hunk_cb, diff_line_cb, &actual));
+
+		expected = &test_expects[i];
+		cl_assert_equal_i(actual.files,     expected->files);
+		for (j = GIT_DELTA_UNMODIFIED; j <= GIT_DELTA_TYPECHANGE; ++j)
+			cl_assert_equal_i(expected->file_status[j], actual.file_status[j]);
+		cl_assert_equal_i(actual.hunks,     expected->hunks);
+		cl_assert_equal_i(actual.lines,     expected->lines);
+		cl_assert_equal_i(actual.line_ctxt, expected->line_ctxt);
+		cl_assert_equal_i(actual.line_adds, expected->line_adds);
+		cl_assert_equal_i(actual.line_dels, expected->line_dels);
+
+		git_diff_free(diff);
+		diff = NULL;
+	}
+
+	git_tree_free(c);
+	git_tree_free(d);
+}
+
+
+// Source: tree.c
+// Lines 125-179

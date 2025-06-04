@@ -1,0 +1,66 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'peer' at line 3
+2. Pointer 'arg' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+proc_event_cb(__unused int fd, short events, void *arg)
+{
+	struct tmuxpeer	*peer = arg;
+	ssize_t		 n;
+	struct imsg	 imsg;
+
+	if (!(peer->flags & PEER_BAD) && (events & EV_READ)) {
+		if (((n = imsg_read(&peer->ibuf)) == -1 && errno != EAGAIN) ||
+		    n == 0) {
+			peer->dispatchcb(NULL, peer->arg);
+			return;
+		}
+		for (;;) {
+			if ((n = imsg_get(&peer->ibuf, &imsg)) == -1) {
+				peer->dispatchcb(NULL, peer->arg);
+				return;
+			}
+			if (n == 0)
+				break;
+			log_debug("peer %p message %d", peer, imsg.hdr.type);
+
+			if (peer_check_version(peer, &imsg) != 0) {
+				if (imsg.fd != -1)
+					close(imsg.fd);
+				imsg_free(&imsg);
+				break;
+			}
+
+			peer->dispatchcb(&imsg, peer->arg);
+			imsg_free(&imsg);
+		}
+	}
+
+	if (events & EV_WRITE) {
+		if (msgbuf_write(&peer->ibuf.w) <= 0 && errno != EAGAIN) {
+			peer->dispatchcb(NULL, peer->arg);
+			return;
+		}
+	}
+
+	if ((peer->flags & PEER_BAD) && peer->ibuf.w.queued == 0) {
+		peer->dispatchcb(NULL, peer->arg);
+		return;
+	}
+
+	proc_update_event(peer);
+}
+
+
+// Source: proc.c
+// Lines 73-119
+
+
+[ANSWER]
+MUST

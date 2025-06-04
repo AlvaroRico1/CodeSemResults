@@ -1,0 +1,1 @@
+last_buf,h2o/lib/handler/compress/gzip.c,6,zero_buf,h2o/lib/handler/compress/gzip.c,20,1

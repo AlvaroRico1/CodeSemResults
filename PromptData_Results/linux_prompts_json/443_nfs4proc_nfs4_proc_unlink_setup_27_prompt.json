@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'res' at line 6\n2. Pointer 'msg' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void nfs4_proc_unlink_setup(struct rpc_message *msg,\n\t\tstruct dentry *dentry,\n\t\tstruct inode *inode)\n{\n\tstruct nfs_removeargs *args = msg->rpc_argp;\n\tstruct nfs_removeres *res = msg->rpc_resp;\n\n\tres->server = NFS_SB(dentry->d_sb);\n\tmsg->rpc_proc = &nfs4_procedures[NFSPROC4_CLNT_REMOVE];\n\tnfs4_init_sequence(&args->seq_args, &res->seq_res, 1, 0);\n\n\tnfs_fattr_init(res->dir_attr);\n\n\tif (inode)\n\t\tnfs4_inode_return_delegation(inode);\n}\n\n\n// Source: nfs4proc.c\n// Lines 4471-4486\n",
+  "ANSWER": "MUST"
+}

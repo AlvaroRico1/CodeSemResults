@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'odb' at line 3\n2. Pointer 'odb' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstruct object_directory *find_odb(struct repository *r, const char *obj_dir)\n{\n\tstruct object_directory *odb;\n\tchar *obj_dir_real = real_pathdup(obj_dir, 1);\n\tstruct strbuf odb_path_real = STRBUF_INIT;\n\n\tprepare_alt_odb(r);\n\tfor (odb = r->objects->odb; odb; odb = odb->next) {\n\t\tstrbuf_realpath(&odb_path_real, odb->path, 1);\n\t\tif (!strcmp(obj_dir_real, odb_path_real.buf))\n\t\t\tbreak;\n\t}\n\n\tfree(obj_dir_real);\n\tstrbuf_release(&odb_path_real);\n\n\tif (!odb)\n\t\tdie(_(\"could not find object directory matching %s\"), obj_dir);\n\treturn odb;\n}\n\n\n// Source: object-file.c\n// Lines 756-775\n",
+  "ANSWER": "MUST"
+}

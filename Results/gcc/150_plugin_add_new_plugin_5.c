@@ -1,0 +1,80 @@
+add_new_plugin (const char* plugin_name)
+{
+  struct plugin_name_args *plugin;
+  void **slot;
+  char *base_name;
+  bool name_is_short;
+  const char *pc;
+
+  flag_plugin_added = true;
+
+  /* Replace short names by their full path when relevant.  */
+  name_is_short  = !IS_ABSOLUTE_PATH (plugin_name);
+  for (pc = plugin_name; name_is_short && *pc; pc++)
+    if (*pc == '.' || IS_DIR_SEPARATOR (*pc))
+      name_is_short = false;
+
+  if (name_is_short)
+    {
+      base_name = CONST_CAST (char*, plugin_name);
+
+#if defined(__MINGW32__)
+      static const char plugin_ext[] = ".dll";
+#elif defined(__APPLE__)
+      /* Mac OS has two types of libraries: dynamic libraries (.dylib) and
+         plugins (.bundle). Both can be used with dlopen()/dlsym() but the
+         former cannot be linked at build time (i.e., with the -lfoo linker
+         option). A GCC plugin is therefore probably a Mac OS plugin but their
+         use seems to be quite rare and the .bundle extension is more of a
+         recommendation rather than the rule. This raises the questions of how
+         well they are supported by tools (e.g., libtool). So to avoid
+         complications let's use the .dylib extension for now. In the future,
+         if this proves to be an issue, we can always check for both
+         extensions.  */
+      static const char plugin_ext[] = ".dylib";
+#else
+      static const char plugin_ext[] = ".so";
+#endif
+
+      plugin_name = concat (default_plugin_dir_name (), "/",
+			    plugin_name, plugin_ext, NULL);
+      if (access (plugin_name, R_OK))
+	fatal_error
+	  (input_location,
+	   "inaccessible plugin file %s expanded from short plugin name %s: %m",
+	   plugin_name, base_name);
+    }
+  else
+    base_name = get_plugin_base_name (plugin_name);
+
+  /* If this is the first -fplugin= option we encounter, create
+     'plugin_name_args_tab' hash table.  */
+  if (!plugin_name_args_tab)
+    plugin_name_args_tab = htab_create (10, htab_hash_plugin, htab_str_eq,
+                                        NULL);
+
+  slot = htab_find_slot_with_hash (plugin_name_args_tab, base_name,
+				   htab_hash_string (base_name), INSERT);
+
+  /* If the same plugin (name) has been specified earlier, either emit an
+     error or a warning message depending on if they have identical full
+     (path) names.  */
+  if (*slot)
+    {
+      plugin = (struct plugin_name_args *) *slot;
+      if (strcmp (plugin->full_name, plugin_name))
+	error ("plugin %qs was specified with different paths: %qs and %qs",
+               plugin->base_name, plugin->full_name, plugin_name);
+      return;
+    }
+
+  plugin = XCNEW (struct plugin_name_args);
+  plugin->base_name = base_name;
+  plugin->full_name = plugin_name;
+
+  *slot = plugin;
+}
+
+
+// Source: plugin.c
+// Lines 169-244

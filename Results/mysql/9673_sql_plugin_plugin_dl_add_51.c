@@ -1,0 +1,203 @@
+static st_plugin_dl *plugin_dl_add(const LEX_STRING *dl, int report,
+                                   bool load_early) {
+  char dlpath[FN_REFLEN];
+  uint dummy_errors, i;
+  size_t plugin_dir_len, dlpathlen;
+  st_plugin_dl *tmp, plugin_dl;
+  void *sym;
+  DBUG_TRACE;
+  DBUG_PRINT("enter",
+             ("dl->str: '%s', dl->length: %d", dl->str, (int)dl->length));
+  plugin_dir_len = strlen(opt_plugin_dir);
+  /*
+    Ensure that the dll doesn't have a path.
+    This is done to ensure that only approved libraries from the
+    plugin directory are used (to make this even remotely secure).
+  */
+  LEX_CSTRING dl_cstr = {dl->str, dl->length};
+  if (check_valid_path(dl->str, dl->length) ||
+      check_string_char_length(dl_cstr, "", NAME_CHAR_LEN, system_charset_info,
+                               true) ||
+      plugin_dir_len + dl->length + 1 >= FN_REFLEN) {
+    mysql_rwlock_unlock(&LOCK_system_variables_hash);
+    mysql_mutex_unlock(&LOCK_plugin);
+    report_error(report, ER_UDF_NO_PATHS);
+    return nullptr;
+  }
+  /* If this dll is already loaded just increase ref_count. */
+  if ((tmp = plugin_dl_find(dl))) {
+    tmp->ref_count++;
+    return tmp;
+  }
+  memset(&plugin_dl, 0, sizeof(plugin_dl));
+  /* Compile dll path */
+  dlpathlen = strxnmov(dlpath, sizeof(dlpath) - 1, opt_plugin_dir, "/", dl->str,
+                       NullS) -
+              dlpath;
+  (void)unpack_filename(dlpath, dlpath);
+  plugin_dl.ref_count = 1;
+  /* Open new dll handle */
+  mysql_mutex_assert_owner(&LOCK_plugin);
+  if (!(plugin_dl.handle = dlopen(dlpath, RTLD_NOW))) {
+    const char *errmsg;
+    int error_number = dlopen_errno;
+    /*
+      Conforming applications should use a critical section to retrieve
+      the error pointer and buffer...
+    */
+    DLERROR_GENERATE(errmsg, error_number);
+
+    if (!strncmp(
+            dlpath, errmsg,
+            dlpathlen)) {  // if errmsg starts from dlpath, trim this prefix.
+      errmsg += dlpathlen;
+      if (*errmsg == ':') errmsg++;
+      if (*errmsg == ' ') errmsg++;
+    }
+    mysql_rwlock_unlock(&LOCK_system_variables_hash);
+    mysql_mutex_unlock(&LOCK_plugin);
+    report_error(report, ER_CANT_OPEN_LIBRARY, dlpath, error_number, errmsg);
+
+    /*
+      "The messages returned by dlerror() may reside in a static buffer
+       that is overwritten on each call to dlerror()."
+
+      Some implementations have a static pointer instead, and the memory it
+      points to may be reported as "still reachable" by Valgrind.
+      Calling dlerror() once more will free the memory.
+     */
+#if !defined(_WIN32)
+    errmsg = dlerror();
+    assert(errmsg == nullptr);
+#endif
+    return nullptr;
+  }
+  /* Determine interface version */
+  if (!(sym = dlsym(plugin_dl.handle, plugin_interface_version_sym))) {
+    free_plugin_mem(&plugin_dl);
+    mysql_rwlock_unlock(&LOCK_system_variables_hash);
+    mysql_mutex_unlock(&LOCK_plugin);
+    report_error(report, ER_CANT_FIND_DL_ENTRY, plugin_interface_version_sym);
+    return nullptr;
+  }
+  plugin_dl.version = *(int *)sym;
+  /* Versioning */
+  if (plugin_dl.version < min_plugin_interface_version ||
+      (plugin_dl.version >> 8) > (MYSQL_PLUGIN_INTERFACE_VERSION >> 8)) {
+    free_plugin_mem(&plugin_dl);
+    mysql_rwlock_unlock(&LOCK_system_variables_hash);
+    mysql_mutex_unlock(&LOCK_plugin);
+    report_error(report, ER_CANT_OPEN_LIBRARY, dlpath, 0,
+                 "plugin interface version mismatch");
+    return nullptr;
+  }
+
+  /* link the services in */
+  for (i = 0; i < array_elements(list_of_services); i++) {
+    if ((sym = dlsym(plugin_dl.handle, list_of_services[i].name))) {
+      uint ver = (uint)(intptr) * (void **)sym;
+      if ((*(void **)sym) !=
+              list_of_services[i].service && /* already replaced */
+          (ver > list_of_services[i].version ||
+           (ver >> 8) < (list_of_services[i].version >> 8))) {
+        char buf[MYSQL_ERRMSG_SIZE];
+        snprintf(buf, sizeof(buf), "service '%s' interface version mismatch",
+                 list_of_services[i].name);
+        mysql_rwlock_unlock(&LOCK_system_variables_hash);
+        mysql_mutex_unlock(&LOCK_plugin);
+        report_error(report, ER_CANT_OPEN_LIBRARY, dlpath, 0, buf);
+        return nullptr;
+      }
+      *(void **)sym = list_of_services[i].service;
+    }
+  }
+
+  /* Find plugin declarations */
+  if (!(sym = dlsym(plugin_dl.handle, plugin_declarations_sym))) {
+    free_plugin_mem(&plugin_dl);
+    mysql_rwlock_unlock(&LOCK_system_variables_hash);
+    mysql_mutex_unlock(&LOCK_plugin);
+    report_error(report, ER_CANT_FIND_DL_ENTRY, plugin_declarations_sym);
+    return nullptr;
+  }
+
+  if (plugin_dl.version != MYSQL_PLUGIN_INTERFACE_VERSION) {
+    uint sizeof_st_plugin;
+    st_mysql_plugin *old, *cur;
+    char *ptr = (char *)sym;
+
+    if ((sym = dlsym(plugin_dl.handle, sizeof_st_plugin_sym)))
+      sizeof_st_plugin = *(int *)sym;
+    else {
+      /*
+        When the following assert starts failing, we'll have to call
+        report_error(report, ER_CANT_FIND_DL_ENTRY, sizeof_st_plugin_sym);
+      */
+      assert(min_plugin_interface_version == 0);
+      sizeof_st_plugin = (int)offsetof(st_mysql_plugin, version);
+    }
+
+    /*
+      What's the purpose of this loop? If the goal is to catch a
+      missing 0 record at the end of a list, it will fail miserably
+      since the compiler is likely to optimize this away. /Matz
+     */
+    for (i = 0; ((st_mysql_plugin *)(ptr + i * sizeof_st_plugin))->info; i++)
+      /* no op */;
+
+    cur = (st_mysql_plugin *)my_malloc(key_memory_mysql_plugin,
+                                       (i + 1) * sizeof(st_mysql_plugin),
+                                       MYF(MY_ZEROFILL | MY_WME));
+    if (!cur) {
+      free_plugin_mem(&plugin_dl);
+      mysql_rwlock_unlock(&LOCK_system_variables_hash);
+      mysql_mutex_unlock(&LOCK_plugin);
+      report_error(report, ER_OUTOFMEMORY,
+                   static_cast<int>(plugin_dl.dl.length));
+      return nullptr;
+    }
+    /*
+      All st_plugin fields not initialized in the plugin explicitly, are
+      set to 0. It matches C standard behaviour for struct initializers that
+      have less values than the struct definition.
+    */
+    for (i = 0; (old = (st_mysql_plugin *)(ptr + i * sizeof_st_plugin))->info;
+         i++)
+      memcpy(cur + i, old, min<size_t>(sizeof(cur[i]), sizeof_st_plugin));
+
+    sym = cur;
+  }
+  plugin_dl.plugins = (st_mysql_plugin *)sym;
+
+  /*
+    If report is REPORT_TO_USER, we were called from
+    mysql_install_plugin. Otherwise, we are called
+    indirectly from plugin_register_dynamic_and_init_all().
+   */
+  if (report == REPORT_TO_USER) {
+    st_mysql_plugin *plugin = plugin_dl.plugins;
+    for (; plugin->info; ++plugin)
+      if (plugin->flags & PLUGIN_OPT_NO_INSTALL) {
+        mysql_rwlock_unlock(&LOCK_system_variables_hash);
+        mysql_mutex_unlock(&LOCK_plugin);
+        report_error(report, ER_PLUGIN_NO_INSTALL, plugin->name);
+        free_plugin_mem(&plugin_dl);
+        return nullptr;
+      }
+  }
+
+  if (load_early) {
+    st_mysql_plugin *plugin = plugin_dl.plugins;
+    for (; plugin->info; ++plugin)
+      if (!(plugin->flags & PLUGIN_OPT_ALLOW_EARLY)) {
+        mysql_rwlock_unlock(&LOCK_system_variables_hash);
+        mysql_mutex_unlock(&LOCK_plugin);
+        report_error(report, ER_PLUGIN_NOT_EARLY, plugin->name);
+        free_plugin_mem(&plugin_dl);
+        return nullptr;
+      }
+  }
+
+
+// Source: sql_plugin.cc
+// Lines 647-845

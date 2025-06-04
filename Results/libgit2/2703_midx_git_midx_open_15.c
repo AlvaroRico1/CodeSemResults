@@ -1,0 +1,54 @@
+int git_midx_open(
+		git_midx_file **idx_out,
+		const char *path)
+{
+	git_midx_file *idx;
+	git_file fd = -1;
+	size_t idx_size;
+	struct stat st;
+	int error;
+
+	/* TODO: properly open the file without access time using O_NOATIME */
+	fd = git_futils_open_ro(path);
+	if (fd < 0)
+		return fd;
+
+	if (p_fstat(fd, &st) < 0) {
+		p_close(fd);
+		git_error_set(GIT_ERROR_ODB, "multi-pack-index file not found - '%s'", path);
+		return -1;
+	}
+
+	if (!S_ISREG(st.st_mode) || !git__is_sizet(st.st_size)) {
+		p_close(fd);
+		git_error_set(GIT_ERROR_ODB, "invalid pack index '%s'", path);
+		return -1;
+	}
+	idx_size = (size_t)st.st_size;
+
+	idx = git__calloc(1, sizeof(git_midx_file));
+	GIT_ERROR_CHECK_ALLOC(idx);
+
+	error = git_str_sets(&idx->filename, path);
+	if (error < 0)
+		return error;
+
+	error = git_futils_mmap_ro(&idx->index_map, fd, 0, idx_size);
+	p_close(fd);
+	if (error < 0) {
+		git_midx_free(idx);
+		return error;
+	}
+
+	if ((error = git_midx_parse(idx, idx->index_map.data, idx_size)) < 0) {
+		git_midx_free(idx);
+		return error;
+	}
+
+	*idx_out = idx;
+	return 0;
+}
+
+
+// Source: midx.c
+// Lines 290-339

@@ -1,0 +1,1159 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'p' at line 99
+2. Pointer 'elt' at line 99
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+cse_insn (rtx_insn *insn)
+{
+  rtx x = PATTERN (insn);
+  int i;
+  rtx tem;
+  int n_sets = 0;
+
+  rtx src_eqv = 0;
+  struct table_elt *src_eqv_elt = 0;
+  int src_eqv_volatile = 0;
+  int src_eqv_in_memory = 0;
+  unsigned src_eqv_hash = 0;
+
+  struct set *sets = (struct set *) 0;
+
+  if (GET_CODE (x) == SET)
+    sets = XALLOCA (struct set);
+  else if (GET_CODE (x) == PARALLEL)
+    sets = XALLOCAVEC (struct set, XVECLEN (x, 0));
+
+  this_insn = insn;
+  /* Records what this insn does to set CC0.  */
+  this_insn_cc0 = 0;
+  this_insn_cc0_mode = VOIDmode;
+
+  /* Find all regs explicitly clobbered in this insn,
+     to ensure they are not replaced with any other regs
+     elsewhere in this insn.  */
+  invalidate_from_sets_and_clobbers (insn);
+
+  /* Record all the SETs in this instruction.  */
+  n_sets = find_sets_in_insn (insn, &sets);
+
+  /* Substitute the canonical register where possible.  */
+  canonicalize_insn (insn, &sets, n_sets);
+
+  /* If this insn has a REG_EQUAL note, store the equivalent value in SRC_EQV,
+     if different, or if the DEST is a STRICT_LOW_PART/ZERO_EXTRACT.  The
+     latter condition is necessary because SRC_EQV is handled specially for
+     this case, and if it isn't set, then there will be no equivalence
+     for the destination.  */
+  if (n_sets == 1 && REG_NOTES (insn) != 0
+      && (tem = find_reg_note (insn, REG_EQUAL, NULL_RTX)) != 0)
+    {
+
+      if (GET_CODE (SET_DEST (sets[0].rtl)) != ZERO_EXTRACT
+	  && (! rtx_equal_p (XEXP (tem, 0), SET_SRC (sets[0].rtl))
+	      || GET_CODE (SET_DEST (sets[0].rtl)) == STRICT_LOW_PART))
+	src_eqv = copy_rtx (XEXP (tem, 0));
+      /* If DEST is of the form ZERO_EXTACT, as in:
+	 (set (zero_extract:SI (reg:SI 119)
+		  (const_int 16 [0x10])
+		  (const_int 16 [0x10]))
+	      (const_int 51154 [0xc7d2]))
+	 REG_EQUAL note will specify the value of register (reg:SI 119) at this
+	 point.  Note that this is different from SRC_EQV. We can however
+	 calculate SRC_EQV with the position and width of ZERO_EXTRACT.  */
+      else if (GET_CODE (SET_DEST (sets[0].rtl)) == ZERO_EXTRACT
+	       && CONST_INT_P (XEXP (tem, 0))
+	       && CONST_INT_P (XEXP (SET_DEST (sets[0].rtl), 1))
+	       && CONST_INT_P (XEXP (SET_DEST (sets[0].rtl), 2)))
+	{
+	  rtx dest_reg = XEXP (SET_DEST (sets[0].rtl), 0);
+	  /* This is the mode of XEXP (tem, 0) as well.  */
+	  scalar_int_mode dest_mode
+	    = as_a <scalar_int_mode> (GET_MODE (dest_reg));
+	  rtx width = XEXP (SET_DEST (sets[0].rtl), 1);
+	  rtx pos = XEXP (SET_DEST (sets[0].rtl), 2);
+	  HOST_WIDE_INT val = INTVAL (XEXP (tem, 0));
+	  HOST_WIDE_INT mask;
+	  unsigned int shift;
+	  if (BITS_BIG_ENDIAN)
+	    shift = (GET_MODE_PRECISION (dest_mode)
+		     - INTVAL (pos) - INTVAL (width));
+	  else
+	    shift = INTVAL (pos);
+	  if (INTVAL (width) == HOST_BITS_PER_WIDE_INT)
+	    mask = HOST_WIDE_INT_M1;
+	  else
+	    mask = (HOST_WIDE_INT_1 << INTVAL (width)) - 1;
+	  val = (val >> shift) & mask;
+	  src_eqv = GEN_INT (val);
+	}
+    }
+
+  /* Set sets[i].src_elt to the class each source belongs to.
+     Detect assignments from or to volatile things
+     and set set[i] to zero so they will be ignored
+     in the rest of this function.
+
+     Nothing in this loop changes the hash table or the register chains.  */
+
+  for (i = 0; i < n_sets; i++)
+    {
+      bool repeat = false;
+      bool noop_insn = false;
+      rtx src, dest;
+      rtx src_folded;
+      struct table_elt *elt = 0, *p;
+      machine_mode mode;
+      rtx src_eqv_here;
+      rtx src_const = 0;
+      rtx src_related = 0;
+      bool src_related_is_const_anchor = false;
+      struct table_elt *src_const_elt = 0;
+      int src_cost = MAX_COST;
+      int src_eqv_cost = MAX_COST;
+      int src_folded_cost = MAX_COST;
+      int src_related_cost = MAX_COST;
+      int src_elt_cost = MAX_COST;
+      int src_regcost = MAX_COST;
+      int src_eqv_regcost = MAX_COST;
+      int src_folded_regcost = MAX_COST;
+      int src_related_regcost = MAX_COST;
+      int src_elt_regcost = MAX_COST;
+      /* Set nonzero if we need to call force_const_mem on with the
+	 contents of src_folded before using it.  */
+      int src_folded_force_flag = 0;
+      scalar_int_mode int_mode;
+
+      dest = SET_DEST (sets[i].rtl);
+      src = SET_SRC (sets[i].rtl);
+
+      /* If SRC is a constant that has no machine mode,
+	 hash it with the destination's machine mode.
+	 This way we can keep different modes separate.  */
+
+      mode = GET_MODE (src) == VOIDmode ? GET_MODE (dest) : GET_MODE (src);
+      sets[i].mode = mode;
+
+      if (src_eqv)
+	{
+	  machine_mode eqvmode = mode;
+	  if (GET_CODE (dest) == STRICT_LOW_PART)
+	    eqvmode = GET_MODE (SUBREG_REG (XEXP (dest, 0)));
+	  do_not_record = 0;
+	  hash_arg_in_memory = 0;
+	  src_eqv_hash = HASH (src_eqv, eqvmode);
+
+	  /* Find the equivalence class for the equivalent expression.  */
+
+	  if (!do_not_record)
+	    src_eqv_elt = lookup (src_eqv, src_eqv_hash, eqvmode);
+
+	  src_eqv_volatile = do_not_record;
+	  src_eqv_in_memory = hash_arg_in_memory;
+	}
+
+      /* If this is a STRICT_LOW_PART assignment, src_eqv corresponds to the
+	 value of the INNER register, not the destination.  So it is not
+	 a valid substitution for the source.  But save it for later.  */
+      if (GET_CODE (dest) == STRICT_LOW_PART)
+	src_eqv_here = 0;
+      else
+	src_eqv_here = src_eqv;
+
+      /* Simplify and foldable subexpressions in SRC.  Then get the fully-
+	 simplified result, which may not necessarily be valid.  */
+      src_folded = fold_rtx (src, NULL);
+
+#if 0
+      /* ??? This caused bad code to be generated for the m68k port with -O2.
+	 Suppose src is (CONST_INT -1), and that after truncation src_folded
+	 is (CONST_INT 3).  Suppose src_folded is then used for src_const.
+	 At the end we will add src and src_const to the same equivalence
+	 class.  We now have 3 and -1 on the same equivalence class.  This
+	 causes later instructions to be mis-optimized.  */
+      /* If storing a constant in a bitfield, pre-truncate the constant
+	 so we will be able to record it later.  */
+      if (GET_CODE (SET_DEST (sets[i].rtl)) == ZERO_EXTRACT)
+	{
+	  rtx width = XEXP (SET_DEST (sets[i].rtl), 1);
+
+	  if (CONST_INT_P (src)
+	      && CONST_INT_P (width)
+	      && INTVAL (width) < HOST_BITS_PER_WIDE_INT
+	      && (INTVAL (src) & ((HOST_WIDE_INT) (-1) << INTVAL (width))))
+	    src_folded
+	      = GEN_INT (INTVAL (src) & ((HOST_WIDE_INT_1
+					  << INTVAL (width)) - 1));
+	}
+#endif
+
+      /* Compute SRC's hash code, and also notice if it
+	 should not be recorded at all.  In that case,
+	 prevent any further processing of this assignment.
+
+	 We set DO_NOT_RECORD if the destination has a REG_UNUSED note.
+	 This avoids getting the source register into the tables, where it
+	 may be invalidated later (via REG_QTY), then trigger an ICE upon
+	 re-insertion.
+
+	 This is only a problem in multi-set insns.  If it were a single
+	 set the dead copy would have been removed.  If the RHS were anything
+	 but a simple REG, then we won't call insert_regs and thus there's
+	 no potential for triggering the ICE.  */
+      do_not_record = (REG_P (dest)
+		       && REG_P (src)
+		       && find_reg_note (insn, REG_UNUSED, dest));
+      hash_arg_in_memory = 0;
+
+      sets[i].src = src;
+      sets[i].src_hash = HASH (src, mode);
+      sets[i].src_volatile = do_not_record;
+      sets[i].src_in_memory = hash_arg_in_memory;
+
+      /* If SRC is a MEM, there is a REG_EQUIV note for SRC, and DEST is
+	 a pseudo, do not record SRC.  Using SRC as a replacement for
+	 anything else will be incorrect in that situation.  Note that
+	 this usually occurs only for stack slots, in which case all the
+	 RTL would be referring to SRC, so we don't lose any optimization
+	 opportunities by not having SRC in the hash table.  */
+
+      if (MEM_P (src)
+	  && find_reg_note (insn, REG_EQUIV, NULL_RTX) != 0
+	  && REG_P (dest)
+	  && REGNO (dest) >= FIRST_PSEUDO_REGISTER)
+	sets[i].src_volatile = 1;
+
+      else if (GET_CODE (src) == ASM_OPERANDS
+	       && GET_CODE (x) == PARALLEL)
+	{
+	  /* Do not record result of a non-volatile inline asm with
+	     more than one result.  */
+	  if (n_sets > 1)
+	    sets[i].src_volatile = 1;
+
+	  int j, lim = XVECLEN (x, 0);
+	  for (j = 0; j < lim; j++)
+	    {
+	      rtx y = XVECEXP (x, 0, j);
+	      /* And do not record result of a non-volatile inline asm
+		 with "memory" clobber.  */
+	      if (GET_CODE (y) == CLOBBER && MEM_P (XEXP (y, 0)))
+		{
+		  sets[i].src_volatile = 1;
+		  break;
+		}
+	    }
+	}
+
+#if 0
+      /* It is no longer clear why we used to do this, but it doesn't
+	 appear to still be needed.  So let's try without it since this
+	 code hurts cse'ing widened ops.  */
+      /* If source is a paradoxical subreg (such as QI treated as an SI),
+	 treat it as volatile.  It may do the work of an SI in one context
+	 where the extra bits are not being used, but cannot replace an SI
+	 in general.  */
+      if (paradoxical_subreg_p (src))
+	sets[i].src_volatile = 1;
+#endif
+
+      /* Locate all possible equivalent forms for SRC.  Try to replace
+         SRC in the insn with each cheaper equivalent.
+
+         We have the following types of equivalents: SRC itself, a folded
+         version, a value given in a REG_EQUAL note, or a value related
+	 to a constant.
+
+         Each of these equivalents may be part of an additional class
+         of equivalents (if more than one is in the table, they must be in
+         the same class; we check for this).
+
+	 If the source is volatile, we don't do any table lookups.
+
+         We note any constant equivalent for possible later use in a
+         REG_NOTE.  */
+
+      if (!sets[i].src_volatile)
+	elt = lookup (src, sets[i].src_hash, mode);
+
+      sets[i].src_elt = elt;
+
+      if (elt && src_eqv_here && src_eqv_elt)
+	{
+	  if (elt->first_same_value != src_eqv_elt->first_same_value)
+	    {
+	      /* The REG_EQUAL is indicating that two formerly distinct
+		 classes are now equivalent.  So merge them.  */
+	      merge_equiv_classes (elt, src_eqv_elt);
+	      src_eqv_hash = HASH (src_eqv, elt->mode);
+	      src_eqv_elt = lookup (src_eqv, src_eqv_hash, elt->mode);
+	    }
+
+	  src_eqv_here = 0;
+	}
+
+      else if (src_eqv_elt)
+	elt = src_eqv_elt;
+
+      /* Try to find a constant somewhere and record it in `src_const'.
+	 Record its table element, if any, in `src_const_elt'.  Look in
+	 any known equivalences first.  (If the constant is not in the
+	 table, also set `sets[i].src_const_hash').  */
+      if (elt)
+	for (p = elt->first_same_value; p; p = p->next_same_value)
+	  if (p->is_const)
+	    {
+	      src_const = p->exp;
+	      src_const_elt = elt;
+	      break;
+	    }
+
+      if (src_const == 0
+	  && (CONSTANT_P (src_folded)
+	      /* Consider (minus (label_ref L1) (label_ref L2)) as
+		 "constant" here so we will record it. This allows us
+		 to fold switch statements when an ADDR_DIFF_VEC is used.  */
+	      || (GET_CODE (src_folded) == MINUS
+		  && GET_CODE (XEXP (src_folded, 0)) == LABEL_REF
+		  && GET_CODE (XEXP (src_folded, 1)) == LABEL_REF)))
+	src_const = src_folded, src_const_elt = elt;
+      else if (src_const == 0 && src_eqv_here && CONSTANT_P (src_eqv_here))
+	src_const = src_eqv_here, src_const_elt = src_eqv_elt;
+
+      /* If we don't know if the constant is in the table, get its
+	 hash code and look it up.  */
+      if (src_const && src_const_elt == 0)
+	{
+	  sets[i].src_const_hash = HASH (src_const, mode);
+	  src_const_elt = lookup (src_const, sets[i].src_const_hash, mode);
+	}
+
+      sets[i].src_const = src_const;
+      sets[i].src_const_elt = src_const_elt;
+
+      /* If the constant and our source are both in the table, mark them as
+	 equivalent.  Otherwise, if a constant is in the table but the source
+	 isn't, set ELT to it.  */
+      if (src_const_elt && elt
+	  && src_const_elt->first_same_value != elt->first_same_value)
+	merge_equiv_classes (elt, src_const_elt);
+      else if (src_const_elt && elt == 0)
+	elt = src_const_elt;
+
+      /* See if there is a register linearly related to a constant
+         equivalent of SRC.  */
+      if (src_const
+	  && (GET_CODE (src_const) == CONST
+	      || (src_const_elt && src_const_elt->related_value != 0)))
+	{
+	  src_related = use_related_value (src_const, src_const_elt);
+	  if (src_related)
+	    {
+	      struct table_elt *src_related_elt
+		= lookup (src_related, HASH (src_related, mode), mode);
+	      if (src_related_elt && elt)
+		{
+		  if (elt->first_same_value
+		      != src_related_elt->first_same_value)
+		    /* This can occur when we previously saw a CONST
+		       involving a SYMBOL_REF and then see the SYMBOL_REF
+		       twice.  Merge the involved classes.  */
+		    merge_equiv_classes (elt, src_related_elt);
+
+		  src_related = 0;
+		  src_related_elt = 0;
+		}
+	      else if (src_related_elt && elt == 0)
+		elt = src_related_elt;
+	    }
+	}
+
+      /* See if we have a CONST_INT that is already in a register in a
+	 wider mode.  */
+
+      if (src_const && src_related == 0 && CONST_INT_P (src_const)
+	  && is_int_mode (mode, &int_mode)
+	  && GET_MODE_PRECISION (int_mode) < BITS_PER_WORD)
+	{
+	  opt_scalar_int_mode wider_mode_iter;
+	  FOR_EACH_WIDER_MODE (wider_mode_iter, int_mode)
+	    {
+	      scalar_int_mode wider_mode = wider_mode_iter.require ();
+	      if (GET_MODE_PRECISION (wider_mode) > BITS_PER_WORD)
+		break;
+
+	      struct table_elt *const_elt
+		= lookup (src_const, HASH (src_const, wider_mode), wider_mode);
+
+	      if (const_elt == 0)
+		continue;
+
+	      for (const_elt = const_elt->first_same_value;
+		   const_elt; const_elt = const_elt->next_same_value)
+		if (REG_P (const_elt->exp))
+		  {
+		    src_related = gen_lowpart (int_mode, const_elt->exp);
+		    break;
+		  }
+
+	      if (src_related != 0)
+		break;
+	    }
+	}
+
+      /* Another possibility is that we have an AND with a constant in
+	 a mode narrower than a word.  If so, it might have been generated
+	 as part of an "if" which would narrow the AND.  If we already
+	 have done the AND in a wider mode, we can use a SUBREG of that
+	 value.  */
+
+      if (flag_expensive_optimizations && ! src_related
+	  && is_a <scalar_int_mode> (mode, &int_mode)
+	  && GET_CODE (src) == AND && CONST_INT_P (XEXP (src, 1))
+	  && GET_MODE_SIZE (int_mode) < UNITS_PER_WORD)
+	{
+	  opt_scalar_int_mode tmode_iter;
+	  rtx new_and = gen_rtx_AND (VOIDmode, NULL_RTX, XEXP (src, 1));
+
+	  FOR_EACH_WIDER_MODE (tmode_iter, int_mode)
+	    {
+	      scalar_int_mode tmode = tmode_iter.require ();
+	      if (GET_MODE_SIZE (tmode) > UNITS_PER_WORD)
+		break;
+
+	      rtx inner = gen_lowpart (tmode, XEXP (src, 0));
+	      struct table_elt *larger_elt;
+
+	      if (inner)
+		{
+		  PUT_MODE (new_and, tmode);
+		  XEXP (new_and, 0) = inner;
+		  larger_elt = lookup (new_and, HASH (new_and, tmode), tmode);
+		  if (larger_elt == 0)
+		    continue;
+
+		  for (larger_elt = larger_elt->first_same_value;
+		       larger_elt; larger_elt = larger_elt->next_same_value)
+		    if (REG_P (larger_elt->exp))
+		      {
+			src_related
+			  = gen_lowpart (int_mode, larger_elt->exp);
+			break;
+		      }
+
+		  if (src_related)
+		    break;
+		}
+	    }
+	}
+
+      /* See if a MEM has already been loaded with a widening operation;
+	 if it has, we can use a subreg of that.  Many CISC machines
+	 also have such operations, but this is only likely to be
+	 beneficial on these machines.  */
+
+      rtx_code extend_op;
+      if (flag_expensive_optimizations && src_related == 0
+	  && MEM_P (src) && ! do_not_record
+	  && is_a <scalar_int_mode> (mode, &int_mode)
+	  && (extend_op = load_extend_op (int_mode)) != UNKNOWN)
+	{
+	  struct rtx_def memory_extend_buf;
+	  rtx memory_extend_rtx = &memory_extend_buf;
+
+	  /* Set what we are trying to extend and the operation it might
+	     have been extended with.  */
+	  memset (memory_extend_rtx, 0, sizeof (*memory_extend_rtx));
+	  PUT_CODE (memory_extend_rtx, extend_op);
+	  XEXP (memory_extend_rtx, 0) = src;
+
+	  opt_scalar_int_mode tmode_iter;
+	  FOR_EACH_WIDER_MODE (tmode_iter, int_mode)
+	    {
+	      struct table_elt *larger_elt;
+
+	      scalar_int_mode tmode = tmode_iter.require ();
+	      if (GET_MODE_SIZE (tmode) > UNITS_PER_WORD)
+		break;
+
+	      PUT_MODE (memory_extend_rtx, tmode);
+	      larger_elt = lookup (memory_extend_rtx,
+				   HASH (memory_extend_rtx, tmode), tmode);
+	      if (larger_elt == 0)
+		continue;
+
+	      for (larger_elt = larger_elt->first_same_value;
+		   larger_elt; larger_elt = larger_elt->next_same_value)
+		if (REG_P (larger_elt->exp))
+		  {
+		    src_related = gen_lowpart (int_mode, larger_elt->exp);
+		    break;
+		  }
+
+	      if (src_related)
+		break;
+	    }
+	}
+
+      /* Try to express the constant using a register+offset expression
+	 derived from a constant anchor.  */
+
+      if (targetm.const_anchor
+	  && !src_related
+	  && src_const
+	  && GET_CODE (src_const) == CONST_INT)
+	{
+	  src_related = try_const_anchors (src_const, mode);
+	  src_related_is_const_anchor = src_related != NULL_RTX;
+	}
+
+
+      if (src == src_folded)
+	src_folded = 0;
+
+      /* At this point, ELT, if nonzero, points to a class of expressions
+         equivalent to the source of this SET and SRC, SRC_EQV, SRC_FOLDED,
+	 and SRC_RELATED, if nonzero, each contain additional equivalent
+	 expressions.  Prune these latter expressions by deleting expressions
+	 already in the equivalence class.
+
+	 Check for an equivalent identical to the destination.  If found,
+	 this is the preferred equivalent since it will likely lead to
+	 elimination of the insn.  Indicate this by placing it in
+	 `src_related'.  */
+
+      if (elt)
+	elt = elt->first_same_value;
+      for (p = elt; p; p = p->next_same_value)
+	{
+	  enum rtx_code code = GET_CODE (p->exp);
+
+	  /* If the expression is not valid, ignore it.  Then we do not
+	     have to check for validity below.  In most cases, we can use
+	     `rtx_equal_p', since canonicalization has already been done.  */
+	  if (code != REG && ! exp_equiv_p (p->exp, p->exp, 1, false))
+	    continue;
+
+	  /* Also skip paradoxical subregs, unless that's what we're
+	     looking for.  */
+	  if (paradoxical_subreg_p (p->exp)
+	      && ! (src != 0
+		    && GET_CODE (src) == SUBREG
+		    && GET_MODE (src) == GET_MODE (p->exp)
+		    && partial_subreg_p (GET_MODE (SUBREG_REG (src)),
+					 GET_MODE (SUBREG_REG (p->exp)))))
+	    continue;
+
+	  if (src && GET_CODE (src) == code && rtx_equal_p (src, p->exp))
+	    src = 0;
+	  else if (src_folded && GET_CODE (src_folded) == code
+		   && rtx_equal_p (src_folded, p->exp))
+	    src_folded = 0;
+	  else if (src_eqv_here && GET_CODE (src_eqv_here) == code
+		   && rtx_equal_p (src_eqv_here, p->exp))
+	    src_eqv_here = 0;
+	  else if (src_related && GET_CODE (src_related) == code
+		   && rtx_equal_p (src_related, p->exp))
+	    src_related = 0;
+
+	  /* This is the same as the destination of the insns, we want
+	     to prefer it.  Copy it to src_related.  The code below will
+	     then give it a negative cost.  */
+	  if (GET_CODE (dest) == code && rtx_equal_p (p->exp, dest))
+	    src_related = p->exp;
+	}
+
+      /* Find the cheapest valid equivalent, trying all the available
+         possibilities.  Prefer items not in the hash table to ones
+         that are when they are equal cost.  Note that we can never
+         worsen an insn as the current contents will also succeed.
+	 If we find an equivalent identical to the destination, use it as best,
+	 since this insn will probably be eliminated in that case.  */
+      if (src)
+	{
+	  if (rtx_equal_p (src, dest))
+	    src_cost = src_regcost = -1;
+	  else
+	    {
+	      src_cost = COST (src, mode);
+	      src_regcost = approx_reg_cost (src);
+	    }
+	}
+
+      if (src_eqv_here)
+	{
+	  if (rtx_equal_p (src_eqv_here, dest))
+	    src_eqv_cost = src_eqv_regcost = -1;
+	  else
+	    {
+	      src_eqv_cost = COST (src_eqv_here, mode);
+	      src_eqv_regcost = approx_reg_cost (src_eqv_here);
+	    }
+	}
+
+      if (src_folded)
+	{
+	  if (rtx_equal_p (src_folded, dest))
+	    src_folded_cost = src_folded_regcost = -1;
+	  else
+	    {
+	      src_folded_cost = COST (src_folded, mode);
+	      src_folded_regcost = approx_reg_cost (src_folded);
+	    }
+	}
+
+      if (src_related)
+	{
+	  if (rtx_equal_p (src_related, dest))
+	    src_related_cost = src_related_regcost = -1;
+	  else
+	    {
+	      src_related_cost = COST (src_related, mode);
+	      src_related_regcost = approx_reg_cost (src_related);
+
+	      /* If a const-anchor is used to synthesize a constant that
+		 normally requires multiple instructions then slightly prefer
+		 it over the original sequence.  These instructions are likely
+		 to become redundant now.  We can't compare against the cost
+		 of src_eqv_here because, on MIPS for example, multi-insn
+		 constants have zero cost; they are assumed to be hoisted from
+		 loops.  */
+	      if (src_related_is_const_anchor
+		  && src_related_cost == src_cost
+		  && src_eqv_here)
+		src_related_cost--;
+	    }
+	}
+
+      /* If this was an indirect jump insn, a known label will really be
+	 cheaper even though it looks more expensive.  */
+      if (dest == pc_rtx && src_const && GET_CODE (src_const) == LABEL_REF)
+	src_folded = src_const, src_folded_cost = src_folded_regcost = -1;
+
+      /* Terminate loop when replacement made.  This must terminate since
+         the current contents will be tested and will always be valid.  */
+      while (1)
+	{
+	  rtx trial;
+
+	  /* Skip invalid entries.  */
+	  while (elt && !REG_P (elt->exp)
+		 && ! exp_equiv_p (elt->exp, elt->exp, 1, false))
+	    elt = elt->next_same_value;
+
+	  /* A paradoxical subreg would be bad here: it'll be the right
+	     size, but later may be adjusted so that the upper bits aren't
+	     what we want.  So reject it.  */
+	  if (elt != 0
+	      && paradoxical_subreg_p (elt->exp)
+	      /* It is okay, though, if the rtx we're trying to match
+		 will ignore any of the bits we can't predict.  */
+	      && ! (src != 0
+		    && GET_CODE (src) == SUBREG
+		    && GET_MODE (src) == GET_MODE (elt->exp)
+		    && partial_subreg_p (GET_MODE (SUBREG_REG (src)),
+					 GET_MODE (SUBREG_REG (elt->exp)))))
+	    {
+	      elt = elt->next_same_value;
+	      continue;
+	    }
+
+	  if (elt)
+	    {
+	      src_elt_cost = elt->cost;
+	      src_elt_regcost = elt->regcost;
+	    }
+
+	  /* Find cheapest and skip it for the next time.   For items
+	     of equal cost, use this order:
+	     src_folded, src, src_eqv, src_related and hash table entry.  */
+	  if (src_folded
+	      && preferable (src_folded_cost, src_folded_regcost,
+			     src_cost, src_regcost) <= 0
+	      && preferable (src_folded_cost, src_folded_regcost,
+			     src_eqv_cost, src_eqv_regcost) <= 0
+	      && preferable (src_folded_cost, src_folded_regcost,
+			     src_related_cost, src_related_regcost) <= 0
+	      && preferable (src_folded_cost, src_folded_regcost,
+			     src_elt_cost, src_elt_regcost) <= 0)
+	    {
+	      trial = src_folded, src_folded_cost = MAX_COST;
+	      if (src_folded_force_flag)
+		{
+		  rtx forced = force_const_mem (mode, trial);
+		  if (forced)
+		    trial = forced;
+		}
+	    }
+	  else if (src
+		   && preferable (src_cost, src_regcost,
+				  src_eqv_cost, src_eqv_regcost) <= 0
+		   && preferable (src_cost, src_regcost,
+				  src_related_cost, src_related_regcost) <= 0
+		   && preferable (src_cost, src_regcost,
+				  src_elt_cost, src_elt_regcost) <= 0)
+	    trial = src, src_cost = MAX_COST;
+	  else if (src_eqv_here
+		   && preferable (src_eqv_cost, src_eqv_regcost,
+				  src_related_cost, src_related_regcost) <= 0
+		   && preferable (src_eqv_cost, src_eqv_regcost,
+				  src_elt_cost, src_elt_regcost) <= 0)
+	    trial = src_eqv_here, src_eqv_cost = MAX_COST;
+	  else if (src_related
+		   && preferable (src_related_cost, src_related_regcost,
+				  src_elt_cost, src_elt_regcost) <= 0)
+	    trial = src_related, src_related_cost = MAX_COST;
+	  else
+	    {
+	      trial = elt->exp;
+	      elt = elt->next_same_value;
+	      src_elt_cost = MAX_COST;
+	    }
+
+	  /* Try to optimize
+	     (set (reg:M N) (const_int A))
+	     (set (reg:M2 O) (const_int B))
+	     (set (zero_extract:M2 (reg:M N) (const_int C) (const_int D))
+		  (reg:M2 O)).  */
+	  if (GET_CODE (SET_DEST (sets[i].rtl)) == ZERO_EXTRACT
+	      && CONST_INT_P (trial)
+	      && CONST_INT_P (XEXP (SET_DEST (sets[i].rtl), 1))
+	      && CONST_INT_P (XEXP (SET_DEST (sets[i].rtl), 2))
+	      && REG_P (XEXP (SET_DEST (sets[i].rtl), 0))
+	      && (known_ge
+		  (GET_MODE_PRECISION (GET_MODE (SET_DEST (sets[i].rtl))),
+		   INTVAL (XEXP (SET_DEST (sets[i].rtl), 1))))
+	      && ((unsigned) INTVAL (XEXP (SET_DEST (sets[i].rtl), 1))
+		  + (unsigned) INTVAL (XEXP (SET_DEST (sets[i].rtl), 2))
+		  <= HOST_BITS_PER_WIDE_INT))
+	    {
+	      rtx dest_reg = XEXP (SET_DEST (sets[i].rtl), 0);
+	      rtx width = XEXP (SET_DEST (sets[i].rtl), 1);
+	      rtx pos = XEXP (SET_DEST (sets[i].rtl), 2);
+	      unsigned int dest_hash = HASH (dest_reg, GET_MODE (dest_reg));
+	      struct table_elt *dest_elt
+		= lookup (dest_reg, dest_hash, GET_MODE (dest_reg));
+	      rtx dest_cst = NULL;
+
+	      if (dest_elt)
+		for (p = dest_elt->first_same_value; p; p = p->next_same_value)
+		  if (p->is_const && CONST_INT_P (p->exp))
+		    {
+		      dest_cst = p->exp;
+		      break;
+		    }
+	      if (dest_cst)
+		{
+		  HOST_WIDE_INT val = INTVAL (dest_cst);
+		  HOST_WIDE_INT mask;
+		  unsigned int shift;
+		  /* This is the mode of DEST_CST as well.  */
+		  scalar_int_mode dest_mode
+		    = as_a <scalar_int_mode> (GET_MODE (dest_reg));
+		  if (BITS_BIG_ENDIAN)
+		    shift = GET_MODE_PRECISION (dest_mode)
+			    - INTVAL (pos) - INTVAL (width);
+		  else
+		    shift = INTVAL (pos);
+		  if (INTVAL (width) == HOST_BITS_PER_WIDE_INT)
+		    mask = HOST_WIDE_INT_M1;
+		  else
+		    mask = (HOST_WIDE_INT_1 << INTVAL (width)) - 1;
+		  val &= ~(mask << shift);
+		  val |= (INTVAL (trial) & mask) << shift;
+		  val = trunc_int_for_mode (val, dest_mode);
+		  validate_unshare_change (insn, &SET_DEST (sets[i].rtl),
+					   dest_reg, 1);
+		  validate_unshare_change (insn, &SET_SRC (sets[i].rtl),
+					   GEN_INT (val), 1);
+		  if (apply_change_group ())
+		    {
+		      rtx note = find_reg_note (insn, REG_EQUAL, NULL_RTX);
+		      if (note)
+			{
+			  remove_note (insn, note);
+			  df_notes_rescan (insn);
+			}
+		      src_eqv = NULL_RTX;
+		      src_eqv_elt = NULL;
+		      src_eqv_volatile = 0;
+		      src_eqv_in_memory = 0;
+		      src_eqv_hash = 0;
+		      repeat = true;
+		      break;
+		    }
+		}
+	    }
+
+	  /* We don't normally have an insn matching (set (pc) (pc)), so
+	     check for this separately here.  We will delete such an
+	     insn below.
+
+	     For other cases such as a table jump or conditional jump
+	     where we know the ultimate target, go ahead and replace the
+	     operand.  While that may not make a valid insn, we will
+	     reemit the jump below (and also insert any necessary
+	     barriers).  */
+	  if (n_sets == 1 && dest == pc_rtx
+	      && (trial == pc_rtx
+		  || (GET_CODE (trial) == LABEL_REF
+		      && ! condjump_p (insn))))
+	    {
+	      /* Don't substitute non-local labels, this confuses CFG.  */
+	      if (GET_CODE (trial) == LABEL_REF
+		  && LABEL_REF_NONLOCAL_P (trial))
+		continue;
+
+	      SET_SRC (sets[i].rtl) = trial;
+	      cse_jumps_altered = true;
+	      break;
+	    }
+
+	  /* Similarly, lots of targets don't allow no-op
+	     (set (mem x) (mem x)) moves.  Even (set (reg x) (reg x))
+	     might be impossible for certain registers (like CC registers).  */
+	  else if (n_sets == 1
+		   && !CALL_P (insn)
+		   && (MEM_P (trial) || REG_P (trial))
+		   && rtx_equal_p (trial, dest)
+		   && !side_effects_p (dest)
+		   && (cfun->can_delete_dead_exceptions
+		       || insn_nothrow_p (insn))
+		   /* We can only remove the later store if the earlier aliases
+		      at least all accesses the later one.  */
+		   && (!MEM_P (trial)
+		       || ((MEM_ALIAS_SET (dest) == MEM_ALIAS_SET (trial)
+			    || alias_set_subset_of (MEM_ALIAS_SET (dest),
+						    MEM_ALIAS_SET (trial)))
+			    && (!MEM_EXPR (trial)
+				|| refs_same_for_tbaa_p (MEM_EXPR (trial),
+							 MEM_EXPR (dest))))))
+	    {
+	      SET_SRC (sets[i].rtl) = trial;
+	      noop_insn = true;
+	      break;
+	    }
+
+	  /* Reject certain invalid forms of CONST that we create.  */
+	  else if (CONSTANT_P (trial)
+		   && GET_CODE (trial) == CONST
+		   /* Reject cases that will cause decode_rtx_const to
+		      die.  On the alpha when simplifying a switch, we
+		      get (const (truncate (minus (label_ref)
+		      (label_ref)))).  */
+		   && (GET_CODE (XEXP (trial, 0)) == TRUNCATE
+		       /* Likewise on IA-64, except without the
+			  truncate.  */
+		       || (GET_CODE (XEXP (trial, 0)) == MINUS
+			   && GET_CODE (XEXP (XEXP (trial, 0), 0)) == LABEL_REF
+			   && GET_CODE (XEXP (XEXP (trial, 0), 1)) == LABEL_REF)))
+	    /* Do nothing for this case.  */
+	    ;
+
+	  /* Do not replace anything with a MEM, except the replacement
+	     is a no-op.  This allows this loop to terminate.  */
+	  else if (MEM_P (trial) && !rtx_equal_p (trial, SET_SRC(sets[i].rtl)))
+	    /* Do nothing for this case.  */
+	    ;
+
+	  /* Look for a substitution that makes a valid insn.  */
+	  else if (validate_unshare_change (insn, &SET_SRC (sets[i].rtl),
+					    trial, 0))
+	    {
+	      rtx new_rtx = canon_reg (SET_SRC (sets[i].rtl), insn);
+
+	      /* The result of apply_change_group can be ignored; see
+		 canon_reg.  */
+
+	      validate_change (insn, &SET_SRC (sets[i].rtl), new_rtx, 1);
+	      apply_change_group ();
+
+	      break;
+	    }
+
+	  /* If we previously found constant pool entries for
+	     constants and this is a constant, try making a
+	     pool entry.  Put it in src_folded unless we already have done
+	     this since that is where it likely came from.  */
+
+	  else if (constant_pool_entries_cost
+		   && CONSTANT_P (trial)
+		   && (src_folded == 0
+		       || (!MEM_P (src_folded)
+			   && ! src_folded_force_flag))
+		   && GET_MODE_CLASS (mode) != MODE_CC
+		   && mode != VOIDmode)
+	    {
+	      src_folded_force_flag = 1;
+	      src_folded = trial;
+	      src_folded_cost = constant_pool_entries_cost;
+	      src_folded_regcost = constant_pool_entries_regcost;
+	    }
+	}
+
+      /* If we changed the insn too much, handle this set from scratch.  */
+      if (repeat)
+	{
+	  i--;
+	  continue;
+	}
+
+      src = SET_SRC (sets[i].rtl);
+
+      /* In general, it is good to have a SET with SET_SRC == SET_DEST.
+	 However, there is an important exception:  If both are registers
+	 that are not the head of their equivalence class, replace SET_SRC
+	 with the head of the class.  If we do not do this, we will have
+	 both registers live over a portion of the basic block.  This way,
+	 their lifetimes will likely abut instead of overlapping.  */
+      if (REG_P (dest)
+	  && REGNO_QTY_VALID_P (REGNO (dest)))
+	{
+	  int dest_q = REG_QTY (REGNO (dest));
+	  struct qty_table_elem *dest_ent = &qty_table[dest_q];
+
+	  if (dest_ent->mode == GET_MODE (dest)
+	      && dest_ent->first_reg != REGNO (dest)
+	      && REG_P (src) && REGNO (src) == REGNO (dest)
+	      /* Don't do this if the original insn had a hard reg as
+		 SET_SRC or SET_DEST.  */
+	      && (!REG_P (sets[i].src)
+		  || REGNO (sets[i].src) >= FIRST_PSEUDO_REGISTER)
+	      && (!REG_P (dest) || REGNO (dest) >= FIRST_PSEUDO_REGISTER))
+	    /* We can't call canon_reg here because it won't do anything if
+	       SRC is a hard register.  */
+	    {
+	      int src_q = REG_QTY (REGNO (src));
+	      struct qty_table_elem *src_ent = &qty_table[src_q];
+	      int first = src_ent->first_reg;
+	      rtx new_src
+		= (first >= FIRST_PSEUDO_REGISTER
+		   ? regno_reg_rtx[first] : gen_rtx_REG (GET_MODE (src), first));
+
+	      /* We must use validate-change even for this, because this
+		 might be a special no-op instruction, suitable only to
+		 tag notes onto.  */
+	      if (validate_change (insn, &SET_SRC (sets[i].rtl), new_src, 0))
+		{
+		  src = new_src;
+		  /* If we had a constant that is cheaper than what we are now
+		     setting SRC to, use that constant.  We ignored it when we
+		     thought we could make this into a no-op.  */
+		  if (src_const && COST (src_const, mode) < COST (src, mode)
+		      && validate_change (insn, &SET_SRC (sets[i].rtl),
+					  src_const, 0))
+		    src = src_const;
+		}
+	    }
+	}
+
+      /* If we made a change, recompute SRC values.  */
+      if (src != sets[i].src)
+	{
+	  do_not_record = 0;
+	  hash_arg_in_memory = 0;
+	  sets[i].src = src;
+	  sets[i].src_hash = HASH (src, mode);
+	  sets[i].src_volatile = do_not_record;
+	  sets[i].src_in_memory = hash_arg_in_memory;
+	  sets[i].src_elt = lookup (src, sets[i].src_hash, mode);
+	}
+
+      /* If this is a single SET, we are setting a register, and we have an
+	 equivalent constant, we want to add a REG_EQUAL note if the constant
+	 is different from the source.  We don't want to do it for a constant
+	 pseudo since verifying that this pseudo hasn't been eliminated is a
+	 pain; moreover such a note won't help anything.
+
+	 Avoid a REG_EQUAL note for (CONST (MINUS (LABEL_REF) (LABEL_REF)))
+	 which can be created for a reference to a compile time computable
+	 entry in a jump table.  */
+      if (n_sets == 1
+	  && REG_P (dest)
+	  && src_const
+	  && !REG_P (src_const)
+	  && !(GET_CODE (src_const) == SUBREG
+	       && REG_P (SUBREG_REG (src_const)))
+	  && !(GET_CODE (src_const) == CONST
+	       && GET_CODE (XEXP (src_const, 0)) == MINUS
+	       && GET_CODE (XEXP (XEXP (src_const, 0), 0)) == LABEL_REF
+	       && GET_CODE (XEXP (XEXP (src_const, 0), 1)) == LABEL_REF)
+	  && !rtx_equal_p (src, src_const))
+	{
+	  /* Make sure that the rtx is not shared.  */
+	  src_const = copy_rtx (src_const);
+
+	  /* Record the actual constant value in a REG_EQUAL note,
+	     making a new one if one does not already exist.  */
+	  set_unique_reg_note (insn, REG_EQUAL, src_const);
+	  df_notes_rescan (insn);
+	}
+
+      /* Now deal with the destination.  */
+      do_not_record = 0;
+
+      /* Look within any ZERO_EXTRACT to the MEM or REG within it.  */
+      while (GET_CODE (dest) == SUBREG
+	     || GET_CODE (dest) == ZERO_EXTRACT
+	     || GET_CODE (dest) == STRICT_LOW_PART)
+	dest = XEXP (dest, 0);
+
+      sets[i].inner_dest = dest;
+
+      if (MEM_P (dest))
+	{
+#ifdef PUSH_ROUNDING
+	  /* Stack pushes invalidate the stack pointer.  */
+	  rtx addr = XEXP (dest, 0);
+	  if (GET_RTX_CLASS (GET_CODE (addr)) == RTX_AUTOINC
+	      && XEXP (addr, 0) == stack_pointer_rtx)
+	    invalidate (stack_pointer_rtx, VOIDmode);
+#endif
+	  dest = fold_rtx (dest, insn);
+	}
+
+      /* Compute the hash code of the destination now,
+	 before the effects of this instruction are recorded,
+	 since the register values used in the address computation
+	 are those before this instruction.  */
+      sets[i].dest_hash = HASH (dest, mode);
+
+      /* Don't enter a bit-field in the hash table
+	 because the value in it after the store
+	 may not equal what was stored, due to truncation.  */
+
+      if (GET_CODE (SET_DEST (sets[i].rtl)) == ZERO_EXTRACT)
+	{
+	  rtx width = XEXP (SET_DEST (sets[i].rtl), 1);
+
+	  if (src_const != 0 && CONST_INT_P (src_const)
+	      && CONST_INT_P (width)
+	      && INTVAL (width) < HOST_BITS_PER_WIDE_INT
+	      && ! (INTVAL (src_const)
+		    & (HOST_WIDE_INT_M1U << INTVAL (width))))
+	    /* Exception: if the value is constant,
+	       and it won't be truncated, record it.  */
+	    ;
+	  else
+	    {
+	      /* This is chosen so that the destination will be invalidated
+		 but no new value will be recorded.
+		 We must invalidate because sometimes constant
+		 values can be recorded for bitfields.  */
+	      sets[i].src_elt = 0;
+	      sets[i].src_volatile = 1;
+	      src_eqv = 0;
+	      src_eqv_elt = 0;
+	    }
+	}
+
+      /* If only one set in a JUMP_INSN and it is now a no-op, we can delete
+	 the insn.  */
+      else if (n_sets == 1 && dest == pc_rtx && src == pc_rtx)
+	{
+	  /* One less use of the label this insn used to jump to.  */
+	  cse_cfg_altered |= delete_insn_and_edges (insn);
+	  cse_jumps_altered = true;
+	  /* No more processing for this set.  */
+	  sets[i].rtl = 0;
+	}
+
+      /* Similarly for no-op moves.  */
+      else if (noop_insn)
+	{
+	  if (cfun->can_throw_non_call_exceptions && can_throw_internal (insn))
+	    cse_cfg_altered = true;
+	  cse_cfg_altered |= delete_insn_and_edges (insn);
+	  /* No more processing for this set.  */
+	  sets[i].rtl = 0;
+	}
+
+      /* If this SET is now setting PC to a label, we know it used to
+	 be a conditional or computed branch.  */
+      else if (dest == pc_rtx && GET_CODE (src) == LABEL_REF
+	       && !LABEL_REF_NONLOCAL_P (src))
+	{
+	  /* We reemit the jump in as many cases as possible just in
+	     case the form of an unconditional jump is significantly
+	     different than a computed jump or conditional jump.
+
+	     If this insn has multiple sets, then reemitting the
+	     jump is nontrivial.  So instead we just force rerecognition
+	     and hope for the best.  */
+	  if (n_sets == 1)
+	    {
+	      rtx_jump_insn *new_rtx;
+	      rtx note;
+
+	      rtx_insn *seq = targetm.gen_jump (XEXP (src, 0));
+	      new_rtx = emit_jump_insn_before (seq, insn);
+	      JUMP_LABEL (new_rtx) = XEXP (src, 0);
+	      LABEL_NUSES (XEXP (src, 0))++;
+
+	      /* Make sure to copy over REG_NON_LOCAL_GOTO.  */
+	      note = find_reg_note (insn, REG_NON_LOCAL_GOTO, 0);
+	      if (note)
+		{
+		  XEXP (note, 1) = NULL_RTX;
+		  REG_NOTES (new_rtx) = note;
+		}
+
+	      cse_cfg_altered |= delete_insn_and_edges (insn);
+	      insn = new_rtx;
+	    }
+	  else
+	    INSN_CODE (insn) = -1;
+
+	  /* Do not bother deleting any unreachable code, let jump do it.  */
+	  cse_jumps_altered = true;
+	  sets[i].rtl = 0;
+	}
+
+      /* If destination is volatile, invalidate it and then do no further
+	 processing for this assignment.  */
+
+      else if (do_not_record)
+	{
+	  invalidate_dest (dest);
+	  sets[i].rtl = 0;
+	}
+
+      if (sets[i].rtl != 0 && dest != SET_DEST (sets[i].rtl))
+	{
+	  do_not_record = 0;
+	  sets[i].dest_hash = HASH (SET_DEST (sets[i].rtl), mode);
+	  if (do_not_record)
+	    {
+	      invalidate_dest (SET_DEST (sets[i].rtl));
+	      sets[i].rtl = 0;
+	    }
+	}
+
+      /* If setting CC0, record what it was set to, or a constant, if it
+	 is equivalent to a constant.  If it is being set to a floating-point
+	 value, make a COMPARE with the appropriate constant of 0.  If we
+	 don't do this, later code can interpret this as a test against
+	 const0_rtx, which can cause problems if we try to put it into an
+	 insn as a floating-point operand.  */
+      if (dest == cc0_rtx)
+	{
+	  this_insn_cc0 = src_const && mode != VOIDmode ? src_const : src;
+	  this_insn_cc0_mode = mode;
+	  if (FLOAT_MODE_P (mode))
+	    this_insn_cc0 = gen_rtx_COMPARE (VOIDmode, this_insn_cc0,
+					     CONST0_RTX (mode));
+	}
+    }
+
+
+// Source: cse.c
+// Lines 4532-5671
+
+
+[ANSWER]
+MUST

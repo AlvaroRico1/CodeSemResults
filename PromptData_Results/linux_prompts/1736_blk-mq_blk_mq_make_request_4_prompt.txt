@@ -1,0 +1,119 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'cookie' at line 10
+2. Pointer 'nr_segs' at line 9
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static blk_qc_t blk_mq_make_request(struct request_queue *q, struct bio *bio)
+{
+	const int is_sync = op_is_sync(bio->bi_opf);
+	const int is_flush_fua = op_is_flush(bio->bi_opf);
+	struct blk_mq_alloc_data data = { .flags = 0};
+	struct request *rq;
+	struct blk_plug *plug;
+	struct request *same_queue_rq = NULL;
+	unsigned int nr_segs;
+	blk_qc_t cookie;
+
+	blk_queue_bounce(q, &bio);
+	__blk_queue_split(q, &bio, &nr_segs);
+
+	if (!bio_integrity_prep(bio))
+		return BLK_QC_T_NONE;
+
+	if (!is_flush_fua && !blk_queue_nomerges(q) &&
+	    blk_attempt_plug_merge(q, bio, nr_segs, &same_queue_rq))
+		return BLK_QC_T_NONE;
+
+	if (blk_mq_sched_bio_merge(q, bio, nr_segs))
+		return BLK_QC_T_NONE;
+
+	rq_qos_throttle(q, bio);
+
+	data.cmd_flags = bio->bi_opf;
+	rq = blk_mq_get_request(q, bio, &data);
+	if (unlikely(!rq)) {
+		rq_qos_cleanup(q, bio);
+		if (bio->bi_opf & REQ_NOWAIT)
+			bio_wouldblock_error(bio);
+		return BLK_QC_T_NONE;
+	}
+
+	trace_block_getrq(q, bio, bio->bi_opf);
+
+	rq_qos_track(q, rq, bio);
+
+	cookie = request_to_qc_t(data.hctx, rq);
+
+	blk_mq_bio_to_request(rq, bio, nr_segs);
+
+	plug = blk_mq_plug(q, bio);
+	if (unlikely(is_flush_fua)) {
+		/* bypass scheduler for flush rq */
+		blk_insert_flush(rq);
+		blk_mq_run_hw_queue(data.hctx, true);
+	} else if (plug && (q->nr_hw_queues == 1 || q->mq_ops->commit_rqs)) {
+		/*
+		 * Use plugging if we have a ->commit_rqs() hook as well, as
+		 * we know the driver uses bd->last in a smart fashion.
+		 */
+		unsigned int request_count = plug->rq_count;
+		struct request *last = NULL;
+
+		if (!request_count)
+			trace_block_plug(q);
+		else
+			last = list_entry_rq(plug->mq_list.prev);
+
+		if (request_count >= BLK_MAX_REQUEST_COUNT || (last &&
+		    blk_rq_bytes(last) >= BLK_PLUG_FLUSH_SIZE)) {
+			blk_flush_plug_list(plug, false);
+			trace_block_plug(q);
+		}
+
+		blk_add_rq_to_plug(plug, rq);
+	} else if (plug && !blk_queue_nomerges(q)) {
+		/*
+		 * We do limited plugging. If the bio can be merged, do that.
+		 * Otherwise the existing request in the plug list will be
+		 * issued. So the plug list will have one request at most
+		 * The plug list might get flushed before this. If that happens,
+		 * the plug list is empty, and same_queue_rq is invalid.
+		 */
+		if (list_empty(&plug->mq_list))
+			same_queue_rq = NULL;
+		if (same_queue_rq) {
+			list_del_init(&same_queue_rq->queuelist);
+			plug->rq_count--;
+		}
+		blk_add_rq_to_plug(plug, rq);
+		trace_block_plug(q);
+
+		if (same_queue_rq) {
+			data.hctx = same_queue_rq->mq_hctx;
+			trace_block_unplug(q, 1, true);
+			blk_mq_try_issue_directly(data.hctx, same_queue_rq,
+					&cookie);
+		}
+	} else if ((q->nr_hw_queues > 1 && is_sync) || (!q->elevator &&
+			!data.hctx->dispatch_busy)) {
+		blk_mq_try_issue_directly(data.hctx, rq, &cookie);
+	} else {
+		blk_mq_sched_insert_request(rq, false, true, true);
+	}
+
+	return cookie;
+}
+
+
+// Source: blk-mq.c
+// Lines 1933-2032
+
+
+[ANSWER]
+MAY

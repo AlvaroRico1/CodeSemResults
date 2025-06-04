@@ -1,0 +1,38 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'cs' at line 4
+2. Pointer 'c' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+control_notify_window_renamed(struct window *w)
+{
+	struct client	*c;
+	struct session	*cs;
+
+	TAILQ_FOREACH(c, &clients, entry) {
+		if (!CONTROL_SHOULD_NOTIFY_CLIENT(c) || c->session == NULL)
+			continue;
+		cs = c->session;
+
+		if (winlink_find_by_window_id(&cs->windows, w->id) != NULL) {
+			control_write(c, "%%window-renamed @%u %s", w->id,
+			    w->name);
+		} else {
+			control_write(c, "%%unlinked-window-renamed @%u %s",
+			    w->id, w->name);
+		}
+	}
+}
+
+
+// Source: control-notify.c
+// Lines 130-148
+
+
+[ANSWER]
+MUST

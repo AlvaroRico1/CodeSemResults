@@ -1,0 +1,1 @@
+entry,libgit2/src/libgit2/index.c,33,extension_size,libgit2/src/libgit2/index.c,65,2

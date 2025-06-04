@@ -1,0 +1,30 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'pattern' at line 8
+2. Pointer 'ln' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int pubsubUnsubscribeAllPatterns(client *c, int notify) {
+    listNode *ln;
+    listIter li;
+    int count = 0;
+
+    listRewind(c->pubsub_patterns,&li);
+    while ((ln = listNext(&li)) != NULL) {
+        robj *pattern = ln->value;
+
+        count += pubsubUnsubscribePattern(c,pattern,notify);
+    }
+
+
+// Source: pubsub.c
+// Lines 272-282
+
+
+[ANSWER]
+MUST

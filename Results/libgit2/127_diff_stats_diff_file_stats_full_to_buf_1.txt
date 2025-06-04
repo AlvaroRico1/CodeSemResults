@@ -1,0 +1,1 @@
+adddel_path,libgit2/src/libgit2/diff_stats.c,8,old_path,libgit2/src/libgit2/diff_stats.c,8,1

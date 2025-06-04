@@ -1,0 +1,37 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'entry_ptr' at line 3
+2. Pointer 'invariant_ptr' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+insert_invariant (rtx invariant_rtx)
+{
+  void **entry_ptr;
+  invariant_t invariant;
+  invariant_ptr_t invariant_ptr;
+
+  invariant.invariant_rtx = invariant_rtx;
+  entry_ptr = htab_find_slot (invariant_table, &invariant, INSERT);
+  if (*entry_ptr == NULL)
+    {
+      invariant_ptr = invariants_pool->allocate ();
+      invariant_ptr->invariant_rtx = invariant_rtx;
+      invariant_ptr->insn = NULL;
+      invariants.safe_push (invariant_ptr);
+      *entry_ptr = (void *) invariant_ptr;
+    }
+  return (invariant_ptr_t) *entry_ptr;
+}
+
+
+// Source: lra-constraints.c
+// Lines 5139-5156
+
+
+[ANSWER]
+MUST

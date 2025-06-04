@@ -1,0 +1,148 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'commit' at line 7
+2. Pointer 'err' at line 11
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_worktree_add(git_worktree **out, git_repository *repo,
+	const char *name, const char *worktree,
+	const git_worktree_add_options *opts)
+{
+	git_str gitdir = GIT_STR_INIT, wddir = GIT_STR_INIT, buf = GIT_STR_INIT;
+	git_reference *ref = NULL, *head = NULL;
+	git_commit *commit = NULL;
+	git_repository *wt = NULL;
+	git_checkout_options coopts;
+	git_worktree_add_options wtopts = GIT_WORKTREE_ADD_OPTIONS_INIT;
+	int err;
+
+	GIT_ERROR_CHECK_VERSION(
+		opts, GIT_WORKTREE_ADD_OPTIONS_VERSION, "git_worktree_add_options");
+
+	GIT_ASSERT_ARG(out);
+	GIT_ASSERT_ARG(repo);
+	GIT_ASSERT_ARG(name);
+	GIT_ASSERT_ARG(worktree);
+
+	*out = NULL;
+
+	if (opts)
+		memcpy(&wtopts, opts, sizeof(wtopts));
+
+	memcpy(&coopts, &wtopts.checkout_options, sizeof(coopts));
+
+	if (wtopts.ref) {
+		if (!git_reference_is_branch(wtopts.ref)) {
+			git_error_set(GIT_ERROR_WORKTREE, "reference is not a branch");
+			err = -1;
+			goto out;
+		}
+
+		if (git_branch_is_checked_out(wtopts.ref)) {
+			git_error_set(GIT_ERROR_WORKTREE, "reference is already checked out");
+			err = -1;
+			goto out;
+		}
+	}
+
+	/* Create gitdir directory ".git/worktrees/<name>" */
+	if ((err = git_str_joinpath(&gitdir, repo->commondir, "worktrees")) < 0)
+		goto out;
+	if (!git_fs_path_exists(gitdir.ptr))
+		if ((err = git_futils_mkdir(gitdir.ptr, 0755, GIT_MKDIR_EXCL)) < 0)
+			goto out;
+	if ((err = git_str_joinpath(&gitdir, gitdir.ptr, name)) < 0)
+		goto out;
+	if ((err = git_futils_mkdir(gitdir.ptr, 0755, GIT_MKDIR_EXCL)) < 0)
+		goto out;
+	if ((err = git_fs_path_prettify_dir(&gitdir, gitdir.ptr, NULL)) < 0)
+		goto out;
+
+	/* Create worktree work dir */
+	if ((err = git_futils_mkdir(worktree, 0755, GIT_MKDIR_EXCL)) < 0)
+		goto out;
+	if ((err = git_fs_path_prettify_dir(&wddir, worktree, NULL)) < 0)
+		goto out;
+
+	if (wtopts.lock) {
+		int fd;
+
+		if ((err = git_str_joinpath(&buf, gitdir.ptr, "locked")) < 0)
+			goto out;
+
+		if ((fd = p_creat(buf.ptr, 0644)) < 0) {
+			err = fd;
+			goto out;
+		}
+
+		p_close(fd);
+		git_str_clear(&buf);
+	}
+
+	/* Create worktree .git file */
+	if ((err = git_str_printf(&buf, "gitdir: %s\n", gitdir.ptr)) < 0)
+		goto out;
+	if ((err = write_wtfile(wddir.ptr, ".git", &buf)) < 0)
+		goto out;
+
+	/* Create gitdir files */
+	if ((err = git_fs_path_prettify_dir(&buf, repo->commondir, NULL) < 0)
+	    || (err = git_str_putc(&buf, '\n')) < 0
+	    || (err = write_wtfile(gitdir.ptr, "commondir", &buf)) < 0)
+		goto out;
+	if ((err = git_str_joinpath(&buf, wddir.ptr, ".git")) < 0
+	    || (err = git_str_putc(&buf, '\n')) < 0
+	    || (err = write_wtfile(gitdir.ptr, "gitdir", &buf)) < 0)
+		goto out;
+
+	/* Set up worktree reference */
+	if (wtopts.ref) {
+		if ((err = git_reference_dup(&ref, wtopts.ref)) < 0)
+			goto out;
+	} else {
+		if ((err = git_repository_head(&head, repo)) < 0)
+			goto out;
+		if ((err = git_commit_lookup(&commit, repo, &head->target.oid)) < 0)
+			goto out;
+		if ((err = git_branch_create(&ref, repo, name, commit, false)) < 0)
+			goto out;
+	}
+
+	/* Set worktree's HEAD */
+	if ((err = git_repository_create_head(gitdir.ptr, git_reference_name(ref))) < 0)
+		goto out;
+	if ((err = git_repository_open(&wt, wddir.ptr)) < 0)
+		goto out;
+
+	/* Checkout worktree's HEAD */
+	if ((err = git_checkout_head(wt, &coopts)) < 0)
+		goto out;
+
+	/* Load result */
+	if ((err = git_worktree_lookup(out, repo, name)) < 0)
+		goto out;
+
+out:
+	git_str_dispose(&gitdir);
+	git_str_dispose(&wddir);
+	git_str_dispose(&buf);
+	git_reference_free(ref);
+	git_reference_free(head);
+	git_commit_free(commit);
+	git_repository_free(wt);
+
+	return err;
+}
+
+
+// Source: worktree.c
+// Lines 299-427
+
+
+[ANSWER]
+MAY

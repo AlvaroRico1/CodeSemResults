@@ -1,0 +1,45 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'generator' at line 3
+2. Pointer 'data' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void on_connect(h2o_socket_t *sock, const char *errstr, void *data, h2o_url_t *_dummy)
+{
+    struct st_fcgi_generator_t *generator = data;
+    iovec_vector_t vecs;
+
+    generator->connect_req = NULL;
+
+    if (sock == NULL) {
+        h2o_req_log_error(generator->req, MODULE_NAME, "connection failed:%s", errstr);
+        errorclose(generator);
+        return;
+    }
+
+    generator->sock = sock;
+    sock->data = generator;
+
+    build_request(generator->req, &vecs, 1, 65535, &generator->handler->config);
+
+    /* start sending the response */
+    h2o_socket_write(generator->sock, vecs.entries, vecs.size, on_send_complete);
+
+    set_timeout(generator, generator->handler->config.io_timeout, on_rw_timeout);
+
+    /* activate the receiver; note: FCGI spec allows the app to start sending the response before it receives FCGI_STDIN */
+    h2o_socket_read_start(sock, on_read);
+}
+
+
+// Source: fastcgi.c
+// Lines 735-760
+
+
+[ANSWER]
+MUST

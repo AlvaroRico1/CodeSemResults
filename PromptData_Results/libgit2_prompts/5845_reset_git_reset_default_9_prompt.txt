@@ -1,0 +1,98 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'commit' at line 6
+2. Pointer 'diff' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_reset_default(
+	git_repository *repo,
+	const git_object *target,
+	const git_strarray *pathspecs)
+{
+	git_object *commit = NULL;
+	git_tree *tree = NULL;
+	git_diff *diff = NULL;
+	git_diff_options opts = GIT_DIFF_OPTIONS_INIT;
+	size_t i, max_i;
+	git_index_entry entry;
+	int error;
+	git_index *index = NULL;
+
+	GIT_ASSERT_ARG(pathspecs && pathspecs->count > 0);
+
+	memset(&entry, 0, sizeof(git_index_entry));
+
+	if ((error = git_repository_index(&index, repo)) < 0)
+		goto cleanup;
+
+	if (target) {
+		if (git_object_owner(target) != repo) {
+			git_error_set(GIT_ERROR_OBJECT,
+				"%s_default - The given target does not belong to this repository.", ERROR_MSG);
+			return -1;
+		}
+
+		if ((error = git_object_peel(&commit, target, GIT_OBJECT_COMMIT)) < 0 ||
+			(error = git_commit_tree(&tree, (git_commit *)commit)) < 0)
+			goto cleanup;
+	}
+
+	opts.pathspec = *pathspecs;
+	opts.flags = GIT_DIFF_REVERSE;
+
+	if ((error = git_diff_tree_to_index(
+		&diff, repo, tree, index, &opts)) < 0)
+			goto cleanup;
+
+	for (i = 0, max_i = git_diff_num_deltas(diff); i < max_i; ++i) {
+		const git_diff_delta *delta = git_diff_get_delta(diff, i);
+
+		GIT_ASSERT(delta->status == GIT_DELTA_ADDED ||
+		           delta->status == GIT_DELTA_MODIFIED ||
+		           delta->status == GIT_DELTA_CONFLICTED ||
+		           delta->status == GIT_DELTA_DELETED);
+
+		error = git_index_conflict_remove(index, delta->old_file.path);
+		if (error < 0) {
+			if (delta->status == GIT_DELTA_ADDED && error == GIT_ENOTFOUND)
+				git_error_clear();
+			else
+				goto cleanup;
+		}
+
+		if (delta->status == GIT_DELTA_DELETED) {
+			if ((error = git_index_remove(index, delta->old_file.path, 0)) < 0)
+				goto cleanup;
+		} else {
+			entry.mode = delta->new_file.mode;
+			git_oid_cpy(&entry.id, &delta->new_file.id);
+			entry.path = (char *)delta->new_file.path;
+
+			if ((error = git_index_add(index, &entry)) < 0)
+				goto cleanup;
+		}
+	}
+
+	error = git_index_write(index);
+
+cleanup:
+	git_object_free(commit);
+	git_tree_free(tree);
+	git_index_free(index);
+	git_diff_free(diff);
+
+	return error;
+}
+
+
+// Source: reset.c
+// Lines 22-100
+
+
+[ANSWER]
+MAY

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'p' at line 8\n2. Pointer 'dst' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int serialize_cert(X509 *cert, ptls_iovec_t *dst)\n{\n    int len = i2d_X509(cert, NULL);\n    assert(len > 0);\n\n    if ((dst->base = malloc(len)) == NULL)\n        return PTLS_ERROR_NO_MEMORY;\n    unsigned char *p = dst->base;\n    dst->len = i2d_X509(cert, &p);\n    assert(len == dst->len);\n\n    return 0;\n}\n\n\n// Source: openssl.c\n// Lines 1164-1176\n",
+  "ANSWER": "MUST"
+}

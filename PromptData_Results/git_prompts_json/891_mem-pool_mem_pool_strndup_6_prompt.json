@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'p' at line 3\n2. Pointer 'str' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nchar *mem_pool_strndup(struct mem_pool *pool, const char *str, size_t len)\n{\n\tchar *p = memchr(str, '\\0', len);\n\tsize_t actual_len = (p ? p - str : len);\n\tchar *ret = mem_pool_alloc(pool, actual_len+1);\n\n\tret[actual_len] = '\\0';\n\treturn memcpy(ret, str, actual_len);\n}\n\n\n// Source: mem-pool.c\n// Lines 108-116\n",
+  "ANSWER": "MUST"
+}

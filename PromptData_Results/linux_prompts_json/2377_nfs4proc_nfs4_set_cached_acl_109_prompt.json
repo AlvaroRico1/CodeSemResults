@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'nfsi' at line 3\n2. Pointer 'acl' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void nfs4_set_cached_acl(struct inode *inode, struct nfs4_cached_acl *acl)\n{\n\tstruct nfs_inode *nfsi = NFS_I(inode);\n\n\tspin_lock(&inode->i_lock);\n\tkfree(nfsi->nfs4_acl);\n\tnfsi->nfs4_acl = acl;\n\tspin_unlock(&inode->i_lock);\n}\n\n\n// Source: nfs4proc.c\n// Lines 5452-5460\n",
+  "ANSWER": "MUST"
+}

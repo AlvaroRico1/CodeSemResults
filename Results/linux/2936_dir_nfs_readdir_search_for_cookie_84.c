@@ -1,0 +1,40 @@
+int nfs_readdir_search_for_cookie(struct nfs_cache_array *array, nfs_readdir_descriptor_t *desc)
+{
+	int i;
+	loff_t new_pos;
+	int status = -EAGAIN;
+
+	for (i = 0; i < array->size; i++) {
+		if (array->array[i].cookie == *desc->dir_cookie) {
+			struct nfs_inode *nfsi = NFS_I(file_inode(desc->file));
+			struct nfs_open_dir_context *ctx = desc->file->private_data;
+
+			new_pos = desc->current_index + i;
+			if (ctx->attr_gencount != nfsi->attr_gencount ||
+			    !nfs_readdir_inode_mapping_valid(nfsi)) {
+				ctx->duped = 0;
+				ctx->attr_gencount = nfsi->attr_gencount;
+			} else if (new_pos < desc->ctx->pos) {
+				if (ctx->duped > 0
+				    && ctx->dup_cookie == *desc->dir_cookie) {
+					if (printk_ratelimit()) {
+						pr_notice("NFS: directory %pD2 contains a readdir loop."
+								"Please contact your server vendor.  "
+								"The file: %.*s has duplicate cookie %llu\n",
+								desc->file, array->array[i].string.len,
+								array->array[i].string.name, *desc->dir_cookie);
+					}
+					status = -ELOOP;
+					goto out;
+				}
+				ctx->dup_cookie = *desc->dir_cookie;
+				ctx->duped = -1;
+			}
+			desc->ctx->pos = new_pos;
+			desc->cache_entry_index = i;
+			return 0;
+		}
+
+
+// Source: dir.c
+// Lines 263-298

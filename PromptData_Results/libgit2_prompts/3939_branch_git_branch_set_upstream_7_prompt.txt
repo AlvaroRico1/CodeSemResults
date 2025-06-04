@@ -1,0 +1,118 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'shortname' at line 8
+2. Pointer 'refname' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_branch_set_upstream(git_reference *branch, const char *branch_name)
+{
+	git_str key = GIT_STR_INIT, remote_name = GIT_STR_INIT, merge_refspec = GIT_STR_INIT;
+	git_reference *upstream;
+	git_repository *repo;
+	git_remote *remote = NULL;
+	git_config *config;
+	const char *refname, *shortname;
+	int local, error;
+	const git_refspec *fetchspec;
+
+	refname = git_reference_name(branch);
+	if (!git_reference__is_branch(refname))
+		return not_a_local_branch(refname);
+
+	if (git_repository_config__weakptr(&config, git_reference_owner(branch)) < 0)
+		return -1;
+
+	shortname = refname + strlen(GIT_REFS_HEADS_DIR);
+
+	/* We're unsetting, delegate and bail-out */
+	if (branch_name == NULL)
+		return unset_upstream(config, shortname);
+
+	repo = git_reference_owner(branch);
+
+	/* First we need to resolve name to a branch */
+	if (git_branch_lookup(&upstream, repo, branch_name, GIT_BRANCH_LOCAL) == 0)
+		local = 1;
+	else if (git_branch_lookup(&upstream, repo, branch_name, GIT_BRANCH_REMOTE) == 0)
+		local = 0;
+	else {
+		git_error_set(GIT_ERROR_REFERENCE,
+			"cannot set upstream for branch '%s'", shortname);
+		return GIT_ENOTFOUND;
+	}
+
+	/*
+	 * If it's a local-tracking branch, its remote is "." (as "the local
+	 * repository"), and the branch name is simply the refname.
+	 * Otherwise we need to figure out what the remote-tracking branch's
+	 * name on the remote is and use that.
+	 */
+	if (local)
+		error = git_str_puts(&remote_name, ".");
+	else
+		error = git_branch__remote_name(&remote_name, repo, git_reference_name(upstream));
+
+	if (error < 0)
+		goto on_error;
+
+	/* Update the upstream branch config with the new name */
+	if (git_str_printf(&key, "branch.%s.remote", shortname) < 0)
+		goto on_error;
+
+	if (git_config_set_string(config, git_str_cstr(&key), git_str_cstr(&remote_name)) < 0)
+		goto on_error;
+
+	if (local) {
+		/* A local branch uses the upstream refname directly */
+		if (git_str_puts(&merge_refspec, git_reference_name(upstream)) < 0)
+			goto on_error;
+	} else {
+		/* We transform the upstream branch name according to the remote's refspecs */
+		if (git_remote_lookup(&remote, repo, git_str_cstr(&remote_name)) < 0)
+			goto on_error;
+
+		fetchspec = git_remote__matching_dst_refspec(remote, git_reference_name(upstream));
+		if (!fetchspec || git_refspec__rtransform(&merge_refspec, fetchspec, git_reference_name(upstream)) < 0)
+			goto on_error;
+
+		git_remote_free(remote);
+		remote = NULL;
+	}
+
+	/* Update the merge branch config with the refspec */
+	git_str_clear(&key);
+	if (git_str_printf(&key, "branch.%s.merge", shortname) < 0)
+		goto on_error;
+
+	if (git_config_set_string(config, git_str_cstr(&key), git_str_cstr(&merge_refspec)) < 0)
+		goto on_error;
+
+	git_reference_free(upstream);
+	git_str_dispose(&key);
+	git_str_dispose(&remote_name);
+	git_str_dispose(&merge_refspec);
+
+	return 0;
+
+on_error:
+	git_reference_free(upstream);
+	git_str_dispose(&key);
+	git_str_dispose(&remote_name);
+	git_str_dispose(&merge_refspec);
+	git_remote_free(remote);
+
+	return -1;
+}
+
+
+// Source: branch.c
+// Lines 662-760
+
+
+[ANSWER]
+MUST

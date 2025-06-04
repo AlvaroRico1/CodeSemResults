@@ -1,0 +1,47 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'minutes' at line 14
+2. Pointer 'str' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool time_zone_displacement_to_seconds(const char *str, size_t length,
+                                       int *result) {
+  if (length < 6) return true;
+
+  int sign = str[0] == '+' ? 1 : (str[0] == '-' ? -1 : 0);
+  if (sign == 0) return true;
+
+  if (!(std::isdigit(str[1]) && std::isdigit(str[2]))) return true;
+  int hours = (str[1] - '0') * 10 + str[2] - '0';
+
+  if (str[3] != ':') return true;
+
+  if (!(std::isdigit(str[4]) && std::isdigit(str[5]))) return true;
+  int minutes = (str[4] - '0') * 10 + str[5] - '0';
+  if (minutes >= MINS_PER_HOUR) return true;
+  int seconds = hours * SECS_PER_HOUR + minutes * SECS_PER_MIN;
+
+  if (seconds > MAX_TIME_ZONE_HOURS * SECS_PER_HOUR) return true;
+
+  // The SQL standard forbids -00:00.
+  if (sign == -1 && hours == 0 && minutes == 0) return true;
+
+  for (size_t i = 6; i < length; ++i)
+    if (!std::isspace(str[i])) return true;
+
+  *result = seconds * sign;
+  return false;
+}
+
+
+// Source: my_time.cc
+// Lines 282-309
+
+
+[ANSWER]
+MUST-NOT

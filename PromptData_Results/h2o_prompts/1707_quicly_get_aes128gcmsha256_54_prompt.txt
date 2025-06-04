@@ -1,0 +1,30 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'cs' at line 3
+2. Pointer 'ctx' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static ptls_cipher_suite_t *get_aes128gcmsha256(quicly_context_t *ctx)
+{
+    ptls_cipher_suite_t **cs;
+
+    for (cs = ctx->tls->cipher_suites;; ++cs) {
+        assert(cs != NULL);
+        if ((*cs)->id == PTLS_CIPHER_SUITE_AES_128_GCM_SHA256)
+            break;
+    }
+    return *cs;
+}
+
+
+// Source: quicly.c
+// Lines 533-543
+
+
+[ANSWER]
+MUST

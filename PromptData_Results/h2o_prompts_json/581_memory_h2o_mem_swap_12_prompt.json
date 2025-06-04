@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'x' at line 3\n2. Pointer '_x' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid h2o_mem_swap(void *_x, void *_y, size_t len)\n{\n    char *x = _x, *y = _y;\n    char buf[256];\n\n    while (len != 0) {\n        size_t blocksz = len < sizeof(buf) ? len : sizeof(buf);\n        memcpy(buf, x, blocksz);\n        memcpy(x, y, blocksz);\n        memcpy(y, buf, blocksz);\n        len -= blocksz;\n        x += blocksz;\n        y += blocksz;\n    }\n}\n\n\n// Source: memory.c\n// Lines 524-538\n",
+  "ANSWER": "MUST"
+}

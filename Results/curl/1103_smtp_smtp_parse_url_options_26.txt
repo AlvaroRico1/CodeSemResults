@@ -1,0 +1,1 @@
+key,curl/lib/smtp.c,10,ptr,curl/lib/smtp.c,5,1

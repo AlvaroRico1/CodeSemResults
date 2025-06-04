@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'inode' at line 3\n2. Pointer 'state' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void nfs4_state_mark_open_context_bad(struct nfs4_state *state, int err)\n{\n\tstruct inode *inode = state->inode;\n\tstruct nfs_inode *nfsi = NFS_I(inode);\n\tstruct nfs_open_context *ctx;\n\n\trcu_read_lock();\n\tlist_for_each_entry_rcu(ctx, &nfsi->open_files, list) {\n\t\tif (ctx->state != state)\n\t\t\tcontinue;\n\t\tset_bit(NFS_CONTEXT_BAD, &ctx->flags);\n\t\tpr_warn(\"NFSv4: state recovery failed for open file %pd2, \"\n\t\t\t\t\"error = %d\\n\", ctx->dentry, err);\n\t}\n\trcu_read_unlock();\n}\n\n\n// Source: nfs4state.c\n// Lines 1481-1496\n",
+  "ANSWER": "MUST"
+}

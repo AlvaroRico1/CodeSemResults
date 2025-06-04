@@ -1,0 +1,55 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'srclen' at line 4
+2. Pointer 'dst_end' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static size_t my_strnxfrm_uca_900_tmpl(const CHARSET_INFO *cs,
+                                       const Mb_wc mb_wc, uchar *dst,
+                                       size_t dstlen, const uchar *src,
+                                       size_t srclen, uint flags) {
+  uchar *d0 = dst;
+  uchar *dst_end = dst + dstlen;
+  uca_scanner_900<Mb_wc, LEVELS_FOR_COMPARE> scanner(mb_wc, cs, src, srclen);
+
+  assert((dstlen % 2) == 0);
+  if ((dstlen % 2) == 1) {
+    // Emergency workaround for optimized mode.
+    --dst_end;
+  }
+
+  if (dst != dst_end) {
+    scanner.for_each_weight(
+        [&dst, dst_end](
+            int s_res, bool is_level_separator MY_ATTRIBUTE((unused))) -> bool {
+          assert(is_level_separator == (s_res == 0));
+          if (LEVELS_FOR_COMPARE == 1) assert(!is_level_separator);
+
+          dst = store16be(dst, s_res);
+          return (dst < dst_end);
+        },
+        [&dst, dst_end](int num_weights) {
+          return (dst < dst_end - num_weights * 2);
+        });
+  }
+
+  if (flags & MY_STRXFRM_PAD_TO_MAXLEN) {
+    memset(dst, 0, dst_end - dst);
+    dst = dst_end;
+  }
+
+  return dst - d0;
+}
+
+
+// Source: ctype-uca.cc
+// Lines 5037-5072
+
+
+[ANSWER]
+MAY

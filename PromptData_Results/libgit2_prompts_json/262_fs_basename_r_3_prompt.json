@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'in' at line 1\n2. Pointer 'start_pos' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void basename_r(const char **out, int *out_len, const char *in)\n{\n\tsize_t in_len = strlen(in), start_pos;\n\n\tfor (in_len = strlen(in); in_len; in_len--) {\n\t\tif (in[in_len - 1] != '/')\n\t\t\tbreak;\n\t}\n\n\tfor (start_pos = in_len; start_pos; start_pos--) {\n\t\tif (in[start_pos - 1] == '/')\n\t\t\tbreak;\n\t}\n\n\tcl_assert(in_len - start_pos < INT_MAX);\n\n\tif (in_len - start_pos > 0) {\n\t\t*out = &in[start_pos];\n\t\t*out_len = (in_len - start_pos);\n\t} else {\n\t\t*out = \"/\";\n\t\t*out_len = 1;\n\t}\n}\n\n\n// Source: fs.h\n// Lines 320-343\n",
+  "ANSWER": "MUST-NOT"
+}

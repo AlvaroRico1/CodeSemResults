@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'group' at line 2\n2. Pointer 'data' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic bool find_field_in_order_list(Field *field, void *data) {\n  ORDER *group = (ORDER *)data;\n  bool part_found = false;\n  for (ORDER *tmp_group = group; tmp_group; tmp_group = tmp_group->next) {\n    const Item *item = (*tmp_group->item)->real_item();\n    if (item->type() == Item::FIELD_ITEM &&\n        down_cast<const Item_field *>(item)->field->eq(field)) {\n      part_found = true;\n      break;\n    }\n  }\n  return part_found;\n}\n\n\n// Source: sql_optimizer.cc\n// Lines 10194-10206\n",
+  "ANSWER": "MUST"
+}

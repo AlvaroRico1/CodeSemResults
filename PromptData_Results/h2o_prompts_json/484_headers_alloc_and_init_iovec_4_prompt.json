@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'iov' at line 3\n2. Pointer 'base' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic inline h2o_iovec_t *alloc_and_init_iovec(h2o_mem_pool_t *pool, const char *base, size_t len)\n{\n    h2o_iovec_t *iov = h2o_mem_alloc_pool(pool, *iov, 1);\n    iov->base = (char *)base;\n    iov->len = len;\n    return iov;\n}\n\n\n// Source: headers.c\n// Lines 42-48\n",
+  "ANSWER": "MUST"
+}

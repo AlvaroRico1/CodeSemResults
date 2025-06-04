@@ -1,0 +1,1 @@
+embedding,mysql/sql/sql_select.cc,7,join_tab,mysql/sql/sql_select.cc,1,1

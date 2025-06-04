@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ci' at line 3\n2. Pointer 'L' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nLUA_API int lua_getstack (lua_State *L, int level, lua_Debug *ar) {\n  int status;\n  CallInfo *ci;\n  lua_lock(L);\n  for (ci = L->ci; level > 0 && ci > L->base_ci; ci--) {\n    level--;\n    if (f_isLua(ci))  /* Lua function? */\n      level -= ci->tailcalls;  /* skip lost tail calls */\n  }\n  if (level == 0 && ci > L->base_ci) {  /* level found? */\n    status = 1;\n    ar->i_ci = cast_int(ci - L->base_ci);\n  }\n  else if (level < 0) {  /* level is of a lost tail call? */\n    status = 1;\n    ar->i_ci = 0;\n  }\n  else status = 0;  /* no such level */\n  lua_unlock(L);\n  return status;\n}\n\n\n// Source: ldebug.c\n// Lines 84-104\n",
+  "ANSWER": "MUST"
+}

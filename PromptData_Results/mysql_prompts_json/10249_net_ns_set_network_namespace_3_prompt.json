@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'fd' at line 2\n2. Pointer 'network_namespace' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nbool set_network_namespace(const std::string &network_namespace) {\n  int fd;\n\n  if (original_ns_fd == -1 && save_original_network_namespace(&original_ns_fd))\n    return true;\n\n  if (open_network_namespace(network_namespace, &fd)) return true;\n\n  if (setns(fd, CLONE_NEWNET) != 0) {\n#ifdef MYSQL_SERVER\n    char errbuf[MYSYS_STRERROR_SIZE];\n\n    LogErr(ERROR_LEVEL, ER_SETNS_FAILED,\n           my_strerror(errbuf, sizeof(errbuf), errno));\n#endif\n    close(fd);\n\n    return true;\n  }\n\n  return false;\n}\n\n\n// Source: net_ns.cc\n// Lines 152-173\n",
+  "ANSWER": "MUST-NOT"
+}

@@ -1,0 +1,62 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'computed' at line 6
+2. Pointer 'repo' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void test_tree_to_tree_computed_to_parsed(
+	const char *sandbox, const char *a_id, const char *b_id,
+	uint32_t diff_flags, uint32_t find_flags)
+{
+	git_repository *repo;
+	git_diff *computed, *parsed;
+	git_tree *a, *b;
+	git_diff_options opts = GIT_DIFF_OPTIONS_INIT;
+	git_diff_find_options findopts = GIT_DIFF_FIND_OPTIONS_INIT;
+	git_buf computed_buf = GIT_BUF_INIT;
+
+	repo = cl_git_sandbox_init(sandbox);
+
+	opts.id_abbrev = GIT_OID_HEXSZ;
+	opts.flags = GIT_DIFF_SHOW_BINARY | diff_flags;
+	findopts.flags = find_flags;
+
+	cl_assert((a = resolve_commit_oid_to_tree(repo, a_id)) != NULL);
+	cl_assert((b = resolve_commit_oid_to_tree(repo, b_id)) != NULL);
+
+	cl_git_pass(git_diff_tree_to_tree(&computed, repo, a, b, &opts));
+
+	if (find_flags)
+		cl_git_pass(git_diff_find_similar(computed, &findopts));
+
+	cl_git_pass(git_diff_to_buf(&computed_buf,
+		computed, GIT_DIFF_FORMAT_PATCH));
+
+	cl_git_pass(git_diff_from_buffer(&parsed,
+		computed_buf.ptr, computed_buf.size));
+
+	diff_assert_equal(computed, parsed);
+
+	git_tree_free(a);
+	git_tree_free(b);
+
+	git_diff_free(computed);
+	git_diff_free(parsed);
+
+	git_buf_dispose(&computed_buf);
+
+	cl_git_sandbox_cleanup();
+}
+
+
+// Source: parse.c
+// Lines 141-183
+
+
+[ANSWER]
+MUST-NOT

@@ -1,0 +1,33 @@
+static void *run_index_diffs(void *arg)
+{
+	int thread = *(int *)arg;
+	git_repository *repo;
+	git_diff_options opts = GIT_DIFF_OPTIONS_INIT;
+	git_diff *diff = NULL;
+	size_t i;
+	int exp[4] = { 0, 0, 0, 0 };
+
+	cl_git_pass(git_repository_open(&repo, git_repository_path(_repo)));
+
+	switch (thread & 0x03) {
+	case 0: /* diff index to workdir */;
+		cl_git_pass(git_diff_index_to_workdir(&diff, repo, NULL, &opts));
+		break;
+	case 1: /* diff tree 'a' to index */;
+		cl_git_pass(git_diff_tree_to_index(&diff, repo, _a, NULL, &opts));
+		break;
+	case 2: /* diff tree 'b' to index */;
+		cl_git_pass(git_diff_tree_to_index(&diff, repo, _b, NULL, &opts));
+		break;
+	case 3: /* diff index to workdir (explicit index) */;
+		{
+			git_index *idx;
+			cl_git_pass(git_repository_index(&idx, repo));
+			cl_git_pass(git_diff_index_to_workdir(&diff, repo, idx, &opts));
+			git_index_free(idx);
+			break;
+		}
+
+
+// Source: diff.c
+// Lines 76-104

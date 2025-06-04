@@ -1,0 +1,1 @@
+wp,tmux/cmd-split-window.c,10,target,tmux/cmd-split-window.c,5,1

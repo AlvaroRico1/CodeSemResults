@@ -1,0 +1,57 @@
+static int similarity_sig(
+	similarity_info *info,
+	const git_diff_find_options *opts,
+	void **cache)
+{
+	int error = 0;
+	git_diff_file *file = info->file;
+
+	if (info->src == GIT_ITERATOR_WORKDIR) {
+		if ((error = git_repository_workdir_path(
+			&info->data, info->repo, file->path)) < 0)
+			return error;
+
+		/* if path is not a regular file, just skip this item */
+		if (!git_fs_path_isfile(info->data.ptr))
+			return 0;
+
+		/* TODO: apply wd-to-odb filters to file data if necessary */
+
+		error = opts->metric->file_signature(
+			&cache[info->idx], info->file,
+			info->data.ptr, opts->metric->payload);
+	} else {
+		/* if we didn't initially know the size, we might have an odb_obj
+		 * around from earlier, so convert that, otherwise load the blob now
+		 */
+		if (info->odb_obj != NULL)
+			error = git_object__from_odb_object(
+				(git_object **)&info->blob, info->repo,
+				info->odb_obj, GIT_OBJECT_BLOB);
+		else
+			error = git_blob_lookup(&info->blob, info->repo, &file->id);
+
+		if (error < 0) {
+			/* if lookup fails, just skip this item in similarity calc */
+			git_error_clear();
+		} else {
+			size_t sz;
+
+			/* index size may not be actual blob size if filtered */
+			if (file->size != git_blob_rawsize(info->blob))
+				file->size = git_blob_rawsize(info->blob);
+
+			sz = git__is_sizet(file->size) ? (size_t)file->size : (size_t)-1;
+
+			error = opts->metric->buffer_signature(
+				&cache[info->idx], info->file,
+				git_blob_rawcontent(info->blob), sz, opts->metric->payload);
+		}
+	}
+
+	return error;
+}
+
+
+// Source: diff_tform.c
+// Lines 471-523

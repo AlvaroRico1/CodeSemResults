@@ -1,0 +1,475 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tl' at line 230
+2. Pointer 'subq_query_block' at line 218
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool Query_block::convert_subquery_to_semijoin(
+    THD *thd, Item_exists_subselect *subq_pred) {
+  TABLE_LIST *emb_tbl_nest = nullptr;
+  mem_root_deque<TABLE_LIST *> *emb_join_list = &top_join_list;
+  DBUG_TRACE;
+
+  assert(subq_pred->substype() == Item_subselect::IN_SUBS ||
+         subq_pred->substype() == Item_subselect::EXISTS_SUBS);
+
+  Opt_trace_context *trace = &thd->opt_trace;
+  Opt_trace_object trace_object(trace, "transformation_to_semi_join");
+  if (unlikely(trace->is_started())) {
+    trace_object.add("subquery_predicate", subq_pred);
+  }
+
+  bool outer_join = false;  // True if predicate is inner to an outer join
+
+  // Save the set of tables in the outer query block:
+  table_map outer_tables_map = all_tables_map();
+  const bool do_aj = subq_pred->can_do_aj;
+
+  /*
+    Find out where to insert the semi-join nest and the generated condition.
+
+    For t1 LEFT JOIN t2, embedding_join_nest will be t2.
+    Note that t2 may be a simple table or may itself be a join nest
+    (e.g. in the case t1 LEFT JOIN (t2 JOIN t3))
+  */
+  if (subq_pred->embedding_join_nest != nullptr) {
+    // Is this on inner side of an outer join?
+    outer_join = subq_pred->embedding_join_nest->is_inner_table_of_outer_join();
+
+    if (subq_pred->embedding_join_nest->nested_join) {
+      /*
+        We're dealing with
+
+          ... [LEFT] JOIN  ( ... ) ON (subquery AND condition) ...
+
+        The sj-nest will be inserted into the brackets nest.
+      */
+      emb_tbl_nest = subq_pred->embedding_join_nest;
+      emb_join_list = &emb_tbl_nest->nested_join->join_list;
+    } else if (!subq_pred->embedding_join_nest->outer_join) {
+      /*
+        We're dealing with
+
+          ... INNER JOIN tblX ON (subquery AND condition) ...
+
+        The sj-nest will be tblX's "sibling", i.e. another child of its
+        parent. This is ok because tblX is joined as an inner join.
+      */
+      emb_tbl_nest = subq_pred->embedding_join_nest->embedding;
+      if (emb_tbl_nest) emb_join_list = &emb_tbl_nest->nested_join->join_list;
+    } else {
+      TABLE_LIST *outer_tbl = subq_pred->embedding_join_nest;
+      /*
+        We're dealing with
+
+          ... LEFT JOIN tbl ON (on_expr AND subq_pred) ...
+
+        tbl will be replaced with:
+
+          ( tbl SJ (subq_tables) )
+          |                      |
+          |<----- wrap_nest ---->|
+
+        giving:
+          ... LEFT JOIN ( tbl SJ (subq_tables) ) ON (on_expr AND subq_pred) ...
+
+        Q:  other subqueries may be pointing to this element. What to do?
+        A1: simple solution: copy *subq_pred->embedding_join_nest= *parent_nest.
+            But we'll need to fix other pointers.
+        A2: Another way: have TABLE_LIST::next_ptr so the following
+            subqueries know the table has been nested.
+        A3: changes in the TABLE_LIST::outer_join will make everything work
+            automatically.
+      */
+      TABLE_LIST *const wrap_nest = TABLE_LIST::new_nested_join(
+          thd->mem_root, "(sj-wrap)", outer_tbl->embedding,
+          outer_tbl->join_list, this);
+      if (wrap_nest == nullptr) return true;
+
+      wrap_nest->nested_join->join_list.push_back(outer_tbl);
+
+      outer_tbl->embedding = wrap_nest;
+      outer_tbl->join_list = &wrap_nest->nested_join->join_list;
+
+      /*
+        wrap_nest will take place of outer_tbl, so move the outer join flag
+        and join condition.
+      */
+      wrap_nest->outer_join = outer_tbl->outer_join;
+      outer_tbl->outer_join = false;
+
+      wrap_nest->set_join_cond(outer_tbl->join_cond());
+      outer_tbl->set_join_cond(nullptr);
+
+      for (auto li = wrap_nest->join_list->begin();
+           li != wrap_nest->join_list->end(); ++li) {
+        TABLE_LIST *tbl = *li;
+        if (tbl == outer_tbl) {
+          *li = wrap_nest;
+          break;
+        }
+      }
+
+      /*
+        outer_tbl is replaced by wrap_nest. Any subquery which was attached to
+        outer_tbl must be attached to embedding_join_nest instead.
+      */
+      for (Item_exists_subselect *subquery : (*sj_candidates)) {
+        if (subquery->embedding_join_nest == outer_tbl)
+          subquery->embedding_join_nest = wrap_nest;
+      }
+
+      /*
+        Ok now wrap_nest 'contains' outer_tbl and we're ready to add the
+        semi-join nest into it
+      */
+      emb_join_list = &wrap_nest->nested_join->join_list;
+      emb_tbl_nest = wrap_nest;
+    }
+  }
+  // else subquery is in WHERE.
+
+  if (do_aj) {
+    /*
+      A negated IN/EXISTS like:
+      NOT EXISTS(... FROM subq_tables WHERE subq_cond)
+      The above code has ensured that we have one of these 3 situations:
+
+      (a) FROM ... WHERE (subquery AND condition)
+      (emb_tbl_nest == nullptr, emb_join_list == FROM clause)
+
+      which has to be changed to
+          FROM (...)            LEFT JOIN (subq_tables) ON subq_cond
+               ^ aj-left-nest             ^aj-nest
+          WHERE x IS NULL AND condition
+
+      or:
+      (b) ... [LEFT] JOIN ( ...          ) ON (subquery AND condition) ...
+                          ^ emb_tbl_nest, emb_join_list
+
+      which has to be changed to
+          ... [LEFT] JOIN ( (...)          LEFT JOIN (subq_tables) ON subq_cond)
+                            ^aj-left-nest            ^aj-nest
+                          ^ emb_tbl_nest, emb_join_list
+              ON x IS NULL AND condition ...
+
+      or:
+      (c) ... INNER JOIN tblX ON (subquery AND condition) ...
+          ^ emb_tbl_nest, emb_join_list
+            (if no '()' above this INNER JOIN up to the root, emb_tbl_nest ==
+             nullptr and emb_join_list == FROM clause)
+
+      which has to be changed to
+       ( ... INNER JOIN tblX ON condition) LEFT JOIN (subq_tables) ON subq_cond
+       ^aj-left-nest                                 ^aj-nest
+
+      so:
+      - move all tables of emb_join_list into a new aj-left-nest
+      - emb_join_list is now empty
+      - put subq_tables in a new aj-nest
+      - add the subq's subq_cond to aj-nest's ON
+      - add a LEFT JOIN operator between the aj-left-nest and aj-nest, with
+      ON condition subq_cond.
+      - insert aj-nest and aj-left-nest into emb_join_list
+      - for some reason, a LEFT JOIN must always be wrapped into a nest (call
+      nest_last_join() then)
+      - do not yet add 'x IS NULL to WHERE' (add it in optimization phase when
+      we have the QEP_TABs so we can set up the 'found'/'not_null_compl'
+      pointers in trig conds).
+    */
+    TABLE_LIST *const wrap_nest = TABLE_LIST::new_nested_join(
+        thd->mem_root, "(aj-left-nest)", emb_tbl_nest, emb_join_list, this);
+    if (wrap_nest == nullptr) return true;
+
+    // Go through tables of emb_join_list, insert them in wrap_nest
+    for (TABLE_LIST *outer_tbl : *emb_join_list) {
+      wrap_nest->nested_join->join_list.push_back(outer_tbl);
+      outer_tbl->embedding = wrap_nest;
+      outer_tbl->join_list = &wrap_nest->nested_join->join_list;
+    }
+    // FROM clause is now only the new left nest
+    emb_join_list->clear();
+    emb_join_list->push_back(wrap_nest);
+    outer_join = true;
+  }
+
+  if (unlikely(trace->is_started()))
+    trace_object.add_alnum("embedded in", emb_tbl_nest ? "JOIN" : "WHERE");
+
+  TABLE_LIST *const sj_nest = TABLE_LIST::new_nested_join(
+      thd->mem_root, do_aj ? "(aj-nest)" : "(sj-nest)", emb_tbl_nest,
+      emb_join_list, this);
+  if (sj_nest == nullptr) return true; /* purecov: inspected */
+
+  NESTED_JOIN *const nested_join = sj_nest->nested_join;
+
+  /* Nests do not participate in those 'chains', so: */
+  /* sj_nest->next_leaf= sj_nest->next_local= sj_nest->next_global == NULL*/
+  /*
+    Using push_front, as sj_nest may be right arg of LEFT JOIN if
+    antijoin, and right args of LEFT JOIN go before left arg.
+  */
+  emb_join_list->push_front(sj_nest);
+
+  /*
+    Natural joins inside a semi-join nest were already processed when the
+    subquery went through initial preparation.
+  */
+  sj_nest->nested_join->natural_join_processed = true;
+  /*
+    nested_join->used_tables and nested_join->not_null_tables are
+    initialized in simplify_joins().
+  */
+
+  Query_block *const subq_query_block = subq_pred->unit->first_query_block();
+
+  nested_join->query_block_id = subq_query_block->select_number;
+
+  // Merge tables from underlying query block into this join nest
+  if (sj_nest->merge_underlying_tables(subq_query_block))
+    return true; /* purecov: inspected */
+
+  /*
+    Add tables from subquery at end of leaf table chain.
+    (This also means that table map for parent query block tables are unchanged)
+  */
+  TABLE_LIST *tl;
+  for (tl = leaf_tables; tl->next_leaf; tl = tl->next_leaf) {
+  }
+  tl->next_leaf = subq_query_block->leaf_tables;
+
+  // Add tables from subquery at end of next_local chain.
+  table_list.push_back(&subq_query_block->table_list);
+
+  // Note that subquery's tables are already in the next_global chain
+
+  // Remove the original subquery predicate from the WHERE/ON
+  // The subqueries were replaced with TRUE value earlier
+  // @todo also reset the 'with_subselect' there.
+
+  // Walk through child's tables and adjust table map
+  uint table_no = leaf_table_count;
+  for (tl = subq_query_block->leaf_tables; tl; tl = tl->next_leaf, table_no++) {
+    tl->dep_tables <<= leaf_table_count;
+    tl->set_tableno(table_no);
+  }
+
+  /*
+    If we leave this function in an error path before subq_query_block is
+    unlinked, make sure tables are not duplicated, or cleanup code could be
+    confused:
+  */
+  subq_query_block->table_list.clear();
+  subq_query_block->leaf_tables = nullptr;
+
+  // Adjust table and expression counts in parent query block:
+  derived_table_count += subq_query_block->derived_table_count;
+  materialized_derived_table_count +=
+      subq_query_block->materialized_derived_table_count;
+  table_func_count += subq_query_block->table_func_count;
+  has_sj_nests |= subq_query_block->has_sj_nests;
+  has_aj_nests |= subq_query_block->has_aj_nests;
+  partitioned_table_count += subq_query_block->partitioned_table_count;
+  leaf_table_count += subq_query_block->leaf_table_count;
+  cond_count += subq_query_block->cond_count;
+  between_count += subq_query_block->between_count;
+
+  if (subq_query_block->active_options() & OPTION_SCHEMA_TABLE)
+    add_base_options(OPTION_SCHEMA_TABLE);
+
+  if (outer_join) propagate_nullability(&sj_nest->nested_join->join_list, true);
+
+  nested_join->sj_outer_exprs.clear();
+  nested_join->sj_inner_exprs.clear();
+
+  if (subq_pred->substype() == Item_subselect::IN_SUBS)
+    build_sj_exprs(thd, &nested_join->sj_outer_exprs,
+                   &nested_join->sj_inner_exprs, subq_pred, subq_query_block);
+  else {  // this is EXISTS
+    // Expressions from the SELECT list will not be used; unlike in the case of
+    // IN, they are not part of sj_inner_exprs.
+    // @todo in WL#6570, move this to resolve_subquery().
+    Item::Cleanup_after_removal_context ctx(this);
+    for (Item *item : subq_query_block->visible_fields()) {
+      item->walk(&Item::clean_up_after_removal, enum_walk::SUBQUERY_POSTFIX,
+                 pointer_cast<uchar *>(&ctx));
+    }
+  }
+
+  {
+    /*
+      The WHERE clause and the join conditions may contain equalities that may
+      be leveraged by semi-join strategies (e.g to set up key lookups in
+      semi-join materialization), decorrelate them (ie. add respective fields
+      and expressions to sj_inner_exprs and sj_outer_exprs).
+    */
+    Semijoin_decorrelation sj_decor(&sj_nest->nested_join->sj_outer_exprs,
+                                    &sj_nest->nested_join->sj_inner_exprs,
+                                    // decorrelate only equalities
+                                    /*op_types=*/nullptr);
+
+    if (subq_query_block->where_cond() &&
+        subq_query_block->decorrelate_condition(sj_decor, nullptr))
+      return true;
+
+    if (walk_join_list(
+            subq_query_block->top_join_list, [&](TABLE_LIST *tr) -> bool {
+              return !tr->is_inner_table_of_outer_join() && tr->join_cond() &&
+                     subq_query_block->decorrelate_condition(sj_decor, tr);
+            }))
+      return true;
+  }
+
+  // Unlink the subquery's query expression:
+  subq_query_block->master_query_expression()->exclude_level();
+
+  // Merge subquery's name resolution contexts into parent's
+  merge_contexts(subq_query_block);
+
+  repoint_contexts_of_join_nests(subq_query_block->top_join_list);
+
+  // Update table map for semi-join nest's WHERE condition and join conditions
+  fix_tables_after_pullout(this, subq_query_block, sj_nest, 0, 0);
+
+  Item *sj_cond = subq_query_block->where_cond();
+  if (sj_cond != nullptr) sj_cond->fix_after_pullout(this, subq_query_block);
+
+  // Assign the set of non-trivially tables after decorrelation
+  nested_join->sj_corr_tables =
+      (sj_cond != nullptr ? sj_cond->used_tables() & outer_tables_map : 0);
+
+  walk_join_list(subq_query_block->top_join_list, [&](TABLE_LIST *tr) -> bool {
+    if (tr->join_cond())
+      nested_join->sj_corr_tables |=
+          tr->join_cond()->used_tables() & outer_tables_map;
+    if (tr->is_derived() && tr->uses_materialization())
+      nested_join->sj_corr_tables |=
+          tr->derived_query_expression()->m_lateral_deps;
+    return false;
+  });
+
+  // Build semijoin condition using the inner/outer expression list
+  if (build_sj_cond(thd, nested_join, subq_query_block, outer_tables_map,
+                    &sj_cond))
+    return true;
+
+  // Processing requires a non-empty semi-join condition:
+  assert(sj_cond != nullptr);
+
+  // Fix the created equality and AND
+  if (!sj_cond->fixed) {
+    Opt_trace_array sj_on_trace(&thd->opt_trace,
+                                "evaluating_constant_semijoin_conditions");
+    sj_cond->apply_is_true();
+    if (sj_cond->fix_fields(thd, &sj_cond))
+      return true; /* purecov: inspected */
+  }
+
+  sj_nest->set_sj_or_aj_nest();
+  assert(sj_nest->join_cond() == nullptr);
+
+  if (do_aj) {
+    sj_nest->outer_join = true;
+    sj_nest->set_join_cond(sj_cond);
+    this->outer_join |= sj_nest->nested_join->used_tables;
+    if (emb_tbl_nest == nullptr)
+      nest_last_join(thd);  // as is done for a true LEFT JOIN
+  }
+
+  if (unlikely(trace->is_started())) {
+    trace_object.add("semi-join condition", sj_cond);
+    Opt_trace_array trace_dep(trace, "decorrelated_predicates");
+    auto ii = nested_join->sj_inner_exprs.begin();
+    auto oi = nested_join->sj_outer_exprs.begin();
+    while (ii != nested_join->sj_inner_exprs.end() &&
+           oi != nested_join->sj_outer_exprs.end()) {
+      Item *inner = *ii++, *outer = *oi++;
+      Opt_trace_object trace_predicate(trace);
+      trace_predicate.add("outer", outer);
+      trace_predicate.add("inner", inner);
+    }
+  }
+
+  /*
+    sj_depends_on contains the set of outer tables referred in the
+    subquery's WHERE clause as well as tables referred in the IN predicate's
+    left-hand side, and lateral dependencies from materialized derived tables
+    contained in the original subquery.
+  */
+  nested_join->sj_depends_on =
+      nested_join->sj_corr_tables | (sj_cond->used_tables() & outer_tables_map);
+
+  assert((nested_join->sj_corr_tables & OUTER_REF_TABLE_BIT) == 0);
+  assert((nested_join->sj_depends_on & OUTER_REF_TABLE_BIT) == 0);
+
+  // TODO fix QT_
+  DBUG_EXECUTE("where", print_where(thd, sj_cond, "SJ-COND", QT_ORDINARY););
+
+  if (do_aj) { /* Condition remains attached to inner table, as for LEFT JOIN
+                */
+  } else if (emb_tbl_nest) {
+    // Inject semi-join condition into parent's join condition
+    emb_tbl_nest->set_join_cond(and_items(emb_tbl_nest->join_cond(), sj_cond));
+    if (emb_tbl_nest->join_cond() == nullptr) return true;
+    emb_tbl_nest->join_cond()->apply_is_true();
+    if (!emb_tbl_nest->join_cond()->fixed &&
+        emb_tbl_nest->join_cond()->fix_fields(thd,
+                                              emb_tbl_nest->join_cond_ref()))
+      return true;
+  } else {
+    // Inject semi-join condition into parent's WHERE condition
+    m_where_cond = and_items(m_where_cond, sj_cond);
+    if (m_where_cond == nullptr) return true;
+    m_where_cond->apply_is_true();
+    if (m_where_cond->fix_fields(thd, &m_where_cond)) return true;
+  }
+
+  Item *cond = emb_tbl_nest ? emb_tbl_nest->join_cond() : m_where_cond;
+  if (cond && cond->const_item() &&
+      !cond->walk(&Item::is_non_const_over_literals, enum_walk::POSTFIX,
+                  nullptr)) {
+    bool cond_value = true;
+    if (simplify_const_condition(thd, &cond, false, &cond_value)) return true;
+    if (!cond_value) {
+      /*
+        Parent's condition is always FALSE. Thus:
+        (a) the value of the anti/semi-join condition has no influence on the
+        result
+        (b) we don't need to set up lookups (for loosescan or materialization)
+        (c) for a semi-join, the semi-join condition is already lost (it was
+        in parent's condition, which has been replaced with FALSE); the
+        outer/inner sj expressions are Items which point into the SJ
+        condition, so at 2nd execution they won't be fixed => clearing them
+        prevents a bug.
+        (d) for an anti-join, the join condition remains in
+        sj_nest->join_cond() and will possibly be evaluated. (c) doesn't hold,
+        but (a) and (b) do.
+      */
+      clear_sj_expressions(nested_join);
+    }
+  }
+
+  if (subq_query_block->ftfunc_list->elements &&
+      add_ftfunc_list(subq_query_block->ftfunc_list))
+    return true; /* purecov: inspected */
+
+  if (do_aj)
+    has_aj_nests = true;
+  else
+    has_sj_nests = true;  // This query block has semi-join nests
+
+  return false;
+}
+
+
+// Source: sql_resolver.cc
+// Lines 2912-3367
+
+
+[ANSWER]
+MUST

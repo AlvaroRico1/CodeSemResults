@@ -1,0 +1,1 @@
+prompt,tmux/window-customize.c,9,key,tmux/window-customize.c,2,2

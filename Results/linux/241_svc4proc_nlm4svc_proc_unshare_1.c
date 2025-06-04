@@ -1,0 +1,34 @@
+nlm4svc_proc_unshare(struct svc_rqst *rqstp)
+{
+	struct nlm_args *argp = rqstp->rq_argp;
+	struct nlm_res *resp = rqstp->rq_resp;
+	struct nlm_host	*host;
+	struct nlm_file	*file;
+
+	dprintk("lockd: UNSHARE       called\n");
+
+	resp->cookie = argp->cookie;
+
+	/* Don't accept requests during grace period */
+	if (locks_in_grace(SVC_NET(rqstp))) {
+		resp->status = nlm_lck_denied_grace_period;
+		return rpc_success;
+	}
+
+	/* Obtain client and file */
+	if ((resp->status = nlm4svc_retrieve_args(rqstp, argp, &host, &file)))
+		return resp->status == nlm_drop_reply ? rpc_drop_reply :rpc_success;
+
+	/* Now try to lock the file */
+	resp->status = nlmsvc_unshare_file(host, file, argp);
+
+	dprintk("lockd: UNSHARE       status %d\n", ntohl(resp->status));
+	nlmsvc_release_lockowner(&argp->lock);
+	nlmsvc_release_host(host);
+	nlm_release_file(file);
+	return rpc_success;
+}
+
+
+// Source: svc4proc.c
+// Lines 388-417

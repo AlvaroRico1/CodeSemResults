@@ -1,0 +1,28 @@
+FORCE_INLINE_TEMPLATE U32 ZSTD_BtGetAllMatches (
+                        ZSTD_match_t* matches,   /* store result (match found, increasing size) in this table */
+                        ZSTD_matchState_t* ms,
+                        U32* nextToUpdate3,
+                        const BYTE* ip, const BYTE* const iHighLimit, const ZSTD_dictMode_e dictMode,
+                        const U32 rep[ZSTD_REP_NUM],
+                        U32 const ll0,
+                        U32 const lengthToBeat)
+{
+    const ZSTD_compressionParameters* const cParams = &ms->cParams;
+    U32 const matchLengthSearch = cParams->minMatch;
+    DEBUGLOG(8, "ZSTD_BtGetAllMatches");
+    if (ip < ms->window.base + ms->nextToUpdate) return 0;   /* skipped area */
+    ZSTD_updateTree_internal(ms, ip, iHighLimit, matchLengthSearch, dictMode);
+    switch(matchLengthSearch)
+    {
+    case 3 : return ZSTD_insertBtAndGetAllMatches(matches, ms, nextToUpdate3, ip, iHighLimit, dictMode, rep, ll0, lengthToBeat, 3);
+    default :
+    case 4 : return ZSTD_insertBtAndGetAllMatches(matches, ms, nextToUpdate3, ip, iHighLimit, dictMode, rep, ll0, lengthToBeat, 4);
+    case 5 : return ZSTD_insertBtAndGetAllMatches(matches, ms, nextToUpdate3, ip, iHighLimit, dictMode, rep, ll0, lengthToBeat, 5);
+    case 7 :
+    case 6 : return ZSTD_insertBtAndGetAllMatches(matches, ms, nextToUpdate3, ip, iHighLimit, dictMode, rep, ll0, lengthToBeat, 6);
+    }
+}
+
+
+// Source: zstd_opt.c
+// Lines 776-799

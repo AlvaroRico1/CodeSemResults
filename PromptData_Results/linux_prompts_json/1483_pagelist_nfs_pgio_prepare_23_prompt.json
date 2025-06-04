@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'hdr' at line 3\n2. Pointer 'calldata' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void nfs_pgio_prepare(struct rpc_task *task, void *calldata)\n{\n\tstruct nfs_pgio_header *hdr = calldata;\n\tint err;\n\terr = NFS_PROTO(hdr->inode)->pgio_rpc_prepare(task, hdr);\n\tif (err)\n\t\trpc_exit(task, err);\n}\n\n\n// Source: pagelist.c\n// Lines 604-611\n",
+  "ANSWER": "MUST"
+}

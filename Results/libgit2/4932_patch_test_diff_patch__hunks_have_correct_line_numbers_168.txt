@@ -1,0 +1,1 @@
+line,libgit2/tests/libgit2/diff/patch.c,10,delta,libgit2/tests/libgit2/diff/patch.c,8,0

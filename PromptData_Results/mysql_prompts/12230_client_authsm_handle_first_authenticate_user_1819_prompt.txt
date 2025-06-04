@@ -1,0 +1,61 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'mysql' at line 4
+2. Pointer 'ctx' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static mysql_state_machine_status authsm_handle_first_authenticate_user(
+    mysql_async_auth *ctx) {
+  DBUG_TRACE;
+  MYSQL *mysql = ctx->mysql;
+  DBUG_PRINT("info",
+             ("authenticate_user returned %s",
+              ctx->res == CR_OK
+                  ? "CR_OK"
+                  : ctx->res == CR_ERROR ? "CR_ERROR"
+                                         : ctx->res == CR_OK_HANDSHAKE_COMPLETE
+                                               ? "CR_OK_HANDSHAKE_COMPLETE"
+                                               : "error"));
+
+  static_assert(CR_OK == -1, "");
+  static_assert(CR_ERROR == 0, "");
+
+  /*
+    The connection may be closed. If so: do not try to read from the buffer.
+    If server sends OK packet without sending auth-switch first, client side
+    auth plugin may not be able to process it correctly.
+    However, if server sends OK, it means server side authentication plugin
+    already performed required checks. Further, server side plugin did not
+    really care about plugin used by client in this case.
+  */
+  if (ctx->res > CR_OK &&
+      (!my_net_is_inited(&mysql->net) ||
+       (mysql->net.read_pos[0] != 0 && mysql->net.read_pos[0] != 254))) {
+    /*
+      the plugin returned an error. write it down in mysql,
+      unless the error code is CR_ERROR and mysql->net.last_errno
+      is already set (the plugin has done it)
+    */
+    DBUG_PRINT("info", ("res=%d", ctx->res));
+    if (ctx->res > CR_ERROR)
+      set_mysql_error(mysql, ctx->res, unknown_sqlstate);
+    else if (!mysql->net.last_errno)
+      set_mysql_error(mysql, CR_UNKNOWN_ERROR, unknown_sqlstate);
+    return STATE_MACHINE_FAILED;
+  }
+  ctx->state_function = authsm_read_change_user_result;
+  return STATE_MACHINE_CONTINUE;
+}
+
+
+// Source: client.cc
+// Lines 5397-5438
+
+
+[ANSWER]
+MUST-NOT

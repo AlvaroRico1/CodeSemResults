@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'zs' at line 2
+2. Pointer 'o' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void freeZsetObject(robj *o) {
+    zset *zs;
+    switch (o->encoding) {
+    case OBJ_ENCODING_SKIPLIST:
+        zs = o->ptr;
+        dictRelease(zs->dict);
+        zslFree(zs->zsl);
+        zfree(zs);
+        break;
+    case OBJ_ENCODING_ZIPLIST:
+        zfree(o->ptr);
+        break;
+    default:
+        serverPanic("Unknown sorted set encoding");
+    }
+}
+
+
+// Source: object.c
+// Lines 323-338
+
+
+[ANSWER]
+MUST

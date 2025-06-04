@@ -1,0 +1,33 @@
+static int get_url_base(git_str *url, git_repository *repo)
+{
+	int error;
+	git_worktree *wt = NULL;
+	git_remote *remote = NULL;
+
+	if ((error = lookup_default_remote(&remote, repo)) == 0) {
+		error = git_str_sets(url, git_remote_url(remote));
+		goto out;
+	} else if (error != GIT_ENOTFOUND)
+		goto out;
+	else
+		git_error_clear();
+
+	/* if repository does not have a default remote, use workdir instead */
+	if (git_repository_is_worktree(repo)) {
+		if ((error = git_worktree_open_from_repository(&wt, repo)) < 0)
+			goto out;
+		error = git_str_sets(url, wt->parent_path);
+	} else {
+		error = git_str_sets(url, git_repository_workdir(repo));
+	}
+
+out:
+	git_remote_free(remote);
+	git_worktree_free(wt);
+
+	return error;
+}
+
+
+// Source: submodule.c
+// Lines 2255-2283

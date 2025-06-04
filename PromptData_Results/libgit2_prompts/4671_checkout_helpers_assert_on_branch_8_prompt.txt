@@ -1,0 +1,33 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'repo' at line 1
+2. Pointer 'head' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void assert_on_branch(git_repository *repo, const char *branch)
+{
+	git_reference *head;
+	git_str bname = GIT_STR_INIT;
+
+	cl_git_pass(git_reference_lookup(&head, repo, GIT_HEAD_FILE));
+	cl_assert_(git_reference_type(head) == GIT_REFERENCE_SYMBOLIC, branch);
+
+	cl_git_pass(git_str_joinpath(&bname, "refs/heads", branch));
+	cl_assert_equal_s(bname.ptr, git_reference_symbolic_target(head));
+
+	git_reference_free(head);
+	git_str_dispose(&bname);
+}
+
+
+// Source: checkout_helpers.c
+// Lines 7-20
+
+
+[ANSWER]
+MUST-NOT

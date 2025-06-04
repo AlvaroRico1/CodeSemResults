@@ -1,0 +1,116 @@
+static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
+{
+    size_t inreqlen = conn->sock->input->size < H2O_MAX_REQLEN ? conn->sock->input->size : H2O_MAX_REQLEN;
+    int reqlen, minor_version;
+    struct phr_header headers[H2O_MAX_HEADERS];
+    size_t num_headers = H2O_MAX_HEADERS;
+    ssize_t entity_body_header_index;
+    h2o_iovec_t expect;
+
+    /* need to set request_begin_at here for keep-alive connection */
+    if (h2o_timeval_is_null(&conn->req.timestamps.request_begin_at))
+        conn->req.timestamps.request_begin_at = h2o_gettimeofday(conn->super.ctx->loop);
+
+    reqlen = phr_parse_request(conn->sock->input->bytes, inreqlen, (const char **)&conn->req.input.method.base,
+                               &conn->req.input.method.len, (const char **)&conn->req.input.path.base, &conn->req.input.path.len,
+                               &minor_version, headers, &num_headers, conn->_prevreqlen);
+    conn->_prevreqlen = inreqlen;
+
+    switch (reqlen) {
+    default: { // parse complete
+        conn->_unconsumed_request_size = reqlen;
+        const char *err;
+        if ((err = fixup_request(conn, headers, num_headers, minor_version, &expect, &entity_body_header_index)) != NULL &&
+            err != fixup_request_is_h2_upgrade) {
+            clear_timeouts(conn);
+            send_bad_request(conn, err);
+            return;
+        }
+        h2o_probe_log_request(&conn->req, conn->_req_index);
+        if (err == fixup_request_is_h2_upgrade) {
+            clear_timeouts(conn);
+            h2o_socket_read_stop(conn->sock);
+            if (h2o_http2_handle_upgrade(&conn->req, conn->super.connected_at) != 0)
+                h2o_send_error_400(&conn->req, "Invalid Request", "Broken upgrade request to HTTP/2", 0);
+        } else if (entity_body_header_index != -1) {
+            /* Request has body, start reading it. Invocation of `h2o_process_request` is delayed to reduce backend concurrency. */
+            conn->req.timestamps.request_body_begin_at = h2o_gettimeofday(conn->super.ctx->loop);
+            if (expect.base != NULL) {
+                if (!h2o_lcstris(expect.base, expect.len, H2O_STRLIT("100-continue"))) {
+                    clear_timeouts(conn);
+                    h2o_socket_read_stop(conn->sock);
+                    h2o_send_error_417(&conn->req, "Expectation Failed", "unknown expectation",
+                                       H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
+                    return;
+                }
+            }
+            if (create_entity_reader(conn, headers + entity_body_header_index) != 0)
+                return;
+            conn->req.write_req.cb = write_req_first;
+            conn->req.write_req.ctx = &conn->req;
+            conn->_unconsumed_request_size = 0;
+            h2o_buffer_consume(&conn->sock->input, reqlen);
+            h2o_buffer_init(&conn->req_body, &h2o_socket_buffer_prototype);
+            if (expect.base != NULL) {
+                static const h2o_iovec_t res = {H2O_STRLIT("HTTP/1.1 100 Continue\r\n\r\n")};
+                h2o_socket_write(conn->sock, (void *)&res, 1, on_continue_sent);
+                /* processing of the incoming entity is postponed until the 100 response is sent */
+                h2o_socket_read_stop(conn->sock);
+                return;
+            }
+            conn->_req_entity_reader->handle_incoming_entity(conn);
+        } else if (conn->req.is_tunnel_req) {
+            /* Is a CONNECT request or a upgrade that uses our stream API (e.g., websocket tunnelling), therefore:
+             * * the request is submitted immediately for processing,
+             * * input is read and provided to the request handler using the request streaming API,
+             * * but the timeout is stopped as the client might wait for the server to send 200 before sending anything. */
+            clear_timeouts(conn);
+            if (!h2o_req_can_stream_request(&conn->req) &&
+                h2o_memis(conn->req.input.method.base, conn->req.input.method.len, H2O_STRLIT("CONNECT"))) {
+                h2o_send_error_405(&conn->req, "Method Not Allowed", "Method Not Allowed", 0);
+                return;
+            }
+            if (create_content_length_entity_reader(conn, SIZE_MAX) != 0)
+                return;
+            conn->_unconsumed_request_size = 0;
+            h2o_buffer_consume(&conn->sock->input, reqlen);
+            h2o_buffer_init(&conn->req_body, &h2o_socket_buffer_prototype);
+            conn->req.write_req.cb = write_req_connect_first;
+            conn->req.write_req.ctx = &conn->req;
+            conn->req.proceed_req = proceed_request;
+            conn->req.entity = h2o_iovec_init("", 0); /* set to non-NULL pointer to indicate that request body exists */
+            h2o_process_request(&conn->req);
+            conn->_req_entity_reader->handle_incoming_entity(conn);
+        } else {
+            /* Ordinary request without request body. */
+            clear_timeouts(conn);
+            h2o_socket_read_stop(conn->sock);
+            h2o_process_request(&conn->req);
+        }
+    }
+        return;
+    case -2: // incomplete
+        if (inreqlen == H2O_MAX_REQLEN) {
+            send_bad_request(conn, "Bad Request");
+        }
+        return;
+    case -1: // error
+        /* upgrade to HTTP/2 if the request starts with: PRI * HTTP/2 */
+        if (conn->super.ctx->globalconf->http1.upgrade_to_http2) {
+            /* should check up to the first octet that phr_parse_request returns an error */
+            static const h2o_iovec_t HTTP2_SIG = {H2O_STRLIT("PRI * HTTP/2")};
+            if (conn->sock->input->size >= HTTP2_SIG.len && memcmp(conn->sock->input->bytes, HTTP2_SIG.base, HTTP2_SIG.len) == 0) {
+                h2o_accept_ctx_t accept_ctx = {conn->super.ctx, conn->super.hosts};
+                h2o_socket_t *sock = conn->sock;
+                struct timeval connected_at = conn->super.connected_at;
+                /* destruct the connection after detatching the socket */
+                conn->sock = NULL;
+                close_connection(conn, 1);
+                /* and accept as http2 connection */
+                h2o_http2_accept(&accept_ctx, sock, connected_at);
+                return;
+            }
+
+
+// Source: http1.c
+// Lines 625-736

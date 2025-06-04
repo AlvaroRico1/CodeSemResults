@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'nw' at line 3\n2. Pointer 'node' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\net_new_occ (struct et_node *node)\n{\n  et_occ *nw = et_occurrences.allocate ();\n\n  nw->of = node;\n  nw->parent = NULL;\n  nw->prev = NULL;\n  nw->next = NULL;\n\n  nw->depth = 0;\n  nw->min_occ = nw;\n  nw->min = 0;\n\n  return nw;\n}\n\n\n// Source: et-forest.c\n// Lines 444-458\n",
+  "ANSWER": "MUST"
+}

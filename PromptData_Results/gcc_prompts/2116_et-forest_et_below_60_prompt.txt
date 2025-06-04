@@ -1,0 +1,72 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'l' at line 4
+2. Pointer 'up' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+et_below (struct et_node *down, struct et_node *up)
+{
+  struct et_occ *u = up->rightmost_occ, *d = down->rightmost_occ;
+  struct et_occ *l, *r;
+
+  if (up == down)
+    return true;
+
+  et_splay (u);
+  l = u->prev;
+  r = u->next;
+
+  if (!l)
+    return false;
+
+  l->parent = NULL;
+
+  if (r)
+    r->parent = NULL;
+
+  et_splay (d);
+
+  if (l == d || l->parent != NULL)
+    {
+      if (r)
+	r->parent = u;
+      set_prev (u, d);
+#ifdef DEBUG_ET
+      et_check_tree_sanity (u);
+#endif
+    }
+  else
+    {
+      l->parent = u;
+
+      /* In case O1 and O2 are in two different trees, we must just restore the
+	 original state.  */
+      if (r && r->parent != NULL)
+	set_next (u, d);
+      else
+	set_next (u, r);
+
+#ifdef DEBUG_ET
+      et_check_tree_sanity (u);
+#endif
+      return false;
+    }
+
+  if (d->depth <= 0)
+    return false;
+
+  return !d->next || d->next->min + d->depth >= 0;
+}
+
+
+// Source: et-forest.c
+// Lines 698-750
+
+
+[ANSWER]
+MUST

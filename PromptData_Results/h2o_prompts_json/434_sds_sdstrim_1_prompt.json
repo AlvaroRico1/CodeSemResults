@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'start' at line 2\n2. Pointer 's' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nsds sdstrim(sds s, const char *cset) {\n    char *start, *end, *sp, *ep;\n    size_t len;\n\n    sp = start = s;\n    ep = end = s+sdslen(s)-1;\n    while(sp <= end && strchr(cset, *sp)) sp++;\n    while(ep > sp && strchr(cset, *ep)) ep--;\n    len = (sp > ep) ? 0 : ((ep-sp)+1);\n    if (s != sp) memmove(s, sp, len);\n    s[len] = '\\0';\n    sdssetlen(s,len);\n    return s;\n}\n\n\n// Source: sds.c\n// Lines 681-694\n",
+  "ANSWER": "MUST"
+}

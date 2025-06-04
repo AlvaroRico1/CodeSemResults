@@ -1,0 +1,1 @@
+table_list,mysql/sql/sql_parse.cc,43,schema_query_block,mysql/sql/sql_parse.cc,3,1

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'entry' at line 2\n2. Pointer 'count' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int count_cfg_entries_and_compare_levels(\n\tconst git_config_entry *entry, void *payload)\n{\n\tint *count = payload;\n\n\tif (!strcmp(entry->value, \"7\") || !strcmp(entry->value, \"17\"))\n\t\tcl_assert(entry->level == GIT_CONFIG_LEVEL_GLOBAL);\n\telse\n\t\tcl_assert(entry->level == GIT_CONFIG_LEVEL_SYSTEM);\n\n\t(*count)++;\n\treturn 0;\n}\n\n\n// Source: read.c\n// Lines 295-307\n",
+  "ANSWER": "MUST-NOT"
+}

@@ -1,0 +1,146 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ret' at line 48
+2. Pointer 'database' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int sql_real_connect(char *host, char *database, char *user,
+                            char *password, uint silent) {
+  if (connected) {
+    connected = false;
+#ifdef HAVE_SETNS
+    if (opt_network_namespace) (void)release_network_namespace_resources();
+#endif
+    mysql_close(&mysql);
+  }
+
+  mysql_init(&mysql);
+  if (init_connection_options(&mysql)) {
+    (void)put_error(&mysql);
+    (void)fflush(stdout);
+    return ignore_errors ? -1 : 1;
+  }
+#ifdef _WIN32
+  uint cnv_errors;
+  String converted_database, converted_user;
+  if (!my_charset_same(&my_charset_utf8mb4_bin, mysql.charset)) {
+    /* Convert user and database from UTF8MB4 to connection character set */
+    if (user) {
+      converted_user.copy(user, strlen(user) + 1, &my_charset_utf8mb4_bin,
+                          mysql.charset, &cnv_errors);
+      user = (char *)converted_user.ptr();
+    }
+    if (database) {
+      converted_database.copy(database, strlen(database) + 1,
+                              &my_charset_utf8mb4_bin, mysql.charset,
+                              &cnv_errors);
+      database = (char *)converted_database.ptr();
+    }
+  }
+#endif
+
+#ifdef HAVE_SETNS
+  if (opt_network_namespace && set_network_namespace(opt_network_namespace)) {
+    if (!silent) {
+      char msgbuf[PATH_MAX];
+      snprintf(msgbuf, sizeof(msgbuf), "Network namespace error: %s",
+               strerror(errno));
+      put_info(msgbuf, INFO_ERROR);
+    }
+
+    return ignore_errors ? -1 : 1;  // Abort
+  }
+#endif
+  MYSQL *ret;
+  if (dns_srv_name)
+    ret = mysql_real_connect_dns_srv(&mysql, dns_srv_name, user, password,
+                                     database,
+                                     connect_flag | CLIENT_MULTI_STATEMENTS);
+  else
+    ret = mysql_real_connect(&mysql, host, user, password, database,
+                             opt_mysql_port, opt_mysql_unix_port,
+                             connect_flag | CLIENT_MULTI_STATEMENTS);
+  if (!ret) {
+#ifdef HAVE_SETNS
+    if (opt_network_namespace) (void)restore_original_network_namespace();
+#endif
+    if (mysql_errno(&mysql) == ER_MUST_CHANGE_PASSWORD_LOGIN) {
+      tee_fprintf(stdout,
+                  "Please use --connect-expired-password option or "
+                  "invoke mysql in interactive mode.\n");
+      return ignore_errors ? -1 : 1;
+    }
+    if (!silent || (mysql_errno(&mysql) != CR_CONN_HOST_ERROR &&
+                    mysql_errno(&mysql) != CR_CONNECTION_ERROR)) {
+      (void)put_error(&mysql);
+      (void)fflush(stdout);
+      return ignore_errors ? -1 : 1;  // Abort
+    }
+    return -1;  // Retryable
+  }
+
+#ifdef HAVE_SETNS
+  if (opt_network_namespace && restore_original_network_namespace()) {
+    if (!silent) {
+      char msgbuf[PATH_MAX];
+      snprintf(msgbuf, sizeof(msgbuf), "Network namespace error: %s",
+               strerror(errno));
+      put_info(msgbuf, INFO_ERROR);
+    }
+
+    return ignore_errors ? -1 : 1;  // Abort
+  }
+#endif
+
+#ifdef _WIN32
+  /* Convert --execute buffer from UTF8MB4 to connection character set */
+  if (!execute_buffer_conversion_done && status.line_buff &&
+      !status.line_buff->file && /* Convert only -e buffer, not real file */
+      status.line_buff->buffer < status.line_buff->end && /* Non-empty */
+      !my_charset_same(&my_charset_utf8mb4_bin, mysql.charset)) {
+    String tmp;
+    size_t len = status.line_buff->end - status.line_buff->buffer;
+    uint dummy_errors;
+    /*
+      Don't convert trailing '\n' character - it was appended during
+      last batch_readline_command() call.
+      Oherwise we'll get an extra line, which makes some tests fail.
+    */
+    if (status.line_buff->buffer[len - 1] == '\n') len--;
+    if (tmp.copy(status.line_buff->buffer, len, &my_charset_utf8mb4_bin,
+                 mysql.charset, &dummy_errors))
+      return 1;
+
+    /* Free the old line buffer */
+    batch_readline_end(status.line_buff);
+
+    /* Re-initialize line buffer from the converted string */
+    if (!(status.line_buff =
+              batch_readline_command(NULL, (char *)tmp.c_ptr_safe())))
+      return 1;
+  }
+  execute_buffer_conversion_done = true;
+#endif /* _WIN32 */
+
+  charset_info = mysql.charset;
+
+  connected = true;
+  mysql.reconnect = debug_info_flag;  // We want to know if this happens
+#ifdef HAVE_READLINE
+  build_completion_hash(opt_rehash, true);
+#endif
+  return 0;
+}
+
+
+// Source: mysql.cc
+// Lines 4493-4619
+
+
+[ANSWER]
+MUST-NOT

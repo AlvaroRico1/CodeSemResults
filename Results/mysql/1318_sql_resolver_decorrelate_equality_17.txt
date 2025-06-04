@@ -1,0 +1,1 @@
+outer,mysql/sql/sql_resolver.cc,8,right,mysql/sql/sql_resolver.cc,6,1

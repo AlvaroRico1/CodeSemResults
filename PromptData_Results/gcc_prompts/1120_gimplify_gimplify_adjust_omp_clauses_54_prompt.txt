@@ -1,0 +1,200 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'octx' at line 11
+2. Pointer 'ctx' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+gimplify_adjust_omp_clauses (gimple_seq *pre_p, gimple_seq body, tree *list_p,
+			     enum tree_code code)
+{
+  struct gimplify_omp_ctx *ctx = gimplify_omp_ctxp;
+  tree *orig_list_p = list_p;
+  tree c, decl;
+  bool has_inscan_reductions = false;
+
+  if (body)
+    {
+      struct gimplify_omp_ctx *octx;
+      for (octx = ctx; octx; octx = octx->outer_context)
+	if ((octx->region_type & (ORT_PARALLEL | ORT_TASK | ORT_TEAMS)) != 0)
+	  break;
+      if (octx)
+	{
+	  struct walk_stmt_info wi;
+	  memset (&wi, 0, sizeof (wi));
+	  walk_gimple_seq (body, omp_find_stores_stmt,
+			   omp_find_stores_op, &wi);
+	}
+    }
+
+  if (ctx->add_safelen1)
+    {
+      /* If there are VLAs in the body of simd loop, prevent
+	 vectorization.  */
+      gcc_assert (ctx->region_type == ORT_SIMD);
+      c = build_omp_clause (UNKNOWN_LOCATION, OMP_CLAUSE_SAFELEN);
+      OMP_CLAUSE_SAFELEN_EXPR (c) = integer_one_node;
+      OMP_CLAUSE_CHAIN (c) = *list_p;
+      *list_p = c;
+      list_p = &OMP_CLAUSE_CHAIN (c);
+    }
+
+  if (ctx->region_type == ORT_WORKSHARE
+      && ctx->outer_context
+      && ctx->outer_context->region_type == ORT_COMBINED_PARALLEL)
+    {
+      for (c = ctx->outer_context->clauses; c; c = OMP_CLAUSE_CHAIN (c))
+	if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_LASTPRIVATE
+	    && OMP_CLAUSE_LASTPRIVATE_CONDITIONAL (c))
+	  {
+	    decl = OMP_CLAUSE_DECL (c);
+	    splay_tree_node n
+	      = splay_tree_lookup (ctx->outer_context->variables,
+				   (splay_tree_key) decl);
+	    gcc_checking_assert (!splay_tree_lookup (ctx->variables,
+						     (splay_tree_key) decl));
+	    omp_add_variable (ctx, decl, n->value);
+	    tree c2 = copy_node (c);
+	    OMP_CLAUSE_CHAIN (c2) = *list_p;
+	    *list_p = c2;
+	    if ((n->value & GOVD_FIRSTPRIVATE) == 0)
+	      continue;
+	    c2 = build_omp_clause (OMP_CLAUSE_LOCATION (c),
+				   OMP_CLAUSE_FIRSTPRIVATE);
+	    OMP_CLAUSE_DECL (c2) = decl;
+	    OMP_CLAUSE_CHAIN (c2) = *list_p;
+	    *list_p = c2;
+	  }
+    }
+  while ((c = *list_p) != NULL)
+    {
+      splay_tree_node n;
+      bool remove = false;
+
+      switch (OMP_CLAUSE_CODE (c))
+	{
+	case OMP_CLAUSE_FIRSTPRIVATE:
+	  if ((ctx->region_type & ORT_TARGET)
+	      && (ctx->region_type & ORT_ACC) == 0
+	      && TYPE_ATOMIC (strip_array_types
+					(TREE_TYPE (OMP_CLAUSE_DECL (c)))))
+	    {
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%<_Atomic%> %qD in %<firstprivate%> clause on "
+			"%<target%> construct", OMP_CLAUSE_DECL (c));
+	      remove = true;
+	      break;
+	    }
+	  /* FALLTHRU */
+	case OMP_CLAUSE_PRIVATE:
+	case OMP_CLAUSE_SHARED:
+	case OMP_CLAUSE_LINEAR:
+	  decl = OMP_CLAUSE_DECL (c);
+	  n = splay_tree_lookup (ctx->variables, (splay_tree_key) decl);
+	  remove = !(n->value & GOVD_SEEN);
+	  if ((n->value & GOVD_LASTPRIVATE_CONDITIONAL) != 0
+	      && code == OMP_PARALLEL
+	      && OMP_CLAUSE_CODE (c) == OMP_CLAUSE_FIRSTPRIVATE)
+	    remove = true;
+	  if (! remove)
+	    {
+	      bool shared = OMP_CLAUSE_CODE (c) == OMP_CLAUSE_SHARED;
+	      if ((n->value & GOVD_DEBUG_PRIVATE)
+		  || lang_hooks.decls.omp_private_debug_clause (decl, shared))
+		{
+		  gcc_assert ((n->value & GOVD_DEBUG_PRIVATE) == 0
+			      || ((n->value & GOVD_DATA_SHARE_CLASS)
+				  == GOVD_SHARED));
+		  OMP_CLAUSE_SET_CODE (c, OMP_CLAUSE_PRIVATE);
+		  OMP_CLAUSE_PRIVATE_DEBUG (c) = 1;
+		}
+              if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_SHARED
+		  && ctx->has_depend
+		  && DECL_P (decl))
+		n->value |= GOVD_WRITTEN;
+	      if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_SHARED
+		  && (n->value & GOVD_WRITTEN) == 0
+		  && DECL_P (decl)
+		  && omp_shared_to_firstprivate_optimizable_decl_p (decl))
+		OMP_CLAUSE_SHARED_READONLY (c) = 1;
+	      else if (DECL_P (decl)
+		       && ((OMP_CLAUSE_CODE (c) == OMP_CLAUSE_SHARED
+			    && (n->value & GOVD_WRITTEN) != 0)
+			   || (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_LINEAR
+			       && !OMP_CLAUSE_LINEAR_NO_COPYOUT (c)))
+		       && omp_shared_to_firstprivate_optimizable_decl_p (decl))
+		omp_mark_stores (gimplify_omp_ctxp->outer_context, decl);
+	    }
+	  break;
+
+	case OMP_CLAUSE_LASTPRIVATE:
+	  /* Make sure OMP_CLAUSE_LASTPRIVATE_FIRSTPRIVATE is set to
+	     accurately reflect the presence of a FIRSTPRIVATE clause.  */
+	  decl = OMP_CLAUSE_DECL (c);
+	  n = splay_tree_lookup (ctx->variables, (splay_tree_key) decl);
+	  OMP_CLAUSE_LASTPRIVATE_FIRSTPRIVATE (c)
+	    = (n->value & GOVD_FIRSTPRIVATE) != 0;
+	  if (code == OMP_DISTRIBUTE
+	      && OMP_CLAUSE_LASTPRIVATE_FIRSTPRIVATE (c))
+	    {
+	      remove = true;
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"same variable used in %<firstprivate%> and "
+			"%<lastprivate%> clauses on %<distribute%> "
+			"construct");
+	    }
+	  if (!remove
+	      && OMP_CLAUSE_CODE (c) == OMP_CLAUSE_LASTPRIVATE
+	      && DECL_P (decl)
+	      && omp_shared_to_firstprivate_optimizable_decl_p (decl))
+	    omp_mark_stores (gimplify_omp_ctxp->outer_context, decl);
+	  if (OMP_CLAUSE_LASTPRIVATE_CONDITIONAL (c) && code == OMP_PARALLEL)
+	    remove = true;
+	  break;
+
+	case OMP_CLAUSE_ALIGNED:
+	  decl = OMP_CLAUSE_DECL (c);
+	  if (!is_global_var (decl))
+	    {
+	      n = splay_tree_lookup (ctx->variables, (splay_tree_key) decl);
+	      remove = n == NULL || !(n->value & GOVD_SEEN);
+	      if (!remove && TREE_CODE (TREE_TYPE (decl)) == POINTER_TYPE)
+		{
+		  struct gimplify_omp_ctx *octx;
+		  if (n != NULL
+		      && (n->value & (GOVD_DATA_SHARE_CLASS
+				      & ~GOVD_FIRSTPRIVATE)))
+		    remove = true;
+		  else
+		    for (octx = ctx->outer_context; octx;
+			 octx = octx->outer_context)
+		      {
+			n = splay_tree_lookup (octx->variables,
+					       (splay_tree_key) decl);
+			if (n == NULL)
+			  continue;
+			if (n->value & GOVD_LOCAL)
+			  break;
+			/* We have to avoid assigning a shared variable
+			   to itself when trying to add
+			   __builtin_assume_aligned.  */
+			if (n->value & GOVD_SHARED)
+			  {
+			    remove = true;
+			    break;
+			  }
+		      }
+		}
+
+
+// Source: gimplify.c
+// Lines 10166-10346
+
+
+[ANSWER]
+MUST

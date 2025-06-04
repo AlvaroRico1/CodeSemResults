@@ -1,0 +1,30 @@
+static int parse_header_git_index(
+	git_patch_parsed *patch, git_patch_parse_ctx *ctx)
+{
+	char c;
+
+	if (parse_header_oid(&patch->base.delta->old_file.id,
+			&patch->base.delta->old_file.id_abbrev, ctx) < 0 ||
+		git_parse_advance_expected_str(&ctx->parse_ctx, "..") < 0 ||
+		parse_header_oid(&patch->base.delta->new_file.id,
+			&patch->base.delta->new_file.id_abbrev, ctx) < 0)
+		return -1;
+
+	if (git_parse_peek(&c, &ctx->parse_ctx, 0) == 0 && c == ' ') {
+		uint16_t mode = 0;
+
+		git_parse_advance_chars(&ctx->parse_ctx, 1);
+
+		if (parse_header_mode(&mode, ctx) < 0)
+			return -1;
+
+		if (!patch->base.delta->new_file.mode)
+			patch->base.delta->new_file.mode = mode;
+
+		if (!patch->base.delta->old_file.mode)
+			patch->base.delta->old_file.mode = mode;
+	}
+
+
+// Source: patch_parse.c
+// Lines 188-213

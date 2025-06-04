@@ -1,0 +1,70 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'multiline' at line 4
+2. Pointer 'proc_line' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int parse_multiline_variable(git_config_parser *reader, git_str *value, int in_quotes, size_t *line_len)
+{
+	int quote_count;
+	bool multiline = true;
+
+	while (multiline) {
+		char *line = NULL, *proc_line = NULL;
+		int error;
+
+		/* Check that the next line exists */
+		git_parse_advance_line(&reader->ctx);
+		line = git__strndup(reader->ctx.line, reader->ctx.line_len);
+		GIT_ERROR_CHECK_ALLOC(line);
+		if (GIT_ADD_SIZET_OVERFLOW(line_len, *line_len, reader->ctx.line_len)) {
+			error = -1;
+			goto out;
+		}
+
+		/*
+		 * We've reached the end of the file, there is no continuation.
+		 * (this is not an error).
+		 */
+		if (line[0] == '\0') {
+			error = 0;
+			goto out;
+		}
+
+		/* If it was just a comment, pretend it didn't exist */
+		quote_count = strip_comments(line, in_quotes);
+		if (line[0] == '\0')
+			goto next;
+
+		if ((error = unescape_line(&proc_line, &multiline,
+					   line, in_quotes)) < 0)
+			goto out;
+
+		/* Add this line to the multiline var */
+		if ((error = git_str_puts(value, proc_line)) < 0)
+			goto out;
+
+next:
+		git__free(line);
+		git__free(proc_line);
+		in_quotes = quote_count;
+		continue;
+
+out:
+		git__free(line);
+		git__free(proc_line);
+		return error;
+	}
+
+
+// Source: config_parse.c
+// Lines 328-378
+
+
+[ANSWER]
+MAY

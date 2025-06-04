@@ -1,0 +1,54 @@
+void updateFailoverStatus(void) {
+    if (server.failover_state != FAILOVER_WAIT_FOR_SYNC) return;
+    mstime_t now = server.mstime;
+
+    /* Check if failover operation has timed out */
+    if (server.failover_end_time && server.failover_end_time <= now) {
+        if (server.force_failover) {
+            serverLog(LL_NOTICE,
+                "FAILOVER to %s:%d time out exceeded, failing over.",
+                server.target_replica_host, server.target_replica_port);
+            server.failover_state = FAILOVER_IN_PROGRESS;
+            /* If timeout has expired force a failover if requested. */
+            replicationSetMaster(server.target_replica_host,
+                server.target_replica_port);
+            return;
+        } else {
+            /* Force was not requested, so timeout. */
+            abortFailover("Replica never caught up before timeout");
+            return;
+        }
+    }
+
+    /* Check to see if the replica has caught up so failover can start */
+    client *replica = NULL;
+    if (server.target_replica_host) {
+        replica = findReplica(server.target_replica_host, 
+            server.target_replica_port);
+    } else {
+        listIter li;
+        listNode *ln;
+
+        listRewind(server.slaves,&li);
+        /* Find any replica that has matched our repl_offset */
+        while((ln = listNext(&li))) {
+            replica = ln->value;
+            if (replica->repl_ack_off == server.master_repl_offset) {
+                char ip[NET_IP_STR_LEN], *replicaaddr = replica->slave_addr;
+
+                if (!replicaaddr) {
+                    if (connPeerToString(replica->conn,ip,sizeof(ip),NULL) == -1)
+                        continue;
+                    replicaaddr = ip;
+                }
+
+                /* We are now failing over to this specific node */
+                server.target_replica_host = zstrdup(replicaaddr);
+                server.target_replica_port = replica->slave_listening_port;
+                break;
+            }
+        }
+
+
+// Source: replication.c
+// Lines 3728-3777

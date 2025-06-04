@@ -1,0 +1,101 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'item' at line 76
+2. Pointer 'group' at line 74
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool Query_block::decorrelate_derived_scalar_subquery_pre(
+    THD *thd, TABLE_LIST *derived, Item *lifted_where,
+    Lifted_fields_map *lifted_fields, bool *added_card_check) {
+  const uint hidden_fields = CountHiddenFields(fields);
+  const uint first_non_hidden = hidden_fields;
+  assert((fields.size() - hidden_fields) == 1);  // scalar subquery
+
+  Item_field *selected_field = nullptr;
+  if (fields[first_non_hidden]->type() == Item::FIELD_ITEM) {
+    selected_field = down_cast<Item_field *>(fields[first_non_hidden]);
+  }
+
+  // Collect referenced fields, a mixture of inner fields and the correlated
+  // fields.
+  Item::Collect_item_fields_or_refs info{&lifted_fields->m_fields};
+  if (lifted_where->walk(&Item::collect_item_field_or_ref_processor,
+                         enum_walk::PREFIX | enum_walk::POSTFIX,
+                         pointer_cast<uchar *>(&info)))
+    return true;
+
+  // Run through the inner fields and add them to the derived table's
+  // SELECT list if not already present (only one can be present, since it's a
+  // scalar subquery), and make a note of where in the derived table's Field
+  // list they are positioned: we need that information in
+  // Query_block::decorrelate_derived_scalar_subquery_post
+  Item *field_or_ref;
+  List_iterator<Item> li(lifted_fields->m_fields);
+
+  while ((field_or_ref = li++)) {
+    Item_field *f = down_cast<Item_field *>(field_or_ref->real_item());
+    if (!field_or_ref->is_outer_reference()) {
+      // Add non-correlated fields in WHERE clause to select_list if not
+      // already present
+      if (selected_field == nullptr || f->field != selected_field->field) {
+        m_added_non_hidden_fields++;
+        // Mark the field as visible field. An earlier transformation could
+        // have added this as a hidden item to the fields list.
+        f->hidden = false;
+
+        // select_n_where_fields is counted, so safe to add to base_ref_items
+        base_ref_items[fields.size()] = f;
+
+        // Compute position in resulting derived table (TABLE::fields)
+        // We are adding visible fields after hidden fields, which breaks
+        // an earlier invariant. Hard to avoid here.
+        // Note the corresponding slice position calculation performed in
+        //     - change_to_use_tmp_fields_except_sums  (example figure expanded)
+        //     - setup_copy_fields
+        //     - change_to_use_tmp_fields
+        // takes this new situation into account.
+        lifted_fields->m_field_positions.push_back(fields.size() -
+                                                   hidden_fields);
+        fields.push_back(f);
+
+        // We have added to fields; master_query_expression->types must
+        // always be equal to it;
+        master_query_expression()->types.push_back(f);
+      } else {
+        // This is the field present in the scalar subquery initially, so it
+        // will be first in the derived table's set of fields.
+        lifted_fields->m_field_positions.push_back(0);
+      }
+    }
+  }
+
+  li.rewind();
+
+  // Run through the inner fields and add them to GROUP BY if not present
+  bool selected_field_in_group_by = false;
+  while ((field_or_ref = li++)) {
+    Item_field *f = down_cast<Item_field *>(field_or_ref->real_item());
+    if (!field_or_ref->is_outer_reference()) {
+      bool found = false;
+      for (ORDER *group = group_list.first; group != nullptr;
+           group = group->next) {
+        Item *item = *group->item;
+        if (item->type() == Item::FIELD_ITEM &&
+            down_cast<Item_field *>(item)->field == f->field) {
+          found = true;
+          break;
+        }
+      }
+
+
+// Source: sql_resolver.cc
+// Lines 6550-6631
+
+
+[ANSWER]
+MUST

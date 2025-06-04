@@ -1,0 +1,65 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'chosen' at line 19
+2. Pointer 'cm' at line 37
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void bitmap_writer_select_commits(struct commit **indexed_commits,
+				  unsigned int indexed_commits_nr,
+				  int max_bitmaps)
+{
+	unsigned int i = 0, j, next;
+
+	QSORT(indexed_commits, indexed_commits_nr, date_compare);
+
+	if (writer.show_progress)
+		writer.progress = start_progress("Selecting bitmap commits", 0);
+
+	if (indexed_commits_nr < 100) {
+		for (i = 0; i < indexed_commits_nr; ++i)
+			push_bitmapped_commit(indexed_commits[i]);
+		return;
+	}
+
+	for (;;) {
+		struct commit *chosen = NULL;
+
+		next = next_commit_index(i);
+
+		if (i + next >= indexed_commits_nr)
+			break;
+
+		if (max_bitmaps > 0 && writer.selected_nr >= max_bitmaps) {
+			writer.selected_nr = max_bitmaps;
+			break;
+		}
+
+		if (next == 0) {
+			chosen = indexed_commits[i];
+		} else {
+			chosen = indexed_commits[i + next];
+
+			for (j = 0; j <= next; ++j) {
+				struct commit *cm = indexed_commits[i + j];
+
+				if ((cm->object.flags & NEEDS_BITMAP) != 0) {
+					chosen = cm;
+					break;
+				}
+
+				if (cm->parents && cm->parents->next)
+					chosen = cm;
+			}
+
+
+// Source: pack-bitmap-write.c
+// Lines 570-615
+
+
+[ANSWER]
+MUST

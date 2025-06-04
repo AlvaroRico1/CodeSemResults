@@ -1,0 +1,60 @@
+h2o_iovec_t h2o_decode_base64url(h2o_mem_pool_t *pool, const char *src, size_t len)
+{
+    h2o_iovec_t decoded;
+    uint32_t t;
+    uint8_t *dst;
+    char remaining_input[4];
+
+    decoded.len = len * 3 / 4;
+    decoded.base = pool != NULL ? h2o_mem_alloc_pool(pool, char, decoded.len + 1) : h2o_mem_alloc(decoded.len + 1);
+    dst = (uint8_t *)decoded.base;
+
+    while (len >= 4) {
+        if ((t = decode_base64url_quad(src)) == UINT32_MAX)
+            goto Error;
+        *dst++ = t >> 16;
+        *dst++ = t >> 8;
+        *dst++ = t;
+        src += 4;
+        len -= 4;
+    }
+    switch (len) {
+    case 0:
+        break;
+    case 1:
+        goto Error;
+    case 2:
+        remaining_input[0] = *src++;
+        remaining_input[1] = *src++;
+        remaining_input[2] = 'A';
+        remaining_input[3] = 'A';
+        if ((t = decode_base64url_quad(remaining_input)) == UINT32_MAX)
+            goto Error;
+        *dst++ = t >> 16;
+        break;
+    case 3:
+        remaining_input[0] = *src++;
+        remaining_input[1] = *src++;
+        remaining_input[2] = *src++;
+        remaining_input[3] = 'A';
+        if ((t = decode_base64url_quad(remaining_input)) == UINT32_MAX)
+            goto Error;
+        *dst++ = t >> 16;
+        *dst++ = t >> 8;
+        break;
+    }
+
+    assert((char *)dst - decoded.base == decoded.len);
+    decoded.base[decoded.len] = '\0';
+
+    return decoded;
+
+Error:
+    if (pool == NULL)
+        free(decoded.base);
+    return h2o_iovec_init(NULL, 0);
+}
+
+
+// Source: string.c
+// Lines 186-241

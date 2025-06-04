@@ -1,0 +1,1 @@
+linesize,tmux/client.c,11,ncaps,tmux/client.c,14,0

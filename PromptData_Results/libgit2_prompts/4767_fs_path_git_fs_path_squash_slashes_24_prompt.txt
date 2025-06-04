@@ -1,0 +1,37 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'q' at line 3
+2. Pointer 'path' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void git_fs_path_squash_slashes(git_str *path)
+{
+	char *p, *q;
+
+	if (path->size == 0)
+		return;
+
+	for (p = path->ptr, q = path->ptr; *q; p++, q++) {
+		*p = *q;
+
+		while (*q == '/' && *(q+1) == '/') {
+			path->size--;
+			q++;
+		}
+	}
+
+	*p = '\0';
+}
+
+
+// Source: fs_path.c
+// Lines 360-377
+
+
+[ANSWER]
+MUST

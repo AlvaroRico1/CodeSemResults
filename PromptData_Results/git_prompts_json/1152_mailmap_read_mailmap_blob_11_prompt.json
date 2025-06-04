@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'buf' at line 4\n2. Pointer 'type' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int read_mailmap_blob(struct string_list *map, const char *name)\n{\n\tstruct object_id oid;\n\tchar *buf;\n\tunsigned long size;\n\tenum object_type type;\n\n\tif (!name)\n\t\treturn 0;\n\tif (get_oid(name, &oid) < 0)\n\t\treturn 0;\n\n\tbuf = read_object_file(&oid, &type, &size);\n\tif (!buf)\n\t\treturn error(\"unable to read mailmap object at %s\", name);\n\tif (type != OBJ_BLOB)\n\t\treturn error(\"mailmap is not a blob: %s\", name);\n\n\tread_mailmap_string(map, buf);\n\n\tfree(buf);\n\treturn 0;\n}\n\n\n// Source: mailmap.c\n// Lines 207-229\n",
+  "ANSWER": "MAY"
+}

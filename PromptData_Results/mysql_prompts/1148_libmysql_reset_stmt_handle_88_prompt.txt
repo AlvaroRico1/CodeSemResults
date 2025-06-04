@@ -1,0 +1,73 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'result' at line 5
+2. Pointer 'stmt' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static bool reset_stmt_handle(MYSQL_STMT *stmt, uint flags) {
+  /* If statement hasn't been prepared there is nothing to reset */
+  if ((int)stmt->state > (int)MYSQL_STMT_INIT_DONE) {
+    MYSQL *mysql = stmt->mysql;
+    MYSQL_DATA *result = &stmt->result;
+
+    /*
+      Reset stored result set if so was requested or it's a part
+      of cursor fetch.
+    */
+    if (flags & RESET_STORE_RESULT) {
+      /* Result buffered */
+      free_root(result->alloc, MYF(MY_KEEP_PREALLOC));
+      result->data = nullptr;
+      result->rows = 0;
+      stmt->data_cursor = nullptr;
+    }
+    if (flags & RESET_LONG_DATA) {
+      MYSQL_BIND *param = stmt->params, *param_end = param + stmt->param_count;
+      /* Clear long_data_used flags */
+      for (; param < param_end; param++) param->long_data_used = false;
+    }
+    stmt->read_row_func = stmt_read_row_no_result_set;
+    if (mysql) {
+      if ((int)stmt->state > (int)MYSQL_STMT_PREPARE_DONE) {
+        if (mysql->unbuffered_fetch_owner == &stmt->unbuffered_fetch_cancelled)
+          mysql->unbuffered_fetch_owner = nullptr;
+        if (stmt->field_count && mysql->status != MYSQL_STATUS_READY) {
+          /* There is a result set and it belongs to this statement */
+          (*mysql->methods->flush_use_result)(mysql, false);
+          if (mysql->unbuffered_fetch_owner)
+            *mysql->unbuffered_fetch_owner = true;
+          mysql->status = MYSQL_STATUS_READY;
+        }
+      }
+      if (flags & RESET_SERVER_SIDE) {
+        /*
+          Reset the server side statement and close the server side
+          cursor if it exists.
+        */
+        uchar buff[MYSQL_STMT_HEADER]; /* packet header: 4 bytes for stmt id */
+        int4store(buff, stmt->stmt_id);
+        if ((*mysql->methods->advanced_command)(mysql, COM_STMT_RESET, buff,
+                                                sizeof(buff), nullptr, 0, false,
+                                                stmt)) {
+          set_stmt_errmsg(stmt, &mysql->net);
+          stmt->state = MYSQL_STMT_INIT_DONE;
+          return true;
+        }
+      }
+    }
+    if (flags & RESET_CLEAR_ERROR) stmt_clear_error(stmt);
+    stmt->state = MYSQL_STMT_PREPARE_DONE;
+  }
+
+
+// Source: libmysql.cc
+// Lines 4069-4122
+
+
+[ANSWER]
+MUST-NOT

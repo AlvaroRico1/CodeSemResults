@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'first' at line 4
+2. Pointer 'order' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+ORDER *simple_remove_const(ORDER *order, Item *where) {
+  if (order == nullptr || where == nullptr) return order;
+
+  ORDER *first = nullptr, *prev = nullptr;
+  for (; order; order = order->next) {
+    assert(!order->item[0]->has_aggregation());  // should never happen
+    if (!check_field_is_const(where, order->item[0])) {
+      if (first == nullptr) first = order;
+      if (prev != nullptr) prev->next = order;
+      prev = order;
+    }
+  }
+  if (prev != nullptr) prev->next = nullptr;
+  return first;
+}
+
+
+// Source: sql_select.cc
+// Lines 3637-3651
+
+
+[ANSWER]
+MUST

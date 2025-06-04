@@ -1,0 +1,33 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 's' at line 3
+2. Pointer 'arg' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+session_free(__unused int fd, __unused short events, void *arg)
+{
+	struct session	*s = arg;
+
+	log_debug("session %s freed (%d references)", s->name, s->references);
+
+	if (s->references == 0) {
+		environ_free(s->environ);
+		options_free(s->options);
+
+		free(s->name);
+		free(s);
+	}
+}
+
+
+// Source: session.c
+// Lines 184-197
+
+
+[ANSWER]
+MUST

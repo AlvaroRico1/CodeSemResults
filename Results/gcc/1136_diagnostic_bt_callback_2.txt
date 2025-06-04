@@ -1,0 +1,1 @@
+function,gcc/gcc/diagnostic.c,2,pcount,gcc/gcc/diagnostic.c,4,2

@@ -1,0 +1,26 @@
+static bool reset_stmt_handle(MYSQL_STMT *stmt, uint flags) {
+  /* If statement hasn't been prepared there is nothing to reset */
+  if ((int)stmt->state > (int)MYSQL_STMT_INIT_DONE) {
+    MYSQL *mysql = stmt->mysql;
+    MYSQL_DATA *result = &stmt->result;
+
+    /*
+      Reset stored result set if so was requested or it's a part
+      of cursor fetch.
+    */
+    if (flags & RESET_STORE_RESULT) {
+      /* Result buffered */
+      free_root(result->alloc, MYF(MY_KEEP_PREALLOC));
+      result->data = nullptr;
+      result->rows = 0;
+      stmt->data_cursor = nullptr;
+    }
+    if (flags & RESET_LONG_DATA) {
+      MYSQL_BIND *param = stmt->params, *param_end = param + stmt->param_count;
+      /* Clear long_data_used flags */
+      for (; param < param_end; param++) param->long_data_used = false;
+    }
+
+
+// Source: libmysql.cc
+// Lines 4069-4090

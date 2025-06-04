@@ -1,0 +1,36 @@
+h2o_iovec_t h2o_http2_casper_get_cookie(h2o_http2_casper_t *casper)
+{
+    if (casper->cookie_cache.base != NULL)
+        return casper->cookie_cache;
+
+    if (casper->keys.size == 0)
+        return (h2o_iovec_t){NULL};
+
+    /* encode as binary */
+    char tiny_bin_buf[128], *bin_buf = tiny_bin_buf;
+    size_t bin_capacity = sizeof(tiny_bin_buf), bin_size;
+    while (bin_size = bin_capacity,
+           golombset_encode(casper->remainder_bits, casper->keys.entries, casper->keys.size, bin_buf, &bin_size) != 0) {
+        if (bin_buf != tiny_bin_buf)
+            free(bin_buf);
+        bin_capacity *= 2;
+        bin_buf = h2o_mem_alloc(bin_capacity);
+    }
+
+    char *header_bytes = h2o_mem_alloc(sizeof(COOKIE_NAME "=" COOKIE_ATTRIBUTES) - 1 + (bin_size + 3) * 4 / 3);
+    size_t header_len = 0;
+
+    header_len += append_str(header_bytes + header_len, H2O_STRLIT(COOKIE_NAME "="));
+    header_len += h2o_base64_encode(header_bytes + header_len, bin_buf, bin_size, 1);
+    header_len += append_str(header_bytes + header_len, H2O_STRLIT(COOKIE_ATTRIBUTES));
+
+    if (bin_buf != tiny_bin_buf)
+        free(bin_buf);
+
+    casper->cookie_cache = h2o_iovec_init(header_bytes, header_len);
+    return casper->cookie_cache;
+}
+
+
+// Source: casper.c
+// Lines 174-205

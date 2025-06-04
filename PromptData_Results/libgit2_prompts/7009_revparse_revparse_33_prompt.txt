@@ -1,0 +1,95 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'pos' at line 8
+2. Pointer 'temp_object' at line 34
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int revparse(
+	git_object **object_out,
+	git_reference **reference_out,
+	size_t *identifier_len_out,
+	git_repository *repo,
+	const char *spec)
+{
+	size_t pos = 0, identifier_len = 0;
+	int error = -1, n;
+	git_str buf = GIT_STR_INIT;
+
+	git_reference *reference = NULL;
+	git_object *base_rev = NULL;
+
+	bool should_return_reference = true;
+
+	GIT_ASSERT_ARG(object_out);
+	GIT_ASSERT_ARG(reference_out);
+	GIT_ASSERT_ARG(repo);
+	GIT_ASSERT_ARG(spec);
+
+	*object_out = NULL;
+	*reference_out = NULL;
+
+	while (spec[pos]) {
+		switch (spec[pos]) {
+		case '^':
+			should_return_reference = false;
+
+			if ((error = ensure_base_rev_loaded(&base_rev, &reference, spec, identifier_len, repo, false)) < 0)
+				goto cleanup;
+
+			if (spec[pos+1] == '{') {
+				git_object *temp_object = NULL;
+
+				if ((error = extract_curly_braces_content(&buf, spec, &pos)) < 0)
+					goto cleanup;
+
+				if ((error = handle_caret_curly_syntax(&temp_object, base_rev, git_str_cstr(&buf))) < 0)
+					goto cleanup;
+
+				git_object_free(base_rev);
+				base_rev = temp_object;
+			} else {
+				git_object *temp_object = NULL;
+
+				if ((error = extract_how_many(&n, spec, &pos)) < 0)
+					goto cleanup;
+
+				if ((error = handle_caret_parent_syntax(&temp_object, base_rev, n)) < 0)
+					goto cleanup;
+
+				git_object_free(base_rev);
+				base_rev = temp_object;
+			}
+			break;
+
+		case '~':
+		{
+			git_object *temp_object = NULL;
+
+			should_return_reference = false;
+
+			if ((error = extract_how_many(&n, spec, &pos)) < 0)
+				goto cleanup;
+
+			if ((error = ensure_base_rev_loaded(&base_rev, &reference, spec, identifier_len, repo, false)) < 0)
+				goto cleanup;
+
+			if ((error = handle_linear_syntax(&temp_object, base_rev, n)) < 0)
+				goto cleanup;
+
+			git_object_free(base_rev);
+			base_rev = temp_object;
+			break;
+		}
+
+
+// Source: revparse.c
+// Lines 673-748
+
+
+[ANSWER]
+MAY

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'notes_commit' at line 4\n2. Pointer 'tree' at line 10\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint git_note_commit_remove(\n\t\tgit_oid *notes_commit_out,\n\t\tgit_repository *repo,\n\t\tgit_commit *notes_commit,\n\t\tconst git_signature *author,\n\t\tconst git_signature *committer,\n\t\tconst git_oid *oid)\n{\n\tint error;\n\tgit_tree *tree = NULL;\n\tchar target[GIT_OID_HEXSZ + 1];\n\n\tgit_oid_tostr(target, sizeof(target), oid);\n\n\tif ((error = git_commit_tree(&tree, notes_commit)) < 0)\n\t\tgoto cleanup;\n\n\terror = note_remove(notes_commit_out,\n\t\trepo, author, committer, NULL, tree, target, &notes_commit);\n\ncleanup:\n\tgit_tree_free(tree);\n\treturn error;\n}\n\n\n// Source: notes.c\n// Lines 571-594\n",
+  "ANSWER": "MAY"
+}

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'oi' at line 6\n2. Pointer 'type' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void *read_object(struct repository *r,\n\t\t\t const struct object_id *oid,\n\t\t\t enum object_type *type,\n\t\t\t unsigned long *size)\n{\n\tstruct object_info oi = OBJECT_INFO_INIT;\n\tvoid *content;\n\toi.typep = type;\n\toi.sizep = size;\n\toi.contentp = &content;\n\n\tif (oid_object_info_extended(r, oid, &oi, 0) < 0)\n\t\treturn NULL;\n\treturn content;\n}\n\n\n// Source: packfile.c\n// Lines 1649-1663\n",
+  "ANSWER": "MUST"
+}

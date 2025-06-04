@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'i' at line 3\n2. Pointer 'val' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid test_core_env__cleanup(void)\n{\n\tint i;\n\tchar **val;\n\n\tfor (i = 0; i < NUM_VARS; ++i) {\n\t\tcl_setenv(env_vars[i], env_save[i]);\n\t\tgit__free(env_save[i]);\n\t\tenv_save[i] = NULL;\n\t}\n\n\t/* these will probably have already been cleaned up, but if a test\n\t * fails, then it's probably good to try and clear out these dirs\n\t */\n\tfor (val = home_values; *val != NULL; val++) {\n\t\tif (**val != '\\0')\n\t\t\t(void)p_rmdir(*val);\n\t}\n\n\tcl_sandbox_set_search_path_defaults();\n}\n\n\n// Source: env.c\n// Lines 46-66\n",
+  "ANSWER": "MUST-NOT"
+}

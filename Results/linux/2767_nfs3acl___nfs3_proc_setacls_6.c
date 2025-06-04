@@ -1,0 +1,90 @@
+static int __nfs3_proc_setacls(struct inode *inode, struct posix_acl *acl,
+		struct posix_acl *dfacl)
+{
+	struct nfs_server *server = NFS_SERVER(inode);
+	struct nfs_fattr *fattr;
+	struct page *pages[NFSACL_MAXPAGES];
+	struct nfs3_setaclargs args = {
+		.inode = inode,
+		.mask = NFS_ACL,
+		.acl_access = acl,
+		.pages = pages,
+	};
+	struct rpc_message msg = {
+		.rpc_argp	= &args,
+		.rpc_resp	= &fattr,
+	};
+	int status = 0;
+
+	if (acl == NULL && (!S_ISDIR(inode->i_mode) || dfacl == NULL))
+		goto out;
+
+	status = -EOPNOTSUPP;
+	if (!nfs_server_capable(inode, NFS_CAP_ACLS))
+		goto out;
+
+	/* We are doing this here because XDR marshalling does not
+	 * return any results, it BUGs. */
+	status = -ENOSPC;
+	if (acl != NULL && acl->a_count > NFS_ACL_MAX_ENTRIES)
+		goto out;
+	if (dfacl != NULL && dfacl->a_count > NFS_ACL_MAX_ENTRIES)
+		goto out;
+	if (S_ISDIR(inode->i_mode)) {
+		args.mask |= NFS_DFACL;
+		args.acl_default = dfacl;
+		args.len = nfsacl_size(acl, dfacl);
+	} else
+		args.len = nfsacl_size(acl, NULL);
+
+	if (args.len > NFS_ACL_INLINE_BUFSIZE) {
+		unsigned int npages = 1 + ((args.len - 1) >> PAGE_SHIFT);
+
+		status = -ENOMEM;
+		do {
+			args.pages[args.npages] = alloc_page(GFP_KERNEL);
+			if (args.pages[args.npages] == NULL)
+				goto out_freepages;
+			args.npages++;
+		} while (args.npages < npages);
+	}
+
+	dprintk("NFS call setacl\n");
+	status = -ENOMEM;
+	fattr = nfs_alloc_fattr();
+	if (fattr == NULL)
+		goto out_freepages;
+
+	msg.rpc_proc = &server->client_acl->cl_procinfo[ACLPROC3_SETACL];
+	msg.rpc_resp = fattr;
+	status = rpc_call_sync(server->client_acl, &msg, 0);
+	nfs_access_zap_cache(inode);
+	nfs_zap_acl_cache(inode);
+	dprintk("NFS reply setacl: %d\n", status);
+
+	switch (status) {
+		case 0:
+			status = nfs_refresh_inode(inode, fattr);
+			break;
+		case -EPFNOSUPPORT:
+		case -EPROTONOSUPPORT:
+			dprintk("NFS_V3_ACL SETACL RPC not supported"
+					"(will not retry)\n");
+			server->caps &= ~NFS_CAP_ACLS;
+			/* fall through */
+		case -ENOTSUPP:
+			status = -EOPNOTSUPP;
+	}
+	nfs_free_fattr(fattr);
+out_freepages:
+	while (args.npages != 0) {
+		args.npages--;
+		__free_page(args.pages[args.npages]);
+	}
+out:
+	return status;
+}
+
+
+// Source: nfs3acl.c
+// Lines 158-243

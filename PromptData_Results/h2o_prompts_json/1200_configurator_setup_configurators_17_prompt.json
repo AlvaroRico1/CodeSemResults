@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'n' at line 3\n2. Pointer 'n' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int setup_configurators(h2o_configurator_context_t *ctx, int is_enter, yoml_t *node)\n{\n    h2o_linklist_t *n;\n\n    for (n = ctx->globalconf->configurators.next; n != &ctx->globalconf->configurators; n = n->next) {\n        h2o_configurator_t *c = H2O_STRUCT_FROM_MEMBER(h2o_configurator_t, _link, n);\n        if (is_enter) {\n            if (c->enter != NULL && c->enter(c, ctx, node) != 0)\n                return -1;\n        } else {\n            if (c->exit != NULL && c->exit(c, ctx, node) != 0)\n                return -1;\n        }\n    }\n\n    return 0;\n}\n\n\n// Source: configurator.c\n// Lines 109-125\n",
+  "ANSWER": "MUST"
+}

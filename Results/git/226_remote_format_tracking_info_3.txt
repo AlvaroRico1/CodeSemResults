@@ -1,0 +1,1 @@
+theirs,git/remote.c,4,full_base,git/remote.c,5,2

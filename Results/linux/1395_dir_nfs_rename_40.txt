@@ -1,0 +1,1 @@
+rehash,linux/fs/nfs/dir.c,7,new_dentry,linux/fs/nfs/dir.c,2,1

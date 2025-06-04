@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'sb' at line 1\n2. Pointer 'fsi' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int trace_fill_super(struct super_block *sb, void *data, int silent)\n{\n\tstatic const struct tree_descr trace_files[] = {{\"\"}};\n\tstruct tracefs_fs_info *fsi;\n\tint err;\n\n\tfsi = kzalloc(sizeof(struct tracefs_fs_info), GFP_KERNEL);\n\tsb->s_fs_info = fsi;\n\tif (!fsi) {\n\t\terr = -ENOMEM;\n\t\tgoto fail;\n\t}\n\n\terr = tracefs_parse_options(data, &fsi->mount_opts);\n\tif (err)\n\t\tgoto fail;\n\n\terr  =  simple_fill_super(sb, TRACEFS_MAGIC, trace_files);\n\tif (err)\n\t\tgoto fail;\n\n\tsb->s_op = &tracefs_super_operations;\n\n\ttracefs_apply_options(sb);\n\n\treturn 0;\n\nfail:\n\tkfree(fsi);\n\tsb->s_fs_info = NULL;\n\treturn err;\n}\n\n\n// Source: inode.c\n// Lines 263-294\n",
+  "ANSWER": "MUST"
+}

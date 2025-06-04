@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'p' at line 3\n2. Pointer 'bignum' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint ptls_buffer_push_asn1_ubigint(ptls_buffer_t *buf, const void *bignum, size_t size)\n{\n    const uint8_t *p = bignum, *const end = p + size;\n    int ret;\n\n    /* skip zeroes */\n    for (; end - p >= 1; ++p)\n        if (*p != 0)\n            break;\n\n    /* emit */\n    ptls_buffer_push(buf, 2);\n    ptls_buffer_push_asn1_block(buf, {\n        if (*p >= 0x80)\n            ptls_buffer_push(buf, 0);\n        if (p != end) {\n            ptls_buffer_pushv(buf, p, end - p);\n        } else {\n            ptls_buffer_pushv(buf, \"\", 1);\n        }\n    });\n    ret = 0;\n\nExit:\n    return ret;\n}\n\n\n// Source: picotls.c\n// Lines 580-605\n",
+  "ANSWER": "MUST"
+}

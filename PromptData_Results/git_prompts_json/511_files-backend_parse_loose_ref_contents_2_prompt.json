@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'type' at line 2\n2. Pointer 'buf' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint parse_loose_ref_contents(const char *buf, struct object_id *oid,\n\t\t\t     struct strbuf *referent, unsigned int *type)\n{\n\tconst char *p;\n\tif (skip_prefix(buf, \"ref:\", &buf)) {\n\t\twhile (isspace(*buf))\n\t\t\tbuf++;\n\n\t\tstrbuf_reset(referent);\n\t\tstrbuf_addstr(referent, buf);\n\t\t*type |= REF_ISSYMREF;\n\t\treturn 0;\n\t}\n\n\t/*\n\t * FETCH_HEAD has additional data after the sha.\n\t */\n\tif (parse_oid_hex(buf, oid, &p) ||\n\t    (*p != '\\0' && !isspace(*p))) {\n\t\t*type |= REF_ISBROKEN;\n\t\terrno = EINVAL;\n\t\treturn -1;\n\t}\n\treturn 0;\n}\n\n\n// Source: files-backend.c\n// Lines 467-491\n",
+  "ANSWER": "MAY"
+}

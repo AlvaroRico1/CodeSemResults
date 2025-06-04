@@ -1,0 +1,1 @@
+end,libgit2/tests/libgit2/diff/patch.c,5,i,libgit2/tests/libgit2/diff/patch.c,67,0

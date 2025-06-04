@@ -1,0 +1,36 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'h' at line 3
+2. Pointer 'handle' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int country_update_row_values(PSI_table_handle *handle) {
+  int result = 0;
+  Country_Table_Handle *h = (Country_Table_Handle *)handle;
+
+  Country_record *cur = &country_records_array[h->m_pos.get_index()];
+
+  assert(cur->m_exist == true);
+
+  native_mutex_lock(&LOCK_country_records_array);
+  if (is_duplicate(&h->current_row, h->m_pos.get_index()))
+    result = PFS_HA_ERR_FOUND_DUPP_KEY;
+  else
+    copy_record(cur, &h->current_row);
+  native_mutex_unlock(&LOCK_country_records_array);
+
+  return result;
+}
+
+
+// Source: pfs_example_country.cc
+// Lines 344-360
+
+
+[ANSWER]
+MUST

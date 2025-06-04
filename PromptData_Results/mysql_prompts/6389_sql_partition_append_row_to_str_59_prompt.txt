@@ -1,0 +1,53 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'rec' at line 3
+2. Pointer 'row' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void append_row_to_str(String &str, const uchar *row, TABLE *table) {
+  Field **fields, **field_ptr;
+  const uchar *rec;
+  uint num_fields = bitmap_bits_set(table->read_set);
+  uint curr_field_index = 0;
+  bool is_rec0 = !row || row == table->record[0];
+  if (!row)
+    rec = table->record[0];
+  else
+    rec = row;
+
+  /* Create a new array of all read fields. */
+  fields = static_cast<Field **>(my_malloc(
+      key_memory_errmsgs_handler, sizeof(void *) * (num_fields + 1), MYF(0)));
+  if (!fields) return;
+  fields[num_fields] = nullptr;
+  for (field_ptr = table->field; *field_ptr; field_ptr++) {
+    if (!bitmap_is_set(table->read_set, (*field_ptr)->field_index())) continue;
+    fields[curr_field_index++] = *field_ptr;
+  }
+
+  if (!is_rec0) set_field_ptr(fields, rec, table->record[0]);
+
+  for (field_ptr = fields; *field_ptr; field_ptr++) {
+    Field *field = *field_ptr;
+    str.append(" ");
+    str.append(field->field_name);
+    str.append(":");
+    field_unpack(&str, field, 0, false);
+  }
+
+  if (!is_rec0) set_field_ptr(fields, table->record[0], rec);
+  my_free(fields);
+}
+
+
+// Source: sql_partition.cc
+// Lines 5212-5245
+
+
+[ANSWER]
+MUST

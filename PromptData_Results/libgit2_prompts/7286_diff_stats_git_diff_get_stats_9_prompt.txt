@@ -1,0 +1,93 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'stats' at line 7
+2. Pointer 'diff' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_diff_get_stats(
+	git_diff_stats **out,
+	git_diff *diff)
+{
+	size_t i, deltas;
+	size_t total_insertions = 0, total_deletions = 0;
+	git_diff_stats *stats = NULL;
+	int error = 0;
+
+	GIT_ASSERT_ARG(out);
+	GIT_ASSERT_ARG(diff);
+
+	stats = git__calloc(1, sizeof(git_diff_stats));
+	GIT_ERROR_CHECK_ALLOC(stats);
+
+	deltas = git_diff_num_deltas(diff);
+
+	stats->filestats = git__calloc(deltas, sizeof(diff_file_stats));
+	if (!stats->filestats) {
+		git__free(stats);
+		return -1;
+	}
+
+	stats->diff = diff;
+	GIT_REFCOUNT_INC(diff);
+
+	for (i = 0; i < deltas && !error; ++i) {
+		git_patch *patch = NULL;
+		size_t add = 0, remove = 0, namelen;
+		const git_diff_delta *delta;
+
+		if ((error = git_patch_from_diff(&patch, diff, i)) < 0)
+			break;
+
+		/* keep a count of renames because it will affect formatting */
+		delta = patch->delta;
+
+		/* TODO ugh */
+		namelen = strlen(delta->new_file.path);
+		if (delta->old_file.path && strcmp(delta->old_file.path, delta->new_file.path) != 0) {
+			namelen += strlen(delta->old_file.path);
+			stats->renames++;
+		}
+
+		/* and, of course, count the line stats */
+		error = git_patch_line_stats(NULL, &add, &remove, patch);
+
+		git_patch_free(patch);
+
+		stats->filestats[i].insertions = add;
+		stats->filestats[i].deletions = remove;
+
+		total_insertions += add;
+		total_deletions += remove;
+
+		if (stats->max_name < namelen)
+			stats->max_name = namelen;
+		if (stats->max_filestat < add + remove)
+			stats->max_filestat = add + remove;
+	}
+
+	stats->files_changed = deltas;
+	stats->insertions = total_insertions;
+	stats->deletions = total_deletions;
+	stats->max_digits = digits_for_value(stats->max_filestat + 1);
+
+	if (error < 0) {
+		git_diff_stats_free(stats);
+		stats = NULL;
+	}
+
+	*out = stats;
+	return error;
+}
+
+
+// Source: diff_stats.c
+// Lines 179-252
+
+
+[ANSWER]
+MUST

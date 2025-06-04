@@ -1,0 +1,1 @@
+func,mysql/sql/sql_select.cc,49,func_ptr,mysql/sql/sql_select.cc,49,1

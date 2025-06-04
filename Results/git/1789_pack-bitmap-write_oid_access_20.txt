@@ -1,0 +1,1 @@
+index,git/pack-bitmap-write.c,3,table,git/pack-bitmap-write.c,1,1

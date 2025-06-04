@@ -1,0 +1,1 @@
+argv,h2o/lib/handler/configurator/fastcgi.c,7,kill_on_close_cmd_path,h2o/lib/handler/configurator/fastcgi.c,5,1

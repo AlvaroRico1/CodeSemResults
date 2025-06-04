@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'output' at line 7\n2. Pointer 'payload' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint git_diff_print_callback__to_buf(\n\tconst git_diff_delta *delta,\n\tconst git_diff_hunk *hunk,\n\tconst git_diff_line *line,\n\tvoid *payload)\n{\n\tgit_str *output = payload;\n\tGIT_UNUSED(delta); GIT_UNUSED(hunk);\n\n\tif (!output) {\n\t\tgit_error_set(GIT_ERROR_INVALID, \"buffer pointer must be provided\");\n\t\treturn -1;\n\t}\n\n\tif (line->origin == GIT_DIFF_LINE_ADDITION ||\n\t    line->origin == GIT_DIFF_LINE_DELETION ||\n\t    line->origin == GIT_DIFF_LINE_CONTEXT)\n\t\tgit_str_putc(output, line->origin);\n\n\treturn git_str_put(output, line->content, line->content_len);\n}\n\n\n// Source: diff_print.c\n// Lines 712-732\n",
+  "ANSWER": "MUST"
+}

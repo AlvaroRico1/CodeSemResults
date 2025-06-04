@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'filename' at line 1\n2. Pointer 'i' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void write_similarity_file_two(const char *filename, size_t b_lines)\n{\n\tgit_str contents = GIT_STR_INIT;\n\tsize_t i;\n\n\tfor (i = 0; i < b_lines; i++)\n\t\tgit_str_printf(&contents, \"%02d - bbbbb\\r\\n\", (int)(i+1));\n\n\tfor (i = b_lines; i < 50; i++)\n\t\tgit_str_printf(&contents, \"%02d - aaaaa%s\", (int)(i+1), (i == 49 ? \"\" : \"\\r\\n\"));\n\n\tcl_git_pass(\n\t\tgit_futils_writebuffer(&contents, filename, O_RDWR|O_CREAT, 0777));\n\n\tgit_str_dispose(&contents);\n}\n\n\n// Source: rename.c\n// Lines 1031-1046\n",
+  "ANSWER": "MUST-NOT"
+}

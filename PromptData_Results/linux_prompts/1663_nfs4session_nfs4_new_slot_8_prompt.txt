@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'slot' at line 4
+2. Pointer 'tbl' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static struct nfs4_slot *nfs4_new_slot(struct nfs4_slot_table  *tbl,
+		u32 slotid, u32 seq_init, gfp_t gfp_mask)
+{
+	struct nfs4_slot *slot;
+
+	slot = kzalloc(sizeof(*slot), gfp_mask);
+	if (slot) {
+		slot->table = tbl;
+		slot->slot_nr = slotid;
+		slot->seq_nr = seq_init;
+		slot->seq_nr_highest_sent = seq_init;
+		slot->seq_nr_last_acked = seq_init - 1;
+	}
+	return slot;
+}
+
+
+// Source: nfs4session.c
+// Lines 104-118
+
+
+[ANSWER]
+MUST

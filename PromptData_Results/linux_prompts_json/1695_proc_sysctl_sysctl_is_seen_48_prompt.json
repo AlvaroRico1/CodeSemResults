@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'set' at line 3\n2. Pointer 'p' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int sysctl_is_seen(struct ctl_table_header *p)\n{\n\tstruct ctl_table_set *set = p->set;\n\tint res;\n\tspin_lock(&sysctl_lock);\n\tif (p->unregistering)\n\t\tres = 0;\n\telse if (!set->is_seen)\n\t\tres = 1;\n\telse\n\t\tres = set->is_seen(set);\n\tspin_unlock(&sysctl_lock);\n\treturn res;\n}\n\n\n// Source: proc_sysctl.c\n// Lines 909-922\n",
+  "ANSWER": "MUST"
+}

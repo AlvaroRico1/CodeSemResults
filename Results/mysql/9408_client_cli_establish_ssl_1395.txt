@@ -1,0 +1,1 @@
+ssl_init_error,mysql/sql-common/client.cc,39,ssl_error,mysql/sql-common/client.cc,41,2

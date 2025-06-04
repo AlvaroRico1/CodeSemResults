@@ -1,0 +1,177 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'forced_extra_defaults' at line 6
+2. Pointer 'forced_default_file' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int my_search_option_files(const char *conf_file, int *argc, char ***argv,
+                           uint *args_used, Process_option_func func,
+                           void *func_ctx, const char **default_directories,
+                           bool is_login_file, bool found_no_defaults) {
+  const char **dirs;
+  char *forced_default_file, *forced_extra_defaults;
+  DBUG_TRACE;
+
+  /* Skip for login file. */
+  if (!is_login_file) {
+    /* Check if we want to force the use a specific default file */
+    *args_used += get_defaults_options(
+        *argc - *args_used, *argv + *args_used, &forced_default_file,
+        &forced_extra_defaults, const_cast<char **>(&my_defaults_group_suffix),
+        const_cast<char **>(&my_login_path), found_no_defaults);
+
+    if (!my_defaults_group_suffix)
+      my_defaults_group_suffix = getenv("MYSQL_GROUP_SUFFIX");
+
+    if (forced_extra_defaults && !defaults_already_read) {
+      int error =
+          fn_expand(forced_extra_defaults, my_defaults_extra_file_buffer);
+      if (error) return error;
+
+      my_defaults_extra_file = my_defaults_extra_file_buffer;
+    }
+
+    if (forced_default_file && !defaults_already_read) {
+      int error = fn_expand(forced_default_file, my_defaults_file_buffer);
+      if (error) return error;
+      my_defaults_file = my_defaults_file_buffer;
+    }
+
+    defaults_already_read = true;
+    init_variable_default_paths();
+
+    /*
+      We can only handle 'defaults-group-suffix' if we are called from
+      load_defaults() as otherwise we can't know the type of 'func_ctx'
+    */
+
+    if (my_defaults_group_suffix && func == handle_default_option) {
+      /* Handle --defaults-group-suffix= */
+      uint i;
+      const char **extra_groups;
+      const size_t instance_len = strlen(my_defaults_group_suffix);
+      struct handle_option_ctx *ctx = (struct handle_option_ctx *)func_ctx;
+      char *ptr;
+      TYPELIB *group = ctx->group;
+
+      if (!(extra_groups = (const char **)ctx->alloc->Alloc(
+                (2 * group->count + 1) * sizeof(char *))))
+        return 2;
+
+      for (i = 0; i < group->count; i++) {
+        size_t len;
+        extra_groups[i] = group->type_names[i]; /** copy group */
+
+        len = strlen(extra_groups[i]);
+        if (!(ptr = (char *)ctx->alloc->Alloc((uint)(len + instance_len + 1))))
+          return 2;
+
+        extra_groups[i + group->count] = ptr;
+
+        /** Construct new group */
+        memcpy(ptr, extra_groups[i], len);
+        memcpy(ptr + len, my_defaults_group_suffix, instance_len + 1);
+      }
+
+      group->count *= 2;
+      group->type_names = extra_groups;
+      group->type_names[group->count] = nullptr;
+    }
+  } else if (my_login_path && func == handle_default_option) {
+    /* Handle --login_path= */
+    uint i;
+    size_t len;
+    const char **extra_groups;
+    size_t instance_len = 0;
+    struct handle_option_ctx *ctx = (struct handle_option_ctx *)func_ctx;
+    char *ptr;
+    TYPELIB *group = ctx->group;
+
+    if (!(extra_groups = (const char **)ctx->alloc->Alloc((group->count + 3) *
+                                                          sizeof(char *))))
+      return 2;
+
+    for (i = 0; i < group->count; i++) {
+      extra_groups[i] = group->type_names[i]; /** copy group */
+    }
+
+    extra_groups[i] = my_login_path;
+
+    if (my_defaults_group_suffix && func == handle_default_option) {
+      instance_len = strlen(my_defaults_group_suffix);
+      len = strlen(extra_groups[i]);
+
+      if (!(ptr = (char *)ctx->alloc->Alloc((uint)(len + instance_len + 1))))
+        return 2;
+
+      extra_groups[i + 1] = ptr;
+
+      /** Construct new group */
+      memcpy(ptr, extra_groups[i], len);
+      memcpy(ptr + len, my_defaults_group_suffix, instance_len + 1);
+      group->count += 1;
+    }
+
+    group->count += 1;
+    group->type_names = extra_groups;
+    group->type_names[group->count] = nullptr;
+  }
+
+  // If conf_file is an absolute path, we only read it
+  if (dirname_length(conf_file)) {
+    int error;
+    if ((error = search_default_file(func, func_ctx, NullS, conf_file,
+                                     is_login_file)) < 0)
+      goto err;
+  }
+  // If my defaults file is set (from a previous run), we read it
+  else if (my_defaults_file) {
+    int error;
+    if ((error = search_default_file_with_ext(
+             func, func_ctx, "", "", my_defaults_file, 0, is_login_file)) < 0)
+      goto err;
+    if (error > 0) {
+      my_message_local(ERROR_LEVEL, EE_FAILED_TO_OPEN_DEFAULTS_FILE,
+                       my_defaults_file);
+      goto err;
+    }
+  } else if (!found_no_defaults) {
+    for (dirs = default_directories; *dirs; dirs++) {
+      if (**dirs) {
+        if (search_default_file(func, func_ctx, *dirs, conf_file,
+                                is_login_file) < 0)
+          goto err;
+      } else if (my_defaults_extra_file) {
+        int error;
+        if ((error = search_default_file_with_ext(func, func_ctx, "", "",
+                                                  my_defaults_extra_file, 0,
+                                                  is_login_file)) < 0)
+          goto err; /* Fatal error */
+        if (error > 0) {
+          my_message_local(ERROR_LEVEL, EE_FAILED_TO_OPEN_DEFAULTS_FILE,
+                           my_defaults_extra_file);
+          goto err;
+        }
+      }
+    }
+  }
+
+  return 0;
+
+err:
+  my_message_local(ERROR_LEVEL, EE_FAILED_TO_HANDLE_DEFAULTS_FILE);
+  return 1;
+}
+
+
+// Source: my_default.cc
+// Lines 338-495
+
+
+[ANSWER]
+MAY

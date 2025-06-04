@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ri' at line 1\n2. Pointer 'ri' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nchar *sentinelInstanceMapCommand(sentinelRedisInstance *ri, char *command) {\n    sds sc = sdsnew(command);\n    if (ri->master) ri = ri->master;\n    char *retval = dictFetchValue(ri->renamed_commands, sc);\n    sdsfree(sc);\n    return retval ? retval : command;\n}\n\n\n// Source: sentinel.c\n// Lines 1736-1742\n",
+  "ANSWER": "MUST"
+}

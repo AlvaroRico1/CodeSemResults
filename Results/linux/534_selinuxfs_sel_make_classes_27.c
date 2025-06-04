@@ -1,0 +1,43 @@
+static int sel_make_classes(struct selinux_fs_info *fsi)
+{
+
+	int rc, nclasses, i;
+	char **classes;
+
+	/* delete any existing entries */
+	sel_remove_entries(fsi->class_dir);
+
+	rc = security_get_classes(fsi->state, &classes, &nclasses);
+	if (rc)
+		return rc;
+
+	/* +2 since classes are 1-indexed */
+	fsi->last_class_ino = sel_class_to_ino(nclasses + 2);
+
+	for (i = 0; i < nclasses; i++) {
+		struct dentry *class_name_dir;
+
+		class_name_dir = sel_make_dir(fsi->class_dir, classes[i],
+					      &fsi->last_class_ino);
+		if (IS_ERR(class_name_dir)) {
+			rc = PTR_ERR(class_name_dir);
+			goto out;
+		}
+
+		/* i+1 since class values are 1-indexed */
+		rc = sel_make_class_dir_entries(classes[i], i + 1,
+				class_name_dir);
+		if (rc)
+			goto out;
+	}
+	rc = 0;
+out:
+	for (i = 0; i < nclasses; i++)
+		kfree(classes[i]);
+	kfree(classes);
+	return rc;
+}
+
+
+// Source: selinuxfs.c
+// Lines 1794-1832

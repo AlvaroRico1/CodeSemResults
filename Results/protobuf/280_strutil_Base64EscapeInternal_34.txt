@@ -1,0 +1,1 @@
+cur_src,protobuf/src/google/protobuf/stubs/strutil.cc,11,src,protobuf/src/google/protobuf/stubs/strutil.cc,1,1

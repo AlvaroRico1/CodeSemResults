@@ -1,0 +1,184 @@
+inline_insns_auto (cgraph_node *n, bool hint)
+{
+  int max_inline_insns_auto = opt_for_fn (n->decl, param_max_inline_insns_auto);
+  if (hint)
+    return max_inline_insns_auto
+	   * opt_for_fn (n->decl, param_inline_heuristics_hint_percent) / 100;
+  return max_inline_insns_auto;
+}
+
+/* Decide if we can inline the edge and possibly update
+   inline_failed reason.  
+   We check whether inlining is possible at all and whether
+   caller growth limits allow doing so.  
+
+   if REPORT is true, output reason to the dump file.
+
+   if DISREGARD_LIMITS is true, ignore size limits.  */
+
+static bool
+can_inline_edge_by_limits_p (struct cgraph_edge *e, bool report,
+		             bool disregard_limits = false, bool early = false)
+{
+  gcc_checking_assert (e->inline_failed);
+
+  if (cgraph_inline_failed_type (e->inline_failed) == CIF_FINAL_ERROR)
+    {
+      if (report)
+        report_inline_failed_reason (e);
+      return false;
+    }
+
+  bool inlinable = true;
+  enum availability avail;
+  cgraph_node *caller = (e->caller->inlined_to
+			 ? e->caller->inlined_to : e->caller);
+  cgraph_node *callee = e->callee->ultimate_alias_target (&avail, caller);
+  tree caller_tree = DECL_FUNCTION_SPECIFIC_OPTIMIZATION (caller->decl);
+  tree callee_tree
+    = callee ? DECL_FUNCTION_SPECIFIC_OPTIMIZATION (callee->decl) : NULL;
+  /* Check if caller growth allows the inlining.  */
+  if (!DECL_DISREGARD_INLINE_LIMITS (callee->decl)
+      && !disregard_limits
+      && !lookup_attribute ("flatten",
+     		 DECL_ATTRIBUTES (caller->decl))
+      && !caller_growth_limits (e))
+    inlinable = false;
+  else if (callee->externally_visible
+	   && !DECL_DISREGARD_INLINE_LIMITS (callee->decl)
+	   && flag_live_patching == LIVE_PATCHING_INLINE_ONLY_STATIC)
+    {
+      e->inline_failed = CIF_EXTERN_LIVE_ONLY_STATIC;
+      inlinable = false;
+    }
+  /* Don't inline a function with a higher optimization level than the
+     caller.  FIXME: this is really just tip of iceberg of handling
+     optimization attribute.  */
+  else if (caller_tree != callee_tree)
+    {
+      bool always_inline =
+	     (DECL_DISREGARD_INLINE_LIMITS (callee->decl)
+	      && lookup_attribute ("always_inline",
+				   DECL_ATTRIBUTES (callee->decl)));
+      ipa_fn_summary *caller_info = ipa_fn_summaries->get (caller);
+      ipa_fn_summary *callee_info = ipa_fn_summaries->get (callee);
+
+     /* Until GCC 4.9 we did not check the semantics-altering flags
+	below and inlined across optimization boundaries.
+	Enabling checks below breaks several packages by refusing
+	to inline library always_inline functions. See PR65873.
+	Disable the check for early inlining for now until better solution
+	is found.  */
+     if (always_inline && early)
+	;
+      /* There are some options that change IL semantics which means
+         we cannot inline in these cases for correctness reason.
+	 Not even for always_inline declared functions.  */
+     else if (check_match (flag_wrapv)
+	      || check_match (flag_trapv)
+	      || check_match (flag_pcc_struct_return)
+	      || check_maybe_down (optimize_debug)
+	      /* When caller or callee does FP math, be sure FP codegen flags
+		 compatible.  */
+	      || ((caller_info->fp_expressions && callee_info->fp_expressions)
+		  && (check_maybe_up (flag_rounding_math)
+		      || check_maybe_up (flag_trapping_math)
+		      || check_maybe_down (flag_unsafe_math_optimizations)
+		      || check_maybe_down (flag_finite_math_only)
+		      || check_maybe_up (flag_signaling_nans)
+		      || check_maybe_down (flag_cx_limited_range)
+		      || check_maybe_up (flag_signed_zeros)
+		      || check_maybe_down (flag_associative_math)
+		      || check_maybe_down (flag_reciprocal_math)
+		      || check_maybe_down (flag_fp_int_builtin_inexact)
+		      /* Strictly speaking only when the callee contains function
+			 calls that may end up setting errno.  */
+		      || check_maybe_up (flag_errno_math)))
+	      /* We do not want to make code compiled with exceptions to be
+		 brought into a non-EH function unless we know that the callee
+		 does not throw.
+		 This is tracked by DECL_FUNCTION_PERSONALITY.  */
+	      || (check_maybe_up (flag_non_call_exceptions)
+		  && DECL_FUNCTION_PERSONALITY (callee->decl))
+	      || (check_maybe_up (flag_exceptions)
+		  && DECL_FUNCTION_PERSONALITY (callee->decl))
+	      /* When devirtualization is disabled for callee, it is not safe
+		 to inline it as we possibly mangled the type info.
+		 Allow early inlining of always inlines.  */
+	      || (!early && check_maybe_down (flag_devirtualize)))
+	{
+	  e->inline_failed = CIF_OPTIMIZATION_MISMATCH;
+	  inlinable = false;
+	}
+      /* gcc.dg/pr43564.c.  Apply user-forced inline even at -O0.  */
+      else if (always_inline)
+	;
+      /* When user added an attribute to the callee honor it.  */
+      else if (lookup_attribute ("optimize", DECL_ATTRIBUTES (callee->decl))
+	       && opts_for_fn (caller->decl) != opts_for_fn (callee->decl))
+	{
+	  e->inline_failed = CIF_OPTIMIZATION_MISMATCH;
+	  inlinable = false;
+	}
+      /* If explicit optimize attribute are not used, the mismatch is caused
+	 by different command line options used to build different units.
+	 Do not care about COMDAT functions - those are intended to be
+         optimized with the optimization flags of module they are used in.
+	 Also do not care about mixing up size/speed optimization when
+	 DECL_DISREGARD_INLINE_LIMITS is set.  */
+      else if ((callee->merged_comdat
+	        && !lookup_attribute ("optimize",
+				      DECL_ATTRIBUTES (caller->decl)))
+	       || DECL_DISREGARD_INLINE_LIMITS (callee->decl))
+	;
+      /* If mismatch is caused by merging two LTO units with different
+	 optimization flags we want to be bit nicer.  However never inline
+	 if one of functions is not optimized at all.  */
+      else if (!opt_for_fn (callee->decl, optimize)
+      	       || !opt_for_fn (caller->decl, optimize))
+	{
+	  e->inline_failed = CIF_OPTIMIZATION_MISMATCH;
+	  inlinable = false;
+	}
+      /* If callee is optimized for size and caller is not, allow inlining if
+	 code shrinks or we are in param_max_inline_insns_single limit and
+	 callee is inline (and thus likely an unified comdat).
+	 This will allow caller to run faster.  */
+      else if (opt_for_fn (callee->decl, optimize_size)
+	       > opt_for_fn (caller->decl, optimize_size))
+	{
+	  int growth = estimate_edge_growth (e);
+	  if (growth > opt_for_fn (caller->decl, param_max_inline_insns_size)
+	      && (!DECL_DECLARED_INLINE_P (callee->decl)
+		  && growth >= MAX (inline_insns_single (caller, false),
+				    inline_insns_auto (caller, false))))
+	    {
+	      e->inline_failed = CIF_OPTIMIZATION_MISMATCH;
+	      inlinable = false;
+	    }
+	}
+      /* If callee is more aggressively optimized for performance than caller,
+	 we generally want to inline only cheap (runtime wise) functions.  */
+      else if (opt_for_fn (callee->decl, optimize_size)
+	       < opt_for_fn (caller->decl, optimize_size)
+	       || (opt_for_fn (callee->decl, optimize)
+		   > opt_for_fn (caller->decl, optimize)))
+	{
+	  if (estimate_edge_time (e)
+	      >= 20 + ipa_call_summaries->get (e)->call_stmt_time)
+	    {
+	      e->inline_failed = CIF_OPTIMIZATION_MISMATCH;
+	      inlinable = false;
+	    }
+	}
+
+    }
+
+  if (!inlinable && report)
+    report_inline_failed_reason (e);
+  return inlinable;
+}
+
+
+// Source: ipa-inline.c
+// Lines 409-588

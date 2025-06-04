@@ -1,0 +1,64 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tmp' at line 2
+2. Pointer 'buffer' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int com_connect(String *buffer, char *line) {
+  char *tmp, buff[256];
+  bool save_rehash = opt_rehash;
+  int error;
+
+  memset(buff, 0, sizeof(buff));
+  if (buffer) {
+    /*
+      Two null bytes are needed in the end of buff to allow
+      get_arg to find end of string the second time it's called.
+    */
+    tmp = strmake(buff, line, sizeof(buff) - 2);
+#ifdef EXTRA_DEBUG
+    tmp[1] = 0;
+#endif
+    tmp = get_arg(buff, false);
+    if (tmp && *tmp) {
+      my_free(current_db);
+      current_db = my_strdup(PSI_NOT_INSTRUMENTED, tmp, MYF(MY_WME));
+      tmp = get_arg(buff, true);
+      if (tmp) {
+        my_free(current_host);
+        current_host = my_strdup(PSI_NOT_INSTRUMENTED, tmp, MYF(MY_WME));
+        my_free(dns_srv_name);
+        dns_srv_name = nullptr;
+      }
+    } else {
+      /* Quick re-connect */
+      opt_rehash = false; /* purecov: tested */
+    }
+    buffer->length(0);  // command used
+  } else
+    opt_rehash = false;
+  error = sql_connect(current_host, current_db, current_user, opt_password, 0);
+  opt_rehash = save_rehash;
+
+  if (connected) {
+    sprintf(buff, "Connection id:    %lu", mysql_thread_id(&mysql));
+    put_info(buff, INFO_INFO);
+    sprintf(buff, "Current database: %.128s\n",
+            current_db ? current_db : "*** NONE ***");
+    put_info(buff, INFO_INFO);
+  }
+  return error;
+}
+
+
+// Source: mysql.cc
+// Lines 4147-4191
+
+
+[ANSWER]
+MUST-NOT

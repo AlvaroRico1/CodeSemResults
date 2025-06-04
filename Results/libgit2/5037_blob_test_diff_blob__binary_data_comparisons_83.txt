@@ -1,0 +1,1 @@
+nonbin_content,libgit2/tests/libgit2/diff/blob.c,5,bin_len,libgit2/tests/libgit2/diff/blob.c,8,0

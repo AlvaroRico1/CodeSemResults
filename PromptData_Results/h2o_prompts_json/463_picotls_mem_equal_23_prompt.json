@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'x' at line 3\n2. Pointer '_x' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int mem_equal(const void *_x, const void *_y, size_t len)\n{\n    const volatile uint8_t *x = _x, *y = _y;\n    uint8_t t = 0;\n\n    for (; len != 0; --len)\n        t |= *x++ ^ *y++;\n\n    return t == 0;\n}\n\n\n// Source: picotls.c\n// Lines 5288-5297\n",
+  "ANSWER": "MUST"
+}

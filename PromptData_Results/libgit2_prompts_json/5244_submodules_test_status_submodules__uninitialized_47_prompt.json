@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'cloned_repo' at line 3\n2. Pointer 'statuslist' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid test_status_submodules__uninitialized(void)\n{\n\tgit_repository *cloned_repo;\n\tgit_status_list *statuslist;\n\n\tg_repo = cl_git_sandbox_init(\"submod2\");\n\n\tcl_git_pass(git_clone(&cloned_repo, \"submod2\", \"submod2-clone\", NULL));\n\n\tcl_git_pass(git_status_list_new(&statuslist, cloned_repo, NULL));\n\tcl_assert_equal_i(0, git_status_list_entrycount(statuslist));\n\n\tgit_status_list_free(statuslist);\n\tgit_repository_free(cloned_repo);\n\tcl_git_sandbox_cleanup();\n}\n\n\n// Source: submodules.c\n// Lines 218-233\n",
+  "ANSWER": "MAY"
+}

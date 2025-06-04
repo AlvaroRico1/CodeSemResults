@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ref' at line 3\n2. Pointer 'node' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void decr_active_cnt(h2o_http2_scheduler_node_t *node)\n{\n    h2o_http2_scheduler_openref_t *ref;\n\n    /* do nothing if node is the root */\n    if (node->_parent == NULL)\n        return;\n\n    ref = (h2o_http2_scheduler_openref_t *)node;\n    if (--ref->_active_cnt != 0)\n        return;\n    /* just changed to inactive */\n    queue_unset(&ref->_queue_node);\n    /* delegate the change towards root */\n    decr_active_cnt(ref->node._parent);\n}\n\n\n// Source: scheduler.c\n// Lines 159-174\n",
+  "ANSWER": "MUST"
+}

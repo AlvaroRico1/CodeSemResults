@@ -1,0 +1,1 @@
+errmsg,mysql/sql-common/client_plugin.cc,4,argc,mysql/sql-common/client_plugin.cc,3,0

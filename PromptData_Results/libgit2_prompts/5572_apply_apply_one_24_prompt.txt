@@ -1,0 +1,161 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'filename' at line 15
+2. Pointer 'delta' at line 14
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int apply_one(
+	git_repository *repo,
+	git_reader *preimage_reader,
+	git_index *preimage,
+	git_reader *postimage_reader,
+	git_index *postimage,
+	git_diff *diff,
+	git_strmap *removed_paths,
+	size_t i,
+	const git_apply_options *opts)
+{
+	git_patch *patch = NULL;
+	git_str pre_contents = GIT_STR_INIT, post_contents = GIT_STR_INIT;
+	const git_diff_delta *delta;
+	char *filename = NULL;
+	unsigned int mode;
+	git_oid pre_id, post_id;
+	git_filemode_t pre_filemode;
+	git_index_entry pre_entry, post_entry;
+	bool skip_preimage = false;
+	int error;
+
+	if ((error = git_patch_from_diff(&patch, diff, i)) < 0)
+		goto done;
+
+	delta = git_patch_get_delta(patch);
+
+	if (opts->delta_cb) {
+		error = opts->delta_cb(delta, opts->payload);
+
+		if (error) {
+			if (error > 0)
+				error = 0;
+
+			goto done;
+		}
+	}
+
+	/*
+	 * Ensure that the file has not been deleted or renamed if we're
+	 * applying a modification delta.
+	 */
+	if (delta->status != GIT_DELTA_RENAMED &&
+	    delta->status != GIT_DELTA_ADDED) {
+		if (git_strmap_exists(removed_paths, delta->old_file.path)) {
+			error = apply_err("path '%s' has been renamed or deleted", delta->old_file.path);
+			goto done;
+		}
+	}
+
+	/*
+	 * We may be applying a second delta to an already seen file.  If so,
+	 * use the already modified data in the postimage instead of the
+	 * content from the index or working directory.  (Don't do this in
+	 * the case of a rename, which must be specified before additional
+	 * deltas since we apply deltas to the target filename.)
+	 */
+	if (delta->status != GIT_DELTA_RENAMED) {
+		if ((error = git_reader_read(&pre_contents, &pre_id, &pre_filemode,
+		    postimage_reader, delta->old_file.path)) == 0) {
+			skip_preimage = true;
+		} else if (error == GIT_ENOTFOUND) {
+			git_error_clear();
+			error = 0;
+		} else {
+			goto done;
+		}
+	}
+
+	if (!skip_preimage && delta->status != GIT_DELTA_ADDED) {
+		error = git_reader_read(&pre_contents, &pre_id, &pre_filemode,
+			preimage_reader, delta->old_file.path);
+
+		/* ENOTFOUND means the preimage was not found; apply failed. */
+		if (error == GIT_ENOTFOUND)
+			error = GIT_EAPPLYFAIL;
+
+		/* When applying to BOTH, the index did not match the workdir. */
+		if (error == GIT_READER_MISMATCH)
+			error = apply_err("%s: does not match index", delta->old_file.path);
+
+		if (error < 0)
+			goto done;
+
+		/*
+		 * We need to populate the preimage data structure with the
+		 * contents that we are using as the preimage for this file.
+		 * This allows us to apply patches to files that have been
+		 * modified in the working directory.  During checkout,
+		 * we will use this expected preimage as the baseline, and
+		 * limit checkout to only the paths affected by patch
+		 * application.  (Without this, we would fail to write the
+		 * postimage contents to any file that had been modified
+		 * from HEAD on-disk, even if the patch application succeeded.)
+		 * Use the contents from the delta where available - some
+		 * fields may not be available, like the old file mode (eg in
+		 * an exact rename situation) so trust the patch parsing to
+		 * validate and use the preimage data in that case.
+		 */
+		if (preimage) {
+			memset(&pre_entry, 0, sizeof(git_index_entry));
+			pre_entry.path = delta->old_file.path;
+			pre_entry.mode = delta->old_file.mode ? delta->old_file.mode : pre_filemode;
+			git_oid_cpy(&pre_entry.id, &pre_id);
+
+			if ((error = git_index_add(preimage, &pre_entry)) < 0)
+				goto done;
+		}
+	}
+
+	if (delta->status != GIT_DELTA_DELETED) {
+		if ((error = git_apply__patch(&post_contents, &filename, &mode,
+				pre_contents.ptr, pre_contents.size, patch, opts)) < 0 ||
+			(error = git_blob_create_from_buffer(&post_id, repo,
+				post_contents.ptr, post_contents.size)) < 0)
+			goto done;
+
+		memset(&post_entry, 0, sizeof(git_index_entry));
+		post_entry.path = filename;
+		post_entry.mode = mode;
+		git_oid_cpy(&post_entry.id, &post_id);
+
+		if ((error = git_index_add(postimage, &post_entry)) < 0)
+			goto done;
+	}
+
+	if (delta->status == GIT_DELTA_RENAMED ||
+	    delta->status == GIT_DELTA_DELETED)
+		error = git_strmap_set(removed_paths, delta->old_file.path, (char *) delta->old_file.path);
+
+	if (delta->status == GIT_DELTA_RENAMED ||
+	    delta->status == GIT_DELTA_ADDED)
+		git_strmap_delete(removed_paths, delta->new_file.path);
+
+done:
+	git_str_dispose(&pre_contents);
+	git_str_dispose(&post_contents);
+	git__free(filename);
+	git_patch_free(patch);
+
+	return error;
+}
+
+
+// Source: apply.c
+// Lines 447-588
+
+
+[ANSWER]
+MAY

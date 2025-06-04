@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'table' at line 2
+2. Pointer 'table' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static TABLE_LIST **make_leaf_tables(TABLE_LIST **list, TABLE_LIST *tables) {
+  for (TABLE_LIST *table = tables; table; table = table->next_local) {
+    // A mergable view is not allowed to have a table pointer.
+    assert(!(table->is_view() && table->is_merged() && table->table));
+    if (table->merge_underlying_list) {
+      assert(table->is_merged());
+
+      list = make_leaf_tables(list, table->merge_underlying_list);
+    } else {
+      *list = table;
+      list = &table->next_leaf;
+    }
+  }
+  return list;
+}
+
+
+// Source: sql_resolver.cc
+// Lines 1058-1072
+
+
+[ANSWER]
+MUST

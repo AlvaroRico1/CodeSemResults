@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'object' at line 2\n2. Pointer 'array' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int contains_object(struct object_array *array,\n\t\t\t   const struct object *item, const char *name)\n{\n\tunsigned nr = array->nr, i;\n\tstruct object_array_entry *object = array->objects;\n\n\tfor (i = 0; i < nr; i++, object++)\n\t\tif (item == object->item && !strcmp(object->name, name))\n\t\t\treturn 1;\n\treturn 0;\n}\n\n\n// Source: object.c\n// Lines 434-444\n",
+  "ANSWER": "MUST"
+}

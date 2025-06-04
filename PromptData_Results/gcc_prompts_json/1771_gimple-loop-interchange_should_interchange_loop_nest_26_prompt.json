@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'loop' at line 1\n2. Pointer 'innermost' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nshould_interchange_loop_nest (class loop *loop_nest, class loop *innermost,\n\t\t\t      vec<data_reference_p> datarefs)\n{\n  unsigned idx = loop_depth (innermost) - loop_depth (loop_nest);\n  gcc_assert (idx > 0);\n\n  /* Check if any two adjacent loops should be interchanged.  */\n  for (class loop *loop = innermost;\n       loop != loop_nest; loop = loop_outer (loop), idx--)\n    if (should_interchange_loops (idx, idx - 1, datarefs, 0, 0,\n\t\t\t\t  loop == innermost, false))\n      return true;\n\n  return false;\n}\n\n\n// Source: gimple-loop-interchange.cc\n// Lines 1818-1832\n",
+  "ANSWER": "MUST"
+}

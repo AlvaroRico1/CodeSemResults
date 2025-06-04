@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'obj' at line 3
+2. Pointer 'o' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void *create_object(struct repository *r, const struct object_id *oid, void *o)
+{
+	struct object *obj = o;
+
+	obj->parsed = 0;
+	obj->flags = 0;
+	oidcpy(&obj->oid, oid);
+
+	if (r->parsed_objects->obj_hash_size - 1 <= r->parsed_objects->nr_objs * 2)
+		grow_object_hash(r);
+
+	insert_obj_hash(obj, r->parsed_objects->obj_hash,
+			r->parsed_objects->obj_hash_size);
+	r->parsed_objects->nr_objs++;
+	return obj;
+}
+
+
+// Source: object.c
+// Lines 143-158
+
+
+[ANSWER]
+MUST

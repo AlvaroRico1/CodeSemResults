@@ -1,0 +1,39 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'e' at line 5
+2. Pointer 'e' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bitmap_tree_to_vec (vec<bitmap_element *> &elts, const_bitmap head)
+{
+  gcc_checking_assert (head->tree_form);
+  auto_vec<bitmap_element *, 32> stack;
+  bitmap_element *e = head->first;
+  while (true)
+    {
+      while (e != NULL)
+	{
+	  stack.safe_push (e);
+	  e = e->prev;
+	}
+      if (stack.is_empty ())
+	break;
+
+      e = stack.pop ();
+      elts.safe_push (e);
+      e = e->next;
+    }
+}
+
+
+// Source: bitmap.c
+// Lines 2602-2621
+
+
+[ANSWER]
+MUST

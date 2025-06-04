@@ -1,0 +1,121 @@
+void DescriptorBuilder::CrossLinkField(FieldDescriptor* field,
+                                       const FieldDescriptorProto& proto) {
+  if (field->options_ == nullptr) {
+    field->options_ = &FieldOptions::default_instance();
+  }
+
+  if (proto.has_extendee()) {
+    Symbol extendee =
+        LookupSymbol(proto.extendee(), field->full_name(),
+                     DescriptorPool::PLACEHOLDER_EXTENDABLE_MESSAGE);
+    if (extendee.IsNull()) {
+      AddNotDefinedError(field->full_name(), proto,
+                         DescriptorPool::ErrorCollector::EXTENDEE,
+                         proto.extendee());
+      return;
+    } else if (extendee.type() != Symbol::MESSAGE) {
+      AddError(field->full_name(), proto,
+               DescriptorPool::ErrorCollector::EXTENDEE,
+               "\"" + proto.extendee() + "\" is not a message type.");
+      return;
+    }
+    field->containing_type_ = extendee.descriptor();
+
+    const Descriptor::ExtensionRange* extension_range =
+        field->containing_type()->FindExtensionRangeContainingNumber(
+            field->number());
+
+    if (extension_range == nullptr) {
+      // Set of valid extension numbers for MessageSet is different (< 2^32)
+      // from other extendees (< 2^29). If unknown deps are allowed, we may not
+      // have that information, and wrongly deem the extension as invalid.
+      auto skip_check = get_allow_unknown(pool_) &&
+                        proto.extendee() == "google.protobuf.bridge.MessageSet";
+      if (!skip_check) {
+        AddError(field->full_name(), proto,
+                 DescriptorPool::ErrorCollector::NUMBER,
+                 strings::Substitute("\"$0\" does not declare $1 as an "
+                                  "extension number.",
+                                  field->containing_type()->full_name(),
+                                  field->number()));
+      }
+    }
+  }
+
+  if (field->containing_oneof() != nullptr) {
+    if (field->label() != FieldDescriptor::LABEL_OPTIONAL) {
+      // Note that this error will never happen when parsing .proto files.
+      // It can only happen if you manually construct a FileDescriptorProto
+      // that is incorrect.
+      AddError(field->full_name(), proto, DescriptorPool::ErrorCollector::NAME,
+               "Fields of oneofs must themselves have label LABEL_OPTIONAL.");
+    }
+  }
+
+  if (proto.has_type_name()) {
+    // Assume we are expecting a message type unless the proto contains some
+    // evidence that it expects an enum type.  This only makes a difference if
+    // we end up creating a placeholder.
+    bool expecting_enum = (proto.type() == FieldDescriptorProto::TYPE_ENUM) ||
+                          proto.has_default_value();
+
+    // In case of weak fields we force building the dependency. We need to know
+    // if the type exist or not. If it doesn't exist we substitute Empty which
+    // should only be done if the type can't be found in the generated pool.
+    // TODO(gerbens) Ideally we should query the database directly to check
+    // if weak fields exist or not so that we don't need to force building
+    // weak dependencies. However the name lookup rules for symbols are
+    // somewhat complicated, so I defer it too another CL.
+    bool is_weak = !pool_->enforce_weak_ && proto.options().weak();
+    bool is_lazy = pool_->lazily_build_dependencies_ && !is_weak;
+
+    Symbol type =
+        LookupSymbol(proto.type_name(), field->full_name(),
+                     expecting_enum ? DescriptorPool::PLACEHOLDER_ENUM
+                                    : DescriptorPool::PLACEHOLDER_MESSAGE,
+                     LOOKUP_TYPES, !is_lazy);
+
+    if (type.IsNull()) {
+      if (is_lazy) {
+        // Save the symbol names for later for lookup, and allocate the once
+        // object needed for the accessors.
+        const std::string& name = proto.type_name();
+
+        int name_sizes = static_cast<int>(name.size() + 1 +
+                                          proto.default_value().size() + 1);
+
+        field->type_once_ = ::new (tables_->AllocateBytes(static_cast<int>(
+            sizeof(internal::once_flag) + name_sizes))) internal::once_flag{};
+        char* names = reinterpret_cast<char*>(field->type_once_ + 1);
+
+        memcpy(names, name.c_str(), name.size() + 1);
+        memcpy(names + name.size() + 1, proto.default_value().c_str(),
+               proto.default_value().size() + 1);
+
+        // AddFieldByNumber and AddExtension are done later in this function,
+        // and can/must be done if the field type was not found. The related
+        // error checking is not necessary when in lazily_build_dependencies_
+        // mode, and can't be done without building the type's descriptor,
+        // which we don't want to do.
+        file_tables_->AddFieldByNumber(field);
+        if (field->is_extension()) {
+          tables_->AddExtension(field);
+        }
+        return;
+      } else {
+        // If the type is a weak type, we change the type to a google.protobuf.Empty
+        // field.
+        if (is_weak) {
+          type = FindSymbol(kNonLinkedWeakMessageReplacementName);
+        }
+        if (type.IsNull()) {
+          AddNotDefinedError(field->full_name(), proto,
+                             DescriptorPool::ErrorCollector::TYPE,
+                             proto.type_name());
+          return;
+        }
+      }
+
+
+// Source: descriptor.cc
+// Lines 6312-6428

@@ -1,0 +1,113 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'd_max_p' at line 2
+2. Pointer 'ret' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int acpi_dev_pm_get_state(struct device *dev, struct acpi_device *adev,
+				 u32 target_state, int *d_min_p, int *d_max_p)
+{
+	char method[] = { '_', 'S', '0' + target_state, 'D', '\0' };
+	acpi_handle handle = adev->handle;
+	unsigned long long ret;
+	int d_min, d_max;
+	bool wakeup = false;
+	bool has_sxd = false;
+	acpi_status status;
+
+	/*
+	 * If the system state is S0, the lowest power state the device can be
+	 * in is D3cold, unless the device has _S0W and is supposed to signal
+	 * wakeup, in which case the return value of _S0W has to be used as the
+	 * lowest power state available to the device.
+	 */
+	d_min = ACPI_STATE_D0;
+	d_max = ACPI_STATE_D3_COLD;
+
+	/*
+	 * If present, _SxD methods return the minimum D-state (highest power
+	 * state) we can use for the corresponding S-states.  Otherwise, the
+	 * minimum D-state is D0 (ACPI 3.x).
+	 */
+	if (target_state > ACPI_STATE_S0) {
+		/*
+		 * We rely on acpi_evaluate_integer() not clobbering the integer
+		 * provided if AE_NOT_FOUND is returned.
+		 */
+		ret = d_min;
+		status = acpi_evaluate_integer(handle, method, NULL, &ret);
+		if ((ACPI_FAILURE(status) && status != AE_NOT_FOUND)
+		    || ret > ACPI_STATE_D3_COLD)
+			return -ENODATA;
+
+		/*
+		 * We need to handle legacy systems where D3hot and D3cold are
+		 * the same and 3 is returned in both cases, so fall back to
+		 * D3cold if D3hot is not a valid state.
+		 */
+		if (!adev->power.states[ret].flags.valid) {
+			if (ret == ACPI_STATE_D3_HOT)
+				ret = ACPI_STATE_D3_COLD;
+			else
+				return -ENODATA;
+		}
+
+		if (status == AE_OK)
+			has_sxd = true;
+
+		d_min = ret;
+		wakeup = device_may_wakeup(dev) && adev->wakeup.flags.valid
+			&& adev->wakeup.sleep_state >= target_state;
+	} else {
+		wakeup = adev->wakeup.flags.valid;
+	}
+
+	/*
+	 * If _PRW says we can wake up the system from the target sleep state,
+	 * the D-state returned by _SxD is sufficient for that (we assume a
+	 * wakeup-aware driver if wake is set).  Still, if _SxW exists
+	 * (ACPI 3.x), it should return the maximum (lowest power) D-state that
+	 * can wake the system.  _S0W may be valid, too.
+	 */
+	if (wakeup) {
+		method[3] = 'W';
+		status = acpi_evaluate_integer(handle, method, NULL, &ret);
+		if (status == AE_NOT_FOUND) {
+			/* No _SxW. In this case, the ACPI spec says that we
+			 * must not go into any power state deeper than the
+			 * value returned from _SxD.
+			 */
+			if (has_sxd && target_state > ACPI_STATE_S0)
+				d_max = d_min;
+		} else if (ACPI_SUCCESS(status) && ret <= ACPI_STATE_D3_COLD) {
+			/* Fall back to D3cold if ret is not a valid state. */
+			if (!adev->power.states[ret].flags.valid)
+				ret = ACPI_STATE_D3_COLD;
+
+			d_max = ret > d_min ? ret : d_min;
+		} else {
+			return -ENODATA;
+		}
+	}
+
+	if (d_min_p)
+		*d_min_p = d_min;
+
+	if (d_max_p)
+		*d_max_p = d_max;
+
+	return 0;
+}
+
+
+// Source: device_pm.c
+// Lines 580-673
+
+
+[ANSWER]
+MAY

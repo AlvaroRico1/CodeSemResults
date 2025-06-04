@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'mime' at line 3\n2. Pointer 'easy' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ncurl_mime *curl_mime_init(struct Curl_easy *easy)\n{\n  curl_mime *mime;\n\n  mime = (curl_mime *) malloc(sizeof(*mime));\n\n  if(mime) {\n    mime->easy = easy;\n    mime->parent = NULL;\n    mime->firstpart = NULL;\n    mime->lastpart = NULL;\n\n    memset(mime->boundary, '-', 24);\n    if(Curl_rand_hex(easy, (unsigned char *) &mime->boundary[24],\n                     MIME_RAND_BOUNDARY_CHARS + 1)) {\n      /* failed to get random separator, bail out */\n      free(mime);\n      return NULL;\n    }\n    mimesetstate(&mime->state, MIMESTATE_BEGIN, NULL);\n  }\n\n  return mime;\n}\n\n\n// Source: mime.c\n// Lines 1307-1330\n",
+  "ANSWER": "MUST"
+}

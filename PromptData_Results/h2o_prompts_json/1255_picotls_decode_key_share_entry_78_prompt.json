@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'src' at line 1\n2. Pointer 'end' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int decode_key_share_entry(uint16_t *group, ptls_iovec_t *key_exchange, const uint8_t **src, const uint8_t *const end)\n{\n    int ret;\n\n    if ((ret = ptls_decode16(group, src, end)) != 0)\n        goto Exit;\n    ptls_decode_open_block(*src, end, 2, {\n        *key_exchange = ptls_iovec_init(*src, end - *src);\n        *src = end;\n    });\n\nExit:\n    return ret;\n}\n\n\n// Source: picotls.c\n// Lines 1621-1634\n",
+  "ANSWER": "MUST"
+}

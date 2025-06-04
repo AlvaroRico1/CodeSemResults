@@ -1,0 +1,74 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'end' at line 2
+2. Pointer 'fields' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void alloc_stmt_fields(MYSQL_STMT *stmt) {
+  MYSQL_FIELD *fields, *field, *end;
+  MEM_ROOT *fields_mem_root = &stmt->extension->fields_mem_root;
+  MYSQL *mysql = stmt->mysql;
+
+  assert(stmt->field_count);
+
+  free_root(fields_mem_root, MYF(0));
+
+  /*
+    mysql->fields is NULL when the client set CLIENT_OPTIONAL_RESULTSET_METADATA
+    flag and server @@session.resultset_metadata is "NONE". That means that the
+    client received a resultset without metadata.
+  */
+  if (!mysql->fields) return;
+
+  /*
+    Get the field information for non-select statements
+    like SHOW and DESCRIBE commands
+  */
+  if (!(stmt->fields = (MYSQL_FIELD *)fields_mem_root->Alloc(
+            sizeof(MYSQL_FIELD) * stmt->field_count)) ||
+      !(stmt->bind = (MYSQL_BIND *)fields_mem_root->Alloc(sizeof(MYSQL_BIND) *
+                                                          stmt->field_count))) {
+    set_stmt_error(stmt, CR_OUT_OF_MEMORY, unknown_sqlstate, nullptr);
+    return;
+  }
+
+  for (fields = mysql->fields, end = fields + stmt->field_count,
+      field = stmt->fields;
+       field && fields < end; fields++, field++) {
+    *field = *fields; /* To copy all numeric parts. */
+    field->catalog =
+        strmake_root(fields_mem_root, fields->catalog, fields->catalog_length);
+    field->db = strmake_root(fields_mem_root, fields->db, fields->db_length);
+    field->table =
+        strmake_root(fields_mem_root, fields->table, fields->table_length);
+    field->org_table = strmake_root(fields_mem_root, fields->org_table,
+                                    fields->org_table_length);
+    field->name =
+        strmake_root(fields_mem_root, fields->name, fields->name_length);
+    field->org_name = strmake_root(fields_mem_root, fields->org_name,
+                                   fields->org_name_length);
+    if (fields->def) {
+      field->def =
+          strmake_root(fields_mem_root, fields->def, fields->def_length);
+      field->def_length = fields->def_length;
+    } else {
+      field->def = nullptr;
+      field->def_length = 0;
+    }
+    field->extension = nullptr; /* Avoid dangling links. */
+    field->max_length = 0; /* max_length is set in mysql_stmt_store_result() */
+  }
+}
+
+
+// Source: libmysql.cc
+// Lines 1523-1577
+
+
+[ANSWER]
+MUST-NOT

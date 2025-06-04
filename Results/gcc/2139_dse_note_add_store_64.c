@@ -1,0 +1,35 @@
+note_add_store (rtx loc, const_rtx expr ATTRIBUTE_UNUSED, void *data)
+{
+  rtx_insn *insn;
+  note_add_store_info *info = (note_add_store_info *) data;
+
+  if (!REG_P (loc))
+    return;
+
+  /* If this register is referenced by the current or an earlier insn,
+     that's OK.  E.g. this applies to the register that is being incremented
+     with this addition.  */
+  for (insn = info->first;
+       insn != NEXT_INSN (info->current);
+       insn = NEXT_INSN (insn))
+    if (reg_referenced_p (loc, PATTERN (insn)))
+      return;
+
+  /* If we come here, we have a clobber of a register that's only OK
+     if that register is not live.  If we don't have liveness information
+     available, fail now.  */
+  if (!info->fixed_regs_live)
+    {
+      info->failure = true;
+      return;
+    }
+  /* Now check if this is a live fixed register.  */
+  unsigned int end_regno = END_REGNO (loc);
+  for (unsigned int regno = REGNO (loc); regno < end_regno; ++regno)
+    if (REGNO_REG_SET_P (info->fixed_regs_live, regno))
+      info->failure = true;
+}
+
+
+// Source: dse.c
+// Lines 763-793

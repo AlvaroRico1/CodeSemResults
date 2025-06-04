@@ -1,0 +1,51 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'days' at line 17
+2. Pointer 'my_time' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void mix_date_and_time(MYSQL_TIME *ldate, const MYSQL_TIME &my_time) {
+  assert(ldate->time_type == MYSQL_TIMESTAMP_DATE ||
+         ldate->time_type == MYSQL_TIMESTAMP_DATETIME);
+
+  if (!my_time.neg && my_time.hour < 24) {
+    /*
+      Simple case: TIME is within normal 24 hours internal.
+      Mix DATE part of ltime2 and TIME part of ltime together.
+    */
+    ldate->hour = my_time.hour;
+    ldate->minute = my_time.minute;
+    ldate->second = my_time.second;
+    ldate->second_part = my_time.second_part;
+  } else {
+    /* Complex case: TIME is negative or outside of 24 hours internal. */
+    longlong seconds;
+    long days, useconds;
+    int sign = my_time.neg ? 1 : -1;
+    ldate->neg = calc_time_diff(*ldate, my_time, sign, &seconds, &useconds);
+    assert(!ldate->neg);
+
+    /*
+      We pass current date to mix_date_and_time. If we want to use
+      this function with arbitrary dates, this code will need
+      to cover cases when ltime is negative and "ldate < -ltime".
+    */
+    assert(ldate->year > 0);
+
+    days = static_cast<long>(seconds / SECONDS_IN_24H);
+    calc_time_from_sec(ldate, seconds % SECONDS_IN_24H, useconds);
+    get_date_from_daynr(days, &ldate->year, &ldate->month, &ldate->day);
+  }
+
+
+// Source: my_time.cc
+// Lines 2641-2672
+
+
+[ANSWER]
+MUST-NOT

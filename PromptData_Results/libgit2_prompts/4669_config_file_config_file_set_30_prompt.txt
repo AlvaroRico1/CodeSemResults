@@ -1,0 +1,60 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'entries' at line 4
+2. Pointer 'existing' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int config_file_set(git_config_backend *cfg, const char *name, const char *value)
+{
+	config_file_backend *b = GIT_CONTAINER_OF(cfg, config_file_backend, parent);
+	git_config_entries *entries;
+	git_config_entry *existing;
+	char *key, *esc_value = NULL;
+	int error;
+
+	if ((error = git_config__normalize_name(name, &key)) < 0)
+		return error;
+
+	if ((error = config_file_entries_take(&entries, b)) < 0)
+		return error;
+
+	/* Check whether we'd be modifying an included or multivar key */
+	if ((error = git_config_entries_get_unique(&existing, entries, key)) < 0) {
+		if (error != GIT_ENOTFOUND)
+			goto out;
+		error = 0;
+	} else if ((!existing->value && !value) ||
+		   (existing->value && value && !strcmp(existing->value, value))) {
+		/* don't update if old and new values already match */
+		error = 0;
+		goto out;
+	}
+
+	/* No early returns due to sanity checks, let's write it out and refresh */
+	if (value) {
+		esc_value = escape_value(value);
+		GIT_ERROR_CHECK_ALLOC(esc_value);
+	}
+
+	if ((error = config_file_write(b, name, key, NULL, esc_value)) < 0)
+		goto out;
+
+out:
+	git_config_entries_free(entries);
+	git__free(esc_value);
+	git__free(key);
+	return error;
+}
+
+
+// Source: config_file.c
+// Lines 292-332
+
+
+[ANSWER]
+MAY

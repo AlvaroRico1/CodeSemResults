@@ -1,0 +1,1 @@
+w,libgit2/src/libgit2/indexer.c,8,curpos,libgit2/src/libgit2/indexer.c,9,2

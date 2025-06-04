@@ -1,0 +1,1 @@
+local_net_buffer_length,mysql/libmysql/libmysql.cc,2,net,mysql/libmysql/libmysql.cc,1,0

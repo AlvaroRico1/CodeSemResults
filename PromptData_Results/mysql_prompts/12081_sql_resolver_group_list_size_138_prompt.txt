@@ -1,0 +1,26 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'group' at line 3
+2. Pointer 'group' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int Query_block::group_list_size() const {
+  int size = 0;
+  for (ORDER *group = group_list.first; group; group = group->next) {
+    ++size;
+  }
+  return size;
+}
+
+
+// Source: sql_resolver.cc
+// Lines 4638-4644
+
+
+[ANSWER]
+MUST

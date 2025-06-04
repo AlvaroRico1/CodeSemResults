@@ -1,0 +1,43 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'part_field_array' at line 15
+2. Pointer 'part_info' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int get_part_for_delete(const uchar *buf, const uchar *rec0,
+                        partition_info *part_info, uint32 *part_id) {
+  int error;
+  longlong func_value;
+  DBUG_TRACE;
+
+  if (likely(buf == rec0)) {
+    if (unlikely((error = part_info->get_partition_id(part_info, part_id,
+                                                      &func_value)))) {
+      part_info->err_value = func_value;
+      return error;
+    }
+    DBUG_PRINT("info", ("Delete from partition %d", *part_id));
+  } else {
+    Field **part_field_array = part_info->full_part_field_array;
+    set_field_ptr(part_field_array, buf, rec0);
+    error = part_info->get_partition_id(part_info, part_id, &func_value);
+    set_field_ptr(part_field_array, rec0, buf);
+    if (unlikely(error)) {
+      part_info->err_value = func_value;
+      return error;
+    }
+    DBUG_PRINT("info", ("Delete from partition %d (path2)", *part_id));
+  }
+
+
+// Source: sql_partition.cc
+// Lines 361-384
+
+
+[ANSWER]
+MUST

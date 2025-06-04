@@ -1,0 +1,1 @@
+entry,libgit2/tests/libgit2/config/read.c,2,count,libgit2/tests/libgit2/config/read.c,4,0

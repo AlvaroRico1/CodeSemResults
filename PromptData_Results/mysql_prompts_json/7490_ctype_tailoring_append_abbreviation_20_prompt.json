@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'attrend' at line 4\n2. Pointer 'attr' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int tailoring_append_abbreviation(MY_XML_PARSER *st, const char *fmt,\n                                         size_t len, const char *attr) {\n  size_t clen;\n  const char *attrend = attr + len;\n  my_wc_t wc;\n\n  for (; (clen = scan_one_character(attr, attrend, &wc)) > 0; attr += clen) {\n    assert(attr < attrend);\n    if (tailoring_append(st, fmt, clen, attr) != MY_XML_OK) return MY_XML_ERROR;\n  }\n  return MY_XML_OK;\n}\n\n\n// Source: ctype.cc\n// Lines 415-426\n",
+  "ANSWER": "MUST-NOT"
+}

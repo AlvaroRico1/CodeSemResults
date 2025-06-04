@@ -1,0 +1,91 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'status' at line 6
+2. Pointer 'handle' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static ssize_t counter_set(struct kobject *kobj,
+			   struct kobj_attribute *attr, const char *buf,
+			   size_t size)
+{
+	int index = attr - counter_attrs;
+	acpi_event_status status;
+	acpi_handle handle;
+	int result = 0;
+	unsigned long tmp;
+
+	if (index == num_gpes + ACPI_NUM_FIXED_EVENTS + COUNT_SCI) {
+		int i;
+		for (i = 0; i < num_counters; ++i)
+			all_counters[i].count = 0;
+		acpi_gpe_count = 0;
+		acpi_irq_handled = 0;
+		acpi_irq_not_handled = 0;
+		goto end;
+	}
+
+	/* show the event status for both GPEs and Fixed Events */
+	result = get_status(index, &status, &handle);
+	if (result)
+		goto end;
+
+	if (!(status & ACPI_EVENT_FLAG_HAS_HANDLER)) {
+		printk(KERN_WARNING PREFIX
+		       "Can not change Invalid GPE/Fixed Event status\n");
+		return -EINVAL;
+	}
+
+	if (index < num_gpes) {
+		if (!strcmp(buf, "disable\n") &&
+		    (status & ACPI_EVENT_FLAG_ENABLED))
+			result = acpi_disable_gpe(handle, index);
+		else if (!strcmp(buf, "enable\n") &&
+			 !(status & ACPI_EVENT_FLAG_ENABLED))
+			result = acpi_enable_gpe(handle, index);
+		else if (!strcmp(buf, "clear\n") &&
+			 (status & ACPI_EVENT_FLAG_STATUS_SET))
+			result = acpi_clear_gpe(handle, index);
+		else if (!strcmp(buf, "mask\n"))
+			result = acpi_mask_gpe(handle, index, TRUE);
+		else if (!strcmp(buf, "unmask\n"))
+			result = acpi_mask_gpe(handle, index, FALSE);
+		else if (!kstrtoul(buf, 0, &tmp))
+			all_counters[index].count = tmp;
+		else
+			result = -EINVAL;
+	} else if (index < num_gpes + ACPI_NUM_FIXED_EVENTS) {
+		int event = index - num_gpes;
+		if (!strcmp(buf, "disable\n") &&
+		    (status & ACPI_EVENT_FLAG_ENABLE_SET))
+			result = acpi_disable_event(event, ACPI_NOT_ISR);
+		else if (!strcmp(buf, "enable\n") &&
+			 !(status & ACPI_EVENT_FLAG_ENABLE_SET))
+			result = acpi_enable_event(event, ACPI_NOT_ISR);
+		else if (!strcmp(buf, "clear\n") &&
+			 (status & ACPI_EVENT_FLAG_STATUS_SET))
+			result = acpi_clear_event(event);
+		else if (!kstrtoul(buf, 0, &tmp))
+			all_counters[index].count = tmp;
+		else
+			result = -EINVAL;
+	} else
+		all_counters[index].count = strtoul(buf, NULL, 0);
+
+	if (ACPI_FAILURE(result))
+		result = -EINVAL;
+end:
+	return result ? result : size;
+}
+
+
+// Source: sysfs.c
+// Lines 733-804
+
+
+[ANSWER]
+MAY

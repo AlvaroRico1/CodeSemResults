@@ -1,0 +1,25 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'self' at line 3
+2. Pointer '_self' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void on_stop(h2o_ostream_t *_self, h2o_req_t *req)
+{
+    throttle_resp_t *self = (void *)_self;
+    if (h2o_timer_is_linked(&self->timeout_entry))
+        h2o_timer_unlink(&self->timeout_entry);
+}
+
+
+// Source: throttle_resp.c
+// Lines 100-105
+
+
+[ANSWER]
+MUST

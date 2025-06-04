@@ -1,0 +1,1 @@
+wc,mysql/strings/ctype-uca.cc,12,cweight,mysql/strings/ctype-uca.cc,31,2

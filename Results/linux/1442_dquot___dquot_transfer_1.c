@@ -1,0 +1,125 @@
+int __dquot_transfer(struct inode *inode, struct dquot **transfer_to)
+{
+	qsize_t cur_space;
+	qsize_t rsv_space = 0;
+	qsize_t inode_usage = 1;
+	struct dquot *transfer_from[MAXQUOTAS] = {};
+	int cnt, ret = 0;
+	char is_valid[MAXQUOTAS] = {};
+	struct dquot_warn warn_to[MAXQUOTAS];
+	struct dquot_warn warn_from_inodes[MAXQUOTAS];
+	struct dquot_warn warn_from_space[MAXQUOTAS];
+
+	if (IS_NOQUOTA(inode))
+		return 0;
+
+	if (inode->i_sb->dq_op->get_inode_usage) {
+		ret = inode->i_sb->dq_op->get_inode_usage(inode, &inode_usage);
+		if (ret)
+			return ret;
+	}
+
+	/* Initialize the arrays */
+	for (cnt = 0; cnt < MAXQUOTAS; cnt++) {
+		warn_to[cnt].w_type = QUOTA_NL_NOWARN;
+		warn_from_inodes[cnt].w_type = QUOTA_NL_NOWARN;
+		warn_from_space[cnt].w_type = QUOTA_NL_NOWARN;
+	}
+
+	spin_lock(&dq_data_lock);
+	spin_lock(&inode->i_lock);
+	if (IS_NOQUOTA(inode)) {	/* File without quota accounting? */
+		spin_unlock(&inode->i_lock);
+		spin_unlock(&dq_data_lock);
+		return 0;
+	}
+	cur_space = __inode_get_bytes(inode);
+	rsv_space = __inode_get_rsv_space(inode);
+	/*
+	 * Build the transfer_from list, check limits, and update usage in
+	 * the target structures.
+	 */
+	for (cnt = 0; cnt < MAXQUOTAS; cnt++) {
+		/*
+		 * Skip changes for same uid or gid or for turned off quota-type.
+		 */
+		if (!transfer_to[cnt])
+			continue;
+		/* Avoid races with quotaoff() */
+		if (!sb_has_quota_active(inode->i_sb, cnt))
+			continue;
+		is_valid[cnt] = 1;
+		transfer_from[cnt] = i_dquot(inode)[cnt];
+		ret = dquot_add_inodes(transfer_to[cnt], inode_usage,
+				       &warn_to[cnt]);
+		if (ret)
+			goto over_quota;
+		ret = dquot_add_space(transfer_to[cnt], cur_space, rsv_space,
+				      DQUOT_SPACE_WARN, &warn_to[cnt]);
+		if (ret) {
+			spin_lock(&transfer_to[cnt]->dq_dqb_lock);
+			dquot_decr_inodes(transfer_to[cnt], inode_usage);
+			spin_unlock(&transfer_to[cnt]->dq_dqb_lock);
+			goto over_quota;
+		}
+	}
+
+	/* Decrease usage for source structures and update quota pointers */
+	for (cnt = 0; cnt < MAXQUOTAS; cnt++) {
+		if (!is_valid[cnt])
+			continue;
+		/* Due to IO error we might not have transfer_from[] structure */
+		if (transfer_from[cnt]) {
+			int wtype;
+
+			spin_lock(&transfer_from[cnt]->dq_dqb_lock);
+			wtype = info_idq_free(transfer_from[cnt], inode_usage);
+			if (wtype != QUOTA_NL_NOWARN)
+				prepare_warning(&warn_from_inodes[cnt],
+						transfer_from[cnt], wtype);
+			wtype = info_bdq_free(transfer_from[cnt],
+					      cur_space + rsv_space);
+			if (wtype != QUOTA_NL_NOWARN)
+				prepare_warning(&warn_from_space[cnt],
+						transfer_from[cnt], wtype);
+			dquot_decr_inodes(transfer_from[cnt], inode_usage);
+			dquot_decr_space(transfer_from[cnt], cur_space);
+			dquot_free_reserved_space(transfer_from[cnt],
+						  rsv_space);
+			spin_unlock(&transfer_from[cnt]->dq_dqb_lock);
+		}
+		i_dquot(inode)[cnt] = transfer_to[cnt];
+	}
+	spin_unlock(&inode->i_lock);
+	spin_unlock(&dq_data_lock);
+
+	mark_all_dquot_dirty(transfer_from);
+	mark_all_dquot_dirty(transfer_to);
+	flush_warnings(warn_to);
+	flush_warnings(warn_from_inodes);
+	flush_warnings(warn_from_space);
+	/* Pass back references to put */
+	for (cnt = 0; cnt < MAXQUOTAS; cnt++)
+		if (is_valid[cnt])
+			transfer_to[cnt] = transfer_from[cnt];
+	return 0;
+over_quota:
+	/* Back out changes we already did */
+	for (cnt--; cnt >= 0; cnt--) {
+		if (!is_valid[cnt])
+			continue;
+		spin_lock(&transfer_to[cnt]->dq_dqb_lock);
+		dquot_decr_inodes(transfer_to[cnt], inode_usage);
+		dquot_decr_space(transfer_to[cnt], cur_space);
+		dquot_free_reserved_space(transfer_to[cnt], rsv_space);
+		spin_unlock(&transfer_to[cnt]->dq_dqb_lock);
+	}
+	spin_unlock(&inode->i_lock);
+	spin_unlock(&dq_data_lock);
+	flush_warnings(warn_to);
+	return ret;
+}
+
+
+// Source: dquot.c
+// Lines 1948-2068

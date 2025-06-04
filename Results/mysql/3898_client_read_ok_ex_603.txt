@@ -1,0 +1,1 @@
+saved_pos,mysql/sql-common/client.cc,3,insert_id,mysql/sql-common/client.cc,4,0

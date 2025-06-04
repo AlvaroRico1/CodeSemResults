@@ -1,0 +1,26 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ctx' at line 3
+2. Pointer '_ctx' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void cipher_encrypt(ptls_cipher_context_t *_ctx, void *output, const void *input, size_t _len)
+{
+    struct cipher_context_t *ctx = (struct cipher_context_t *)_ctx;
+    int len = (int)_len, ret = EVP_EncryptUpdate(ctx->evp, output, &len, input, len);
+    assert(ret);
+    assert(len == (int)_len);
+}
+
+
+// Source: openssl.c
+// Lines 815-821
+
+
+[ANSWER]
+MUST

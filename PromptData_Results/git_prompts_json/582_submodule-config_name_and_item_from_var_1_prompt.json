@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'key' at line 4\n2. Pointer 'subsection_len' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int name_and_item_from_var(const char *var, struct strbuf *name,\n\t\t\t\t  struct strbuf *item)\n{\n\tconst char *subsection, *key;\n\tsize_t subsection_len;\n\tint parse;\n\tparse = parse_config_key(var, \"submodule\", &subsection,\n\t\t\t&subsection_len, &key);\n\tif (parse < 0 || !subsection)\n\t\treturn 0;\n\n\tstrbuf_add(name, subsection, subsection_len);\n\tif (check_submodule_name(name->buf) < 0) {\n\t\twarning(_(\"ignoring suspicious submodule name: %s\"), name->buf);\n\t\tstrbuf_release(name);\n\t\treturn 0;\n\t}\n\n\tstrbuf_addstr(item, key);\n\n\treturn 1;\n}\n\n\n// Source: submodule-config.c\n// Lines 224-245\n",
+  "ANSWER": "MAY"
+}

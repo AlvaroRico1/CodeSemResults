@@ -1,0 +1,46 @@
+int intsetValidateIntegrity(const unsigned char *p, size_t size, int deep) {
+    intset *is = (intset *)p;
+    /* check that we can actually read the header. */
+    if (size < sizeof(*is))
+        return 0;
+
+    uint32_t encoding = intrev32ifbe(is->encoding);
+
+    size_t record_size;
+    if (encoding == INTSET_ENC_INT64) {
+        record_size = INTSET_ENC_INT64;
+    } else if (encoding == INTSET_ENC_INT32) {
+        record_size = INTSET_ENC_INT32;
+    } else if (encoding == INTSET_ENC_INT16){
+        record_size = INTSET_ENC_INT16;
+    } else {
+        return 0;
+    }
+
+    /* check that the size matchies (all records are inside the buffer). */
+    uint32_t count = intrev32ifbe(is->length);
+    if (sizeof(*is) + count*record_size != size)
+        return 0;
+
+    /* check that the set is not empty. */
+    if (count==0)
+        return 0;
+
+    if (!deep)
+        return 1;
+
+    /* check that there are no dup or out of order records. */
+    int64_t prev = _intsetGet(is,0);
+    for (uint32_t i=1; i<count; i++) {
+        int64_t cur = _intsetGet(is,i);
+        if (cur <= prev)
+            return 0;
+        prev = cur;
+    }
+
+    return 1;
+}
+
+
+// Source: intset.c
+// Lines 291-332

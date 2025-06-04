@@ -1,0 +1,39 @@
+static int apply_binary_delta(
+	git_str *out,
+	const char *source,
+	size_t source_len,
+	git_diff_binary_file *binary_file)
+{
+	git_str inflated = GIT_STR_INIT;
+	int error = 0;
+
+	/* no diff means identical contents */
+	if (binary_file->datalen == 0)
+		return git_str_put(out, source, source_len);
+
+	error = git_zstream_inflatebuf(&inflated,
+		binary_file->data, binary_file->datalen);
+
+	if (!error && inflated.size != binary_file->inflatedlen) {
+		error = apply_err("inflated delta does not match expected length");
+		git_str_dispose(out);
+	}
+
+	if (error < 0)
+		goto done;
+
+	if (binary_file->type == GIT_DIFF_BINARY_DELTA) {
+		void *data;
+		size_t data_len;
+
+		error = git_delta_apply(&data, &data_len, (void *)source, source_len,
+			(void *)inflated.ptr, inflated.size);
+
+		out->ptr = data;
+		out->size = data_len;
+		out->asize = data_len;
+	}
+
+
+// Source: apply.c
+// Lines 297-331

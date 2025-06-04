@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'fsdata' at line 5\n2. Pointer 'page' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint generic_cont_expand_simple(struct inode *inode, loff_t size)\n{\n\tstruct address_space *mapping = inode->i_mapping;\n\tstruct page *page;\n\tvoid *fsdata;\n\tint err;\n\n\terr = inode_newsize_ok(inode, size);\n\tif (err)\n\t\tgoto out;\n\n\terr = pagecache_write_begin(NULL, mapping, size, 0,\n\t\t\t\t    AOP_FLAG_CONT_EXPAND, &page, &fsdata);\n\tif (err)\n\t\tgoto out;\n\n\terr = pagecache_write_end(NULL, mapping, size, 0, 0, page, fsdata);\n\tBUG_ON(err > 0);\n\nout:\n\treturn err;\n}\n\n\n// Source: buffer.c\n// Lines 2306-2327\n",
+  "ANSWER": "MAY"
+}

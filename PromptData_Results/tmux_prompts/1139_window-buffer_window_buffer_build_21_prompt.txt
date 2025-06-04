@@ -1,0 +1,85 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'data' at line 4
+2. Pointer 'modedata' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+window_buffer_build(void *modedata, struct mode_tree_sort_criteria *sort_crit,
+    __unused uint64_t *tag, const char *filter)
+{
+	struct window_buffer_modedata	*data = modedata;
+	struct window_buffer_itemdata	*item;
+	u_int				 i;
+	struct paste_buffer		*pb;
+	char				*text, *cp;
+	struct format_tree		*ft;
+	struct session			*s = NULL;
+	struct winlink			*wl = NULL;
+	struct window_pane		*wp = NULL;
+
+	for (i = 0; i < data->item_size; i++)
+		window_buffer_free_item(data->item_list[i]);
+	free(data->item_list);
+	data->item_list = NULL;
+	data->item_size = 0;
+
+	pb = NULL;
+	while ((pb = paste_walk(pb)) != NULL) {
+		item = window_buffer_add_item(data);
+		item->name = xstrdup(paste_buffer_name(pb));
+		paste_buffer_data(pb, &item->size);
+		item->order = paste_buffer_order(pb);
+	}
+
+	window_buffer_sort = sort_crit;
+	qsort(data->item_list, data->item_size, sizeof *data->item_list,
+	    window_buffer_cmp);
+
+	if (cmd_find_valid_state(&data->fs)) {
+		s = data->fs.s;
+		wl = data->fs.wl;
+		wp = data->fs.wp;
+	}
+
+	for (i = 0; i < data->item_size; i++) {
+		item = data->item_list[i];
+
+		pb = paste_get_name(item->name);
+		if (pb == NULL)
+			continue;
+		ft = format_create(NULL, NULL, FORMAT_NONE, 0);
+		format_defaults(ft, NULL, s, wl, wp);
+		format_defaults_paste_buffer(ft, pb);
+
+		if (filter != NULL) {
+			cp = format_expand(ft, filter);
+			if (!format_true(cp)) {
+				free(cp);
+				format_free(ft);
+				continue;
+			}
+			free(cp);
+		}
+
+		text = format_expand(ft, data->format);
+		mode_tree_add(data->data, NULL, item, item->order, item->name,
+		    text, -1);
+		free(text);
+
+		format_free(ft);
+	}
+
+}
+
+
+// Source: window-buffer.c
+// Lines 159-224
+
+
+[ANSWER]
+MUST

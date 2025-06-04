@@ -1,0 +1,39 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tmp' at line 7
+2. Pointer 'path' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void reparent_cb(const char *name,
+			const char *old_cwd,
+			const char *new_cwd,
+			void *data)
+{
+	char **path = data;
+	char *tmp = *path;
+
+	if (!tmp)
+		return;
+
+	*path = reparent_relative_path(old_cwd, new_cwd, tmp);
+	free(tmp);
+
+	if (name) {
+		trace_printf_key(&trace_setup_key,
+				 "setup: reparent %s to '%s'",
+				 name, *path);
+	}
+}
+
+
+// Source: chdir-notify.c
+// Lines 25-44
+
+
+[ANSWER]
+MAY

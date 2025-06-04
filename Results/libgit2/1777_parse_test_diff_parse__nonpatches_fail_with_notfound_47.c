@@ -1,0 +1,29 @@
+void test_diff_parse__nonpatches_fail_with_notfound(void)
+{
+	git_diff *diff;
+	const char *not = PATCH_NOT_A_PATCH;
+	const char *not_with_leading = "Leading text.\n" PATCH_NOT_A_PATCH;
+	const char *not_with_trailing = PATCH_NOT_A_PATCH "Trailing text.\n";
+	const char *not_with_both = "Lead.\n" PATCH_NOT_A_PATCH "Trail.\n";
+
+	cl_git_fail_with(GIT_ENOTFOUND,
+		git_diff_from_buffer(&diff,
+		not,
+		strlen(not)));
+	cl_git_fail_with(GIT_ENOTFOUND,
+		git_diff_from_buffer(&diff,
+		not_with_leading,
+		strlen(not_with_leading)));
+	cl_git_fail_with(GIT_ENOTFOUND,
+		git_diff_from_buffer(&diff,
+		not_with_trailing,
+		strlen(not_with_trailing)));
+	cl_git_fail_with(GIT_ENOTFOUND,
+		git_diff_from_buffer(&diff,
+		not_with_both,
+		strlen(not_with_both)));
+}
+
+
+// Source: parse.c
+// Lines 13-37

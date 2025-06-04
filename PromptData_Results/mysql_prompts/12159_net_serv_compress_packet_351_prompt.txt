@@ -1,0 +1,54 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'compr_length' at line 3
+2. Pointer 'length' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static uchar *compress_packet(NET *net, const uchar *packet, size_t *length) {
+  uchar *compr_packet;
+  size_t compr_length = 0;
+  const uint header_length = NET_HEADER_SIZE + COMP_HEADER_SIZE;
+
+  compr_packet = (uchar *)my_malloc(key_memory_NET_compress_packet,
+                                    *length + header_length, MYF(MY_WME));
+
+  if (compr_packet == nullptr) return nullptr;
+
+  memcpy(compr_packet + header_length, packet, *length);
+
+  mysql_compress_context *compress_ctx = compress_context(net);
+
+  /* Compress the encapsulated packet. */
+  if (my_compress(compress_ctx, compr_packet + header_length, length,
+                  &compr_length)) {
+    /*
+      If the length of the compressed packet is larger than the
+      original packet, the original packet is sent uncompressed.
+    */
+    compr_length = 0;
+  }
+
+  /* Length of the compressed (original) packet. */
+  int3store(&compr_packet[NET_HEADER_SIZE], static_cast<uint>(compr_length));
+  /* Length of this packet. */
+  int3store(compr_packet, static_cast<uint>(*length));
+  /* Packet number. */
+  compr_packet[3] = (uchar)(net->compress_pkt_nr++);
+
+  *length += header_length;
+
+  return compr_packet;
+}
+
+
+// Source: net_serv.cc
+// Lines 1238-1272
+
+
+[ANSWER]
+MUST-NOT

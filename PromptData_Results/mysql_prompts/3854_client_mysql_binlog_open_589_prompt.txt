@@ -1,0 +1,123 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ptr' at line 45
+2. Pointer 'rpl' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int STDCALL mysql_binlog_open(MYSQL *mysql, MYSQL_RPL *rpl) {
+  DBUG_TRACE;
+  assert(mysql);
+  assert(rpl);
+
+  enum enum_server_command command;
+  uchar *command_buffer = nullptr;
+  size_t command_size = 0;
+
+  /*
+    No need to check mysql->net.vio here as
+    it'll be checked in the simple_command().
+  */
+
+  if (!rpl->file_name) {
+    rpl->file_name = const_cast<char *>("");
+    rpl->file_name_length = 0;
+  } else if (rpl->file_name_length == 0)
+    rpl->file_name_length = strlen(rpl->file_name);
+
+  if (rpl->file_name_length > UINT_MAX) {
+    set_mysql_error(mysql, CR_FILE_NAME_TOO_LONG, unknown_sqlstate);
+    return -1;
+  }
+
+  if (rpl->flags & MYSQL_RPL_GTID) {
+    command = COM_BINLOG_DUMP_GTID;
+
+#define GTID_ENCODED_DATA_SIZE 8
+
+    size_t alloc_size = rpl->file_name_length + ::BINLOG_FLAGS_INFO_SIZE +
+                        ::BINLOG_SERVER_ID_INFO_SIZE +
+                        ::BINLOG_NAME_SIZE_INFO_SIZE + ::BINLOG_POS_INFO_SIZE +
+                        ::BINLOG_DATA_SIZE_INFO_SIZE +
+                        (rpl->gtid_set_encoded_size ? rpl->gtid_set_encoded_size
+                                                    : GTID_ENCODED_DATA_SIZE) +
+                        1;
+
+    if (!(command_buffer = (uchar *)my_malloc(PSI_NOT_INSTRUMENTED, alloc_size,
+                                              MYF(MY_WME)))) {
+      set_mysql_error(mysql, CR_OUT_OF_MEMORY, unknown_sqlstate);
+      return -1;
+    }
+
+    uchar *ptr = command_buffer;
+
+    int2store(ptr, rpl->flags);  // Note: we use low 16 bits
+    ptr += ::BINLOG_FLAGS_INFO_SIZE;
+    int4store(ptr, rpl->server_id);
+    ptr += ::BINLOG_SERVER_ID_INFO_SIZE;
+    int4store(ptr, static_cast<uint32>(rpl->file_name_length));
+    ptr += ::BINLOG_NAME_SIZE_INFO_SIZE;
+    memcpy(ptr, rpl->file_name, rpl->file_name_length);
+    ptr += rpl->file_name_length;
+    int8store(ptr, rpl->start_position);
+    ptr += ::BINLOG_POS_INFO_SIZE;
+    if (rpl->gtid_set_encoded_size) {
+      int4store(ptr, static_cast<uint32>(rpl->gtid_set_encoded_size));
+      ptr += ::BINLOG_DATA_SIZE_INFO_SIZE;
+      if (rpl->fix_gtid_set)
+        rpl->fix_gtid_set(rpl, ptr);
+      else
+        memcpy(ptr, rpl->gtid_set_arg, rpl->gtid_set_encoded_size);
+      ptr += rpl->gtid_set_encoded_size;
+    } else {
+      /* No GTID set data, store 0 as its length. */
+      int4store(ptr, static_cast<uint32>(GTID_ENCODED_DATA_SIZE));
+      ptr += ::BINLOG_DATA_SIZE_INFO_SIZE;
+      int8store(ptr, static_cast<uint64>(0));
+      ptr += GTID_ENCODED_DATA_SIZE;
+    }
+
+    command_size = ptr - command_buffer;
+    assert(command_size == (alloc_size - 1));
+  } else {
+    command = COM_BINLOG_DUMP;
+    size_t alloc_size = rpl->file_name_length + ::BINLOG_POS_OLD_INFO_SIZE +
+                        ::BINLOG_FLAGS_INFO_SIZE +
+                        ::BINLOG_SERVER_ID_INFO_SIZE + 1;
+
+    if (!(command_buffer = (uchar *)my_malloc(PSI_NOT_INSTRUMENTED, alloc_size,
+                                              MYF(MY_WME)))) {
+      set_mysql_error(mysql, CR_OUT_OF_MEMORY, unknown_sqlstate);
+      return -1;
+    }
+
+    uchar *ptr = command_buffer;
+
+    /*
+      COM_BINLOG_DUMP accepts only 4 bytes for the position, so
+      we are forced to cast to uint32.
+    */
+    int4store(ptr, (uint32)rpl->start_position);
+    ptr += ::BINLOG_POS_OLD_INFO_SIZE;
+    int2store(ptr, rpl->flags);  // note: we use low 16 bits
+    ptr += ::BINLOG_FLAGS_INFO_SIZE;
+    int4store(ptr, rpl->server_id);
+    ptr += ::BINLOG_SERVER_ID_INFO_SIZE;
+    memcpy(ptr, rpl->file_name, rpl->file_name_length);
+    ptr += rpl->file_name_length;
+
+    command_size = ptr - command_buffer;
+    assert(command_size == (alloc_size - 1));
+  }
+
+
+// Source: client.cc
+// Lines 6671-6774
+
+
+[ANSWER]
+MUST-NOT

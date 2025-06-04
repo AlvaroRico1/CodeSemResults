@@ -1,0 +1,1 @@
+gc,tmux/cmd-capture-pane.c,6,cause,tmux/cmd-capture-pane.c,9,0

@@ -1,0 +1,38 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'commit' at line 4
+2. Pointer 'branch' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_worktree_worktree__init_existing_branch(void)
+{
+	git_reference *head, *branch;
+	git_commit *commit;
+	git_worktree *wt;
+	git_str path = GIT_STR_INIT;
+
+	cl_git_pass(git_repository_head(&head, fixture.repo));
+	cl_git_pass(git_commit_lookup(&commit, fixture.repo, &head->target.oid));
+	cl_git_pass(git_branch_create(&branch, fixture.repo, "worktree-new", commit, false));
+
+	cl_git_pass(git_str_joinpath(&path, fixture.repo->workdir, "../worktree-new"));
+	cl_git_fail(git_worktree_add(&wt, fixture.repo, "worktree-new", path.ptr, NULL));
+
+	git_str_dispose(&path);
+	git_commit_free(commit);
+	git_reference_free(head);
+	git_reference_free(branch);
+}
+
+
+// Source: worktree.c
+// Lines 245-263
+
+
+[ANSWER]
+MAY

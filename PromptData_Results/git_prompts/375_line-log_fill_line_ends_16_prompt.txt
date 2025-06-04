@@ -1,0 +1,48 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'data' at line 9
+2. Pointer 'spec' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void fill_line_ends(struct repository *r,
+			   struct diff_filespec *spec,
+			   long *lines,
+			   unsigned long **line_ends)
+{
+	int num = 0, size = 50;
+	long cur = 0;
+	unsigned long *ends = NULL;
+	char *data = NULL;
+
+	if (diff_populate_filespec(r, spec, NULL))
+		die("Cannot read blob %s", oid_to_hex(&spec->oid));
+
+	ALLOC_ARRAY(ends, size);
+	ends[cur++] = 0;
+	data = spec->data;
+	while (num < spec->size) {
+		if (data[num] == '\n' || num == spec->size - 1) {
+			ALLOC_GROW(ends, (cur + 1), size);
+			ends[cur++] = num;
+		}
+		num++;
+	}
+
+	/* shrink the array to fit the elements */
+	REALLOC_ARRAY(ends, cur);
+	*lines = cur-1;
+	*line_ends = ends;
+}
+
+
+// Source: line-log.c
+// Lines 513-541
+
+
+[ANSWER]
+MUST

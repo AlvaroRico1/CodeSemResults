@@ -1,0 +1,48 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'count' at line 5
+2. Pointer 'ht' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+Bucket *find_longest_match(HashTable *ht, char *str, uint length,
+                           uint *res_length) {
+  Bucket *b, *return_b;
+  const char *s;
+  uint count;
+  uint lm;
+
+  b = completion_hash_find(ht, str, length);
+  if (!b) {
+    *res_length = 0;
+    return (Bucket *)nullptr;
+  }
+
+  count = b->count;
+  lm = length;
+  s = b->pData->str;
+
+  return_b = b;
+  while (s[lm] != 0 && (b = completion_hash_find(ht, s, lm + 1))) {
+    if (b->count < count) {
+      *res_length = lm;
+      return return_b;
+    }
+    return_b = b;
+    lm++;
+  }
+  *res_length = lm;
+  return return_b;
+}
+
+
+// Source: completion_hash.cc
+// Lines 164-192
+
+
+[ANSWER]
+MUST-NOT

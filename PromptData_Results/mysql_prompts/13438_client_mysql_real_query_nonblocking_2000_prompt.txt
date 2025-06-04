@@ -1,0 +1,93 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'async_context' at line 12
+2. Pointer 'query' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+net_async_status STDCALL mysql_real_query_nonblocking(MYSQL *mysql,
+                                                      const char *query,
+                                                      ulong length) {
+  DBUG_TRACE;
+  DBUG_PRINT("enter", ("handle: %p", mysql));
+  DBUG_PRINT("query", ("Query = '%-.*s'", (int)length, query));
+  DBUG_EXECUTE_IF("inject_ER_NET_READ_INTERRUPTED", {
+    mysql->net.last_errno = ER_NET_READ_INTERRUPTED;
+    DBUG_SET("-d,inject_ER_NET_READ_INTERRUPTED");
+    return NET_ASYNC_ERROR;
+  });
+  MYSQL_ASYNC *async_context = ASYNC_DATA(mysql);
+  assert(async_context->async_op_status == ASYNC_OP_UNSET ||
+         async_context->async_op_status == ASYNC_OP_QUERY);
+
+  net_async_status status = NET_ASYNC_NOT_READY;
+  DBUG_PRINT("async", ("mysql_real_query_nonblocking start state=%d",
+                       async_context->async_query_state));
+  /* 1st phase: send query. */
+  if (async_context->async_query_state == QUERY_IDLE) {
+    assert(async_context->async_qp_data == nullptr);
+    assert(async_context->async_qp_data_length == 0);
+    if (mysql_prepare_com_query_parameters(
+            mysql, &async_context->async_qp_data,
+            &async_context->async_qp_data_length)) {
+      status = NET_ASYNC_ERROR;
+      goto end;
+    }
+    async_context->async_query_length = length;
+    async_context->async_op_status = ASYNC_OP_QUERY;
+    async_context->async_query_state = QUERY_SENDING;
+    DBUG_PRINT("async", ("set state=%d", async_context->async_query_state));
+  }
+
+  if (async_context->async_query_state == QUERY_SENDING) {
+    status = mysql_send_query_nonblocking_inner(mysql, query, length);
+    if (status == NET_ASYNC_NOT_READY)
+      return NET_ASYNC_NOT_READY;
+    else if (status == NET_ASYNC_ERROR)
+      goto end;
+    async_context->async_query_state = QUERY_READING_RESULT;
+    DBUG_PRINT("async", ("set state=%d", async_context->async_query_state));
+    /*
+      Technically we don't need to keep the query attributes data until the
+      state change as they're stored into the NET at the first call to
+      advanced_command. But since advanced_command() requires these we
+      keep them as they are.
+    */
+    if (async_context->async_qp_data) {
+      my_free(async_context->async_qp_data);
+      async_context->async_qp_data = nullptr;
+      async_context->async_qp_data_length = 0;
+    }
+  }
+
+  /* 2nd phase: read query result (field count, field info) */
+  if (async_context->async_query_state == QUERY_READING_RESULT) {
+    status = (*mysql->methods->read_query_result_nonblocking)(mysql);
+    if (status == NET_ASYNC_NOT_READY)
+      return NET_ASYNC_NOT_READY;
+    else if (status == NET_ASYNC_ERROR)
+      goto end;
+  }
+
+end:
+  async_context->async_op_status = ASYNC_OP_UNSET;
+  async_context->async_query_state = QUERY_IDLE;
+  DBUG_PRINT("async", ("set state=%d", async_context->async_query_state));
+  async_context->async_query_length = 0;
+  if (status == NET_ASYNC_ERROR)
+    return NET_ASYNC_ERROR;
+  else
+    return NET_ASYNC_COMPLETE;
+}
+
+
+// Source: client.cc
+// Lines 7443-7516
+
+
+[ANSWER]
+MUST-NOT

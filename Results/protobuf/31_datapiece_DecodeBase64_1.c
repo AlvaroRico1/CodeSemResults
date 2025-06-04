@@ -1,0 +1,32 @@
+bool DataPiece::DecodeBase64(StringPiece src, std::string* dest) const {
+  // Try web-safe decode first, if it fails, try the non-web-safe decode.
+  if (WebSafeBase64Unescape(src, dest)) {
+    if (use_strict_base64_decoding_) {
+      // In strict mode, check if the escaped version gives us the same value as
+      // unescaped.
+      std::string encoded;
+      // WebSafeBase64Escape does no padding by default.
+      WebSafeBase64Escape(*dest, &encoded);
+      // Remove trailing padding '=' characters before comparison.
+      StringPiece src_no_padding = StringPiece(src).substr(
+          0, HasSuffixString(src, "=") ? src.find_last_not_of('=') + 1
+                                      : src.length());
+      return encoded == src_no_padding;
+    }
+    return true;
+  }
+
+  if (Base64Unescape(src, dest)) {
+    if (use_strict_base64_decoding_) {
+      std::string encoded;
+      Base64Escape(reinterpret_cast<const unsigned char*>(dest->data()),
+                         dest->length(), &encoded, false);
+      StringPiece src_no_padding = StringPiece(src).substr(
+          0, HasSuffixString(src, "=") ? src.find_last_not_of('=') + 1
+                                      : src.length());
+      return encoded == src_no_padding;
+    }
+
+
+// Source: datapiece.cc
+// Lines 365-392

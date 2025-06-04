@@ -1,0 +1,117 @@
+int my_time_compare(const MYSQL_TIME &my_time_a, const MYSQL_TIME &my_time_b) {
+  ulonglong a_t = TIME_to_ulonglong_datetime(my_time_a);
+  ulonglong b_t = TIME_to_ulonglong_datetime(my_time_b);
+
+  if (a_t < b_t) return -1;
+  if (a_t > b_t) return 1;
+
+  if (my_time_a.second_part < my_time_b.second_part) return -1;
+  if (my_time_a.second_part > my_time_b.second_part) return 1;
+
+  return 0;
+}
+
+/**
+  Convert MYSQL_TIME value to its packed numeric representation,
+  using field type.
+
+  @param my_time The time value to convert.
+  @param type    MySQL field type.
+  @return        Packed numeric representation.
+*/
+longlong TIME_to_longlong_packed(const MYSQL_TIME &my_time,
+                                 enum enum_field_types type) {
+  switch (type) {
+    case MYSQL_TYPE_TIME:
+      return TIME_to_longlong_time_packed(my_time);
+    case MYSQL_TYPE_DATETIME:
+    case MYSQL_TYPE_TIMESTAMP:
+      return TIME_to_longlong_datetime_packed(my_time);
+    case MYSQL_TYPE_DATE:
+      return TIME_to_longlong_date_packed(my_time);
+    default:
+      return TIME_to_longlong_packed(my_time);
+  }
+}
+
+/**
+  Convert packed numeric temporal representation to time, date or datetime,
+  using field type.
+
+  @param[out] ltime        The variable to write to.
+  @param      type         MySQL field type.
+  @param      packed_value Numeric datetype representation.
+*/
+void TIME_from_longlong_packed(MYSQL_TIME *ltime, enum enum_field_types type,
+                               longlong packed_value) {
+  switch (type) {
+    case MYSQL_TYPE_TIME:
+      TIME_from_longlong_time_packed(ltime, packed_value);
+      break;
+    case MYSQL_TYPE_DATE:
+      TIME_from_longlong_date_packed(ltime, packed_value);
+      break;
+    case MYSQL_TYPE_DATETIME:
+    case MYSQL_TYPE_TIMESTAMP:
+      TIME_from_longlong_datetime_packed(ltime, packed_value);
+      break;
+    default:
+      assert(false);
+      set_zero_time(ltime, MYSQL_TIMESTAMP_ERROR);
+      break;
+  }
+}
+
+/**
+  Convert packed numeric representation to
+  unpacked numeric representation.
+
+  @param type           MySQL field type.
+  @param packed_value   Packed numeric temporal value.
+  @return               Number in one of the following formats,
+                        depending on type: YYMMDD, YYMMDDhhmmss, hhmmss.
+*/
+longlong longlong_from_datetime_packed(enum enum_field_types type,
+                                       longlong packed_value) {
+  MYSQL_TIME ltime;
+  switch (type) {
+    case MYSQL_TYPE_TIME:
+      TIME_from_longlong_time_packed(&ltime, packed_value);
+      return TIME_to_ulonglong_time(ltime);
+    case MYSQL_TYPE_DATE:
+      TIME_from_longlong_date_packed(&ltime, packed_value);
+      return TIME_to_ulonglong_date(ltime);
+    case MYSQL_TYPE_DATETIME:
+    case MYSQL_TYPE_TIMESTAMP:
+      TIME_from_longlong_datetime_packed(&ltime, packed_value);
+      return TIME_to_ulonglong_datetime(ltime);
+    default:
+      assert(false);
+      return 0;
+  }
+}
+
+/**
+  Convert packed numeric temporal representation to unpacked numeric
+  representation.
+
+  @param type           MySQL field type.
+  @param packed_value   Numeric packed temporal representation.
+  @return               A double value in on of the following formats,
+                        depending  on type:
+                        YYYYMMDD, hhmmss.ffffff or YYMMDDhhmmss.ffffff.
+*/
+double double_from_datetime_packed(enum enum_field_types type,
+                                   longlong packed_value) {
+  longlong result = longlong_from_datetime_packed(type, packed_value);
+  return result +
+         (static_cast<double>(my_packed_time_get_frac_part(packed_value))) /
+             1000000;
+}
+
+/**
+   @} (end of defgroup MY_TIME)
+
+
+// Source: my_time.cc
+// Lines 2788-2900

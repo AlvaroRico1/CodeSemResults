@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'name' at line 1
+2. Pointer 'dup' at line 12
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+char *cl_getenv(const char *name)
+{
+	git_str out = GIT_STR_INIT;
+	int error = git__getenv(&out, name);
+
+	cl_assert(error >= 0 || error == GIT_ENOTFOUND);
+
+	if (error == GIT_ENOTFOUND)
+		return NULL;
+
+	if (out.size == 0) {
+		char *dup = git__strdup("");
+		cl_assert(dup);
+
+		return dup;
+	}
+
+
+// Source: clar_libgit2.c
+// Lines 69-84
+
+
+[ANSWER]
+MUST-NOT

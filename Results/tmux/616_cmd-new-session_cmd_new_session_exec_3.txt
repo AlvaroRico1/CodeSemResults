@@ -1,0 +1,1 @@
+c,tmux/cmd-new-session.c,6,c,tmux/cmd-new-session.c,6,1

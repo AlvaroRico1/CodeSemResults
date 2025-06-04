@@ -1,0 +1,64 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'best' at line 4
+2. Pointer 'e' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void index_existing_and_best(
+	git_index_entry **existing,
+	size_t *existing_position,
+	git_index_entry **best,
+	git_index *index,
+	const git_index_entry *entry)
+{
+	git_index_entry *e;
+	size_t pos;
+	int error;
+
+	error = index_find(&pos,
+		index, entry->path, 0, GIT_INDEX_ENTRY_STAGE(entry));
+
+	if (error == 0) {
+		*existing = index->entries.contents[pos];
+		*existing_position = pos;
+		*best = index->entries.contents[pos];
+		return;
+	}
+
+	*existing = NULL;
+	*existing_position = 0;
+	*best = NULL;
+
+	if (GIT_INDEX_ENTRY_STAGE(entry) == 0) {
+		for (; pos < index->entries.length; pos++) {
+			int (*strcomp)(const char *a, const char *b) =
+				index->ignore_case ? git__strcasecmp : git__strcmp;
+
+			e = index->entries.contents[pos];
+
+			if (strcomp(entry->path, e->path) != 0)
+				break;
+
+			if (GIT_INDEX_ENTRY_STAGE(e) == GIT_INDEX_STAGE_ANCESTOR) {
+				*best = e;
+				continue;
+			} else {
+				*best = e;
+				break;
+			}
+		}
+	}
+}
+
+
+// Source: index.c
+// Lines 1280-1324
+
+
+[ANSWER]
+MUST

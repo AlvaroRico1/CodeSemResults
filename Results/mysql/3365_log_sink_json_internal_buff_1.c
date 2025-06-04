@@ -1,0 +1,206 @@
+  char internal_buff[LOG_BUFF_MAX];  // output buffer if none given by caller
+  char esc_buff[LOG_BUFF_MAX];       // buffer to JSON-escape strings in
+  char *out_buff = internal_buff;    // result buffer
+  const char *inp_readpos;           // read-position in input
+  char *out_writepos;                // write-position in output
+  size_t len, out_left, out_size = sizeof(internal_buff), inp_left;
+  int wellknown_label, out_fields = 0;
+  const char *comma = (pretty != JSON_NOSPACE) ? " " : "";
+  const char *separator;
+  enum loglevel level = ERROR_LEVEL;
+  log_item_type item_type = LOG_ITEM_END;
+  log_item_type_mask out_types = 0;
+  log_item_iter *it;
+  log_item *li;
+#ifdef WITH_PFS_SUPPORT
+  log_item *output_buffer = log_bi->line_get_output_buffer(ll);
+
+  // use caller's buffer if one was provided
+  if (output_buffer != nullptr) {
+    out_buff = (char *)output_buffer->data.data_buffer.str;
+    out_size = output_buffer->data.data_buffer.length;
+  }
+#endif
+
+  out_writepos = out_buff;
+  out_left = out_size;
+
+  if (instance == nullptr) return LOG_SERVICE_INVALID_ARGUMENT;
+
+  if (pretty == JSON_NOSPACE)
+    separator = ":";
+  else if (pretty == JSON_MULTILINE)
+    separator = ": ";
+  else
+    separator = " : ";
+
+  if ((it = log_bi->line_item_iter_acquire(ll)) == nullptr)
+    return LOG_SERVICE_MISC_ERROR; /* purecov: inspected */
+
+  if ((li = log_bi->line_item_iter_first(it)) != nullptr) {
+    len = log_bs->substitute(out_writepos, out_left, "{");
+    out_left -= len;
+    out_writepos += len;
+
+    // Iterate until we're out of items, or out of space in the resulting row.
+    while ((li != nullptr) && (out_left > 0)) {
+      item_type = li->type;
+      len = 0;
+
+      // Sanity-check the item.
+      if (log_bi->item_inconsistent(li)) {
+        len =
+            log_bs->substitute(out_writepos, out_left,
+                               "%s\"%s\"%s\"log_sink_json: broken item with "
+                               "class %d, type %d\"",
+                               comma, (li->key == nullptr) ? "_null" : li->key,
+                               separator, li->item_class, li->type);
+        item_type = LOG_ITEM_END;  // do not flag current item-type as added
+        goto broken_item;  // add this notice if there is enough space left
+      }
+
+      if (item_type == LOG_ITEM_LOG_PRIO) {
+        level = static_cast<enum loglevel>(li->data.data_integer);
+      }
+
+      switch (li->item_class) {
+        case LOG_LEX_STRING:
+          inp_readpos = li->data.data_string.str;
+          inp_left = li->data.data_string.length;
+
+          if (inp_readpos != nullptr) {
+            size_t esc_len = 0;  // characters used in escape buffer
+
+            // escape value for JSON: \ " \x00..\x1f  (RfC7159)
+            while (inp_left-- > 0) {
+              if ((*inp_readpos == '\\') || (*inp_readpos == '\"')) {
+                if (esc_len >= (sizeof(esc_buff) - 2)) goto skip_item;
+                esc_buff[esc_len++] = '\\';
+                esc_buff[esc_len++] = *(inp_readpos++);
+              } else if (((unsigned char)*inp_readpos) <= 0x1f) {
+                size_t esc_have = sizeof(esc_buff) - esc_len - 1;
+                size_t esc_want;
+                esc_want = log_bs->substitute(
+                    &esc_buff[esc_len], esc_have, "\\u%04x",
+                    (unsigned int)((unsigned char)*(inp_readpos++)));
+                if (esc_want >= esc_have) goto skip_item;
+
+                esc_len += esc_want;
+              } else {
+                if (esc_len >= (sizeof(esc_buff) - 1)) goto skip_item;
+                esc_buff[esc_len++] = *(inp_readpos++);
+              }
+            }
+            esc_buff[esc_len] = '\0';
+
+            len = log_bs->substitute(out_writepos, out_left,
+                                     "%s\"%s\"%s\"%.*s\"", comma, li->key,
+                                     separator, (int)esc_len, esc_buff);
+          }
+          break;
+
+        case LOG_INTEGER:
+          len = log_bs->substitute(out_writepos, out_left, "%s\"%s\"%s%lld",
+                                   comma, li->key, separator,
+                                   li->data.data_integer);
+          break;
+
+        case LOG_FLOAT:
+          len = log_bs->substitute(out_writepos, out_left, "%s\"%s\"%s%.12lf",
+                                   comma, li->key, separator,
+                                   li->data.data_float);
+          break;
+
+        default:
+          // unknown item-class
+          goto skip_item; /* purecov: inspected */
+          break;
+      }
+
+      // label: item is malformed or otherwise broken; notice inserted instead
+    broken_item:
+
+      // item is too large, skip it
+      if (len > out_left) {
+        *out_writepos = '\0';  // "remove" truncated write
+        goto skip_item;
+      }
+
+      out_types |= item_type;  // successfully added; flag item-type as present
+
+      out_fields++;
+      out_left -= len;
+      out_writepos += len;
+
+      comma = (pretty == JSON_MULTILINE)
+                  ? ",\n  "
+                  : ((pretty == JSON_NOSPACE) ? "," : ", ");
+
+      // label: item was too large and therefore was skipped
+    skip_item:
+      li = log_bi->line_item_iter_next(it);
+    }
+
+    if (out_fields > 0) {
+      if ((out_types & LOG_ITEM_LOG_PRIO) &&
+          !(out_types & LOG_ITEM_LOG_LABEL) && (out_left > 0)) {
+        const char *label = log_bi->label_from_prio(level);
+
+        wellknown_label = log_bi->wellknown_by_type(LOG_ITEM_LOG_LABEL);
+        len = log_bs->substitute(
+            out_writepos, out_left, "%s\"%s\"%s\"%.*s\"", comma,
+            log_bi->wellknown_get_name((log_item_type)wellknown_label),
+            separator, (int)log_bs->length(label), label);
+        if (len < out_left) {
+          out_fields++;
+          out_left -= len;
+          out_writepos += len;
+          out_types |= LOG_ITEM_LOG_LABEL;
+        } else                  // prio didn't fit
+          *out_writepos = '\0'; /* purecov: inspected */
+      }
+
+      /*
+        We're multiplexing several JSON streams into the same output
+        stream, so we add a stream_id so they can be told apart.
+      */
+      if ((log_bi->dedicated_errstream(((my_state *)instance)->errstream) <
+           1) &&
+          (opened > 1)) {
+        len = log_bs->substitute(out_writepos, out_left, "%s\"%s\"%s\"%d\"",
+                                 comma, "stream_id", separator,
+                                 ((my_state *)instance)->id);
+        if (len < out_left) {
+          out_fields++;
+          out_left -= len;
+          out_writepos += len;
+        } else       // no soft-fail for "cannot write needed stream_id"
+          goto fail; /* purecov: inspected */
+      }
+
+      len = log_bs->substitute(out_writepos, out_left,
+                               (pretty != JSON_NOSPACE) ? " }" : "}");
+      if (len >= out_left)  // no soft-fail for "cannot write needed terminator"
+        goto fail;          /* purecov: inspected */
+
+      out_left -= len;
+      out_writepos += len;
+
+#ifdef WITH_PFS_SUPPORT
+      // support for performance_schema.error_log
+      if (output_buffer != nullptr) {
+        output_buffer->data.data_buffer.length = out_size - out_left;
+        // we update this only if we created a valid record
+        output_buffer->type = LOG_ITEM_RET_BUFFER;
+      }
+#endif
+
+      // write the record to the stream / log-file
+      log_bi->write_errstream(((my_state *)instance)->errstream, out_buff,
+                              (size_t)out_size - out_left);
+    }
+  }
+
+
+// Source: log_sink_json.cc
+// Lines 181-382

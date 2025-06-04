@@ -1,0 +1,27 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'item' at line 2
+2. Pointer 'stmt' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void reset_stmt_params(Prepared_statement *stmt) {
+  Item_param **item = stmt->param_array;
+  Item_param **end = item + stmt->param_count;
+  for (; item < end; ++item) {
+    (**item).reset();
+    (**item).sync_clones();
+  }
+}
+
+
+// Source: sql_prepare.cc
+// Lines 1841-1848
+
+
+[ANSWER]
+MUST

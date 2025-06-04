@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'stream' at line 1\n2. Pointer 'buffer' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int unpack_loose_short_header(git_zstream *stream,\n\t\t\t\t     unsigned char *map, unsigned long mapsize,\n\t\t\t\t     void *buffer, unsigned long bufsiz)\n{\n\tint ret;\n\n\t/* Get the data stream */\n\tmemset(stream, 0, sizeof(*stream));\n\tstream->next_in = map;\n\tstream->avail_in = mapsize;\n\tstream->next_out = buffer;\n\tstream->avail_out = bufsiz;\n\n\tgit_inflate_init(stream);\n\tobj_read_unlock();\n\tret = git_inflate(stream, 0);\n\tobj_read_lock();\n\n\treturn ret;\n}\n\n\n// Source: object-file.c\n// Lines 1190-1209\n",
+  "ANSWER": "MUST"
+}

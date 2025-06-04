@@ -1,0 +1,48 @@
+static int my_strcasecmp_utf8mb4(const CHARSET_INFO *cs, const char *s,
+                                 const char *t) {
+  const MY_UNICASE_INFO *uni_plane = cs->caseinfo;
+  while (s[0] && t[0]) {
+    my_wc_t s_wc, t_wc;
+
+    if ((uchar)s[0] < 128) {
+      /*
+        s[0] is between 0 and 127.
+        It represents a single byte character.
+        Convert it into weight according to collation.
+      */
+      s_wc = plane00[(uchar)s[0]].tolower;
+      s++;
+    } else {
+      int res = my_mb_wc_utf8mb4_no_range(cs, &s_wc, (const uchar *)s);
+
+      /*
+         In the case of wrong multibyte sequence we will
+         call strcmp() for byte-to-byte comparison.
+      */
+      if (res <= 0) return strcmp(s, t);
+      s += res;
+
+      my_tolower_utf8mb4(uni_plane, &s_wc);
+    }
+
+    /* Do the same for the second string */
+
+    if ((uchar)t[0] < 128) {
+      /* Convert single byte character into weight */
+      t_wc = plane00[(uchar)t[0]].tolower;
+      t++;
+    } else {
+      int res = my_mb_wc_utf8mb4_no_range(cs, &t_wc, (const uchar *)t);
+      if (res <= 0) return strcmp(s, t);
+      t += res;
+
+      my_tolower_utf8mb4(uni_plane, &t_wc);
+    }
+
+    /* Now we have two weights, let's compare them */
+    if (s_wc != t_wc) return ((int)s_wc) - ((int)t_wc);
+  }
+
+
+// Source: ctype-utf8.cc
+// Lines 7603-7646

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'p' at line 6\n2. Pointer 'n' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\n  pointer allocate(size_type n,\n                   const_pointer hint MY_ATTRIBUTE((unused)) = nullptr) {\n    if (n == 0) return nullptr;\n    if (n > max_size()) throw std::bad_alloc();\n\n    pointer p = static_cast<pointer>(\n        my_malloc(m_key, n * sizeof(T), MYF(MY_WME | ME_FATALERROR)));\n    if (p == nullptr) throw std::bad_alloc();\n    return p;\n  }\n\n\n// Source: malloc_allocator.h\n// Lines 92-101\n",
+  "ANSWER": "MUST-NOT"
+}

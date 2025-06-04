@@ -1,0 +1,81 @@
+cmd_select_layout_exec(struct cmd *self, struct cmdq_item *item)
+{
+	struct args		*args = cmd_get_args(self);
+	struct cmd_find_state	*target = cmdq_get_target(item);
+	struct winlink		*wl = target->wl;
+	struct window		*w = wl->window;
+	struct window_pane	*wp = target->wp;
+	const char		*layoutname;
+	char			*oldlayout;
+	int			 next, previous, layout;
+
+	server_unzoom_window(w);
+
+	next = (cmd_get_entry(self) == &cmd_next_layout_entry);
+	if (args_has(args, 'n'))
+		next = 1;
+	previous = (cmd_get_entry(self) == &cmd_previous_layout_entry);
+	if (args_has(args, 'p'))
+		previous = 1;
+
+	oldlayout = w->old_layout;
+	w->old_layout = layout_dump(w->layout_root);
+
+	if (next || previous) {
+		if (next)
+			layout_set_next(w);
+		else
+			layout_set_previous(w);
+		goto changed;
+	}
+
+	if (args_has(args, 'E')) {
+		layout_spread_out(wp);
+		goto changed;
+	}
+
+	if (args_count(args) != 0)
+		layoutname = args_string(args, 0);
+	else if (args_has(args, 'o'))
+		layoutname = oldlayout;
+	else
+		layoutname = NULL;
+
+	if (!args_has(args, 'o')) {
+		if (layoutname == NULL)
+			layout = w->lastlayout;
+		else
+			layout = layout_set_lookup(layoutname);
+		if (layout != -1) {
+			layout_set_select(w, layout);
+			goto changed;
+		}
+	}
+
+	if (layoutname != NULL) {
+		if (layout_parse(w, layoutname) == -1) {
+			cmdq_error(item, "can't set layout: %s", layoutname);
+			goto error;
+		}
+		goto changed;
+	}
+
+	free(oldlayout);
+	return (CMD_RETURN_NORMAL);
+
+changed:
+	free(oldlayout);
+	recalculate_sizes();
+	server_redraw_window(w);
+	notify_window("window-layout-changed", w);
+	return (CMD_RETURN_NORMAL);
+
+error:
+	free(w->old_layout);
+	w->old_layout = oldlayout;
+	return (CMD_RETURN_ERROR);
+}
+
+
+// Source: cmd-select-layout.c
+// Lines 72-148

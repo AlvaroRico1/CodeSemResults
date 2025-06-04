@@ -1,0 +1,96 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'offset' at line 59
+2. Pointer 'slot' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+get_combined_adhoc_loc (line_maps *set,
+			location_t locus,
+			source_range src_range,
+			void *data)
+{
+  struct location_adhoc_data lb;
+  struct location_adhoc_data **slot;
+
+  if (IS_ADHOC_LOC (locus))
+    locus = get_location_from_adhoc_loc (set, locus);
+  if (locus == 0 && data == NULL)
+    return 0;
+
+  /* Any ordinary locations ought to be "pure" at this point: no
+     compressed ranges.  */
+  linemap_assert (locus < RESERVED_LOCATION_COUNT
+		  || locus >= LINE_MAP_MAX_LOCATION_WITH_PACKED_RANGES
+		  || locus >= LINEMAPS_MACRO_LOWEST_LOCATION (set)
+		  || pure_location_p (set, locus));
+
+  /* Consider short-range optimization.  */
+  if (can_be_stored_compactly_p (set, locus, src_range, data))
+    {
+      /* The low bits ought to be clear.  */
+      linemap_assert (pure_location_p (set, locus));
+      const line_map *map = linemap_lookup (set, locus);
+      const line_map_ordinary *ordmap = linemap_check_ordinary (map);
+      unsigned int int_diff = src_range.m_finish - src_range.m_start;
+      unsigned int col_diff = (int_diff >> ordmap->m_range_bits);
+      if (col_diff < (1U << ordmap->m_range_bits))
+	{
+	  location_t packed = locus | col_diff;
+	  set->num_optimized_ranges++;
+	  return packed;
+	}
+    }
+
+  /* We can also compactly store locations
+     when locus == start == finish (and data is NULL).  */
+  if (locus == src_range.m_start
+      && locus == src_range.m_finish
+      && !data)
+    return locus;
+
+  if (!data)
+    set->num_unoptimized_ranges++;
+
+  lb.locus = locus;
+  lb.src_range = src_range;
+  lb.data = data;
+  slot = (struct location_adhoc_data **)
+      htab_find_slot (set->location_adhoc_data_map.htab, &lb, INSERT);
+  if (*slot == NULL)
+    {
+      if (set->location_adhoc_data_map.curr_loc >=
+	  set->location_adhoc_data_map.allocated)
+	{
+	  char *orig_data = (char *) set->location_adhoc_data_map.data;
+	  ptrdiff_t offset;
+	  /* Cast away extern "C" from the type of xrealloc.  */
+	  line_map_realloc reallocator = (set->reallocator
+					  ? set->reallocator
+					  : (line_map_realloc) xrealloc);
+
+	  if (set->location_adhoc_data_map.allocated == 0)
+	    set->location_adhoc_data_map.allocated = 128;
+	  else
+	    set->location_adhoc_data_map.allocated *= 2;
+	  set->location_adhoc_data_map.data = (struct location_adhoc_data *)
+	      reallocator (set->location_adhoc_data_map.data,
+			   set->location_adhoc_data_map.allocated
+			   * sizeof (struct location_adhoc_data));
+	  offset = (char *) (set->location_adhoc_data_map.data) - orig_data;
+	  if (set->location_adhoc_data_map.allocated > 128)
+	    htab_traverse (set->location_adhoc_data_map.htab,
+			   location_adhoc_data_update, &offset);
+	}
+
+
+// Source: line-map.c
+// Lines 157-233
+
+
+[ANSWER]
+MAY

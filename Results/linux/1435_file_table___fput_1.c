@@ -1,0 +1,50 @@
+static void __fput(struct file *file)
+{
+	struct dentry *dentry = file->f_path.dentry;
+	struct vfsmount *mnt = file->f_path.mnt;
+	struct inode *inode = file->f_inode;
+	fmode_t mode = file->f_mode;
+
+	if (unlikely(!(file->f_mode & FMODE_OPENED)))
+		goto out;
+
+	might_sleep();
+
+	fsnotify_close(file);
+	/*
+	 * The function eventpoll_release() should be the first called
+	 * in the file cleanup chain.
+	 */
+	eventpoll_release(file);
+	locks_remove_file(file);
+
+	ima_file_free(file);
+	if (unlikely(file->f_flags & FASYNC)) {
+		if (file->f_op->fasync)
+			file->f_op->fasync(-1, file, 0);
+	}
+	if (file->f_op->release)
+		file->f_op->release(inode, file);
+	if (unlikely(S_ISCHR(inode->i_mode) && inode->i_cdev != NULL &&
+		     !(mode & FMODE_PATH))) {
+		cdev_put(inode->i_cdev);
+	}
+	fops_put(file->f_op);
+	put_pid(file->f_owner.pid);
+	if ((mode & (FMODE_READ | FMODE_WRITE)) == FMODE_READ)
+		i_readcount_dec(inode);
+	if (mode & FMODE_WRITER) {
+		put_write_access(inode);
+		__mnt_drop_write(mnt);
+	}
+	dput(dentry);
+	if (unlikely(mode & FMODE_NEED_UNMOUNT))
+		dissolve_on_fput(mnt);
+	mntput(mnt);
+out:
+	file_free(file);
+}
+
+
+// Source: file_table.c
+// Lines 254-299

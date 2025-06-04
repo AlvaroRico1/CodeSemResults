@@ -1,0 +1,52 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'result' at line 2
+2. Pointer 'author' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int create_commit_from_ids(
+	git_oid *result,
+	const git_oid *tree_id,
+	const git_oid *parent_id)
+{
+	git_signature *author, *committer;
+	const git_oid *parent_ids[1];
+	int ret;
+
+	cl_git_pass(git_signature_new(
+		&committer, committer_name, committer_email, 123456789, 60));
+	cl_git_pass(git_signature_new(
+		&author, committer_name, committer_email, 987654321, 90));
+
+	parent_ids[0] = parent_id;
+
+	ret = git_commit_create_from_ids(
+		result,
+		g_repo,
+		NULL,
+		author,
+		committer,
+		NULL,
+		root_commit_message,
+		tree_id,
+		1,
+		parent_ids);
+
+	git_signature_free(committer);
+	git_signature_free(author);
+
+	return ret;
+}
+
+
+// Source: write.c
+// Lines 204-236
+
+
+[ANSWER]
+MUST-NOT

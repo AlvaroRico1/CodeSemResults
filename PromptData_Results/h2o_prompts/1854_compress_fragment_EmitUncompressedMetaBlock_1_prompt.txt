@@ -1,0 +1,405 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'storage_ix' at line 3
+2. Pointer 'begin' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void EmitUncompressedMetaBlock(const uint8_t* begin, const uint8_t* end,
+                                      const size_t storage_ix_start,
+                                      size_t* storage_ix, uint8_t* storage) {
+  const size_t len = (size_t)(end - begin);
+  RewindBitPosition(storage_ix_start, storage_ix, storage);
+  BrotliStoreMetaBlockHeader(len, 1, storage_ix, storage);
+  *storage_ix = (*storage_ix + 7u) & ~7u;
+  memcpy(&storage[*storage_ix >> 3], begin, len);
+  *storage_ix += len << 3;
+  storage[*storage_ix >> 3] = 0;
+}
+
+static uint32_t kCmdHistoSeed[128] = {
+  0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  1, 1, 1, 1, 0, 0, 0, 0,
+};
+
+static BROTLI_INLINE void BrotliCompressFragmentFastImpl(
+    MemoryManager* m, const uint8_t* input, size_t input_size,
+    BROTLI_BOOL is_last, int* table, size_t table_bits, uint8_t cmd_depth[128],
+    uint16_t cmd_bits[128], size_t* cmd_code_numbits, uint8_t* cmd_code,
+    size_t* storage_ix, uint8_t* storage) {
+  uint32_t cmd_histo[128];
+  const uint8_t* ip_end;
+
+  /* "next_emit" is a pointer to the first byte that is not covered by a
+     previous copy. Bytes between "next_emit" and the start of the next copy or
+     the end of the input will be emitted as literal bytes. */
+  const uint8_t* next_emit = input;
+  /* Save the start of the first block for position and distance computations.
+  */
+  const uint8_t* base_ip = input;
+
+  static const size_t kFirstBlockSize = 3 << 15;
+  static const size_t kMergeBlockSize = 1 << 16;
+
+  const size_t kInputMarginBytes = BROTLI_WINDOW_GAP;
+  const size_t kMinMatchLen = 5;
+
+  const uint8_t* metablock_start = input;
+  size_t block_size = BROTLI_MIN(size_t, input_size, kFirstBlockSize);
+  size_t total_block_size = block_size;
+  /* Save the bit position of the MLEN field of the meta-block header, so that
+     we can update it later if we decide to extend this meta-block. */
+  size_t mlen_storage_ix = *storage_ix + 3;
+
+  uint8_t lit_depth[256];
+  uint16_t lit_bits[256];
+
+  size_t literal_ratio;
+
+  const uint8_t* ip;
+  int last_distance;
+
+  const size_t shift = 64u - table_bits;
+
+  BrotliStoreMetaBlockHeader(block_size, 0, storage_ix, storage);
+  /* No block splits, no contexts. */
+  BrotliWriteBits(13, 0, storage_ix, storage);
+
+  literal_ratio = BuildAndStoreLiteralPrefixCode(
+      m, input, block_size, lit_depth, lit_bits, storage_ix, storage);
+  if (BROTLI_IS_OOM(m)) return;
+
+  {
+    /* Store the pre-compressed command and distance prefix codes. */
+    size_t i;
+    for (i = 0; i + 7 < *cmd_code_numbits; i += 8) {
+      BrotliWriteBits(8, cmd_code[i >> 3], storage_ix, storage);
+    }
+  }
+  BrotliWriteBits(*cmd_code_numbits & 7, cmd_code[*cmd_code_numbits >> 3],
+                  storage_ix, storage);
+
+ emit_commands:
+  /* Initialize the command and distance histograms. We will gather
+     statistics of command and distance codes during the processing
+     of this block and use it to update the command and distance
+     prefix codes for the next block. */
+  memcpy(cmd_histo, kCmdHistoSeed, sizeof(kCmdHistoSeed));
+
+  /* "ip" is the input pointer. */
+  ip = input;
+  last_distance = -1;
+  ip_end = input + block_size;
+
+  if (BROTLI_PREDICT_TRUE(block_size >= kInputMarginBytes)) {
+    /* For the last block, we need to keep a 16 bytes margin so that we can be
+       sure that all distances are at most window size - 16.
+       For all other blocks, we only need to keep a margin of 5 bytes so that
+       we don't go over the block size with a copy. */
+    const size_t len_limit = BROTLI_MIN(size_t, block_size - kMinMatchLen,
+                                        input_size - kInputMarginBytes);
+    const uint8_t* ip_limit = input + len_limit;
+
+    uint32_t next_hash;
+    for (next_hash = Hash(++ip, shift); ; ) {
+      /* Step 1: Scan forward in the input looking for a 5-byte-long match.
+         If we get close to exhausting the input then goto emit_remainder.
+
+         Heuristic match skipping: If 32 bytes are scanned with no matches
+         found, start looking only at every other byte. If 32 more bytes are
+         scanned, look at every third byte, etc.. When a match is found,
+         immediately go back to looking at every byte. This is a small loss
+         (~5% performance, ~0.1% density) for compressible data due to more
+         bookkeeping, but for non-compressible data (such as JPEG) it's a huge
+         win since the compressor quickly "realizes" the data is incompressible
+         and doesn't bother looking for matches everywhere.
+
+         The "skip" variable keeps track of how many bytes there are since the
+         last match; dividing it by 32 (i.e. right-shifting by five) gives the
+         number of bytes to move ahead for each iteration. */
+      uint32_t skip = 32;
+
+      const uint8_t* next_ip = ip;
+      const uint8_t* candidate;
+      assert(next_emit < ip);
+trawl:
+      do {
+        uint32_t hash = next_hash;
+        uint32_t bytes_between_hash_lookups = skip++ >> 5;
+        assert(hash == Hash(next_ip, shift));
+        ip = next_ip;
+        next_ip = ip + bytes_between_hash_lookups;
+        if (BROTLI_PREDICT_FALSE(next_ip > ip_limit)) {
+          goto emit_remainder;
+        }
+        next_hash = Hash(next_ip, shift);
+        candidate = ip - last_distance;
+        if (IsMatch(ip, candidate)) {
+          if (BROTLI_PREDICT_TRUE(candidate < ip)) {
+            table[hash] = (int)(ip - base_ip);
+            break;
+          }
+        }
+        candidate = base_ip + table[hash];
+        assert(candidate >= base_ip);
+        assert(candidate < ip);
+
+        table[hash] = (int)(ip - base_ip);
+      } while (BROTLI_PREDICT_TRUE(!IsMatch(ip, candidate)));
+
+      /* Check copy distance. If candidate is not feasible, continue search.
+         Checking is done outside of hot loop to reduce overhead. */
+      if (ip - candidate > MAX_DISTANCE) goto trawl;
+
+      /* Step 2: Emit the found match together with the literal bytes from
+         "next_emit" to the bit stream, and then see if we can find a next match
+         immediately afterwards. Repeat until we find no match for the input
+         without emitting some literal bytes. */
+
+      {
+        /* We have a 5-byte match at ip, and we need to emit bytes in
+           [next_emit, ip). */
+        const uint8_t* base = ip;
+        size_t matched = 5 + FindMatchLengthWithLimit(
+            candidate + 5, ip + 5, (size_t)(ip_end - ip) - 5);
+        int distance = (int)(base - candidate);  /* > 0 */
+        size_t insert = (size_t)(base - next_emit);
+        ip += matched;
+        assert(0 == memcmp(base, candidate, matched));
+        if (BROTLI_PREDICT_TRUE(insert < 6210)) {
+          EmitInsertLen(insert, cmd_depth, cmd_bits, cmd_histo,
+                        storage_ix, storage);
+        } else if (ShouldUseUncompressedMode(metablock_start, next_emit, insert,
+                                             literal_ratio)) {
+          EmitUncompressedMetaBlock(metablock_start, base, mlen_storage_ix - 3,
+                                    storage_ix, storage);
+          input_size -= (size_t)(base - input);
+          input = base;
+          next_emit = input;
+          goto next_block;
+        } else {
+          EmitLongInsertLen(insert, cmd_depth, cmd_bits, cmd_histo,
+                            storage_ix, storage);
+        }
+        EmitLiterals(next_emit, insert, lit_depth, lit_bits,
+                     storage_ix, storage);
+        if (distance == last_distance) {
+          BrotliWriteBits(cmd_depth[64], cmd_bits[64], storage_ix, storage);
+          ++cmd_histo[64];
+        } else {
+          EmitDistance((size_t)distance, cmd_depth, cmd_bits,
+                       cmd_histo, storage_ix, storage);
+          last_distance = distance;
+        }
+        EmitCopyLenLastDistance(matched, cmd_depth, cmd_bits, cmd_histo,
+                                storage_ix, storage);
+
+        next_emit = ip;
+        if (BROTLI_PREDICT_FALSE(ip >= ip_limit)) {
+          goto emit_remainder;
+        }
+        /* We could immediately start working at ip now, but to improve
+           compression we first update "table" with the hashes of some positions
+           within the last copy. */
+        {
+          uint64_t input_bytes = BROTLI_UNALIGNED_LOAD64LE(ip - 3);
+          uint32_t prev_hash = HashBytesAtOffset(input_bytes, 0, shift);
+          uint32_t cur_hash = HashBytesAtOffset(input_bytes, 3, shift);
+          table[prev_hash] = (int)(ip - base_ip - 3);
+          prev_hash = HashBytesAtOffset(input_bytes, 1, shift);
+          table[prev_hash] = (int)(ip - base_ip - 2);
+          prev_hash = HashBytesAtOffset(input_bytes, 2, shift);
+          table[prev_hash] = (int)(ip - base_ip - 1);
+
+          candidate = base_ip + table[cur_hash];
+          table[cur_hash] = (int)(ip - base_ip);
+        }
+      }
+
+      while (IsMatch(ip, candidate)) {
+        /* We have a 5-byte match at ip, and no need to emit any literal bytes
+           prior to ip. */
+        const uint8_t* base = ip;
+        size_t matched = 5 + FindMatchLengthWithLimit(
+            candidate + 5, ip + 5, (size_t)(ip_end - ip) - 5);
+        if (ip - candidate > MAX_DISTANCE) break;
+        ip += matched;
+        last_distance = (int)(base - candidate);  /* > 0 */
+        assert(0 == memcmp(base, candidate, matched));
+        EmitCopyLen(matched, cmd_depth, cmd_bits, cmd_histo,
+                    storage_ix, storage);
+        EmitDistance((size_t)last_distance, cmd_depth, cmd_bits,
+                     cmd_histo, storage_ix, storage);
+
+        next_emit = ip;
+        if (BROTLI_PREDICT_FALSE(ip >= ip_limit)) {
+          goto emit_remainder;
+        }
+        /* We could immediately start working at ip now, but to improve
+           compression we first update "table" with the hashes of some positions
+           within the last copy. */
+        {
+          uint64_t input_bytes = BROTLI_UNALIGNED_LOAD64LE(ip - 3);
+          uint32_t prev_hash = HashBytesAtOffset(input_bytes, 0, shift);
+          uint32_t cur_hash = HashBytesAtOffset(input_bytes, 3, shift);
+          table[prev_hash] = (int)(ip - base_ip - 3);
+          prev_hash = HashBytesAtOffset(input_bytes, 1, shift);
+          table[prev_hash] = (int)(ip - base_ip - 2);
+          prev_hash = HashBytesAtOffset(input_bytes, 2, shift);
+          table[prev_hash] = (int)(ip - base_ip - 1);
+
+          candidate = base_ip + table[cur_hash];
+          table[cur_hash] = (int)(ip - base_ip);
+        }
+      }
+
+      next_hash = Hash(++ip, shift);
+    }
+  }
+
+ emit_remainder:
+  assert(next_emit <= ip_end);
+  input += block_size;
+  input_size -= block_size;
+  block_size = BROTLI_MIN(size_t, input_size, kMergeBlockSize);
+
+  /* Decide if we want to continue this meta-block instead of emitting the
+     last insert-only command. */
+  if (input_size > 0 &&
+      total_block_size + block_size <= (1 << 20) &&
+      ShouldMergeBlock(input, block_size, lit_depth)) {
+    assert(total_block_size > (1 << 16));
+    /* Update the size of the current meta-block and continue emitting commands.
+       We can do this because the current size and the new size both have 5
+       nibbles. */
+    total_block_size += block_size;
+    UpdateBits(20, (uint32_t)(total_block_size - 1), mlen_storage_ix, storage);
+    goto emit_commands;
+  }
+
+  /* Emit the remaining bytes as literals. */
+  if (next_emit < ip_end) {
+    const size_t insert = (size_t)(ip_end - next_emit);
+    if (BROTLI_PREDICT_TRUE(insert < 6210)) {
+      EmitInsertLen(insert, cmd_depth, cmd_bits, cmd_histo,
+                    storage_ix, storage);
+      EmitLiterals(next_emit, insert, lit_depth, lit_bits, storage_ix, storage);
+    } else if (ShouldUseUncompressedMode(metablock_start, next_emit, insert,
+                                         literal_ratio)) {
+      EmitUncompressedMetaBlock(metablock_start, ip_end, mlen_storage_ix - 3,
+                                storage_ix, storage);
+    } else {
+      EmitLongInsertLen(insert, cmd_depth, cmd_bits, cmd_histo,
+                        storage_ix, storage);
+      EmitLiterals(next_emit, insert, lit_depth, lit_bits,
+                   storage_ix, storage);
+    }
+  }
+  next_emit = ip_end;
+
+next_block:
+  /* If we have more data, write a new meta-block header and prefix codes and
+     then continue emitting commands. */
+  if (input_size > 0) {
+    metablock_start = input;
+    block_size = BROTLI_MIN(size_t, input_size, kFirstBlockSize);
+    total_block_size = block_size;
+    /* Save the bit position of the MLEN field of the meta-block header, so that
+       we can update it later if we decide to extend this meta-block. */
+    mlen_storage_ix = *storage_ix + 3;
+    BrotliStoreMetaBlockHeader(block_size, 0, storage_ix, storage);
+    /* No block splits, no contexts. */
+    BrotliWriteBits(13, 0, storage_ix, storage);
+    literal_ratio = BuildAndStoreLiteralPrefixCode(
+        m, input, block_size, lit_depth, lit_bits, storage_ix, storage);
+    if (BROTLI_IS_OOM(m)) return;
+    BuildAndStoreCommandPrefixCode(cmd_histo, cmd_depth, cmd_bits,
+                                   storage_ix, storage);
+    goto emit_commands;
+  }
+
+  if (!is_last) {
+    /* If this is not the last block, update the command and distance prefix
+       codes for the next block and store the compressed forms. */
+    cmd_code[0] = 0;
+    *cmd_code_numbits = 0;
+    BuildAndStoreCommandPrefixCode(cmd_histo, cmd_depth, cmd_bits,
+                                   cmd_code_numbits, cmd_code);
+  }
+}
+
+#define FOR_TABLE_BITS_(X) X(9) X(11) X(13) X(15)
+
+#define BAKE_METHOD_PARAM_(B) \
+static BROTLI_NOINLINE void BrotliCompressFragmentFastImpl ## B(             \
+    MemoryManager* m, const uint8_t* input, size_t input_size,               \
+    BROTLI_BOOL is_last, int* table, uint8_t cmd_depth[128],                 \
+    uint16_t cmd_bits[128], size_t* cmd_code_numbits, uint8_t* cmd_code,     \
+    size_t* storage_ix, uint8_t* storage) {                                  \
+  BrotliCompressFragmentFastImpl(m, input, input_size, is_last, table, B,    \
+      cmd_depth, cmd_bits, cmd_code_numbits, cmd_code, storage_ix, storage); \
+}
+FOR_TABLE_BITS_(BAKE_METHOD_PARAM_)
+#undef BAKE_METHOD_PARAM_
+
+void BrotliCompressFragmentFast(
+    MemoryManager* m, const uint8_t* input, size_t input_size,
+    BROTLI_BOOL is_last, int* table, size_t table_size, uint8_t cmd_depth[128],
+    uint16_t cmd_bits[128], size_t* cmd_code_numbits, uint8_t* cmd_code,
+    size_t* storage_ix, uint8_t* storage) {
+  const size_t initial_storage_ix = *storage_ix;
+  const size_t table_bits = Log2FloorNonZero(table_size);
+
+  if (input_size == 0) {
+    assert(is_last);
+    BrotliWriteBits(1, 1, storage_ix, storage);  /* islast */
+    BrotliWriteBits(1, 1, storage_ix, storage);  /* isempty */
+    *storage_ix = (*storage_ix + 7u) & ~7u;
+    return;
+  }
+
+  switch (table_bits) {
+#define CASE_(B)                                                     \
+    case B:                                                          \
+      BrotliCompressFragmentFastImpl ## B(                           \
+          m, input, input_size, is_last, table, cmd_depth, cmd_bits, \
+          cmd_code_numbits, cmd_code, storage_ix, storage);          \
+      break;
+    FOR_TABLE_BITS_(CASE_)
+#undef CASE_
+    default: assert(0); break;
+  }
+
+  /* If output is larger than single uncompressed block, rewrite it. */
+  if (*storage_ix - initial_storage_ix > 31 + (input_size << 3)) {
+    EmitUncompressedMetaBlock(input, input + input_size, initial_storage_ix,
+                              storage_ix, storage);
+  }
+
+  if (is_last) {
+    BrotliWriteBits(1, 1, storage_ix, storage);  /* islast */
+    BrotliWriteBits(1, 1, storage_ix, storage);  /* isempty */
+    *storage_ix = (*storage_ix + 7u) & ~7u;
+  }
+}
+
+#undef FOR_TABLE_BITS_
+
+#if defined(__cplusplus) || defined(c_plusplus)
+}  /* extern "C" */
+
+
+// Source: compress_fragment.c
+// Lines 405-790
+
+
+[ANSWER]
+MAY

@@ -1,0 +1,39 @@
+int lcsGetKeys(struct redisCommand *cmd, robj **argv, int argc, getKeysResult *result) {
+    int i;
+    int *keys = getKeysPrepareResult(result, 2);
+    UNUSED(cmd);
+
+    /* We need to parse the options of the command in order to check for the
+     * "KEYS" argument before the "STRINGS" argument. */
+    for (i = 1; i < argc; i++) {
+        char *arg = argv[i]->ptr;
+        int moreargs = (argc-1) - i;
+
+        if (!strcasecmp(arg, "strings")) {
+            break;
+        } else if (!strcasecmp(arg, "keys") && moreargs >= 2) {
+            keys[0] = i+1;
+            keys[1] = i+2;
+            result->numkeys = 2;
+            return result->numkeys;
+        }
+    }
+    result->numkeys = 0;
+    return result->numkeys;
+}
+
+/* Helper function to extract keys from memory command.
+ * MEMORY USAGE <key> */
+int memoryGetKeys(struct redisCommand *cmd, robj **argv, int argc, getKeysResult *result) {
+    UNUSED(cmd);
+
+    getKeysPrepareResult(result, 1);
+    if (argc >= 3 && !strcasecmp(argv[1]->ptr,"usage")) {
+        result->keys[0] = 2;
+        result->numkeys = 1;
+        return result->numkeys;
+    }
+
+
+// Source: db.c
+// Lines 1829-1863

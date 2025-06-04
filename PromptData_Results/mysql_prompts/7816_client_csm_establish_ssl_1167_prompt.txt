@@ -1,0 +1,75 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'mysql' at line 3
+2. Pointer 'ctx' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static mysql_state_machine_status csm_establish_ssl(mysql_async_connect *ctx) {
+  DBUG_TRACE;
+  MYSQL *mysql = ctx->mysql;
+  /* This check happens to work for both sync and async. */
+  if (ctx->ssl_state == SSL_NONE) {
+    MYSQL_TRACE(INIT_PACKET_RECEIVED, mysql,
+                (ctx->pkt_length, mysql->net.read_pos));
+    MYSQL_TRACE_STAGE(mysql, AUTHENTICATE);
+
+#if defined(_WIN32)
+    if ((mysql->options.extension &&
+         mysql->options.extension->ssl_mode <= SSL_MODE_PREFERRED) &&
+        (mysql->options.protocol == MYSQL_PROTOCOL_MEMORY ||
+         mysql->options.protocol == MYSQL_PROTOCOL_PIPE)) {
+      mysql->options.extension->ssl_mode = SSL_MODE_DISABLED;
+    }
+#endif
+    /* try and bring up SSL if possible */
+    cli_calculate_client_flag(mysql, ctx->db, ctx->client_flag);
+
+    /*
+      Allocate separate buffer for scramble data if we are going
+      to attempt TLS connection. This would prevent a possible
+      overwrite through my_net_write.
+    */
+    if (ctx->scramble_data_len && mysql->options.extension &&
+        mysql->options.extension->ssl_mode != SSL_MODE_DISABLED) {
+      if (!(ctx->scramble_buffer =
+                (char *)my_malloc(key_memory_MYSQL_HANDSHAKE,
+                                  ctx->scramble_data_len, MYF(MY_WME)))) {
+        set_mysql_error(mysql, CR_OUT_OF_MEMORY, unknown_sqlstate);
+        return STATE_MACHINE_FAILED;
+      }
+      ctx->scramble_buffer_allocated = true;
+      memcpy(ctx->scramble_buffer, ctx->scramble_data, ctx->scramble_data_len);
+    } else {
+      ctx->scramble_buffer = ctx->scramble_data;
+    }
+  }
+  if (ctx->non_blocking) {
+    int ret;
+    if (cli_establish_ssl_nonblocking(mysql, &ret) == NET_ASYNC_NOT_READY) {
+      return STATE_MACHINE_WOULD_BLOCK;
+    }
+    if (ret) {
+      return STATE_MACHINE_FAILED;
+    }
+  } else {
+    if (cli_establish_ssl(mysql)) {
+      return STATE_MACHINE_FAILED;
+    }
+  }
+
+  ctx->state_function = csm_authenticate;
+  return STATE_MACHINE_CONTINUE;
+}
+
+
+// Source: client.cc
+// Lines 6390-6445
+
+
+[ANSWER]
+MUST-NOT

@@ -1,0 +1,83 @@
+void THD::reset_for_next_command() {
+  // TODO: Why on earth is this here?! We should probably fix this
+  // function and move it to the proper file. /Matz
+  THD *thd = this;
+  DBUG_TRACE;
+  assert(!thd->sp_runtime_ctx); /* not for substatements of routines */
+  assert(!thd->in_sub_stmt);
+  thd->reset_item_list();
+  /*
+    Those two lines below are theoretically unneeded as
+    THD::cleanup_after_query() should take care of this already.
+  */
+  thd->auto_inc_intervals_in_cur_stmt_for_binlog.clear();
+  thd->stmt_depends_on_first_successful_insert_id_in_prev_stmt = false;
+
+  thd->query_start_usec_used = false;
+  thd->m_is_fatal_error = false;
+  thd->time_zone_used = false;
+  /*
+    Clear the status flag that are expected to be cleared at the
+    beginning of each SQL statement.
+  */
+  thd->server_status &= ~SERVER_STATUS_CLEAR_SET;
+  /*
+    If in autocommit mode and not in a transaction, reset flag
+    that identifies if a transaction has done some operations
+    that cannot be safely rolled back.
+
+    If the flag is set an warning message is printed out in
+    ha_rollback_trans() saying that some tables couldn't be
+    rolled back.
+  */
+  if (!thd->in_multi_stmt_transaction_mode()) {
+    thd->get_transaction()->reset_unsafe_rollback_flags(
+        Transaction_ctx::SESSION);
+  }
+  assert(thd->security_context() == &thd->m_main_security_ctx);
+  thd->thread_specific_used = false;
+
+  if (opt_bin_log) {
+    thd->user_var_events.clear();
+    thd->user_var_events_alloc = thd->mem_root;
+  }
+  thd->clear_error();
+  thd->get_stmt_da()->reset_diagnostics_area();
+  thd->get_stmt_da()->reset_statement_cond_count();
+
+  thd->rand_used = false;
+  thd->m_sent_row_count = thd->m_examined_row_count = 0;
+
+  thd->reset_current_stmt_binlog_format_row();
+  thd->binlog_unsafe_warning_flags = 0;
+  thd->binlog_need_explicit_defaults_ts = false;
+
+  thd->commit_error = THD::CE_NONE;
+  thd->durability_property = HA_REGULAR_DURABILITY;
+  thd->set_trans_pos(nullptr, 0);
+  thd->derived_tables_processing = false;
+  thd->parsing_system_view = false;
+
+  // Need explicit setting, else demand all privileges to a table.
+  thd->want_privilege = ~NO_ACCESS;
+
+  thd->reset_skip_readonly_check();
+  thd->tx_commit_pending = false;
+
+  DBUG_PRINT("debug", ("is_current_stmt_binlog_format_row(): %d",
+                       thd->is_current_stmt_binlog_format_row()));
+
+  /*
+    In case we're processing multiple statements we need to checkout a new
+    acl access map here as the global acl version might have increased due to
+    a grant/revoke or flush.
+  */
+  thd->security_context()->checkout_access_maps();
+#ifndef NDEBUG
+  thd->set_tmp_table_seq_id(1);
+#endif
+}
+
+
+// Source: sql_parse.cc
+// Lines 4783-4861

@@ -1,0 +1,60 @@
+int git_object_peel(
+	git_object **peeled,
+	const git_object *object,
+	git_object_t target_type)
+{
+	git_object *source, *deref = NULL;
+	int error;
+
+	GIT_ASSERT_ARG(object);
+	GIT_ASSERT_ARG(peeled);
+
+	GIT_ASSERT_ARG(target_type == GIT_OBJECT_TAG ||
+		target_type == GIT_OBJECT_COMMIT ||
+		target_type == GIT_OBJECT_TREE ||
+		target_type == GIT_OBJECT_BLOB ||
+		target_type == GIT_OBJECT_ANY);
+
+	if ((error = check_type_combination(git_object_type(object), target_type)) < 0)
+		return peel_error(error, git_object_id(object), target_type);
+
+	if (git_object_type(object) == target_type)
+		return git_object_dup(peeled, (git_object *)object);
+
+	source = (git_object *)object;
+
+	while (!(error = dereference_object(&deref, source))) {
+
+		if (source != object)
+			git_object_free(source);
+
+		if (git_object_type(deref) == target_type) {
+			*peeled = deref;
+			return 0;
+		}
+
+		if (target_type == GIT_OBJECT_ANY &&
+			git_object_type(deref) != git_object_type(object))
+		{
+			*peeled = deref;
+			return 0;
+		}
+
+		source = deref;
+		deref = NULL;
+	}
+
+	if (source != object)
+		git_object_free(source);
+
+	git_object_free(deref);
+
+	if (error)
+		error = peel_error(error, git_object_id(object), target_type);
+
+	return error;
+}
+
+
+// Source: object.c
+// Lines 400-455

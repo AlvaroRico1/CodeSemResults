@@ -1,0 +1,108 @@
+gimplify_function_tree (tree fndecl)
+{
+  tree parm, ret;
+  gimple_seq seq;
+  gbind *bind;
+
+  gcc_assert (!gimple_body (fndecl));
+
+  if (DECL_STRUCT_FUNCTION (fndecl))
+    push_cfun (DECL_STRUCT_FUNCTION (fndecl));
+  else
+    push_struct_function (fndecl);
+
+  /* Tentatively set PROP_gimple_lva here, and reset it in gimplify_va_arg_expr
+     if necessary.  */
+  cfun->curr_properties |= PROP_gimple_lva;
+
+  for (parm = DECL_ARGUMENTS (fndecl); parm ; parm = DECL_CHAIN (parm))
+    {
+      /* Preliminarily mark non-addressed complex variables as eligible
+         for promotion to gimple registers.  We'll transform their uses
+         as we find them.  */
+      if ((TREE_CODE (TREE_TYPE (parm)) == COMPLEX_TYPE
+	   || TREE_CODE (TREE_TYPE (parm)) == VECTOR_TYPE)
+          && !TREE_THIS_VOLATILE (parm)
+          && !needs_to_live_in_memory (parm))
+        DECL_GIMPLE_REG_P (parm) = 1;
+    }
+
+  ret = DECL_RESULT (fndecl);
+  if ((TREE_CODE (TREE_TYPE (ret)) == COMPLEX_TYPE
+       || TREE_CODE (TREE_TYPE (ret)) == VECTOR_TYPE)
+      && !needs_to_live_in_memory (ret))
+    DECL_GIMPLE_REG_P (ret) = 1;
+
+  if (asan_sanitize_use_after_scope () && sanitize_flags_p (SANITIZE_ADDRESS))
+    asan_poisoned_variables = new hash_set<tree> ();
+  bind = gimplify_body (fndecl, true);
+  if (asan_poisoned_variables)
+    {
+      delete asan_poisoned_variables;
+      asan_poisoned_variables = NULL;
+    }
+
+  /* The tree body of the function is no longer needed, replace it
+     with the new GIMPLE body.  */
+  seq = NULL;
+  gimple_seq_add_stmt (&seq, bind);
+  gimple_set_body (fndecl, seq);
+
+  /* If we're instrumenting function entry/exit, then prepend the call to
+     the entry hook and wrap the whole function in a TRY_FINALLY_EXPR to
+     catch the exit hook.  */
+  /* ??? Add some way to ignore exceptions for this TFE.  */
+  if (flag_instrument_function_entry_exit
+      && !DECL_NO_INSTRUMENT_FUNCTION_ENTRY_EXIT (fndecl)
+      /* Do not instrument extern inline functions.  */
+      && !(DECL_DECLARED_INLINE_P (fndecl)
+	   && DECL_EXTERNAL (fndecl)
+	   && DECL_DISREGARD_INLINE_LIMITS (fndecl))
+      && !flag_instrument_functions_exclude_p (fndecl))
+    {
+      tree x;
+      gbind *new_bind;
+      gimple *tf;
+      gimple_seq cleanup = NULL, body = NULL;
+      tree tmp_var, this_fn_addr;
+      gcall *call;
+
+      /* The instrumentation hooks aren't going to call the instrumented
+	 function and the address they receive is expected to be matchable
+	 against symbol addresses.  Make sure we don't create a trampoline,
+	 in case the current function is nested.  */
+      this_fn_addr = build_fold_addr_expr (current_function_decl);
+      TREE_NO_TRAMPOLINE (this_fn_addr) = 1;
+
+      x = builtin_decl_implicit (BUILT_IN_RETURN_ADDRESS);
+      call = gimple_build_call (x, 1, integer_zero_node);
+      tmp_var = create_tmp_var (ptr_type_node, "return_addr");
+      gimple_call_set_lhs (call, tmp_var);
+      gimplify_seq_add_stmt (&cleanup, call);
+      x = builtin_decl_implicit (BUILT_IN_PROFILE_FUNC_EXIT);
+      call = gimple_build_call (x, 2, this_fn_addr, tmp_var);
+      gimplify_seq_add_stmt (&cleanup, call);
+      tf = gimple_build_try (seq, cleanup, GIMPLE_TRY_FINALLY);
+
+      x = builtin_decl_implicit (BUILT_IN_RETURN_ADDRESS);
+      call = gimple_build_call (x, 1, integer_zero_node);
+      tmp_var = create_tmp_var (ptr_type_node, "return_addr");
+      gimple_call_set_lhs (call, tmp_var);
+      gimplify_seq_add_stmt (&body, call);
+      x = builtin_decl_implicit (BUILT_IN_PROFILE_FUNC_ENTER);
+      call = gimple_build_call (x, 2, this_fn_addr, tmp_var);
+      gimplify_seq_add_stmt (&body, call);
+      gimplify_seq_add_stmt (&body, tf);
+      new_bind = gimple_build_bind (NULL, body, NULL);
+
+      /* Replace the current function body with the body
+         wrapped in the try/finally TF.  */
+      seq = NULL;
+      gimple_seq_add_stmt (&seq, new_bind);
+      gimple_set_body (fndecl, seq);
+      bind = new_bind;
+    }
+
+
+// Source: gimplify.c
+// Lines 14981-15084

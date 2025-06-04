@@ -1,0 +1,1 @@
+vec,h2o/lib/handler/file.c,6,sendvec_callbacks,h2o/lib/handler/file.c,3,1

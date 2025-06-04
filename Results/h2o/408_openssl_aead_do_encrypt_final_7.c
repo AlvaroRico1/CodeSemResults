@@ -1,0 +1,20 @@
+static size_t aead_do_encrypt_final(ptls_aead_context_t *_ctx, void *_output)
+{
+    struct aead_crypto_context_t *ctx = (struct aead_crypto_context_t *)_ctx;
+    uint8_t *output = _output;
+    size_t off = 0, tag_size = ctx->super.algo->tag_size;
+    int blocklen, ret;
+
+    ret = EVP_EncryptFinal_ex(ctx->evp_ctx, output + off, &blocklen);
+    assert(ret);
+    off += blocklen;
+    ret = EVP_CIPHER_CTX_ctrl(ctx->evp_ctx, EVP_CTRL_GCM_GET_TAG, (int)tag_size, output + off);
+    assert(ret);
+    off += tag_size;
+
+    return off;
+}
+
+
+// Source: openssl.c
+// Lines 920-935

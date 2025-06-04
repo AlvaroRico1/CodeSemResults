@@ -1,0 +1,163 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'part_info' at line 3
+2. Pointer 'table' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool fix_partition_func(THD *thd, TABLE *table, bool is_create_table_ind) {
+  bool result = true;
+  partition_info *part_info = table->part_info;
+  enum_mark_columns save_mark_used_columns = thd->mark_used_columns;
+  Partition_handler *part_handler;
+  const ulong save_want_privilege = thd->want_privilege;
+  DBUG_TRACE;
+
+  if (part_info->fixed) {
+    return false;
+  }
+  thd->mark_used_columns = MARK_COLUMNS_NONE;
+  thd->want_privilege = 0;
+
+  if (!is_create_table_ind || thd->lex->sql_command != SQLCOM_CREATE_TABLE) {
+    if (partition_default_handling(table, part_info, is_create_table_ind,
+                                   table->s->normalized_path.str)) {
+      return true;
+    }
+  }
+  if (part_info->is_sub_partitioned()) {
+    assert(part_info->subpart_type == partition_type::HASH);
+    /*
+      Subpartition is defined. We need to verify that subpartitioning
+      function is correct.
+    */
+    if (part_info->linear_hash_ind)
+      set_linear_hash_mask(part_info, part_info->num_subparts);
+    if (part_info->list_of_subpart_fields) {
+      List_iterator<char> it(part_info->subpart_field_list);
+      if (unlikely(handle_list_of_fields(it, table, part_info, true))) goto end;
+    } else {
+      if (unlikely(fix_fields_part_func(thd, part_info->subpart_expr, table,
+                                        true, is_create_table_ind)))
+        goto end;
+      if (unlikely(part_info->subpart_expr->result_type() != INT_RESULT)) {
+        part_info->report_part_expr_error(true);
+        goto end;
+      }
+    }
+  }
+  assert(part_info->part_type != partition_type::NONE);
+  /*
+    Partition is defined. We need to verify that partitioning
+    function is correct.
+  */
+  if (part_info->part_type == partition_type::HASH) {
+    if (part_info->linear_hash_ind)
+      set_linear_hash_mask(part_info, part_info->num_parts);
+    if (part_info->list_of_part_fields) {
+      List_iterator<char> it(part_info->part_field_list);
+      if (unlikely(handle_list_of_fields(it, table, part_info, false)))
+        goto end;
+    } else {
+      if (unlikely(fix_fields_part_func(thd, part_info->part_expr, table, false,
+                                        is_create_table_ind)))
+        goto end;
+      if (unlikely(part_info->part_expr->result_type() != INT_RESULT)) {
+        part_info->report_part_expr_error(false);
+        goto end;
+      }
+    }
+    part_info->fixed = true;
+  } else {
+    const char *error_str;
+    if (part_info->column_list) {
+      List_iterator<char> it(part_info->part_field_list);
+      if (unlikely(handle_list_of_fields(it, table, part_info, false)))
+        goto end;
+    } else {
+      if (unlikely(fix_fields_part_func(thd, part_info->part_expr, table, false,
+                                        is_create_table_ind)))
+        goto end;
+    }
+    part_info->fixed = true;
+    if (part_info->part_type == partition_type::RANGE) {
+      error_str = partition_keywords[PKW_RANGE].str;
+      if (unlikely(part_info->check_range_constants(thd))) goto end;
+    } else if (part_info->part_type == partition_type::LIST) {
+      error_str = partition_keywords[PKW_LIST].str;
+      if (unlikely(part_info->check_list_constants(thd))) goto end;
+    } else {
+      assert(0);
+      my_error(ER_INCONSISTENT_PARTITION_INFO_ERROR, MYF(0));
+      goto end;
+    }
+    if (unlikely(part_info->num_parts < 1)) {
+      my_error(ER_PARTITIONS_MUST_BE_DEFINED_ERROR, MYF(0), error_str);
+      goto end;
+    }
+    if (unlikely(!part_info->column_list &&
+                 part_info->part_expr->result_type() != INT_RESULT)) {
+      part_info->report_part_expr_error(false);
+      goto end;
+    }
+  }
+  if (((part_info->part_type != partition_type::HASH ||
+        part_info->list_of_part_fields == false) &&
+       !part_info->column_list &&
+       check_part_func_fields(part_info->part_field_array, true)) ||
+      (part_info->list_of_subpart_fields == false &&
+       part_info->is_sub_partitioned() &&
+       check_part_func_fields(part_info->subpart_field_array, true))) {
+    /*
+      Range/List/HASH (but not KEY) and not COLUMNS or HASH subpartitioning
+      with columns in the partitioning expression using unallowed charset.
+    */
+    my_error(ER_PARTITION_FUNCTION_IS_NOT_ALLOWED, MYF(0));
+    goto end;
+  }
+  if (unlikely(create_full_part_field_array(thd, table, part_info))) goto end;
+  if (unlikely(check_primary_key(table))) goto end;
+  if (unlikely((!(table->s->db_type()->partition_flags &&
+                  (table->s->db_type()->partition_flags() &
+                   HA_CAN_PARTITION_UNIQUE))) &&
+               check_unique_keys(table)))
+    goto end;
+  if (unlikely(set_up_partition_bitmaps(part_info))) goto end;
+  if (unlikely(part_info->set_up_charset_field_preps())) {
+    my_error(ER_PARTITION_FUNCTION_IS_NOT_ALLOWED, MYF(0));
+    goto end;
+  }
+  if (unlikely(part_info->check_partition_field_length())) {
+    my_error(ER_PARTITION_FIELDS_TOO_LONG, MYF(0));
+    goto end;
+  }
+  check_range_capable_PF(table);
+  set_up_partition_key_maps(table, part_info);
+  set_up_partition_func_pointers(part_info);
+  set_up_range_analysis_info(part_info);
+  part_handler = table->file->get_partition_handler();
+  if (part_handler) {
+    part_handler->set_part_info(part_info, false);
+    result = false;
+  } else {
+    assert(0);
+    my_error(ER_PARTITION_MGMT_ON_NONPARTITIONED, MYF(0));
+  }
+end:
+  thd->mark_used_columns = save_mark_used_columns;
+  thd->want_privilege = save_want_privilege;
+  DBUG_PRINT("info", ("thd->mark_used_columns: %d", thd->mark_used_columns));
+  return result;
+}
+
+
+// Source: sql_partition.cc
+// Lines 1470-1613
+
+
+[ANSWER]
+MUST

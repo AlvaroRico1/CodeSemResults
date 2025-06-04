@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'f' at line 4\n2. Pointer 'base' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstruct file *alloc_file_clone(struct file *base, int flags,\n\t\t\t\tconst struct file_operations *fops)\n{\n\tstruct file *f = alloc_file(&base->f_path, flags, fops);\n\tif (!IS_ERR(f)) {\n\t\tpath_get(&f->f_path);\n\t\tf->f_mapping = base->f_mapping;\n\t}\n\treturn f;\n}\n\n\n// Source: file_table.c\n// Lines 241-250\n",
+  "ANSWER": "MUST"
+}

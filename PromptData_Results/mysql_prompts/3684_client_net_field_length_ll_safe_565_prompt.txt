@@ -1,0 +1,33 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'sizeof_len' at line 4
+2. Pointer 'mysql' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+inline my_ulonglong net_field_length_ll_safe(MYSQL *mysql, uchar **packet,
+                                             ulong packet_length,
+                                             bool *is_error) {
+  size_t sizeof_len = net_field_length_size(*packet);
+  DBUG_EXECUTE_IF("simulate_bad_packet",
+                  { *packet = *packet + packet_length + 1000000L; });
+  if (!buffer_check_remaining(mysql, *packet, packet_length, sizeof_len)) {
+    *is_error = true;
+    return 0;
+  }
+
+  *is_error = false;
+  return net_field_length_ll(packet);
+}
+
+
+// Source: client.cc
+// Lines 740-753
+
+
+[ANSWER]
+MUST-NOT

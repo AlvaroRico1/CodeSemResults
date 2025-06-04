@@ -1,0 +1,27 @@
+static int crc_object(uint32_t *crc_out, git_mwindow_file *mwf, off64_t start, off64_t size)
+{
+	void *ptr;
+	uint32_t crc;
+	unsigned int left, len;
+	git_mwindow *w = NULL;
+
+	crc = crc32(0L, Z_NULL, 0);
+	while (size) {
+		ptr = git_mwindow_open(mwf, &w, start, (size_t)size, &left);
+		if (ptr == NULL)
+			return -1;
+
+		len = min(left, (unsigned int)size);
+		crc = crc32(crc, ptr, len);
+		size -= len;
+		start += len;
+		git_mwindow_close(&w);
+	}
+
+	*crc_out = htonl(crc);
+	return 0;
+}
+
+
+// Source: indexer.c
+// Lines 304-326

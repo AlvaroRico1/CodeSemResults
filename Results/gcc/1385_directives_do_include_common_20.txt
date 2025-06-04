@@ -1,0 +1,1 @@
+location,gcc/libcpp/directives.c,6,buf,gcc/libcpp/directives.c,5,2

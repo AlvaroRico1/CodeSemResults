@@ -1,0 +1,86 @@
+grid_reflow(struct grid *gd, u_int sx)
+{
+	struct grid		*target;
+	struct grid_line	*gl;
+	struct grid_cell	 gc;
+	u_int			 yy, width, i, at;
+
+	/*
+	 * Create a destination grid. This is just used as a container for the
+	 * line data and may not be fully valid.
+	 */
+	target = grid_create(gd->sx, 0, 0);
+
+	/*
+	 * Loop over each source line.
+	 */
+	for (yy = 0; yy < gd->hsize + gd->sy; yy++) {
+		gl = &gd->linedata[yy];
+		if (gl->flags & GRID_LINE_DEAD)
+			continue;
+
+		/*
+		 * Work out the width of this line. at is the point at which
+		 * the available width is hit, and width is the full line
+		 * width.
+		 */
+		at = width = 0;
+		if (~gl->flags & GRID_LINE_EXTENDED) {
+			width = gl->cellused;
+			if (width > sx)
+				at = sx;
+			else
+				at = width;
+		} else {
+			for (i = 0; i < gl->cellused; i++) {
+				grid_get_cell1(gl, i, &gc);
+				if (at == 0 && width + gc.data.width > sx)
+					at = i;
+				width += gc.data.width;
+			}
+		}
+
+		/*
+		 * If the line is exactly right, just move it across
+		 * unchanged.
+		 */
+		if (width == sx) {
+			grid_reflow_move(target, gl);
+			continue;
+		}
+
+		/*
+		 * If the line is too big, it needs to be split, whether or not
+		 * it was previously wrapped.
+		 */
+		if (width > sx) {
+			grid_reflow_split(target, gd, sx, yy, at);
+			continue;
+		}
+
+		/*
+		 * If the line was previously wrapped, join as much as possible
+		 * of the next line.
+		 */
+		if (gl->flags & GRID_LINE_WRAPPED)
+			grid_reflow_join(target, gd, sx, yy, width, 0);
+		else
+			grid_reflow_move(target, gl);
+	}
+
+	/*
+	 * Replace the old grid with the new.
+	 */
+	if (target->sy < gd->sy)
+		grid_reflow_add(target, gd->sy - target->sy);
+	gd->hsize = target->sy - gd->sy;
+	if (gd->hscrolled > gd->hsize)
+		gd->hscrolled = gd->hsize;
+	free(gd->linedata);
+	gd->linedata = target->linedata;
+	free(target);
+}
+
+
+// Source: grid.c
+// Lines 1274-1355

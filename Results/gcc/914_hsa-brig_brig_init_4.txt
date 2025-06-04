@@ -1,0 +1,1 @@
+extension,gcc/gcc/hsa-brig.c,27,modname,gcc/gcc/hsa-brig.c,18,1

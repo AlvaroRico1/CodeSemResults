@@ -1,0 +1,1 @@
+newcon,linux/security/selinux/selinuxfs.c,8,len,linux/security/selinux/selinuxfs.c,10,2

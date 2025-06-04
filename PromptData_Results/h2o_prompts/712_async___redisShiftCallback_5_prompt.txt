@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'cb' at line 2
+2. Pointer 'list' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int __redisShiftCallback(redisCallbackList *list, redisCallback *target) {
+    redisCallback *cb = list->head;
+    if (cb != NULL) {
+        list->head = cb->next;
+        if (cb == list->tail)
+            list->tail = NULL;
+
+        /* Copy callback from heap to stack */
+        if (target != NULL)
+            memcpy(target,cb,sizeof(*cb));
+        free(cb);
+        return REDIS_OK;
+    }
+    return REDIS_ERR;
+}
+
+
+// Source: async.c
+// Lines 249-263
+
+
+[ANSWER]
+MUST

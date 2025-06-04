@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'bl' at line 2
+2. Pointer 'fs' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void leaveblock (FuncState *fs) {
+  BlockCnt *bl = fs->bl;
+  fs->bl = bl->previous;
+  removevars(fs->ls, bl->nactvar);
+  if (bl->upval)
+    luaK_codeABC(fs, OP_CLOSE, bl->nactvar, 0, 0);
+  /* a block either controls scope or breaks (never both) */
+  lua_assert(!bl->isbreakable || !bl->upval);
+  lua_assert(bl->nactvar == fs->nactvar);
+  fs->freereg = fs->nactvar;  /* free registers */
+  luaK_patchtohere(fs, bl->breaklist);
+}
+
+
+// Source: lparser.c
+// Lines 296-307
+
+
+[ANSWER]
+MUST

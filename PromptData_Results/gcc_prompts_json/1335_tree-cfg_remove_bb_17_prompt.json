@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'loop' at line 17\n2. Pointer 'bb' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nremove_bb (basic_block bb)\n{\n  gimple_stmt_iterator i;\n\n  if (dump_file)\n    {\n      fprintf (dump_file, \"Removing basic block %d\\n\", bb->index);\n      if (dump_flags & TDF_DETAILS)\n\t{\n\t  dump_bb (dump_file, bb, 0, TDF_BLOCKS);\n\t  fprintf (dump_file, \"\\n\");\n\t}\n    }\n\n  if (current_loops)\n    {\n      class loop *loop = bb->loop_father;\n\n      /* If a loop gets removed, clean up the information associated\n\t with it.  */\n      if (loop->latch == bb\n\t  || loop->header == bb)\n\tfree_numbers_of_iterations_estimates (loop);\n    }\n\n\n// Source: tree-cfg.c\n// Lines 2254-2277\n",
+  "ANSWER": "MUST"
+}

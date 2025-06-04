@@ -1,0 +1,62 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'clp' at line 1
+2. Pointer 'clnt' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int nfs_create_rpc_client(struct nfs_client *clp,
+			  const struct nfs_client_initdata *cl_init,
+			  rpc_authflavor_t flavor)
+{
+	struct rpc_clnt		*clnt = NULL;
+	struct rpc_create_args args = {
+		.net		= clp->cl_net,
+		.protocol	= clp->cl_proto,
+		.nconnect	= clp->cl_nconnect,
+		.address	= (struct sockaddr *)&clp->cl_addr,
+		.addrsize	= clp->cl_addrlen,
+		.timeout	= cl_init->timeparms,
+		.servername	= clp->cl_hostname,
+		.nodename	= cl_init->nodename,
+		.program	= &nfs_program,
+		.version	= clp->rpc_ops->version,
+		.authflavor	= flavor,
+		.cred		= cl_init->cred,
+	};
+
+	if (test_bit(NFS_CS_DISCRTRY, &clp->cl_flags))
+		args.flags |= RPC_CLNT_CREATE_DISCRTRY;
+	if (test_bit(NFS_CS_NO_RETRANS_TIMEOUT, &clp->cl_flags))
+		args.flags |= RPC_CLNT_CREATE_NO_RETRANS_TIMEOUT;
+	if (test_bit(NFS_CS_NORESVPORT, &clp->cl_flags))
+		args.flags |= RPC_CLNT_CREATE_NONPRIVPORT;
+	if (test_bit(NFS_CS_INFINITE_SLOTS, &clp->cl_flags))
+		args.flags |= RPC_CLNT_CREATE_INFINITE_SLOTS;
+
+	if (!IS_ERR(clp->cl_rpcclient))
+		return 0;
+
+	clnt = rpc_create(&args);
+	if (IS_ERR(clnt)) {
+		dprintk("%s: cannot create RPC client. Error = %ld\n",
+				__func__, PTR_ERR(clnt));
+		return PTR_ERR(clnt);
+	}
+
+	clnt->cl_principal = clp->cl_principal;
+	clp->cl_rpcclient = clnt;
+	return 0;
+}
+
+
+// Source: client.c
+// Lines 490-532
+
+
+[ANSWER]
+MUST

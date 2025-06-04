@@ -1,0 +1,1 @@
+w,tmux/cmd-select-layout.c,6,w,tmux/cmd-select-layout.c,6,1

@@ -1,0 +1,93 @@
+int git_smart__download_pack(
+	git_transport *transport,
+	git_repository *repo,
+	git_indexer_progress *stats)
+{
+	transport_smart *t = (transport_smart *)transport;
+	gitno_buffer *buf = &t->buffer;
+	git_odb *odb;
+	struct git_odb_writepack *writepack = NULL;
+	int error = 0;
+	struct network_packetsize_payload npp = {0};
+
+	git_indexer_progress_cb progress_cb = t->connect_opts.callbacks.transfer_progress;
+	void *progress_payload = t->connect_opts.callbacks.payload;
+
+	memset(stats, 0, sizeof(git_indexer_progress));
+
+	if (progress_cb) {
+		npp.callback = progress_cb;
+		npp.payload = progress_payload;
+		npp.stats = stats;
+		t->packetsize_cb = &network_packetsize;
+		t->packetsize_payload = &npp;
+
+		/* We might have something in the buffer already from negotiate_fetch */
+		if (t->buffer.offset > 0 && !t->cancelled.val)
+			if (t->packetsize_cb(t->buffer.offset, t->packetsize_payload))
+				git_atomic32_set(&t->cancelled, 1);
+	}
+
+	if ((error = git_repository_odb__weakptr(&odb, repo)) < 0 ||
+		((error = git_odb_write_pack(&writepack, odb, progress_cb, progress_payload)) != 0))
+		goto done;
+
+	/*
+	 * If the remote doesn't support the side-band, we can feed
+	 * the data directly to the pack writer. Otherwise, we need to
+	 * check which one belongs there.
+	 */
+	if (!t->caps.side_band && !t->caps.side_band_64k) {
+		error = no_sideband(t, writepack, buf, stats);
+		goto done;
+	}
+
+	do {
+		git_pkt *pkt = NULL;
+
+		/* Check cancellation before network call */
+		if (t->cancelled.val) {
+			git_error_clear();
+			error = GIT_EUSER;
+			goto done;
+		}
+
+		if ((error = recv_pkt(&pkt, NULL, buf)) >= 0) {
+			/* Check cancellation after network call */
+			if (t->cancelled.val) {
+				git_error_clear();
+				error = GIT_EUSER;
+			} else if (pkt->type == GIT_PKT_PROGRESS) {
+				if (t->connect_opts.callbacks.sideband_progress) {
+					git_pkt_progress *p = (git_pkt_progress *) pkt;
+
+					if (p->len > INT_MAX) {
+						git_error_set(GIT_ERROR_NET, "oversized progress message");
+						error = GIT_ERROR;
+						goto done;
+					}
+
+					error = t->connect_opts.callbacks.sideband_progress(p->data, (int)p->len, t->connect_opts.callbacks.payload);
+				}
+			} else if (pkt->type == GIT_PKT_DATA) {
+				git_pkt_data *p = (git_pkt_data *) pkt;
+
+				if (p->len)
+					error = writepack->append(writepack, p->data, p->len, stats);
+			} else if (pkt->type == GIT_PKT_FLUSH) {
+				/* A flush indicates the end of the packfile */
+				git__free(pkt);
+				break;
+			}
+		}
+
+		git_pkt_free(pkt);
+
+		if (error < 0)
+			goto done;
+
+	} while (1);
+
+
+// Source: smart_protocol.c
+// Lines 524-612

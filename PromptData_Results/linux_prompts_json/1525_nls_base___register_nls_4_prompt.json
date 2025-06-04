@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'tmp' at line 3\n2. Pointer 'tmp' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint __register_nls(struct nls_table *nls, struct module *owner)\n{\n\tstruct nls_table ** tmp = &tables;\n\n\tif (nls->next)\n\t\treturn -EBUSY;\n\n\tnls->owner = owner;\n\tspin_lock(&nls_lock);\n\twhile (*tmp) {\n\t\tif (nls == *tmp) {\n\t\t\tspin_unlock(&nls_lock);\n\t\t\treturn -EBUSY;\n\t\t}\n\t\ttmp = &(*tmp)->next;\n\t}\n\tnls->next = tables;\n\ttables = nls;\n\tspin_unlock(&nls_lock);\n\treturn 0;\t\n}\n\n\n// Source: nls_base.c\n// Lines 235-255\n",
+  "ANSWER": "MUST"
+}

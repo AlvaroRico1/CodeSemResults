@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'sub_elem' at line 14\n2. Pointer 'engine_type' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void set_engine_all_partitions(partition_info *part_info,\n                                      handlerton *engine_type) {\n  uint i = 0;\n  List_iterator<partition_element> part_it(part_info->partitions);\n  do {\n    partition_element *part_elem = part_it++;\n\n    part_elem->engine_type = engine_type;\n    if (part_info->is_sub_partitioned()) {\n      List_iterator<partition_element> sub_it(part_elem->subpartitions);\n      uint j = 0;\n\n      do {\n        partition_element *sub_elem = sub_it++;\n\n        sub_elem->engine_type = engine_type;\n      } while (++j < part_info->num_subparts);\n\n\n// Source: sql_partition.cc\n// Lines 4026-4042\n",
+  "ANSWER": "MUST"
+}

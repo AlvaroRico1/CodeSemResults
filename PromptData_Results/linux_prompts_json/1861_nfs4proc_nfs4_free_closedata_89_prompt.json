@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'calldata' at line 3\n2. Pointer 'data' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void nfs4_free_closedata(void *data)\n{\n\tstruct nfs4_closedata *calldata = data;\n\tstruct nfs4_state_owner *sp = calldata->state->owner;\n\tstruct super_block *sb = calldata->state->inode->i_sb;\n\n\tif (calldata->lr.roc)\n\t\tpnfs_roc_release(&calldata->lr.arg, &calldata->lr.res,\n\t\t\t\tcalldata->res.lr_ret);\n\tnfs4_put_open_state(calldata->state);\n\tnfs_free_seqid(calldata->arg.seqid);\n\tnfs4_put_state_owner(sp);\n\tnfs_sb_deactive(sb);\n\tkfree(calldata);\n}\n\n\n// Source: nfs4proc.c\n// Lines 3327-3341\n",
+  "ANSWER": "MUST"
+}

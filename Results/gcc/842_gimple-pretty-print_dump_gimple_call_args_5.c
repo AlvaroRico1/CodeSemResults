@@ -1,0 +1,54 @@
+dump_gimple_call_args (pretty_printer *buffer, const gcall *gs,
+		       dump_flags_t flags)
+{
+  size_t i = 0;
+
+  /* Pretty print first arg to certain internal fns.  */
+  if (gimple_call_internal_p (gs))
+    {
+      const char *const *enums = NULL;
+      unsigned limit = 0;
+
+      switch (gimple_call_internal_fn (gs))
+	{
+	case IFN_UNIQUE:
+#define DEF(X) #X
+	  static const char *const unique_args[] = {IFN_UNIQUE_CODES};
+#undef DEF
+	  enums = unique_args;
+	  
+	  limit = ARRAY_SIZE (unique_args);
+	  break;
+	  
+	case IFN_GOACC_LOOP:
+#define DEF(X) #X
+	  static const char *const loop_args[] = {IFN_GOACC_LOOP_CODES};
+#undef DEF
+	  enums = loop_args;
+	  limit = ARRAY_SIZE (loop_args);
+	  break;
+
+	case IFN_GOACC_REDUCTION:
+#define DEF(X) #X
+	  static const char *const reduction_args[]
+	    = {IFN_GOACC_REDUCTION_CODES};
+#undef DEF
+	  enums = reduction_args;
+	  limit = ARRAY_SIZE (reduction_args);
+	  break;
+
+	case IFN_ASAN_MARK:
+#define DEF(X) #X
+	  static const char *const asan_mark_args[] = {IFN_ASAN_MARK_FLAGS};
+#undef DEF
+	  enums = asan_mark_args;
+	  limit = ARRAY_SIZE (asan_mark_args);
+	  break;
+
+	default:
+	  break;
+	}
+
+
+// Source: gimple-pretty-print.c
+// Lines 715-764

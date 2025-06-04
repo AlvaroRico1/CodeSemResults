@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'next' at line 4\n2. Pointer 'o' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void free_object_directories(struct raw_object_store *o)\n{\n\twhile (o->odb) {\n\t\tstruct object_directory *next;\n\n\t\tnext = o->odb->next;\n\t\tfree_object_directory(o->odb);\n\t\to->odb = next;\n\t}\n\n\n// Source: object.c\n// Lines 523-531\n",
+  "ANSWER": "MUST"
+}

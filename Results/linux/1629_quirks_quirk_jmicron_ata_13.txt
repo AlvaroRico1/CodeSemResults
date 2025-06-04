@@ -1,0 +1,1 @@
+conf1,linux/drivers/pci/quirks.c,3,hdr,linux/drivers/pci/quirks.c,4,2

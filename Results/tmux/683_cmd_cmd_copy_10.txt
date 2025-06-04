@@ -1,0 +1,1 @@
+new_cmd,tmux/cmd.c,3,cmd,tmux/cmd.c,1,1

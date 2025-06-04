@@ -1,0 +1,1 @@
+adev,linux/drivers/acpi/property.c,11,parent_handle,linux/drivers/acpi/property.c,7,2

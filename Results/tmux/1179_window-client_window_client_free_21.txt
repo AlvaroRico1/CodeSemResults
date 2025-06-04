@@ -1,0 +1,1 @@
+data,tmux/window-client.c,3,wme,tmux/window-client.c,1,1

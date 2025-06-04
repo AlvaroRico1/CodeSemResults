@@ -1,0 +1,30 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'expected' at line 1
+2. Pointer 'dummy' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void assert_commit_summary(const char *expected, const char *given)
+{
+	git_commit *dummy;
+
+	cl_assert(dummy = git__calloc(1, sizeof(struct git_commit)));
+
+	dummy->raw_message = git__strdup(given);
+	cl_assert_equal_s(expected, git_commit_summary(dummy));
+
+	git_commit__free(dummy);
+}
+
+
+// Source: commit.c
+// Lines 114-124
+
+
+[ANSWER]
+MUST-NOT

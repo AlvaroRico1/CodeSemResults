@@ -1,0 +1,1 @@
+parent,tmux/layout.c,3,wp,tmux/layout.c,1,1

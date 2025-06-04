@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'rc' at line 10\n2. Pointer 'line' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic inline int my_mutex_destroy(my_mutex_t *mp\n#ifdef SAFE_MUTEX\n                                   ,\n                                   const char *file, uint line\n#endif\n) {\n#ifdef SAFE_MUTEX\n  assert(mp != nullptr);\n  assert(mp->m_u.m_safe_ptr != nullptr);\n  int rc = safe_mutex_destroy(mp->m_u.m_safe_ptr, file, line);\n  free(mp->m_u.m_safe_ptr);\n  mp->m_u.m_safe_ptr = nullptr;\n  return rc;\n#else\n  return native_mutex_destroy(&mp->m_u.m_native);\n#endif\n}\n\n\n// Source: thr_mutex.h\n// Lines 224-240\n",
+  "ANSWER": "MUST-NOT"
+}

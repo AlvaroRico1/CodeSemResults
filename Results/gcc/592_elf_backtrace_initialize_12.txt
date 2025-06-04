@@ -1,0 +1,1 @@
+found_sym,gcc/libbacktrace/elf.c,6,elf_fileline_fn,gcc/libbacktrace/elf.c,8,2

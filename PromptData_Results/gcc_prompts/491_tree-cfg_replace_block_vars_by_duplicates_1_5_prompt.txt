@@ -1,0 +1,39 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'rd' at line 3
+2. Pointer 'data' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+replace_block_vars_by_duplicates_1 (tree *tp, int *walk_subtrees, void *data)
+{
+  struct replace_decls_d *rd = (struct replace_decls_d *)data;
+
+  switch (TREE_CODE (*tp))
+    {
+    case VAR_DECL:
+    case PARM_DECL:
+    case RESULT_DECL:
+      replace_by_duplicate_decl (tp, rd->vars_map, rd->to_context);
+      break;
+    default:
+      break;
+    }
+
+  if (IS_TYPE_OR_DECL_P (*tp))
+    *walk_subtrees = false;
+
+  return NULL;
+}
+
+
+// Source: tree-cfg.c
+// Lines 7331-7350
+
+
+[ANSWER]
+MUST

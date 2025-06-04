@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'fsi' at line 4\n2. Pointer 'sb' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int tracefs_remount(struct super_block *sb, int *flags, char *data)\n{\n\tint err;\n\tstruct tracefs_fs_info *fsi = sb->s_fs_info;\n\n\tsync_filesystem(sb);\n\terr = tracefs_parse_options(data, &fsi->mount_opts);\n\tif (err)\n\t\tgoto fail;\n\n\ttracefs_apply_options(sb);\n\nfail:\n\treturn err;\n}\n\n\n// Source: inode.c\n// Lines 224-238\n",
+  "ANSWER": "MUST"
+}

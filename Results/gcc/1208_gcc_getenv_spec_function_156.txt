@@ -1,0 +1,1 @@
+ptr,gcc/gcc/gcc.c,7,varname,gcc/gcc/gcc.c,4,2

@@ -1,0 +1,307 @@
+        value, [this](const std::string& path) {
+          this->input_files_.push_back(path);
+        })) {
+      case google::protobuf::io::win32::ExpandWildcardsResult::kSuccess:
+        break;
+      case google::protobuf::io::win32::ExpandWildcardsResult::
+          kErrorNoMatchingFile:
+        // Path does not exist, is not a file, or it's longer than MAX_PATH and
+        // long path handling is disabled.
+        std::cerr << "Invalid file name pattern or missing input file \""
+                  << value << "\"" << std::endl;
+        return PARSE_ARGUMENT_FAIL;
+      default:
+        std::cerr << "Cannot convert path \"" << value
+                  << "\" to or from Windows style" << std::endl;
+        return PARSE_ARGUMENT_FAIL;
+    }
+#else   // not _WIN32
+    // On other platforms than Windows (e.g. Linux, Mac OS) the shell (typically
+    // Bash) expands wildcards.
+    input_files_.push_back(value);
+#endif  // _WIN32
+
+  } else if (name == "-I" || name == "--proto_path") {
+    // Java's -classpath (and some other languages) delimits path components
+    // with colons.  Let's accept that syntax too just to make things more
+    // intuitive.
+    std::vector<std::string> parts = Split(
+        value, CommandLineInterface::kPathSeparator,
+        true);
+
+    for (int i = 0; i < parts.size(); i++) {
+      std::string virtual_path;
+      std::string disk_path;
+
+      std::string::size_type equals_pos = parts[i].find_first_of('=');
+      if (equals_pos == std::string::npos) {
+        virtual_path = "";
+        disk_path = parts[i];
+      } else {
+        virtual_path = parts[i].substr(0, equals_pos);
+        disk_path = parts[i].substr(equals_pos + 1);
+      }
+
+      if (disk_path.empty()) {
+        std::cerr
+            << "--proto_path passed empty directory name.  (Use \".\" for "
+               "current directory.)"
+            << std::endl;
+        return PARSE_ARGUMENT_FAIL;
+      }
+
+      // Make sure disk path exists, warn otherwise.
+      if (access(disk_path.c_str(), F_OK) < 0) {
+        // Try the original path; it may have just happened to have a '=' in it.
+        if (access(parts[i].c_str(), F_OK) < 0) {
+          std::cerr << disk_path << ": warning: directory does not exist."
+                    << std::endl;
+        } else {
+          virtual_path = "";
+          disk_path = parts[i];
+        }
+      }
+
+      // Don't use make_pair as the old/default standard library on Solaris
+      // doesn't support it without explicit template parameters, which are
+      // incompatible with C++0x's make_pair.
+      proto_path_.push_back(
+          std::pair<std::string, std::string>(virtual_path, disk_path));
+    }
+
+  } else if (name == "--direct_dependencies") {
+    if (direct_dependencies_explicitly_set_) {
+      std::cerr << name
+                << " may only be passed once. To specify multiple "
+                   "direct dependencies, pass them all as a single "
+                   "parameter separated by ':'."
+                << std::endl;
+      return PARSE_ARGUMENT_FAIL;
+    }
+
+    direct_dependencies_explicitly_set_ = true;
+    std::vector<std::string> direct =
+        Split(value, ":", true);
+    GOOGLE_DCHECK(direct_dependencies_.empty());
+    direct_dependencies_.insert(direct.begin(), direct.end());
+
+  } else if (name == "--direct_dependencies_violation_msg") {
+    direct_dependencies_violation_msg_ = value;
+
+  } else if (name == "--descriptor_set_in") {
+    if (!descriptor_set_in_names_.empty()) {
+      std::cerr << name
+                << " may only be passed once. To specify multiple "
+                   "descriptor sets, pass them all as a single "
+                   "parameter separated by '"
+                << CommandLineInterface::kPathSeparator << "'." << std::endl;
+      return PARSE_ARGUMENT_FAIL;
+    }
+    if (value.empty()) {
+      std::cerr << name << " requires a non-empty value." << std::endl;
+      return PARSE_ARGUMENT_FAIL;
+    }
+    if (!dependency_out_name_.empty()) {
+      std::cerr << name << " cannot be used with --dependency_out."
+                << std::endl;
+      return PARSE_ARGUMENT_FAIL;
+    }
+
+    descriptor_set_in_names_ = Split(
+        value, CommandLineInterface::kPathSeparator,
+        true);
+
+  } else if (name == "-o" || name == "--descriptor_set_out") {
+    if (!descriptor_set_out_name_.empty()) {
+      std::cerr << name << " may only be passed once." << std::endl;
+      return PARSE_ARGUMENT_FAIL;
+    }
+    if (value.empty()) {
+      std::cerr << name << " requires a non-empty value." << std::endl;
+      return PARSE_ARGUMENT_FAIL;
+    }
+    if (mode_ != MODE_COMPILE) {
+      std::cerr
+          << "Cannot use --encode or --decode and generate descriptors at the "
+             "same time."
+          << std::endl;
+      return PARSE_ARGUMENT_FAIL;
+    }
+    descriptor_set_out_name_ = value;
+
+  } else if (name == "--dependency_out") {
+    if (!dependency_out_name_.empty()) {
+      std::cerr << name << " may only be passed once." << std::endl;
+      return PARSE_ARGUMENT_FAIL;
+    }
+    if (value.empty()) {
+      std::cerr << name << " requires a non-empty value." << std::endl;
+      return PARSE_ARGUMENT_FAIL;
+    }
+    if (!descriptor_set_in_names_.empty()) {
+      std::cerr << name << " cannot be used with --descriptor_set_in."
+                << std::endl;
+      return PARSE_ARGUMENT_FAIL;
+    }
+    dependency_out_name_ = value;
+
+  } else if (name == "--include_imports") {
+    if (imports_in_descriptor_set_) {
+      std::cerr << name << " may only be passed once." << std::endl;
+      return PARSE_ARGUMENT_FAIL;
+    }
+    imports_in_descriptor_set_ = true;
+
+  } else if (name == "--include_source_info") {
+    if (source_info_in_descriptor_set_) {
+      std::cerr << name << " may only be passed once." << std::endl;
+      return PARSE_ARGUMENT_FAIL;
+    }
+    source_info_in_descriptor_set_ = true;
+
+  } else if (name == "-h" || name == "--help") {
+    PrintHelpText();
+    return PARSE_ARGUMENT_DONE_AND_EXIT;  // Exit without running compiler.
+
+  } else if (name == "--version") {
+    if (!version_info_.empty()) {
+      std::cout << version_info_ << std::endl;
+    }
+    std::cout << "libprotoc " << internal::VersionString(PROTOBUF_VERSION)
+              << PROTOBUF_VERSION_SUFFIX << std::endl;
+    return PARSE_ARGUMENT_DONE_AND_EXIT;  // Exit without running compiler.
+
+  } else if (name == "--disallow_services") {
+    disallow_services_ = true;
+
+
+  } else if (name == "--experimental_allow_proto3_optional") {
+    // Flag is no longer observed, but we allow it for backward compat.
+  } else if (name == "--encode" || name == "--decode" ||
+             name == "--decode_raw") {
+    if (mode_ != MODE_COMPILE) {
+      std::cerr << "Only one of --encode and --decode can be specified."
+                << std::endl;
+      return PARSE_ARGUMENT_FAIL;
+    }
+    if (!output_directives_.empty() || !descriptor_set_out_name_.empty()) {
+      std::cerr << "Cannot use " << name
+                << " and generate code or descriptors at the same time."
+                << std::endl;
+      return PARSE_ARGUMENT_FAIL;
+    }
+
+    mode_ = (name == "--encode") ? MODE_ENCODE : MODE_DECODE;
+
+    if (value.empty() && name != "--decode_raw") {
+      std::cerr << "Type name for " << name << " cannot be blank." << std::endl;
+      if (name == "--decode") {
+        std::cerr << "To decode an unknown message, use --decode_raw."
+                  << std::endl;
+      }
+      return PARSE_ARGUMENT_FAIL;
+    } else if (!value.empty() && name == "--decode_raw") {
+      std::cerr << "--decode_raw does not take a parameter." << std::endl;
+      return PARSE_ARGUMENT_FAIL;
+    }
+
+    codec_type_ = value;
+
+  } else if (name == "--deterministic_output") {
+    deterministic_output_ = true;
+
+  } else if (name == "--error_format") {
+    if (value == "gcc") {
+      error_format_ = ERROR_FORMAT_GCC;
+    } else if (value == "msvs") {
+      error_format_ = ERROR_FORMAT_MSVS;
+    } else {
+      std::cerr << "Unknown error format: " << value << std::endl;
+      return PARSE_ARGUMENT_FAIL;
+    }
+
+  } else if (name == "--fatal_warnings") {
+    if (fatal_warnings_) {
+      std::cerr << name << " may only be passed once." << std::endl;
+      return PARSE_ARGUMENT_FAIL;
+    }
+    fatal_warnings_ = true;
+  } else if (name == "--plugin") {
+    if (plugin_prefix_.empty()) {
+      std::cerr << "This compiler does not support plugins." << std::endl;
+      return PARSE_ARGUMENT_FAIL;
+    }
+
+    std::string plugin_name;
+    std::string path;
+
+    std::string::size_type equals_pos = value.find_first_of('=');
+    if (equals_pos == std::string::npos) {
+      // Use the basename of the file.
+      std::string::size_type slash_pos = value.find_last_of('/');
+      if (slash_pos == std::string::npos) {
+        plugin_name = value;
+      } else {
+        plugin_name = value.substr(slash_pos + 1);
+      }
+      path = value;
+    } else {
+      plugin_name = value.substr(0, equals_pos);
+      path = value.substr(equals_pos + 1);
+    }
+
+    plugins_[plugin_name] = path;
+
+  } else if (name == "--print_free_field_numbers") {
+    if (mode_ != MODE_COMPILE) {
+      std::cerr << "Cannot use " << name
+                << " and use --encode, --decode or print "
+                << "other info at the same time." << std::endl;
+      return PARSE_ARGUMENT_FAIL;
+    }
+    if (!output_directives_.empty() || !descriptor_set_out_name_.empty()) {
+      std::cerr << "Cannot use " << name
+                << " and generate code or descriptors at the same time."
+                << std::endl;
+      return PARSE_ARGUMENT_FAIL;
+    }
+    mode_ = MODE_PRINT;
+    print_mode_ = PRINT_FREE_FIELDS;
+  } else {
+    // Some other flag.  Look it up in the generators list.
+    const GeneratorInfo* generator_info =
+        FindOrNull(generators_by_flag_name_, name);
+    if (generator_info == nullptr &&
+        (plugin_prefix_.empty() || !HasSuffixString(name, "_out"))) {
+      // Check if it's a generator option flag.
+      generator_info = FindOrNull(generators_by_option_name_, name);
+      if (generator_info != nullptr) {
+        std::string* parameters =
+            &generator_parameters_[generator_info->flag_name];
+        if (!parameters->empty()) {
+          parameters->append(",");
+        }
+        parameters->append(value);
+      } else if (HasPrefixString(name, "--") && HasSuffixString(name, "_opt")) {
+        std::string* parameters =
+            &plugin_parameters_[PluginName(plugin_prefix_, name)];
+        if (!parameters->empty()) {
+          parameters->append(",");
+        }
+        parameters->append(value);
+      } else {
+        std::cerr << "Unknown flag: " << name << std::endl;
+        return PARSE_ARGUMENT_FAIL;
+      }
+    } else {
+      // It's an output flag.  Add it to the output directives.
+      if (mode_ != MODE_COMPILE) {
+        std::cerr << "Cannot use --encode, --decode or print .proto info and "
+                     "generate code at the same time."
+                  << std::endl;
+        return PARSE_ARGUMENT_FAIL;
+      }
+
+
+// Source: command_line_interface.cc
+// Lines 1679-1981

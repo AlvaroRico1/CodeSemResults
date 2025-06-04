@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'item' at line 4\n2. Pointer 'pd' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\npopup_free_cb(struct client *c, void *data)\n{\n\tstruct popup_data\t*pd = data;\n\tstruct cmdq_item\t*item = pd->item;\n\n\tif (pd->md != NULL)\n\t\tmenu_free_cb(c, pd->md);\n\n\tif (pd->cb != NULL)\n\t\tpd->cb(pd->status, pd->arg);\n\n\tif (item != NULL) {\n\t\tif (cmdq_get_client(item) != NULL &&\n\t\t    cmdq_get_client(item)->session == NULL)\n\t\t\tcmdq_get_client(item)->retval = pd->status;\n\t\tcmdq_continue(item);\n\t}\n\tserver_client_unref(pd->c);\n\n\tif (pd->job != NULL)\n\t\tjob_free(pd->job);\n\tinput_free(pd->ictx);\n\n\tscreen_free(&pd->s);\n\tcolour_palette_free(&pd->palette);\n\n\tfree(pd->title);\n\tfree(pd);\n}\n\n\n// Source: popup.c\n// Lines 265-293\n",
+  "ANSWER": "MUST"
+}

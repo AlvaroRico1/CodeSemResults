@@ -1,0 +1,198 @@
+bool find_order_in_list(THD *thd, Ref_item_array ref_item_array,
+                        TABLE_LIST *tables, ORDER *order,
+                        mem_root_deque<Item *> *fields, bool is_group_field,
+                        bool is_window_order) {
+  Item *order_item = *order->item; /* The item from the GROUP/ORDER clause. */
+  Item::Type order_item_type;
+  Item **select_item; /* The corresponding item from the SELECT clause. */
+  Field *from_field;  /* The corresponding field from the FROM clause. */
+  uint counter;
+  enum_resolution_type resolution;
+
+  /*
+    Local SP variables may be int but are expressions, not positions.
+    (And they can't be used before fix_fields is called for them).
+  */
+  if (order_item->type() == Item::INT_ITEM &&
+      order_item->basic_const_item()) { /* Order by position */
+    uint count = (uint)order_item->val_int();
+    if (!count || count > CountVisibleFields(*fields)) {
+      my_error(ER_BAD_FIELD_ERROR, MYF(0), order_item->full_name(), thd->where);
+      return true;
+    }
+    order->item = &ref_item_array[count - 1];
+    order->in_field_list = true;
+    order->is_position = true;
+    return false;
+  }
+  /* Lookup the current GROUP/ORDER field in the SELECT clause. */
+  select_item = find_item_in_list(thd, order_item, fields, &counter,
+                                  REPORT_EXCEPT_NOT_FOUND, &resolution);
+  if (!select_item)
+    return true; /* The item is not unique, or some other error occurred. */
+
+  /* Check whether the resolved field is unambiguous. */
+  if (select_item != not_found_item) {
+    Item *view_ref = nullptr;
+    /*
+      If we have found field not by its alias in select list but by its
+      original field name, we should additionally check if we have conflict
+      for this name (in case if we would perform lookup in all tables).
+    */
+    if (resolution == RESOLVED_BEHIND_ALIAS && !order_item->fixed &&
+        order_item->fix_fields(thd, order->item))
+      return true;
+
+    /*
+      Lookup the current GROUP or WINDOW partition by or order by field in the
+      FROM clause.
+    */
+    order_item_type = order_item->type();
+    from_field = not_found_field;
+    if (((is_group_field || is_window_order) &&
+         order_item_type == Item::FIELD_ITEM) ||
+        order_item_type == Item::REF_ITEM) {
+      from_field = find_field_in_tables(thd, (Item_ident *)order_item, tables,
+                                        nullptr, &view_ref, IGNORE_ERRORS, true,
+                                        // view_ref is a local variable, so
+                                        // don't record a change to roll back:
+                                        false);
+      if (thd->is_error()) return true;
+
+      if (!from_field) from_field = not_found_field;
+    }
+
+    if (from_field == not_found_field ||
+        (from_field != view_ref_found
+             ?
+             /* it is field of base table => check that fields are same */
+             ((*select_item)->type() == Item::FIELD_ITEM &&
+              ((Item_field *)(*select_item))->field->eq(from_field))
+             :
+             /*
+               in is field of view table => check that references on translation
+               table are same
+             */
+             ((*select_item)->type() == Item::REF_ITEM &&
+              view_ref->type() == Item::REF_ITEM &&
+              ((Item_ref *)(*select_item))->ref ==
+                  ((Item_ref *)view_ref)->ref))) {
+      /*
+        If there is no such field in the FROM clause, or it is the same field
+        as the one found in the SELECT clause, then use the Item created for
+        the SELECT field. As a result if there was a derived field that
+        'shadowed' a table field with the same name, the table field will be
+        chosen over the derived field.
+
+        If we replace *order->item with one from the select list or
+        from a table in the FROM list, we should clean up after
+        removing the old *order->item from the query. The item has not
+        been fixed (so there are no aggregation functions that need
+        cleaning up), but it may contain subqueries that should be
+        unlinked.
+      */
+      if ((*order->item)->real_item() != *select_item)
+        (*order->item)
+            ->walk(&Item::clean_up_after_removal, enum_walk::SUBQUERY_POSTFIX,
+                   nullptr);
+      order->item = &ref_item_array[counter];
+      order->in_field_list = true;
+      if (resolution == RESOLVED_AGAINST_ALIAS && from_field == not_found_field)
+        order->used_alias = true;
+      return false;
+    } else {
+      /*
+        There is a field with the same name in the FROM clause. This
+        is the field that will be chosen. In this case we issue a
+        warning so the user knows that the field from the FROM clause
+        overshadows the column reference from the SELECT list.
+        For window functions we do not need to issue this warning
+        (field should resolve to a unique column in the FROM derived
+        table expression, cf. SQL 2016 section 7.15 SR 4)
+      */
+      if (!is_window_order) {
+        push_warning_printf(thd, Sql_condition::SL_WARNING, ER_NON_UNIQ_ERROR,
+                            ER_THD(thd, ER_NON_UNIQ_ERROR),
+                            ((Item_ident *)order_item)->field_name, thd->where);
+      }
+    }
+  }
+
+  // If we couldn't find the item, see if we can find it in a merged derived
+  // table, hidden behind an Item_view_ref. This is a lowest-priority
+  // fallback to make sure we don't add the field twice to the select list;
+  // once as hidden (directly) and once as visible (through the view_ref).
+  // Such double-adds would be a problem if we later create a temporary table
+  // containing the item, which will call item->get_tmp_table_item() and
+  // effectively peel away the ref -- an item cannot be both visible and
+  // hidden at the same time.
+  counter = 0;
+  for (auto it = VisibleFields(*fields).begin();
+       it != VisibleFields(*fields).end(); ++it, ++counter) {
+    Item *item = *it;
+    if (item->type() == Item::REF_ITEM &&
+        ((Item_ref *)item)->ref_type() == Item_ref::VIEW_REF) {
+      Item_view_ref *item_ref = down_cast<Item_view_ref *>(item);
+      if (item_ref->cached_table->is_merged() &&
+          order_item->eq(*item_ref->ref, false)) {
+        order->item = &ref_item_array[counter];
+        order->in_field_list = true;
+        return false;
+      }
+    }
+  }
+
+  order->in_field_list = false;
+  /*
+    The call to order_item->fix_fields() means that here we resolve
+    'order_item' to a column from a table in the list 'tables', or to
+    a column in some outer query. Exactly because of the second case
+    we come to this point even if (select_item == not_found_item),
+    inspite of that fix_fields() calls find_item_in_list() one more
+    time.
+
+    We check order_item->fixed because Item_func_group_concat can put
+    arguments for which fix_fields already was called.
+
+    group_fix_field = true is so that we properly reject GROUP BY on
+    subqueries with references to group fields.
+  */
+  bool save_group_fix_field = thd->lex->current_query_block()->group_fix_field;
+  if (is_group_field) thd->lex->current_query_block()->group_fix_field = true;
+  bool ret =
+      (!order_item->fixed && (order_item->fix_fields(thd, order->item) ||
+                              (order_item = *order->item)->check_cols(1)));
+  thd->lex->current_query_block()->group_fix_field = save_group_fix_field;
+  if (ret) return true; /* Wrong field. */
+
+  assert_consistent_hidden_flags(*fields, order_item, /*hidden=*/true);
+
+  uint el = fields->size();
+  order_item->hidden = true;
+  fields->push_front(order_item); /* Add new field to field list. */
+  ref_item_array[el] = order_item;
+  /*
+    If the order_item is a SUM_FUNC_ITEM, when fix_fields is called
+    referenced_by is set to order->item which is the address of order_item.
+    But this needs to be address of order_item in the fields list.
+    As a result, when it gets replaced with Item_aggregate_ref
+    object in Item::split_sum_func2, we will be able to retrieve the
+    newly created object.
+  */
+  if (order_item->type() == Item::SUM_FUNC_ITEM)
+    down_cast<Item_sum *>(order_item)->referenced_by[0] = &(*fields)[0];
+
+  /*
+    Currently, we assume that this assertion holds. If it turns out
+    that it fails for some query, order->item has changed and the old
+    item is removed from the query. In that case, we must call walk()
+    with clean_up_after_removal() on the old order->item.
+  */
+  assert(order_item == *order->item);
+  order->item = &ref_item_array[el];
+  return false;
+}
+
+
+// Source: sql_resolver.cc
+// Lines 4220-4413

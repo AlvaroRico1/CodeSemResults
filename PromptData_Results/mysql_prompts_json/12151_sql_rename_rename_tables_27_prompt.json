@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ren_table' at line 7\n2. Pointer 'new_table' at line 7\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic TABLE_LIST *rename_tables(\n    THD *thd, TABLE_LIST *table_list, bool *int_commit_done,\n    post_ddl_htons_t *post_ddl_htons,\n    Foreign_key_parents_invalidator *fk_invalidator)\n\n{\n  TABLE_LIST *ren_table, *new_table;\n\n  DBUG_TRACE;\n\n  for (ren_table = table_list; ren_table; ren_table = new_table->next_local) {\n    new_table = ren_table->next_local;\n    if (do_rename(thd, ren_table, new_table->db, new_table->table_name,\n                  new_table->alias, int_commit_done, post_ddl_htons,\n                  fk_invalidator))\n      return ren_table;\n  }\n  return nullptr;\n}\n\n\n// Source: sql_rename.cc\n// Lines 895-913\n",
+  "ANSWER": "MUST"
+}

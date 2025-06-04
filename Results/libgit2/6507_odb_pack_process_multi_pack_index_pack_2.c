@@ -1,0 +1,41 @@
+static int process_multi_pack_index_pack(
+		struct pack_backend *backend,
+		size_t i,
+		const char *packfile_name)
+{
+	int error;
+	struct git_pack_file *pack;
+	size_t found_position;
+	git_str pack_path = GIT_STR_INIT, index_prefix = GIT_STR_INIT;
+
+	error = git_str_joinpath(&pack_path, backend->pack_folder, packfile_name);
+	if (error < 0)
+		return error;
+
+	/* This is ensured by midx_parse_packfile_name() */
+	if (git_str_len(&pack_path) <= strlen(".idx") || git__suffixcmp(git_str_cstr(&pack_path), ".idx") != 0)
+		return git_odb__error_notfound("midx file contained a non-index", NULL, 0);
+
+	git_str_attach_notowned(&index_prefix, git_str_cstr(&pack_path), git_str_len(&pack_path) - strlen(".idx"));
+
+	if (git_vector_search2(&found_position, &backend->packs, packfile_byname_search_cmp, &index_prefix) == 0) {
+		/* Pack was found in the packs list. Moving it to the midx_packs list. */
+		git_str_dispose(&pack_path);
+		git_vector_set(NULL, &backend->midx_packs, i, git_vector_get(&backend->packs, found_position));
+		git_vector_remove(&backend->packs, found_position);
+		return 0;
+	}
+
+	/* Pack was not found. Allocate a new one. */
+	error = git_mwindow_get_pack(&pack, git_str_cstr(&pack_path));
+	git_str_dispose(&pack_path);
+	if (error < 0)
+		return error;
+
+	git_vector_set(NULL, &backend->midx_packs, i, pack);
+	return 0;
+}
+
+
+// Source: odb_pack.c
+// Lines 399-435

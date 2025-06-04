@@ -1,0 +1,20 @@
+static void fetch_result_with_conversion(MYSQL_BIND *param, MYSQL_FIELD *field,
+                                         uchar **row) {
+  enum enum_field_types field_type = field->type;
+  uint field_is_unsigned = field->flags & UNSIGNED_FLAG;
+
+  switch (field_type) {
+    case MYSQL_TYPE_BOOL:
+    case MYSQL_TYPE_TINY: {
+      uchar value = **row;
+      /* sic: we need to cast to 'signed char' as 'char' may be unsigned */
+      longlong data =
+          field_is_unsigned ? (longlong)value : (longlong)(signed char)value;
+      fetch_long_with_conversion(param, field, data, false);
+      *row += 1;
+      break;
+    }
+
+
+// Source: libmysql.cc
+// Lines 3138-3153

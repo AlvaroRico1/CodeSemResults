@@ -1,0 +1,54 @@
+bool STDCALL mysql_stmt_close(MYSQL_STMT *stmt) {
+  MYSQL *mysql = stmt->mysql;
+  int rc = 0;
+  DBUG_TRACE;
+
+  free_root(stmt->result.alloc, MYF(0));
+  free_root(stmt->mem_root, MYF(0));
+  free_root(&stmt->extension->fields_mem_root, MYF(0));
+
+  if (mysql) {
+    mysql->stmts = list_delete(mysql->stmts, &stmt->list);
+    /*
+      Clear NET error state: if the following commands come through
+      successfully, connection will still be usable for other commands.
+    */
+    net_clear_error(&mysql->net);
+    if ((int)stmt->state > (int)MYSQL_STMT_INIT_DONE) {
+      uchar buff[MYSQL_STMT_HEADER]; /* 4 bytes - stmt id */
+
+      if (mysql->unbuffered_fetch_owner == &stmt->unbuffered_fetch_cancelled)
+        mysql->unbuffered_fetch_owner = nullptr;
+      if (mysql->status != MYSQL_STATUS_READY) {
+        /*
+          Flush result set of the connection. If it does not belong
+          to this statement, set a warning.
+        */
+        (*mysql->methods->flush_use_result)(mysql, true);
+        if (mysql->unbuffered_fetch_owner)
+          *mysql->unbuffered_fetch_owner = true;
+        mysql->status = MYSQL_STATUS_READY;
+      }
+      int4store(buff, stmt->stmt_id);
+      /*
+        If stmt_command failed, it would have already raised
+        error using set_mysql_error. Caller should use
+        mysql_error() or mysql_errno() to find out details.
+        Memory allocated for stmt will be released regardless
+        of the error.
+      */
+      rc = stmt_command(mysql, COM_STMT_CLOSE, buff, 4, stmt);
+    }
+  }
+
+  my_free(stmt->result.alloc);
+  my_free(stmt->mem_root);
+  my_free(stmt->extension);
+  my_free(stmt);
+
+  return rc != 0;
+}
+
+
+// Source: libmysql.cc
+// Lines 4150-4199

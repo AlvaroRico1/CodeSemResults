@@ -1,0 +1,38 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'index' at line 3
+2. Pointer 'sm' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_submodule_add__path_exists_in_index(void)
+{
+	git_index *index;
+	git_submodule *sm;
+	git_str filename = GIT_STR_INIT;
+
+	g_repo = cl_git_sandbox_init("testrepo");
+
+	cl_git_pass(git_str_joinpath(&filename, "subdirectory", "test.txt"));
+
+	cl_git_pass(git_repository_index__weakptr(&index, g_repo));
+
+	test_add_entry(index, valid_blob_id, filename.ptr, GIT_FILEMODE_BLOB);
+
+	cl_git_fail_with(git_submodule_add_setup(&sm, g_repo, "./", "subdirectory", 1), GIT_EEXISTS);
+
+	git_submodule_free(sm);
+	git_str_dispose(&filename);
+}
+
+
+// Source: add.c
+// Lines 150-168
+
+
+[ANSWER]
+MAY

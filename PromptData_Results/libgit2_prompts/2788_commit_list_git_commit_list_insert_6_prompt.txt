@@ -1,0 +1,29 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'list_p' at line 1
+2. Pointer 'new_list' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+git_commit_list *git_commit_list_insert(git_commit_list_node *item, git_commit_list **list_p)
+{
+	git_commit_list *new_list = git__malloc(sizeof(git_commit_list));
+	if (new_list != NULL) {
+		new_list->item = item;
+		new_list->next = *list_p;
+	}
+	*list_p = new_list;
+	return new_list;
+}
+
+
+// Source: commit_list.c
+// Lines 46-55
+
+
+[ANSWER]
+MUST

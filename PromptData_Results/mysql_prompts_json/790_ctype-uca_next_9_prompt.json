@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'res' at line 2\n2. Pointer 'param' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nALWAYS_INLINE int uca_scanner_900<Mb_wc, LEVELS_FOR_COMPARE>::next() {\n  int res = next_raw();\n  Coll_param *param = cs->coll_param;\n  if (res > 0 && param) {\n    /* Reorder weight change only on primary level. */\n    if (param->reorder_param && weight_lv == 0) res = apply_reorder_param(res);\n    if (param->case_first != CASE_FIRST_OFF) res = apply_case_first(res);\n  }\n  return res;\n}\n\n\n// Source: ctype-uca.cc\n// Lines 1726-1735\n",
+  "ANSWER": "MAY"
+}

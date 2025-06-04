@@ -1,0 +1,71 @@
+try_back_substitute_reg (rtx set, rtx_insn *insn)
+{
+  rtx dest = SET_DEST (set);
+  rtx src = SET_SRC (set);
+
+  if (REG_P (dest)
+      && REG_P (src) && ! HARD_REGISTER_P (src)
+      && REGNO_QTY_VALID_P (REGNO (src)))
+    {
+      int src_q = REG_QTY (REGNO (src));
+      struct qty_table_elem *src_ent = &qty_table[src_q];
+
+      if (src_ent->first_reg == REGNO (dest))
+	{
+	  /* Scan for the previous nonnote insn, but stop at a basic
+	     block boundary.  */
+	  rtx_insn *prev = insn;
+	  rtx_insn *bb_head = BB_HEAD (BLOCK_FOR_INSN (insn));
+	  do
+	    {
+	      prev = PREV_INSN (prev);
+	    }
+	  while (prev != bb_head && (NOTE_P (prev) || DEBUG_INSN_P (prev)));
+
+	  /* Do not swap the registers around if the previous instruction
+	     attaches a REG_EQUIV note to REG1.
+
+	     ??? It's not entirely clear whether we can transfer a REG_EQUIV
+	     from the pseudo that originally shadowed an incoming argument
+	     to another register.  Some uses of REG_EQUIV might rely on it
+	     being attached to REG1 rather than REG2.
+
+	     This section previously turned the REG_EQUIV into a REG_EQUAL
+	     note.  We cannot do that because REG_EQUIV may provide an
+	     uninitialized stack slot when REG_PARM_STACK_SPACE is used.  */
+	  if (NONJUMP_INSN_P (prev)
+	      && GET_CODE (PATTERN (prev)) == SET
+	      && SET_DEST (PATTERN (prev)) == src
+	      && ! find_reg_note (prev, REG_EQUIV, NULL_RTX))
+	    {
+	      rtx note;
+
+	      validate_change (prev, &SET_DEST (PATTERN (prev)), dest, 1);
+	      validate_change (insn, &SET_DEST (set), src, 1);
+	      validate_change (insn, &SET_SRC (set), dest, 1);
+	      apply_change_group ();
+
+	      /* If INSN has a REG_EQUAL note, and this note mentions
+		 REG0, then we must delete it, because the value in
+		 REG0 has changed.  If the note's value is REG1, we must
+		 also delete it because that is now this insn's dest.  */
+	      note = find_reg_note (insn, REG_EQUAL, NULL_RTX);
+	      if (note != 0
+		  && (reg_mentioned_p (dest, XEXP (note, 0))
+		      || rtx_equal_p (src, XEXP (note, 0))))
+		remove_note (insn, note);
+
+	      /* If INSN has a REG_ARGS_SIZE note, move it to PREV.  */
+	      note = find_reg_note (insn, REG_ARGS_SIZE, NULL_RTX);
+	      if (note != 0)
+		{
+		  remove_note (insn, note);
+		  gcc_assert (!find_reg_note (prev, REG_ARGS_SIZE, NULL_RTX));
+		  set_unique_reg_note (prev, REG_ARGS_SIZE, XEXP (note, 0));
+		}
+	    }
+	}
+
+
+// Source: cse.c
+// Lines 4213-4279

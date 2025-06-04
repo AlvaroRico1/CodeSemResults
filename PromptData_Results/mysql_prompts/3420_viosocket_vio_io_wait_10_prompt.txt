@@ -1,0 +1,113 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'vio' at line 1
+2. Pointer 'revents' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int vio_io_wait(Vio *vio, enum enum_vio_io_event event, int timeout) {
+  int ret;
+  int retry_count = 0;
+#ifndef NDEBUG
+  short revents = 0;
+#endif
+  struct pollfd pfd;
+  my_socket sd = mysql_socket_getfd(vio->mysql_socket);
+  MYSQL_SOCKET_WAIT_VARIABLES(locker, state) /* no ';' */
+  DBUG_TRACE;
+
+  memset(&pfd, 0, sizeof(pfd));
+
+  pfd.fd = sd;
+
+  /*
+    Set the poll bitmask describing the type of events.
+    The error flags are only valid in the revents bitmask.
+  */
+  switch (event) {
+    case VIO_IO_EVENT_READ:
+      pfd.events = MY_POLL_SET_IN;
+#ifndef NDEBUG
+      revents = MY_POLL_SET_IN | MY_POLL_SET_ERR | POLLRDHUP;
+#endif
+      break;
+    case VIO_IO_EVENT_WRITE:
+    case VIO_IO_EVENT_CONNECT:
+      pfd.events = MY_POLL_SET_OUT;
+#ifndef NDEBUG
+      revents = MY_POLL_SET_OUT | MY_POLL_SET_ERR;
+#endif
+      break;
+  }
+
+  MYSQL_START_SOCKET_WAIT(locker, &state, vio->mysql_socket, PSI_SOCKET_SELECT,
+                          0);
+
+#ifdef USE_PPOLL_IN_VIO
+  // Check if shutdown is in progress, if so return -1
+  if (vio->poll_shutdown_flag.test_and_set()) return -1;
+
+  timespec ts;
+  timespec *ts_ptr = nullptr;
+
+  if (timeout >= 0) {
+    ts = {timeout / 1000, (timeout % 1000) * 1000000};
+    ts_ptr = &ts;
+  }
+#endif
+
+  /*
+    Wait for the I/O event and return early in case of
+    error or timeout.
+  */
+  do {
+#ifdef USE_PPOLL_IN_VIO
+    /*
+      vio->signal_mask is only useful when thread_id != 0.
+      thread_id is only set for servers, so signal_mask is unused for client
+      libraries.
+    */
+    ret = ppoll(&pfd, 1, ts_ptr,
+                vio->thread_id != 0 ? &vio->signal_mask : nullptr);
+#else
+    ret = poll(&pfd, 1, timeout);
+#endif
+  } while (ret < 0 && vio_should_retry(vio) &&
+           (retry_count++ < vio->retry_count));
+
+#ifdef USE_PPOLL_IN_VIO
+  vio->poll_shutdown_flag.clear();
+#endif
+
+  switch (ret) {
+    case -1:
+      /* On error, -1 is returned. */
+      break;
+    case 0:
+      /*
+        Set errno to indicate a timeout error.
+        (This is not compiled in on WIN32.)
+      */
+      errno = SOCKET_ETIMEDOUT;
+      break;
+    default:
+      /* Ensure that the requested I/O event has completed. */
+      assert(pfd.revents & revents);
+      break;
+  }
+
+  MYSQL_END_SOCKET_WAIT(locker, 0);
+  return ret;
+}
+
+
+// Source: viosocket.cc
+// Lines 784-877
+
+
+[ANSWER]
+MAY

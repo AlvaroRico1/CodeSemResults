@@ -1,0 +1,1 @@
+class_mask,linux/drivers/pci/pci-driver.c,7,subdevice,linux/drivers/pci/pci-driver.c,7,2

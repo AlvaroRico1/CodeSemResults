@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'bp' at line 3\n2. Pointer 'ap' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void memswap(void *a, void *b, size_t len)\n{\n\tunsigned char *ap, *bp;\n\n\tap = (unsigned char *)a;\n\tbp = (unsigned char *)b;\n\twhile (len-- > 0) {\n\t\tswap(*ap, *bp);\n\t\tap++;\n\t\tbp++;\n\t}\n}\n\n\n// Source: ioctl.c\n// Lines 37-48\n",
+  "ANSWER": "MAY"
+}

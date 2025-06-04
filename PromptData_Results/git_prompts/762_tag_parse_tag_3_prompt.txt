@@ -1,0 +1,41 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'size' at line 5
+2. Pointer 'type' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int parse_tag(struct tag *item)
+{
+	enum object_type type;
+	void *data;
+	unsigned long size;
+	int ret;
+
+	if (item->object.parsed)
+		return 0;
+	data = read_object_file(&item->object.oid, &type, &size);
+	if (!data)
+		return error("Could not read %s",
+			     oid_to_hex(&item->object.oid));
+	if (type != OBJ_TAG) {
+		free(data);
+		return error("Object %s not a tag",
+			     oid_to_hex(&item->object.oid));
+	}
+	ret = parse_tag_buffer(the_repository, item, data, size);
+	free(data);
+	return ret;
+}
+
+
+// Source: tag.c
+// Lines 209-230
+
+
+[ANSWER]
+MAY

@@ -1,0 +1,46 @@
+void ThreadSafeArena::InitializeWithPolicy(void* mem, size_t size,
+                                           AllocationPolicy policy) {
+#ifndef NDEBUG
+  const uint64_t old_alloc_policy = alloc_policy_.get_raw();
+  // If there was a policy (e.g., in Reset()), make sure flags were preserved.
+#define GOOGLE_DCHECK_POLICY_FLAGS_() \
+  if (old_alloc_policy > 3)    \
+    GOOGLE_CHECK_EQ(old_alloc_policy & 3, alloc_policy_.get_raw() & 3)
+#else
+#define GOOGLE_DCHECK_POLICY_FLAGS_()
+#endif  // NDEBUG
+
+  if (policy.IsDefault()) {
+    // Legacy code doesn't use the API above, but provides the initial block
+    // through ArenaOptions. I suspect most do not touch the allocation
+    // policy parameters.
+    InitializeFrom(mem, size);
+    GOOGLE_DCHECK_POLICY_FLAGS_();
+    return;
+  }
+  GOOGLE_DCHECK_EQ(reinterpret_cast<uintptr_t>(mem) & 7, 0u);
+  Init();
+
+  // Ignore initial block if it is too small. We include an optional
+  // AllocationPolicy in this check, so that this can be allocated on the
+  // first block.
+  constexpr size_t kAPSize = internal::AlignUpTo8(sizeof(AllocationPolicy));
+  constexpr size_t kMinimumSize = kBlockHeaderSize + kSerialArenaSize + kAPSize;
+
+  // The value for alloc_policy_ stores whether or not allocations should be
+  // recorded.
+  alloc_policy_.set_should_record_allocs(
+      policy.metrics_collector != nullptr &&
+      policy.metrics_collector->RecordAllocs());
+  // Make sure we have an initial block to store the AllocationPolicy.
+  if (mem != nullptr && size >= kMinimumSize) {
+    alloc_policy_.set_is_user_owned_initial_block(true);
+  } else {
+    auto tmp = AllocateMemory(&policy, 0, kMinimumSize);
+    mem = tmp.ptr;
+    size = tmp.size;
+  }
+
+
+// Source: arena.cc
+// Lines 241-282

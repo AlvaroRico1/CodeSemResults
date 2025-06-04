@@ -1,0 +1,36 @@
+void remove_proc_entry(const char *name, struct proc_dir_entry *parent)
+{
+	struct proc_dir_entry *de = NULL;
+	const char *fn = name;
+	unsigned int len;
+
+	write_lock(&proc_subdir_lock);
+	if (__xlate_proc_name(name, &parent, &fn) != 0) {
+		write_unlock(&proc_subdir_lock);
+		return;
+	}
+	len = strlen(fn);
+
+	de = pde_subdir_find(parent, fn, len);
+	if (de)
+		rb_erase(&de->subdir_node, &parent->subdir);
+	write_unlock(&proc_subdir_lock);
+	if (!de) {
+		WARN(1, "name '%s'\n", name);
+		return;
+	}
+
+	proc_entry_rundown(de);
+
+	if (S_ISDIR(de->mode))
+		parent->nlink--;
+	de->nlink = 0;
+	WARN(pde_subdir_first(de),
+	     "%s: removing non-empty directory '%s/%s', leaking at least '%s'\n",
+	     __func__, de->parent->name, de->name, pde_subdir_first(de)->name);
+	pde_put(de);
+}
+
+
+// Source: generic.c
+// Lines 655-686

@@ -1,0 +1,1 @@
+cells,tmux/cmd-resize-pane.c,9,lc,tmux/cmd-resize-pane.c,9,1

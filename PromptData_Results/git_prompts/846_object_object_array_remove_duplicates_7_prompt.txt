@@ -1,0 +1,36 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'objects' at line 4
+2. Pointer 'array' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void object_array_remove_duplicates(struct object_array *array)
+{
+	unsigned nr = array->nr, src;
+	struct object_array_entry *objects = array->objects;
+
+	array->nr = 0;
+	for (src = 0; src < nr; src++) {
+		if (!contains_object(array, objects[src].item,
+				     objects[src].name)) {
+			if (src != array->nr)
+				objects[array->nr] = objects[src];
+			array->nr++;
+		} else {
+			object_array_release_entry(&objects[src]);
+		}
+	}
+}
+
+
+// Source: object.c
+// Lines 446-462
+
+
+[ANSWER]
+MUST

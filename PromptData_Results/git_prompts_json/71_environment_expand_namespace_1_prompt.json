@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'components' at line 4\n2. Pointer 'raw_namespace' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic char *expand_namespace(const char *raw_namespace)\n{\n\tstruct strbuf buf = STRBUF_INIT;\n\tstruct strbuf **components, **c;\n\n\tif (!raw_namespace || !*raw_namespace)\n\t\treturn xstrdup(\"\");\n\n\tstrbuf_addstr(&buf, raw_namespace);\n\tcomponents = strbuf_split(&buf, '/');\n\tstrbuf_reset(&buf);\n\tfor (c = components; *c; c++)\n\t\tif (strcmp((*c)->buf, \"/\") != 0)\n\t\t\tstrbuf_addf(&buf, \"refs/namespaces/%s\", (*c)->buf);\n\tstrbuf_list_free(components);\n\tif (check_refname_format(buf.buf, 0))\n\t\tdie(_(\"bad git namespace path \\\"%s\\\"\"), raw_namespace);\n\tstrbuf_addch(&buf, '/');\n\treturn strbuf_detach(&buf, NULL);\n}\n\n\n// Source: environment.c\n// Lines 127-146\n",
+  "ANSWER": "MAY"
+}

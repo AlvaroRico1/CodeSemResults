@@ -1,0 +1,44 @@
+static bool plugin_init_initialize_and_reap() {
+  struct st_plugin_int *plugin_ptr;
+  struct st_plugin_int **reap;
+
+  /* Now we initialize all plugins that are not already initialized */
+  mysql_mutex_lock(&LOCK_plugin);
+  reap =
+      (st_plugin_int **)my_alloca((plugin_array->size() + 1) * sizeof(void *));
+  *(reap++) = nullptr;
+
+  for (st_plugin_int **it = plugin_array->begin(); it != plugin_array->end();
+       ++it) {
+    plugin_ptr = *it;
+    if (plugin_ptr->state == PLUGIN_IS_UNINITIALIZED) {
+      if (plugin_initialize(plugin_ptr)) {
+        plugin_ptr->state = PLUGIN_IS_DYING;
+        *(reap++) = plugin_ptr;
+      }
+    }
+  }
+
+  /* Check if any plugins have to be reaped */
+  bool reaped_mandatory_plugin = false;
+  while ((plugin_ptr = *(--reap))) {
+    mysql_mutex_unlock(&LOCK_plugin);
+    if (plugin_ptr->load_option == PLUGIN_FORCE ||
+        plugin_ptr->load_option == PLUGIN_FORCE_PLUS_PERMANENT)
+      reaped_mandatory_plugin = true;
+    plugin_deinitialize(plugin_ptr, true);
+    mysql_mutex_lock(&LOCK_plugin_delete);
+    mysql_mutex_lock(&LOCK_plugin);
+    plugin_del(plugin_ptr);
+    mysql_mutex_unlock(&LOCK_plugin_delete);
+  }
+
+  mysql_mutex_unlock(&LOCK_plugin);
+  if (reaped_mandatory_plugin) return true;
+
+  return false;
+}
+
+
+// Source: sql_plugin.cc
+// Lines 1430-1469

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ctx' at line 1\n2. Pointer 'newmap' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int on_config_mime_settypes(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)\n{\n    h2o_mimemap_t *newmap = h2o_mimemap_create();\n    h2o_mimemap_clear_types(newmap);\n    h2o_mimemap_set_default_type(newmap, h2o_mimemap_get_default_type(*ctx->mimemap)->data.mimetype.base, NULL);\n    if (set_mimetypes(cmd, newmap, node) != 0) {\n        h2o_mem_release_shared(newmap);\n        return -1;\n    }\n\n    h2o_mem_release_shared(*ctx->mimemap);\n    *ctx->mimemap = newmap;\n    return 0;\n}\n\n\n// Source: configurator.c\n// Lines 756-769\n",
+  "ANSWER": "MUST"
+}

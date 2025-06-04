@@ -1,0 +1,52 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'entry_name' at line 4
+2. Pointer 'entry' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_config_write__delete_value_with_duplicate_header(void)
+{
+	const char *file_name  = "config-duplicate-header";
+	const char *entry_name = "remote.origin.url";
+	git_config *cfg;
+	git_config_entry *entry;
+
+	/* This config can occur after removing and re-adding the origin remote */
+	const char *file_content =
+		"[remote \"origin\"]\n"		\
+		"[branch \"master\"]\n"		\
+		"	remote = \"origin\"\n"	\
+		"[remote \"origin\"]\n"		\
+		"	url = \"foo\"\n";
+
+	/* Write the test config and make sure the expected entry exists */
+	cl_git_mkfile(file_name, file_content);
+	cl_git_pass(git_config_open_ondisk(&cfg, file_name));
+	cl_git_pass(git_config_get_entry(&entry, cfg, entry_name));
+
+	/* Delete that entry */
+	cl_git_pass(git_config_delete_entry(cfg, entry_name));
+
+	/* Reopen the file and make sure the entry no longer exists */
+	git_config_entry_free(entry);
+	git_config_free(cfg);
+	cl_git_pass(git_config_open_ondisk(&cfg, file_name));
+	cl_git_fail(git_config_get_entry(&entry, cfg, entry_name));
+
+	/* Cleanup */
+	git_config_entry_free(entry);
+	git_config_free(cfg);
+}
+
+
+// Source: write.c
+// Lines 117-149
+
+
+[ANSWER]
+MUST-NOT

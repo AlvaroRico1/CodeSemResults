@@ -1,0 +1,1 @@
+tables,mysql/sql/sql_resolver.cc,35,new_derived,mysql/sql/sql_resolver.cc,20,1

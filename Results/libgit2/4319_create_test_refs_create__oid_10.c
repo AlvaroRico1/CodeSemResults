@@ -1,0 +1,39 @@
+void test_refs_create__oid(void)
+{
+	/* create a new OID reference */
+	git_reference *new_reference, *looked_up_ref;
+	git_repository *repo2;
+	git_oid id;
+
+	const char *new_head = "refs/heads/new-head";
+
+	git_oid_fromstr(&id, current_master_tip);
+
+	/* Create and write the new object id reference */
+	cl_git_pass(git_reference_create(&new_reference, g_repo, new_head, &id, 0, NULL));
+
+	/* Ensure the reference can be looked-up... */
+	cl_git_pass(git_reference_lookup(&looked_up_ref, g_repo, new_head));
+	cl_assert(git_reference_type(looked_up_ref) & GIT_REFERENCE_DIRECT);
+	cl_assert(reference_is_packed(looked_up_ref) == 0);
+	cl_assert_equal_s(looked_up_ref->name, new_head);
+
+	/* ...and that it points to the current master tip */
+	cl_assert_equal_oid(&id, git_reference_target(looked_up_ref));
+	git_reference_free(looked_up_ref);
+
+	/* Similar test with a fresh new repository */
+	cl_git_pass(git_repository_open(&repo2, "testrepo"));
+
+	cl_git_pass(git_reference_lookup(&looked_up_ref, repo2, new_head));
+	cl_assert_equal_oid(&id, git_reference_target(looked_up_ref));
+
+	git_repository_free(repo2);
+
+	git_reference_free(new_reference);
+	git_reference_free(looked_up_ref);
+}
+
+
+// Source: create.c
+// Lines 139-173

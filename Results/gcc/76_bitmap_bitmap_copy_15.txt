@@ -1,0 +1,1 @@
+to_ptr,gcc/gcc/bitmap.c,4,to_elt,gcc/gcc/bitmap.c,13,1

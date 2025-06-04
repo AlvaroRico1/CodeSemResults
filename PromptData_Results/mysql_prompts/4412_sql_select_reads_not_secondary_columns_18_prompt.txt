@@ -1,0 +1,50 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tl' at line 3
+2. Pointer 'tl' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static bool reads_not_secondary_columns(const LEX *lex) {
+  // Check all read base tables.
+  const TABLE_LIST *tl = lex->query_tables;
+  // For INSERT INTO SELECT statements, the table to insert into does not have
+  // to have a secondary engine. This table is always first in the list.
+  if (lex->sql_command == SQLCOM_INSERT_SELECT && tl != nullptr)
+    tl = tl->next_global;
+  for (; tl != nullptr; tl = tl->next_global) {
+    if (tl->is_placeholder()) continue;
+
+    // Check all read columns of table.
+    for (unsigned int i = bitmap_get_first_set(tl->table->read_set);
+         i != MY_BIT_NONE; i = bitmap_get_next_set(tl->table->read_set, i)) {
+      if (tl->table->field[i]->is_flag_set(NOT_SECONDARY_FLAG)) {
+        Opt_trace_context *trace = &lex->thd->opt_trace;
+        if (trace->is_started()) {
+          std::string message("");
+          message.append("Column ");
+          message.append(tl->table->field[i]->field_name);
+          message.append(" is marked as NOT SECONDARY.");
+          Opt_trace_object trace_wrapper(trace);
+          Opt_trace_object oto(trace, "secondary_engine_not_used");
+          oto.add_alnum("reason", message.c_str());
+        }
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+
+// Source: sql_select.cc
+// Lines 239-269
+
+
+[ANSWER]
+MUST

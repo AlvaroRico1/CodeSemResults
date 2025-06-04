@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'as' at line 7\n2. Pointer 'e' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void altsvc_flush(struct altsvcinfo *asi, enum alpnid srcalpnid,\n                         const char *srchost, unsigned short srcport)\n{\n  struct Curl_llist_element *e;\n  struct Curl_llist_element *n;\n  for(e = asi->list.head; e; e = n) {\n    struct altsvc *as = e->ptr;\n    n = e->next;\n    if((srcalpnid == as->src.alpnid) &&\n       (srcport == as->src.port) &&\n       strcasecompare(srchost, as->src.host)) {\n      Curl_llist_remove(&asi->list, e, NULL);\n      altsvc_free(as);\n    }\n  }\n\n\n// Source: altsvc.c\n// Lines 401-415\n",
+  "ANSWER": "MUST"
+}

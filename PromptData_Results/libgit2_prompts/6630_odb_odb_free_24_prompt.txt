@@ -1,0 +1,36 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'backend' at line 12
+2. Pointer 'internal' at line 11
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void odb_free(git_odb *db)
+{
+	size_t i;
+	bool locked = true;
+
+	if (git_mutex_lock(&db->lock) < 0) {
+		git_error_set(GIT_ERROR_ODB, "failed to acquire the odb lock");
+		locked = false;
+	}
+	for (i = 0; i < db->backends.length; ++i) {
+		backend_internal *internal = git_vector_get(&db->backends, i);
+		git_odb_backend *backend = internal->backend;
+
+		backend->free(backend);
+
+		git__free(internal);
+	}
+
+
+// Source: odb.c
+// Lines 749-765
+
+
+[ANSWER]
+MUST

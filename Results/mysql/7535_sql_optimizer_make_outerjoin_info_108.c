@@ -1,0 +1,91 @@
+void JOIN::make_outerjoin_info() {
+  DBUG_TRACE;
+
+  assert(query_block->outer_join);
+  ASSERT_BEST_REF_IN_JOIN_ORDER(this);
+
+  query_block->reset_nj_counters();
+
+  for (uint i = const_tables; i < tables; ++i) {
+    JOIN_TAB *const tab = best_ref[i];
+    TABLE *const table = tab->table();
+    if (!table) continue;
+
+    TABLE_LIST *const tbl = tab->table_ref;
+    /*
+      If 'tbl' is inside a SJ/AJ nest served by materialization, we must
+      limit setting first_inner, last_inner and first_upper for join nests
+      inside the materialized table. Indeed it is the SJ-tmp table, and not
+      'tbl', which interacts with the nests outer to the SJ/AJ nest.
+    */
+    const bool sj_mat_inner =
+        sj_is_materialize_strategy(tab->get_sj_strategy());
+
+    if (tbl->outer_join) {
+      /*
+        Table tab is the only one inner table for outer join.
+        (Like table t4 for the table reference t3 LEFT JOIN t4 ON t3.a=t4.a
+        is in the query above.)
+      */
+      tab->set_last_inner(i);
+      tab->set_first_inner(i);
+      tab->init_join_cond_ref(tbl);
+      tab->cond_equal = tbl->cond_equal;
+      /*
+        If this outer join nest is embedded in another join nest,
+        link the join-tabs:
+      */
+      TABLE_LIST *const outer_join_nest = tbl->outer_join_nest();
+      if (outer_join_nest) {
+        assert(outer_join_nest->nested_join->first_nested != NO_PLAN_IDX);
+        if (!sj_mat_inner ||
+            (tab->emb_sj_nest->sj_inner_tables &
+             best_ref[outer_join_nest->nested_join->first_nested]
+                 ->table_ref->map()))
+          tab->set_first_upper(outer_join_nest->nested_join->first_nested);
+      }
+    }
+    for (TABLE_LIST *embedding = tbl->embedding; embedding;
+         embedding = embedding->embedding) {
+      // When reaching the outer tables of the materialized temporary table,
+      // the decoration for this table is complete.
+      if (sj_mat_inner && embedding == tab->emb_sj_nest) break;
+      // Ignore join nests that are not outer join nests:
+      if (!embedding->join_cond_optim()) continue;
+      NESTED_JOIN *const nested_join = embedding->nested_join;
+      if (!nested_join->nj_counter) {
+        /*
+          Table tab is the first inner table for nested_join.
+          Save reference to it in the nested join structure.
+        */
+        nested_join->first_nested = i;
+        // The table's condition is set to point to the join nest's condition
+        tab->init_join_cond_ref(embedding);
+        tab->cond_equal = tbl->cond_equal;
+
+        TABLE_LIST *const outer_join_nest = embedding->outer_join_nest();
+        if (outer_join_nest) {
+          assert(outer_join_nest->nested_join->first_nested != NO_PLAN_IDX);
+          if (!sj_mat_inner ||
+              (tab->emb_sj_nest->sj_inner_tables &
+               best_ref[outer_join_nest->nested_join->first_nested]
+                   ->table_ref->map()))
+            tab->set_first_upper(outer_join_nest->nested_join->first_nested);
+        }
+      }
+      if (tab->first_inner() == NO_PLAN_IDX)
+        tab->set_first_inner(nested_join->first_nested);
+      /*
+        If including the sj-mat tmp table, this also implicitely
+        includes the inner tables of the sj-nest.
+      */
+      nested_join->nj_counter +=
+          tab->sj_mat_exec() ? tab->sj_mat_exec()->table_count : 1;
+      if (nested_join->nj_counter < nested_join->nj_total) break;
+      // Table tab is the last inner table for nested join.
+      best_ref[nested_join->first_nested]->set_last_inner(i);
+    }
+
+
+// Source: sql_optimizer.cc
+// Lines 8154-8240

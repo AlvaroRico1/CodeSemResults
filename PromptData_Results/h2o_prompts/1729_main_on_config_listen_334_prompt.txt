@@ -1,0 +1,50 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'port_node' at line 14
+2. Pointer 'servname' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    const char *hostname = NULL, *servname, *type = "tcp";
+    yoml_t **ssl_node = NULL, **owner_node = NULL, **permission_node = NULL, **quic_node = NULL, **cc_node = NULL,
+           **initcwnd_node = NULL, **group_node = NULL;
+    int proxy_protocol = 0;
+
+    /* fetch servname (and hostname) */
+    switch (node->type) {
+    case YOML_TYPE_SCALAR:
+        servname = node->data.scalar;
+        break;
+    case YOML_TYPE_MAPPING: {
+        yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node;
+        if (h2o_configurator_parse_mapping(
+                cmd, node, "port:s", "host:s,type:s,owner:s,group:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s,initcwnd:s",
+                &port_node, &host_node, &type_node, &owner_node, &group_node, &permission_node, &ssl_node, &proxy_protocol_node,
+                &quic_node, &cc_node, &initcwnd_node) != 0)
+            return -1;
+        servname = (*port_node)->data.scalar;
+        if (host_node != NULL)
+            hostname = (*host_node)->data.scalar;
+        if (type_node != NULL) {
+            type = (*type_node)->data.scalar;
+        } else if (quic_node != NULL) {
+            type = "quic";
+        }
+        if (proxy_protocol_node != NULL &&
+            (proxy_protocol = (int)h2o_configurator_get_one_of(cmd, *proxy_protocol_node, "OFF,ON")) == -1)
+            return -1;
+    } break;
+
+
+// Source: main.c
+// Lines 1796-1826
+
+
+[ANSWER]
+MAY

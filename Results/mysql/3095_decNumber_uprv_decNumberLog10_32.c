@@ -1,0 +1,139 @@
+U_CAPI decNumber * U_EXPORT2 uprv_decNumberLog10(decNumber *res, const decNumber *rhs,
+                          decContext *set) {
+  uInt status=0, ignore=0;         /* status accumulators  */
+  uInt needbytes;                  /* for space calculations  */
+  Int p;                           /* working precision  */
+  Int t;                           /* digits in exponent of A  */
+
+  /* buffers for a and b working decimals  */
+  /* (adjustment calculator, same size)  */
+  decNumber bufa[D2N(DECBUFFER+2)];
+  decNumber *allocbufa=NULL;       /* -> allocated bufa, iff allocated  */
+  decNumber *a=bufa;               /* temporary a  */
+  decNumber bufb[D2N(DECBUFFER+2)];
+  decNumber *allocbufb=NULL;       /* -> allocated bufb, iff allocated  */
+  decNumber *b=bufb;               /* temporary b  */
+  decNumber bufw[D2N(10)];         /* working 2-10 digit number  */
+  decNumber *w=bufw;               /* ..  */
+  #if DECSUBSET
+  decNumber *allocrhs=NULL;        /* non-NULL if rounded rhs allocated  */
+  #endif
+
+  decContext aset;                 /* working context  */
+
+  #if DECCHECK
+  if (decCheckOperands(res, DECUNUSED, rhs, set)) return res;
+  #endif
+
+  /* Check restrictions; this is a math function; if not violated  */
+  /* then carry out the operation.  */
+  if (!decCheckMath(rhs, set, &status)) do { /* protect malloc  */
+    #if DECSUBSET
+    if (!set->extended) {
+      /* reduce operand and set lostDigits status, as needed  */
+      if (rhs->digits>set->digits) {
+        allocrhs=decRoundOperand(rhs, set, &status);
+        if (allocrhs==NULL) break;
+        rhs=allocrhs;
+        }
+      /* special check in subset for rhs=0  */
+      if (ISZERO(rhs)) {                /* +/- zeros -> error  */
+        status|=DEC_Invalid_operation;
+        break;}
+      } /* extended=0  */
+    #endif
+
+    uprv_decContextDefault(&aset, DEC_INIT_DECIMAL64); /* clean context  */
+
+    /* handle exact powers of 10; only check if +ve finite  */
+    if (!(rhs->bits&(DECNEG|DECSPECIAL)) && !ISZERO(rhs)) {
+      Int residue=0;               /* (no residue)  */
+      uInt copystat=0;             /* clean status  */
+
+      /* round to a single digit...  */
+      aset.digits=1;
+      decCopyFit(w, rhs, &aset, &residue, &copystat); /* copy & shorten  */
+      /* if exact and the digit is 1, rhs is a power of 10  */
+      if (!(copystat&DEC_Inexact) && w->lsu[0]==1) {
+        /* the exponent, conveniently, is the power of 10; making  */
+        /* this the result needs a little care as it might not fit,  */
+        /* so first convert it into the working number, and then move  */
+        /* to res  */
+        uprv_decNumberFromInt32(w, w->exponent);
+        residue=0;
+        decCopyFit(res, w, set, &residue, &status); /* copy & round  */
+        decFinish(res, set, &residue, &status);     /* cleanup/set flags  */
+        break;
+        } /* not a power of 10  */
+      } /* not a candidate for exact  */
+
+    /* simplify the information-content calculation to use 'total  */
+    /* number of digits in a, including exponent' as compared to the  */
+    /* requested digits, as increasing this will only rarely cost an  */
+    /* iteration in ln(a) anyway  */
+    t=6;                                /* it can never be >6  */
+
+    /* allocate space when needed...  */
+    p=(rhs->digits+t>set->digits?rhs->digits+t:set->digits)+3;
+    needbytes=sizeof(decNumber)+(D2U(p)-1)*sizeof(Unit);
+    if (needbytes>sizeof(bufa)) {       /* need malloc space  */
+      allocbufa=(decNumber *)malloc(needbytes);
+      if (allocbufa==NULL) {            /* hopeless -- abandon  */
+        status|=DEC_Insufficient_storage;
+        break;}
+      a=allocbufa;                      /* use the allocated space  */
+      }
+    aset.digits=p;                      /* as calculated  */
+    aset.emax=DEC_MAX_MATH;             /* usual bounds  */
+    aset.emin=-DEC_MAX_MATH;            /* ..  */
+    aset.clamp=0;                       /* and no concrete format  */
+    decLnOp(a, rhs, &aset, &status);    /* a=ln(rhs)  */
+
+    /* skip the division if the result so far is infinite, NaN, or  */
+    /* zero, or there was an error; note NaN from sNaN needs copy  */
+    if (status&DEC_NaNs && !(status&DEC_sNaN)) break;
+    if (a->bits&DECSPECIAL || ISZERO(a)) {
+      uprv_decNumberCopy(res, a);            /* [will fit]  */
+      break;}
+
+    /* for ln(10) an extra 3 digits of precision are needed  */
+    p=set->digits+3;
+    needbytes=sizeof(decNumber)+(D2U(p)-1)*sizeof(Unit);
+    if (needbytes>sizeof(bufb)) {       /* need malloc space  */
+      allocbufb=(decNumber *)malloc(needbytes);
+      if (allocbufb==NULL) {            /* hopeless -- abandon  */
+        status|=DEC_Insufficient_storage;
+        break;}
+      b=allocbufb;                      /* use the allocated space  */
+      }
+    uprv_decNumberZero(w);                   /* set up 10...  */
+    #if DECDPUN==1
+    w->lsu[1]=1; w->lsu[0]=0;           /* ..  */
+    #else
+    w->lsu[0]=10;                       /* ..  */
+    #endif
+    w->digits=2;                        /* ..  */
+
+    aset.digits=p;
+    decLnOp(b, w, &aset, &ignore);      /* b=ln(10)  */
+
+    aset.digits=set->digits;            /* for final divide  */
+    decDivideOp(res, a, b, &aset, DIVIDE, &status); /* into result  */
+    } while(0);                         /* [for break]  */
+
+  if (allocbufa!=NULL) free(allocbufa); /* drop any storage used  */
+  if (allocbufb!=NULL) free(allocbufb); /* ..  */
+  #if DECSUBSET
+  if (allocrhs !=NULL) free(allocrhs);  /* ..  */
+  #endif
+  /* apply significant status  */
+  if (status!=0) decStatus(res, status, set);
+  #if DECCHECK
+  decCheckInexact(res, set);
+  #endif
+  return res;
+  } /* decNumberLog10  */
+
+
+// Source: decNumber.cpp
+// Lines 1418-1552

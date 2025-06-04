@@ -1,0 +1,1 @@
+inherited,mysql/sql/sql_optimizer.cc,2,cond_equal,mysql/sql/sql_optimizer.cc,5,1

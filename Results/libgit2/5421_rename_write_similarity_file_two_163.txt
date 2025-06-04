@@ -1,0 +1,1 @@
+b_lines,libgit2/tests/libgit2/diff/rename.c,1,i,libgit2/tests/libgit2/diff/rename.c,4,0

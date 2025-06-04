@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'out' at line 1\n2. Pointer 'result' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint git_odb__get_commit_graph_file(git_commit_graph_file **out, git_odb *db)\n{\n\tint error = 0;\n\tgit_commit_graph_file *result = NULL;\n\n\tif ((error = git_mutex_lock(&db->lock)) < 0) {\n\t\tgit_error_set(GIT_ERROR_ODB, \"failed to acquire the db lock\");\n\t\treturn error;\n\t}\n\tif (!db->cgraph) {\n\t\terror = GIT_ENOTFOUND;\n\t\tgoto done;\n\t}\n\terror = git_commit_graph_get_file(&result, db->cgraph);\n\tif (error)\n\t\tgoto done;\n\t*out = result;\n\ndone:\n\tgit_mutex_unlock(&db->lock);\n\treturn error;\n}\n\n\n// Source: odb.c\n// Lines 814-835\n",
+  "ANSWER": "MUST"
+}

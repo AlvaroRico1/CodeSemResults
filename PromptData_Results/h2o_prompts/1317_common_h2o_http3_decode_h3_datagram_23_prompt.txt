@@ -1,0 +1,28 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'src' at line 3
+2. Pointer '_src' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+uint64_t h2o_http3_decode_h3_datagram(h2o_iovec_t *payload, const void *_src, size_t len)
+{
+    const uint8_t *src = _src, *end = src + len;
+    uint64_t flow_id;
+
+    if ((flow_id = ptls_decode_quicint(&src, end)) != UINT64_MAX)
+        *payload = h2o_iovec_init(src, end - src);
+    return flow_id;
+}
+
+
+// Source: common.c
+// Lines 1348-1356
+
+
+[ANSWER]
+MUST

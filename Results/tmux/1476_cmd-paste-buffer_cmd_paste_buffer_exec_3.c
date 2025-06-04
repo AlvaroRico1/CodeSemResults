@@ -1,0 +1,66 @@
+cmd_paste_buffer_exec(struct cmd *self, struct cmdq_item *item)
+{
+	struct args		*args = cmd_get_args(self);
+	struct cmd_find_state	*target = cmdq_get_target(item);
+	struct window_pane	*wp = target->wp;
+	struct paste_buffer	*pb;
+	const char		*sepstr, *bufname, *bufdata, *bufend, *line;
+	size_t			 seplen, bufsize;
+	int			 bracket = args_has(args, 'p');
+
+	bufname = NULL;
+	if (args_has(args, 'b'))
+		bufname = args_get(args, 'b');
+
+	if (bufname == NULL)
+		pb = paste_get_top(NULL);
+	else {
+		pb = paste_get_name(bufname);
+		if (pb == NULL) {
+			cmdq_error(item, "no buffer %s", bufname);
+			return (CMD_RETURN_ERROR);
+		}
+	}
+
+	if (pb != NULL && ~wp->flags & PANE_INPUTOFF) {
+		sepstr = args_get(args, 's');
+		if (sepstr == NULL) {
+			if (args_has(args, 'r'))
+				sepstr = "\n";
+			else
+				sepstr = "\r";
+		}
+		seplen = strlen(sepstr);
+
+		if (bracket && (wp->screen->mode & MODE_BRACKETPASTE))
+			bufferevent_write(wp->event, "\033[200~", 6);
+
+		bufdata = paste_buffer_data(pb, &bufsize);
+		bufend = bufdata + bufsize;
+
+		for (;;) {
+			line = memchr(bufdata, '\n', bufend - bufdata);
+			if (line == NULL)
+				break;
+
+			bufferevent_write(wp->event, bufdata, line - bufdata);
+			bufferevent_write(wp->event, sepstr, seplen);
+
+			bufdata = line + 1;
+		}
+		if (bufdata != bufend)
+			bufferevent_write(wp->event, bufdata, bufend - bufdata);
+
+		if (bracket && (wp->screen->mode & MODE_BRACKETPASTE))
+			bufferevent_write(wp->event, "\033[201~", 6);
+	}
+
+	if (pb != NULL && args_has(args, 'd'))
+		paste_free(pb);
+
+	return (CMD_RETURN_NORMAL);
+}
+
+
+// Source: cmd-paste-buffer.c
+// Lines 47-108

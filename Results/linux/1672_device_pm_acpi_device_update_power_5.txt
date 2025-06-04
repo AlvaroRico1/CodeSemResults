@@ -1,0 +1,1 @@
+state,linux/drivers/acpi/device_pm.c,3,state_p,linux/drivers/acpi/device_pm.c,1,2

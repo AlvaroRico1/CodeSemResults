@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'data' at line 5
+2. Pointer 'dentry' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+nfs_cancel_async_unlink(struct dentry *dentry)
+{
+	spin_lock(&dentry->d_lock);
+	if (dentry->d_flags & DCACHE_NFSFS_RENAMED) {
+		struct nfs_unlinkdata *data = dentry->d_fsdata;
+
+		dentry->d_flags &= ~DCACHE_NFSFS_RENAMED;
+		dentry->d_fsdata = NULL;
+		spin_unlock(&dentry->d_lock);
+		nfs_free_unlinkdata(data);
+		return;
+	}
+
+
+// Source: unlink.c
+// Lines 236-247
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,56 @@
+bitmap_and_compl_into (bitmap a, const_bitmap b)
+{
+  bitmap_element *a_elt = a->first;
+  const bitmap_element *b_elt = b->first;
+  bitmap_element *next;
+  BITMAP_WORD changed = 0;
+
+  gcc_checking_assert (!a->tree_form && !b->tree_form);
+
+  if (a == b)
+    {
+      if (bitmap_empty_p (a))
+	return false;
+      else
+	{
+	  bitmap_clear (a);
+	  return true;
+	}
+    }
+
+  while (a_elt && b_elt)
+    {
+      if (a_elt->indx < b_elt->indx)
+	a_elt = a_elt->next;
+      else if (b_elt->indx < a_elt->indx)
+	b_elt = b_elt->next;
+      else
+	{
+	  /* Matching elts, generate A &= ~B.  */
+	  unsigned ix;
+	  BITMAP_WORD ior = 0;
+
+	  for (ix = 0; ix < BITMAP_ELEMENT_WORDS; ix++)
+	    {
+	      BITMAP_WORD cleared = a_elt->bits[ix] & b_elt->bits[ix];
+	      BITMAP_WORD r = a_elt->bits[ix] ^ cleared;
+
+	      a_elt->bits[ix] = r;
+	      changed |= cleared;
+	      ior |= r;
+	    }
+	  next = a_elt->next;
+	  if (!ior)
+	    bitmap_list_unlink_element (a, a_elt);
+	  a_elt = next;
+	  b_elt = b_elt->next;
+	}
+    }
+  gcc_checking_assert (!a->current == !a->first
+		       && (!a->current || a->indx == a->current->indx));
+  return changed != 0;
+}
+
+
+// Source: bitmap.c
+// Lines 1517-1568

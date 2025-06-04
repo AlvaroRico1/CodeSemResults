@@ -1,0 +1,29 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'c' at line 2
+2. Pointer 'ud' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+LUA_API int lua_cpcall (lua_State *L, lua_CFunction func, void *ud) {
+  struct CCallS c;
+  int status;
+  lua_lock(L);
+  c.func = func;
+  c.ud = ud;
+  status = luaD_pcall(L, f_Ccall, &c, savestack(L, L->top), 0);
+  lua_unlock(L);
+  return status;
+}
+
+
+// Source: lapi.c
+// Lines 850-859
+
+
+[ANSWER]
+MUST

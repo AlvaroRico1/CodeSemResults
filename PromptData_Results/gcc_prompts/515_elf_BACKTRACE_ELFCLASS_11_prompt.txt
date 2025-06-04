@@ -1,0 +1,524 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'uncompressed_data' at line 483
+2. Pointer 'uncompressed_size' at line 484
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+#define BACKTRACE_ELFCLASS ELFCLASS64
+#endif
+
+  if (ehdr.e_ident[EI_CLASS] != BACKTRACE_ELFCLASS)
+    {
+      error_callback (data, "executable file is unexpected ELF class", 0);
+      goto fail;
+    }
+
+  if (ehdr.e_ident[EI_DATA] != ELFDATA2LSB
+      && ehdr.e_ident[EI_DATA] != ELFDATA2MSB)
+    {
+      error_callback (data, "executable file has unknown endianness", 0);
+      goto fail;
+    }
+
+  /* If the executable is ET_DYN, it is either a PIE, or we are running
+     directly a shared library with .interp.  We need to wait for
+     dl_iterate_phdr in that case to determine the actual base_address.  */
+  if (exe && ehdr.e_type == ET_DYN)
+    return -1;
+
+  shoff = ehdr.e_shoff;
+  shnum = ehdr.e_shnum;
+  shstrndx = ehdr.e_shstrndx;
+
+  if ((shnum == 0 || shstrndx == SHN_XINDEX)
+      && shoff != 0)
+    {
+      struct backtrace_view shdr_view;
+      const b_elf_shdr *shdr;
+
+      if (!backtrace_get_view (state, descriptor, shoff, sizeof shdr,
+			       error_callback, data, &shdr_view))
+	goto fail;
+
+      shdr = (const b_elf_shdr *) shdr_view.data;
+
+      if (shnum == 0)
+	shnum = shdr->sh_size;
+
+      if (shstrndx == SHN_XINDEX)
+	{
+	  shstrndx = shdr->sh_link;
+
+	  /* Versions of the GNU binutils between 2.12 and 2.18 did
+	     not handle objects with more than SHN_LORESERVE sections
+	     correctly.  All large section indexes were offset by
+	     0x100.  There is more information at
+	     http://sourceware.org/bugzilla/show_bug.cgi?id-5900 .
+	     Fortunately these object files are easy to detect, as the
+	     GNU binutils always put the section header string table
+	     near the end of the list of sections.  Thus if the
+	     section header string table index is larger than the
+	     number of sections, then we know we have to subtract
+	     0x100 to get the real section index.  */
+	  if (shstrndx >= shnum && shstrndx >= SHN_LORESERVE + 0x100)
+	    shstrndx -= 0x100;
+	}
+
+      backtrace_release_view (state, &shdr_view, error_callback, data);
+    }
+
+  /* To translate PC to file/line when using DWARF, we need to find
+     the .debug_info and .debug_line sections.  */
+
+  /* Read the section headers, skipping the first one.  */
+
+  if (!backtrace_get_view (state, descriptor, shoff + sizeof (b_elf_shdr),
+			   (shnum - 1) * sizeof (b_elf_shdr),
+			   error_callback, data, &shdrs_view))
+    goto fail;
+  shdrs_view_valid = 1;
+  shdrs = (const b_elf_shdr *) shdrs_view.data;
+
+  /* Read the section names.  */
+
+  shstrhdr = &shdrs[shstrndx - 1];
+  shstr_size = shstrhdr->sh_size;
+  shstr_off = shstrhdr->sh_offset;
+
+  if (!backtrace_get_view (state, descriptor, shstr_off, shstrhdr->sh_size,
+			   error_callback, data, &names_view))
+    goto fail;
+  names_view_valid = 1;
+  names = (const char *) names_view.data;
+
+  symtab_shndx = 0;
+  dynsym_shndx = 0;
+
+  memset (sections, 0, sizeof sections);
+  memset (zsections, 0, sizeof zsections);
+
+  /* Look for the symbol table.  */
+  for (i = 1; i < shnum; ++i)
+    {
+      const b_elf_shdr *shdr;
+      unsigned int sh_name;
+      const char *name;
+      int j;
+
+      shdr = &shdrs[i - 1];
+
+      if (shdr->sh_type == SHT_SYMTAB)
+	symtab_shndx = i;
+      else if (shdr->sh_type == SHT_DYNSYM)
+	dynsym_shndx = i;
+
+      sh_name = shdr->sh_name;
+      if (sh_name >= shstr_size)
+	{
+	  error_callback (data, "ELF section name out of range", 0);
+	  goto fail;
+	}
+
+      name = names + sh_name;
+
+      for (j = 0; j < (int) DEBUG_MAX; ++j)
+	{
+	  if (strcmp (name, dwarf_section_names[j]) == 0)
+	    {
+	      sections[j].offset = shdr->sh_offset;
+	      sections[j].size = shdr->sh_size;
+	      sections[j].compressed = (shdr->sh_flags & SHF_COMPRESSED) != 0;
+	      break;
+	    }
+	}
+
+      if (name[0] == '.' && name[1] == 'z')
+	{
+	  for (j = 0; j < (int) DEBUG_MAX; ++j)
+	    {
+	      if (strcmp (name + 2, dwarf_section_names[j] + 1) == 0)
+		{
+		  zsections[j].offset = shdr->sh_offset;
+		  zsections[j].size = shdr->sh_size;
+		  break;
+		}
+	    }
+	}
+
+      /* Read the build ID if present.  This could check for any
+	 SHT_NOTE section with the right note name and type, but gdb
+	 looks for a specific section name.  */
+      if ((!debuginfo || with_buildid_data != NULL)
+	  && !buildid_view_valid
+	  && strcmp (name, ".note.gnu.build-id") == 0)
+	{
+	  const b_elf_note *note;
+
+	  if (!backtrace_get_view (state, descriptor, shdr->sh_offset,
+				   shdr->sh_size, error_callback, data,
+				   &buildid_view))
+	    goto fail;
+
+	  buildid_view_valid = 1;
+	  note = (const b_elf_note *) buildid_view.data;
+	  if (note->type == NT_GNU_BUILD_ID
+	      && note->namesz == 4
+	      && strncmp (note->name, "GNU", 4) == 0
+	      && shdr->sh_size <= 12 + ((note->namesz + 3) & ~ 3) + note->descsz)
+	    {
+	      buildid_data = &note->name[0] + ((note->namesz + 3) & ~ 3);
+	      buildid_size = note->descsz;
+	    }
+
+	  if (with_buildid_size != 0)
+	    {
+	      if (buildid_size != with_buildid_size)
+		goto fail;
+
+	      if (memcmp (buildid_data, with_buildid_data, buildid_size) != 0)
+		goto fail;
+	    }
+	}
+
+      /* Read the debuglink file if present.  */
+      if (!debuginfo
+	  && !debuglink_view_valid
+	  && strcmp (name, ".gnu_debuglink") == 0)
+	{
+	  const char *debuglink_data;
+	  size_t crc_offset;
+
+	  if (!backtrace_get_view (state, descriptor, shdr->sh_offset,
+				   shdr->sh_size, error_callback, data,
+				   &debuglink_view))
+	    goto fail;
+
+	  debuglink_view_valid = 1;
+	  debuglink_data = (const char *) debuglink_view.data;
+	  crc_offset = strnlen (debuglink_data, shdr->sh_size);
+	  crc_offset = (crc_offset + 3) & ~3;
+	  if (crc_offset + 4 <= shdr->sh_size)
+	    {
+	      debuglink_name = debuglink_data;
+	      debuglink_crc = *(const uint32_t*)(debuglink_data + crc_offset);
+	    }
+	}
+
+      if (!debugaltlink_view_valid
+	  && strcmp (name, ".gnu_debugaltlink") == 0)
+	{
+	  const char *debugaltlink_data;
+	  size_t debugaltlink_name_len;
+
+	  if (!backtrace_get_view (state, descriptor, shdr->sh_offset,
+				   shdr->sh_size, error_callback, data,
+				   &debugaltlink_view))
+	    goto fail;
+
+	  debugaltlink_view_valid = 1;
+	  debugaltlink_data = (const char *) debugaltlink_view.data;
+	  debugaltlink_name = debugaltlink_data;
+	  debugaltlink_name_len = strnlen (debugaltlink_data, shdr->sh_size);
+	  if (debugaltlink_name_len < shdr->sh_size)
+	    {
+	      /* Include terminating zero.  */
+	      debugaltlink_name_len += 1;
+
+	      debugaltlink_buildid_data
+		= debugaltlink_data + debugaltlink_name_len;
+	      debugaltlink_buildid_size = shdr->sh_size - debugaltlink_name_len;
+	    }
+	}
+
+      /* Read the .opd section on PowerPC64 ELFv1.  */
+      if (ehdr.e_machine == EM_PPC64
+	  && (ehdr.e_flags & EF_PPC64_ABI) < 2
+	  && shdr->sh_type == SHT_PROGBITS
+	  && strcmp (name, ".opd") == 0)
+	{
+	  if (!backtrace_get_view (state, descriptor, shdr->sh_offset,
+				   shdr->sh_size, error_callback, data,
+				   &opd_data.view))
+	    goto fail;
+
+	  opd = &opd_data;
+	  opd->addr = shdr->sh_addr;
+	  opd->data = (const char *) opd_data.view.data;
+	  opd->size = shdr->sh_size;
+	}
+    }
+
+  if (symtab_shndx == 0)
+    symtab_shndx = dynsym_shndx;
+  if (symtab_shndx != 0 && !debuginfo)
+    {
+      const b_elf_shdr *symtab_shdr;
+      unsigned int strtab_shndx;
+      const b_elf_shdr *strtab_shdr;
+      struct elf_syminfo_data *sdata;
+
+      symtab_shdr = &shdrs[symtab_shndx - 1];
+      strtab_shndx = symtab_shdr->sh_link;
+      if (strtab_shndx >= shnum)
+	{
+	  error_callback (data,
+			  "ELF symbol table strtab link out of range", 0);
+	  goto fail;
+	}
+      strtab_shdr = &shdrs[strtab_shndx - 1];
+
+      if (!backtrace_get_view (state, descriptor, symtab_shdr->sh_offset,
+			       symtab_shdr->sh_size, error_callback, data,
+			       &symtab_view))
+	goto fail;
+      symtab_view_valid = 1;
+
+      if (!backtrace_get_view (state, descriptor, strtab_shdr->sh_offset,
+			       strtab_shdr->sh_size, error_callback, data,
+			       &strtab_view))
+	goto fail;
+      strtab_view_valid = 1;
+
+      sdata = ((struct elf_syminfo_data *)
+	       backtrace_alloc (state, sizeof *sdata, error_callback, data));
+      if (sdata == NULL)
+	goto fail;
+
+      if (!elf_initialize_syminfo (state, base_address,
+				   symtab_view.data, symtab_shdr->sh_size,
+				   strtab_view.data, strtab_shdr->sh_size,
+				   error_callback, data, sdata, opd))
+	{
+	  backtrace_free (state, sdata, sizeof *sdata, error_callback, data);
+	  goto fail;
+	}
+
+      /* We no longer need the symbol table, but we hold on to the
+	 string table permanently.  */
+      backtrace_release_view (state, &symtab_view, error_callback, data);
+      symtab_view_valid = 0;
+
+      *found_sym = 1;
+
+      elf_add_syminfo_data (state, sdata);
+    }
+
+  backtrace_release_view (state, &shdrs_view, error_callback, data);
+  shdrs_view_valid = 0;
+  backtrace_release_view (state, &names_view, error_callback, data);
+  names_view_valid = 0;
+
+  /* If the debug info is in a separate file, read that one instead.  */
+
+  if (buildid_data != NULL)
+    {
+      int d;
+
+      d = elf_open_debugfile_by_buildid (state, buildid_data, buildid_size,
+					 error_callback, data);
+      if (d >= 0)
+	{
+	  int ret;
+
+	  backtrace_release_view (state, &buildid_view, error_callback, data);
+	  if (debuglink_view_valid)
+	    backtrace_release_view (state, &debuglink_view, error_callback,
+				    data);
+	  if (debugaltlink_view_valid)
+	    backtrace_release_view (state, &debugaltlink_view, error_callback,
+				    data);
+	  ret = elf_add (state, "", d, base_address, error_callback, data,
+			 fileline_fn, found_sym, found_dwarf, NULL, 0, 1, NULL,
+			 0);
+	  if (ret < 0)
+	    backtrace_close (d, error_callback, data);
+	  else
+	    backtrace_close (descriptor, error_callback, data);
+	  return ret;
+	}
+    }
+
+  if (buildid_view_valid)
+    {
+      backtrace_release_view (state, &buildid_view, error_callback, data);
+      buildid_view_valid = 0;
+    }
+
+  if (opd)
+    {
+      backtrace_release_view (state, &opd->view, error_callback, data);
+      opd = NULL;
+    }
+
+  if (debuglink_name != NULL)
+    {
+      int d;
+
+      d = elf_open_debugfile_by_debuglink (state, filename, debuglink_name,
+					   debuglink_crc, error_callback,
+					   data);
+      if (d >= 0)
+	{
+	  int ret;
+
+	  backtrace_release_view (state, &debuglink_view, error_callback,
+				  data);
+	  if (debugaltlink_view_valid)
+	    backtrace_release_view (state, &debugaltlink_view, error_callback,
+				    data);
+	  ret = elf_add (state, "", d, base_address, error_callback, data,
+			 fileline_fn, found_sym, found_dwarf, NULL, 0, 1, NULL,
+			 0);
+	  if (ret < 0)
+	    backtrace_close (d, error_callback, data);
+	  else
+	    backtrace_close(descriptor, error_callback, data);
+	  return ret;
+	}
+    }
+
+  if (debuglink_view_valid)
+    {
+      backtrace_release_view (state, &debuglink_view, error_callback, data);
+      debuglink_view_valid = 0;
+    }
+
+  struct dwarf_data *fileline_altlink = NULL;
+  if (debugaltlink_name != NULL)
+    {
+      int d;
+
+      d = elf_open_debugfile_by_debuglink (state, filename, debugaltlink_name,
+					   0, error_callback, data);
+      if (d >= 0)
+	{
+	  int ret;
+
+	  ret = elf_add (state, filename, d, base_address, error_callback, data,
+			 fileline_fn, found_sym, found_dwarf, &fileline_altlink,
+			 0, 1, debugaltlink_buildid_data,
+			 debugaltlink_buildid_size);
+	  backtrace_release_view (state, &debugaltlink_view, error_callback,
+				  data);
+	  debugaltlink_view_valid = 0;
+	  if (ret < 0)
+	    {
+	      backtrace_close (d, error_callback, data);
+	      return ret;
+	    }
+	}
+    }
+
+  if (debugaltlink_view_valid)
+    {
+      backtrace_release_view (state, &debugaltlink_view, error_callback, data);
+      debugaltlink_view_valid = 0;
+    }
+
+  /* Read all the debug sections in a single view, since they are
+     probably adjacent in the file.  If any of sections are
+     uncompressed, we never release this view.  */
+
+  min_offset = 0;
+  max_offset = 0;
+  for (i = 0; i < (int) DEBUG_MAX; ++i)
+    {
+      off_t end;
+
+      if (sections[i].size != 0)
+	{
+	  if (min_offset == 0 || sections[i].offset < min_offset)
+	    min_offset = sections[i].offset;
+	  end = sections[i].offset + sections[i].size;
+	  if (end > max_offset)
+	    max_offset = end;
+	}
+      if (zsections[i].size != 0)
+	{
+	  if (min_offset == 0 || zsections[i].offset < min_offset)
+	    min_offset = zsections[i].offset;
+	  end = zsections[i].offset + zsections[i].size;
+	  if (end > max_offset)
+	    max_offset = end;
+	}
+    }
+  if (min_offset == 0 || max_offset == 0)
+    {
+      if (!backtrace_close (descriptor, error_callback, data))
+	goto fail;
+      return 1;
+    }
+
+  if (!backtrace_get_view (state, descriptor, min_offset,
+			   max_offset - min_offset,
+			   error_callback, data, &debug_view))
+    goto fail;
+  debug_view_valid = 1;
+
+  /* We've read all we need from the executable.  */
+  if (!backtrace_close (descriptor, error_callback, data))
+    goto fail;
+  descriptor = -1;
+
+  using_debug_view = 0;
+  for (i = 0; i < (int) DEBUG_MAX; ++i)
+    {
+      if (sections[i].size == 0)
+	sections[i].data = NULL;
+      else
+	{
+	  sections[i].data = ((const unsigned char *) debug_view.data
+			      + (sections[i].offset - min_offset));
+	  ++using_debug_view;
+	}
+
+      if (zsections[i].size == 0)
+	zsections[i].data = NULL;
+      else
+	zsections[i].data = ((const unsigned char *) debug_view.data
+			     + (zsections[i].offset - min_offset));
+    }
+
+  /* Uncompress the old format (--compress-debug-sections=zlib-gnu).  */
+
+  zdebug_table = NULL;
+  for (i = 0; i < (int) DEBUG_MAX; ++i)
+    {
+      if (sections[i].size == 0 && zsections[i].size > 0)
+	{
+	  unsigned char *uncompressed_data;
+	  size_t uncompressed_size;
+
+	  if (zdebug_table == NULL)
+	    {
+	      zdebug_table = ((uint16_t *)
+			      backtrace_alloc (state, ZDEBUG_TABLE_SIZE,
+					       error_callback, data));
+	      if (zdebug_table == NULL)
+		goto fail;
+	    }
+
+	  uncompressed_data = NULL;
+	  uncompressed_size = 0;
+	  if (!elf_uncompress_zdebug (state, zsections[i].data,
+				      zsections[i].size, zdebug_table,
+				      error_callback, data,
+				      &uncompressed_data, &uncompressed_size))
+	    goto fail;
+	  sections[i].data = uncompressed_data;
+	  sections[i].size = uncompressed_size;
+	  sections[i].compressed = 0;
+	}
+
+
+// Source: elf.c
+// Lines 2717-3221
+
+
+[ANSWER]
+MUST-NOT

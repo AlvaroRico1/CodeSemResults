@@ -1,0 +1,1 @@
+c,tmux/window-client.c,7,c,tmux/window-client.c,7,1

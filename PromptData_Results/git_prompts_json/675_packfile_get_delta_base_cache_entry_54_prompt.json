@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'key' at line 4\n2. Pointer 'p' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nget_delta_base_cache_entry(struct packed_git *p, off_t base_offset)\n{\n\tstruct hashmap_entry entry, *e;\n\tstruct delta_base_cache_key key;\n\n\tif (!delta_base_cache.cmpfn)\n\t\treturn NULL;\n\n\thashmap_entry_init(&entry, pack_entry_hash(p, base_offset));\n\tkey.p = p;\n\tkey.base_offset = base_offset;\n\te = hashmap_get(&delta_base_cache, &entry, &key);\n\treturn e ? container_of(e, struct delta_base_cache_entry, ent) : NULL;\n}\n\n\n// Source: packfile.c\n// Lines 1370-1383\n",
+  "ANSWER": "MUST"
+}

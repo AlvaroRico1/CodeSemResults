@@ -1,0 +1,77 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'macroname' at line 6
+2. Pointer 'src' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+do_pragma_push_macro (cpp_reader *pfile)
+{
+  cpp_hashnode *node;
+  size_t defnlen;
+  const uchar *defn = NULL;
+  char *macroname, *dest;
+  const char *limit, *src;
+  const cpp_token *txt;
+  struct def_pragma_macro *c;
+
+  txt = get__Pragma_string (pfile);
+  if (!txt)
+    {
+      location_t src_loc = pfile->cur_token[-1].src_loc;
+      cpp_error_with_line (pfile, CPP_DL_ERROR, src_loc, 0,
+		 "invalid #pragma push_macro directive");
+      check_eol (pfile, false);
+      skip_rest_of_line (pfile);
+      return;
+    }
+  dest = macroname = (char *) alloca (txt->val.str.len + 2);
+  src = (const char *) (txt->val.str.text + 1 + (txt->val.str.text[0] == 'L'));
+  limit = (const char *) (txt->val.str.text + txt->val.str.len - 1);
+  while (src < limit)
+    {
+      /* We know there is a character following the backslash.  */
+      if (*src == '\\' && (src[1] == '\\' || src[1] == '"'))
+	src++;
+      *dest++ = *src++;
+    }
+  *dest = 0;
+  check_eol (pfile, false);
+  skip_rest_of_line (pfile);
+  c = XNEW (struct def_pragma_macro);
+  memset (c, 0, sizeof (struct def_pragma_macro));
+  c->name = XNEWVAR (char, strlen (macroname) + 1);
+  strcpy (c->name, macroname);
+  c->next = pfile->pushed_macros;
+  node = _cpp_lex_identifier (pfile, c->name);
+  if (node->type == NT_VOID)
+    c->is_undef = 1;
+  else if (node->type == NT_BUILTIN_MACRO)
+    c->is_builtin = 1;
+  else
+    {
+      defn = cpp_macro_definition (pfile, node);
+      defnlen = ustrlen (defn);
+      c->definition = XNEWVEC (uchar, defnlen + 2);
+      c->definition[defnlen] = '\n';
+      c->definition[defnlen + 1] = 0;
+      c->line = node->value.macro->line;
+      c->syshdr = node->value.macro->syshdr;
+      c->used = node->value.macro->used;
+      memcpy (c->definition, defn, defnlen);
+    }
+
+  pfile->pushed_macros = c;
+}
+
+
+// Source: directives.c
+// Lines 1541-1598
+
+
+[ANSWER]
+MAY

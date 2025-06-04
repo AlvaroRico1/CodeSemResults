@@ -1,0 +1,67 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'dest' at line 3
+2. Pointer 'src' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+do_pragma_pop_macro (cpp_reader *pfile)
+{
+  char *macroname, *dest;
+  const char *limit, *src;
+  const cpp_token *txt;
+  struct def_pragma_macro *l = NULL, *c = pfile->pushed_macros;
+  txt = get__Pragma_string (pfile);
+  if (!txt)
+    {
+      location_t src_loc = pfile->cur_token[-1].src_loc;
+      cpp_error_with_line (pfile, CPP_DL_ERROR, src_loc, 0,
+		 "invalid #pragma pop_macro directive");
+      check_eol (pfile, false);
+      skip_rest_of_line (pfile);
+      return;
+    }
+  dest = macroname = (char *) alloca (txt->val.str.len + 2);
+  src = (const char *) (txt->val.str.text + 1 + (txt->val.str.text[0] == 'L'));
+  limit = (const char *) (txt->val.str.text + txt->val.str.len - 1);
+  while (src < limit)
+    {
+      /* We know there is a character following the backslash.  */
+      if (*src == '\\' && (src[1] == '\\' || src[1] == '"'))
+	src++;
+      *dest++ = *src++;
+    }
+  *dest = 0;
+  check_eol (pfile, false);
+  skip_rest_of_line (pfile);
+
+  while (c != NULL)
+    {
+      if (!strcmp (c->name, macroname))
+	{
+	  if (!l)
+	    pfile->pushed_macros = c->next;
+	  else
+	    l->next = c->next;
+	  cpp_pop_definition (pfile, c);
+	  free (c->definition);
+	  free (c->name);
+	  free (c);
+	  break;
+	}
+      l = c;
+      c = c->next;
+    }
+}
+
+
+// Source: directives.c
+// Lines 1602-1649
+
+
+[ANSWER]
+MAY

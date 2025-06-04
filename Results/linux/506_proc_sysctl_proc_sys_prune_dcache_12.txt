@@ -1,0 +1,1 @@
+sb,linux/fs/proc/proc_sysctl.c,6,inode,linux/fs/proc/proc_sysctl.c,3,1

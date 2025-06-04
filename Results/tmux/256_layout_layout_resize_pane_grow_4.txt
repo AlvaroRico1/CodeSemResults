@@ -1,0 +1,1 @@
+lcadd,tmux/layout.c,4,lc,tmux/layout.c,1,1

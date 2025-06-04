@@ -1,0 +1,57 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'conn' at line 3
+2. Pointer '_conn' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void handle_control_stream_frame(h2o_http3_conn_t *_conn, uint8_t type, const uint8_t *payload, size_t len)
+{
+    struct st_h2o_httpclient__h3_conn_t *conn = (void *)_conn;
+    int err;
+    const char *err_desc = NULL;
+
+    if (!h2o_http3_has_received_settings(&conn->super)) {
+        if (type != H2O_HTTP3_FRAME_TYPE_SETTINGS) {
+            err = H2O_HTTP3_ERROR_MISSING_SETTINGS;
+            goto Fail;
+        }
+        if ((err = h2o_http3_handle_settings_frame(&conn->super, payload, len, &err_desc)) != 0)
+            goto Fail;
+        assert(h2o_http3_has_received_settings(&conn->super));
+        /* issue requests (unless it has been done already due to 0-RTT key being available) */
+        start_pending_requests(conn);
+    } else {
+        switch (type) {
+        case H2O_HTTP3_FRAME_TYPE_SETTINGS:
+            err = H2O_HTTP3_ERROR_FRAME_UNEXPECTED;
+            err_desc = "unexpected SETTINGS frame";
+            goto Fail;
+        case H2O_HTTP3_FRAME_TYPE_GOAWAY: {
+            h2o_http3_goaway_frame_t frame;
+            if ((err = h2o_http3_decode_goaway_frame(&frame, payload, len, &err_desc)) != 0)
+                goto Fail;
+            /* FIXME: stop issuing new requests */
+            break;
+        }
+        default:
+            break;
+        }
+    }
+
+    return;
+Fail:
+    h2o_quic_close_connection(&conn->super.super, err, err_desc);
+}
+
+
+// Source: http3client.c
+// Lines 309-346
+
+
+[ANSWER]
+MUST

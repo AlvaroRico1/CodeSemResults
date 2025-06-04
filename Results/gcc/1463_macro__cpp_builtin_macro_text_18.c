@@ -1,0 +1,174 @@
+_cpp_builtin_macro_text (cpp_reader *pfile, cpp_hashnode *node,
+			 location_t loc)
+{
+  const uchar *result = NULL;
+  linenum_type number = 1;
+
+  switch (node->value.builtin)
+    {
+    default:
+      cpp_error (pfile, CPP_DL_ICE, "invalid built-in macro \"%s\"",
+		 NODE_NAME (node));
+      break;
+
+    case BT_TIMESTAMP:
+      {
+	if (CPP_OPTION (pfile, warn_date_time))
+	  cpp_warning (pfile, CPP_W_DATE_TIME, "macro \"%s\" might prevent "
+		       "reproducible builds", NODE_NAME (node));
+
+	cpp_buffer *pbuffer = cpp_get_buffer (pfile);
+	if (pbuffer->timestamp == NULL)
+	  {
+	    /* Initialize timestamp value of the assotiated file. */
+            struct _cpp_file *file = cpp_get_file (pbuffer);
+	    if (file)
+	      {
+    		/* Generate __TIMESTAMP__ string, that represents 
+		   the date and time of the last modification 
+		   of the current source file. The string constant 
+		   looks like "Sun Sep 16 01:03:52 1973".  */
+		struct tm *tb = NULL;
+		struct stat *st = _cpp_get_file_stat (file);
+		if (st)
+		  tb = localtime (&st->st_mtime);
+		if (tb)
+		  {
+		    char *str = asctime (tb);
+		    size_t len = strlen (str);
+		    unsigned char *buf = _cpp_unaligned_alloc (pfile, len + 2);
+		    buf[0] = '"';
+		    strcpy ((char *) buf + 1, str);
+		    buf[len] = '"';
+		    pbuffer->timestamp = buf;
+		  }
+		else
+		  {
+		    cpp_errno (pfile, CPP_DL_WARNING,
+			"could not determine file timestamp");
+		    pbuffer->timestamp = UC"\"??? ??? ?? ??:??:?? ????\"";
+		  }
+	      }
+	  }
+	result = pbuffer->timestamp;
+      }
+      break;
+    case BT_FILE:
+    case BT_BASE_FILE:
+      {
+	unsigned int len;
+	const char *name;
+	uchar *buf;
+	
+	if (node->value.builtin == BT_FILE)
+	  name = linemap_get_expansion_filename (pfile->line_table,
+						 pfile->line_table->highest_line);
+	else
+	  {
+	    name = _cpp_get_file_name (pfile->main_file);
+	    if (!name)
+	      abort ();
+	  }
+	if (pfile->cb.remap_filename)
+	  name = pfile->cb.remap_filename (name);
+	len = strlen (name);
+	buf = _cpp_unaligned_alloc (pfile, len * 2 + 3);
+	result = buf;
+	*buf = '"';
+	buf = cpp_quote_string (buf + 1, (const unsigned char *) name, len);
+	*buf++ = '"';
+	*buf = '\0';
+      }
+      break;
+
+    case BT_INCLUDE_LEVEL:
+      /* The line map depth counts the primary source as level 1, but
+	 historically __INCLUDE_DEPTH__ has called the primary source
+	 level 0.  */
+      number = pfile->line_table->depth - 1;
+      break;
+
+    case BT_SPECLINE:
+      /* If __LINE__ is embedded in a macro, it must expand to the
+	 line of the macro's invocation, not its definition.
+	 Otherwise things like assert() will not work properly.
+	 See WG14 N1911, WG21 N4220 sec 6.5, and PR 61861.  */
+      if (CPP_OPTION (pfile, traditional))
+	loc = pfile->line_table->highest_line;
+      else
+	loc = linemap_resolve_location (pfile->line_table, loc,
+					LRK_MACRO_EXPANSION_POINT, NULL);
+      number = linemap_get_expansion_line (pfile->line_table, loc);
+      break;
+
+      /* __STDC__ has the value 1 under normal circumstances.
+	 However, if (a) we are in a system header, (b) the option
+	 stdc_0_in_system_headers is true (set by target config), and
+	 (c) we are not in strictly conforming mode, then it has the
+	 value 0.  (b) and (c) are already checked in cpp_init_builtins.  */
+    case BT_STDC:
+      if (cpp_in_system_header (pfile))
+	number = 0;
+      else
+	number = 1;
+      break;
+
+    case BT_DATE:
+    case BT_TIME:
+      if (CPP_OPTION (pfile, warn_date_time))
+	cpp_warning (pfile, CPP_W_DATE_TIME, "macro \"%s\" might prevent "
+		     "reproducible builds", NODE_NAME (node));
+      if (pfile->date == NULL)
+	{
+	  /* Allocate __DATE__ and __TIME__ strings from permanent
+	     storage.  We only do this once, and don't generate them
+	     at init time, because time() and localtime() are very
+	     slow on some systems.  */
+	  time_t tt;
+	  struct tm *tb = NULL;
+
+	  /* Set a reproducible timestamp for __DATE__ and __TIME__ macro
+	     if SOURCE_DATE_EPOCH is defined.  */
+	  if (pfile->source_date_epoch == (time_t) -2
+	      && pfile->cb.get_source_date_epoch != NULL)
+	    pfile->source_date_epoch = pfile->cb.get_source_date_epoch (pfile);
+
+	  if (pfile->source_date_epoch >= (time_t) 0)
+	    tb = gmtime (&pfile->source_date_epoch);
+	  else
+	    {
+	      /* (time_t) -1 is a legitimate value for "number of seconds
+		 since the Epoch", so we have to do a little dance to
+		 distinguish that from a genuine error.  */
+	      errno = 0;
+	      tt = time (NULL);
+	      if (tt != (time_t)-1 || errno == 0)
+		tb = localtime (&tt);
+	    }
+
+	  if (tb)
+	    {
+	      pfile->date = _cpp_unaligned_alloc (pfile,
+						  sizeof ("\"Oct 11 1347\""));
+	      sprintf ((char *) pfile->date, "\"%s %2d %4d\"",
+		       monthnames[tb->tm_mon], tb->tm_mday,
+		       tb->tm_year + 1900);
+
+	      pfile->time = _cpp_unaligned_alloc (pfile,
+						  sizeof ("\"12:34:56\""));
+	      sprintf ((char *) pfile->time, "\"%02d:%02d:%02d\"",
+		       tb->tm_hour, tb->tm_min, tb->tm_sec);
+	    }
+	  else
+	    {
+	      cpp_errno (pfile, CPP_DL_WARNING,
+			 "could not determine date and time");
+		
+	      pfile->date = UC"\"??? ?? ????\"";
+	      pfile->time = UC"\"??:??:??\"";
+	    }
+	}
+
+
+// Source: macro.c
+// Lines 480-649

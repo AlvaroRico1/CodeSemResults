@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'slot' at line 1\n2. Pointer 'ostr' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nh2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t alignment, size_t sz, h2o_ostream_t **slot)\n{\n    h2o_ostream_t *ostr = h2o_mem_alloc_pool_aligned(&req->pool, alignment, sz);\n    ostr->next = *slot;\n    ostr->do_send = NULL;\n    ostr->stop = NULL;\n    ostr->send_informational = NULL;\n\n    *slot = ostr;\n\n    return ostr;\n}\n\n\n// Source: request.c\n// Lines 588-599\n",
+  "ANSWER": "MUST"
+}

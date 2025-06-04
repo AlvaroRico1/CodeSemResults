@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'from' at line 3\n2. Pointer 'from_param_array' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid Prepared_statement::copy_parameter_types(Item_param **from_param_array) {\n  for (uint i = 0; i < param_count; ++i) {\n    Item_param *from = from_param_array[i];\n    Item_param *to = this->param_array[i];\n    to->copy_param_actual_type(from);\n  }\n\n\n// Source: sql_prepare.cc\n// Lines 849-854\n",
+  "ANSWER": "MUST"
+}

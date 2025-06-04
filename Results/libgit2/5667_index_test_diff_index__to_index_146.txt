@@ -1,0 +1,1 @@
+old_index,libgit2/tests/libgit2/diff/index.c,5,old_tree,libgit2/tests/libgit2/diff/index.c,4,0

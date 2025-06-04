@@ -1,0 +1,114 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'storage_ix' at line 2
+2. Pointer 'input' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void EmitUncompressedMetaBlock(const uint8_t* input, size_t input_size,
+                                      size_t* storage_ix, uint8_t* storage) {
+  BrotliStoreMetaBlockHeader(input_size, 1, storage_ix, storage);
+  *storage_ix = (*storage_ix + 7u) & ~7u;
+  memcpy(&storage[*storage_ix >> 3], input, input_size);
+  *storage_ix += input_size << 3;
+  storage[*storage_ix >> 3] = 0;
+}
+
+static BROTLI_INLINE void BrotliCompressFragmentTwoPassImpl(
+    MemoryManager* m, const uint8_t* input, size_t input_size,
+    BROTLI_BOOL is_last, uint32_t* command_buf, uint8_t* literal_buf,
+    int* table, size_t table_bits, size_t* storage_ix, uint8_t* storage) {
+  /* Save the start of the first block for position and distance computations.
+  */
+  const uint8_t* base_ip = input;
+  BROTLI_UNUSED(is_last);
+
+  while (input_size > 0) {
+    size_t block_size =
+        BROTLI_MIN(size_t, input_size, kCompressFragmentTwoPassBlockSize);
+    uint32_t* commands = command_buf;
+    uint8_t* literals = literal_buf;
+    size_t num_literals;
+    CreateCommands(input, block_size, input_size, base_ip, table, table_bits,
+                   &literals, &commands);
+    num_literals = (size_t)(literals - literal_buf);
+    if (ShouldCompress(input, block_size, num_literals)) {
+      const size_t num_commands = (size_t)(commands - command_buf);
+      BrotliStoreMetaBlockHeader(block_size, 0, storage_ix, storage);
+      /* No block splits, no contexts. */
+      BrotliWriteBits(13, 0, storage_ix, storage);
+      StoreCommands(m, literal_buf, num_literals, command_buf, num_commands,
+                    storage_ix, storage);
+      if (BROTLI_IS_OOM(m)) return;
+    } else {
+      /* Since we did not find many backward references and the entropy of
+         the data is close to 8 bits, we can simply emit an uncompressed block.
+         This makes compression speed of uncompressible data about 3x faster. */
+      EmitUncompressedMetaBlock(input, block_size, storage_ix, storage);
+    }
+    input += block_size;
+    input_size -= block_size;
+  }
+}
+
+#define FOR_TABLE_BITS_(X) \
+  X(8) X(9) X(10) X(11) X(12) X(13) X(14) X(15) X(16) X(17)
+
+#define BAKE_METHOD_PARAM_(B)                                                  \
+static BROTLI_NOINLINE void BrotliCompressFragmentTwoPassImpl ## B(            \
+    MemoryManager* m, const uint8_t* input, size_t input_size,                 \
+    BROTLI_BOOL is_last, uint32_t* command_buf, uint8_t* literal_buf,          \
+    int* table, size_t* storage_ix, uint8_t* storage) {                        \
+  BrotliCompressFragmentTwoPassImpl(m, input, input_size, is_last, command_buf,\
+      literal_buf, table, B, storage_ix, storage);                             \
+}
+FOR_TABLE_BITS_(BAKE_METHOD_PARAM_)
+#undef BAKE_METHOD_PARAM_
+
+void BrotliCompressFragmentTwoPass(
+    MemoryManager* m, const uint8_t* input, size_t input_size,
+    BROTLI_BOOL is_last, uint32_t* command_buf, uint8_t* literal_buf,
+    int* table, size_t table_size, size_t* storage_ix, uint8_t* storage) {
+  const size_t initial_storage_ix = *storage_ix;
+  const size_t table_bits = Log2FloorNonZero(table_size);
+  switch (table_bits) {
+#define CASE_(B)                                      \
+    case B:                                           \
+      BrotliCompressFragmentTwoPassImpl ## B(         \
+          m, input, input_size, is_last, command_buf, \
+          literal_buf, table, storage_ix, storage);   \
+      break;
+    FOR_TABLE_BITS_(CASE_)
+#undef CASE_
+    default: assert(0); break;
+  }
+
+  /* If output is larger than single uncompressed block, rewrite it. */
+  if (*storage_ix - initial_storage_ix > 31 + (input_size << 3)) {
+    RewindBitPosition(initial_storage_ix, storage_ix, storage);
+    EmitUncompressedMetaBlock(input, input_size, storage_ix, storage);
+  }
+
+  if (is_last) {
+    BrotliWriteBits(1, 1, storage_ix, storage);  /* islast */
+    BrotliWriteBits(1, 1, storage_ix, storage);  /* isempty */
+    *storage_ix = (*storage_ix + 7u) & ~7u;
+  }
+}
+
+#undef FOR_TABLE_BITS_
+
+#if defined(__cplusplus) || defined(c_plusplus)
+}  /* extern "C" */
+
+
+// Source: compress_fragment_two_pass.c
+// Lines 517-611
+
+
+[ANSWER]
+MAY

@@ -1,0 +1,92 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ctx' at line 5
+2. Pointer 'ret' at line 58
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static net_async_status cli_establish_ssl_nonblocking(MYSQL *mysql, int *res) {
+  DBUG_TRACE;
+  NET *net = &mysql->net;
+  NET_ASYNC *net_async = NET_ASYNC_DATA(net);
+  mysql_async_connect *ctx = ASYNC_DATA(mysql)->connect_context;
+
+  if (ctx->ssl_state == SSL_NONE) {
+    /* Don't fallback on unencrypted connection if SSL required. */
+    if (mysql->options.extension &&
+        mysql->options.extension->ssl_mode >= SSL_MODE_REQUIRED &&
+        !(mysql->server_capabilities & CLIENT_SSL)) {
+      set_mysql_extended_error(mysql, CR_SSL_CONNECTION_ERROR, unknown_sqlstate,
+                               ER_CLIENT(CR_SSL_CONNECTION_ERROR),
+                               "SSL is required but the server doesn't "
+                               "support it");
+      goto error;
+    }
+
+    /*
+      If the ssl_mode is VERIFY_CA or VERIFY_IDENTITY, make sure
+      that the connection doesn't succeed without providing the
+      CA certificate.
+    */
+    if (mysql->options.extension &&
+        mysql->options.extension->ssl_mode > SSL_MODE_REQUIRED &&
+        !(mysql->options.ssl_ca || mysql->options.ssl_capath)) {
+      set_mysql_extended_error(mysql, CR_SSL_CONNECTION_ERROR, unknown_sqlstate,
+                               ER_CLIENT(CR_SSL_CONNECTION_ERROR),
+                               "CA certificate is required if ssl-mode "
+                               "is VERIFY_CA or VERIFY_IDENTITY");
+      goto error;
+    }
+
+    /*
+      Attempt SSL connection if ssl_mode != SSL_MODE_DISABLED and
+      the server supports SSL. Fallback on unencrypted
+      connection otherwise.
+    */
+    if (!mysql->options.extension ||
+        mysql->options.extension->ssl_mode == SSL_MODE_DISABLED ||
+        !(mysql->server_capabilities & CLIENT_SSL)) {
+      goto done;
+    }
+    ctx->ssl_state = SSL_REQUEST;
+  }
+
+  if (ctx->ssl_state == SSL_REQUEST) {
+    char buff[33], *end;
+
+    end = mysql_fill_packet_header(mysql, buff, sizeof(buff));
+
+    /*
+      Send mysql->client_flag, max_packet_size - unencrypted
+      otherwise the server does not know we want to do SSL
+    */
+    MYSQL_TRACE(SEND_SSL_REQUEST, mysql,
+                ((size_t)(end - buff), (const unsigned char *)buff));
+    bool ret;
+    if (my_net_write_nonblocking(net, (uchar *)buff, (size_t)(end - buff),
+                                 &ret) == NET_ASYNC_NOT_READY) {
+      return NET_ASYNC_NOT_READY;
+    }
+
+    if (ret) {
+      set_mysql_extended_error(mysql, CR_SERVER_LOST, unknown_sqlstate,
+                               ER_CLIENT(CR_SERVER_LOST_EXTENDED),
+                               "sending connection information to server",
+                               errno);
+      goto error;
+    }
+
+    ctx->ssl_state = SSL_CONNECT;
+  }
+
+
+// Source: client.cc
+// Lines 4286-4358
+
+
+[ANSWER]
+MUST-NOT

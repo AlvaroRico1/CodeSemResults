@@ -1,0 +1,1 @@
+dot,redis/deps/lua/src/loadlib.c,2,modname,redis/deps/lua/src/loadlib.c,1,1

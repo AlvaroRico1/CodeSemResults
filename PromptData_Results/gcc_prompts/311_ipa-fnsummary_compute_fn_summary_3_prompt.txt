@@ -1,0 +1,130 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'e' at line 4
+2. Pointer 'node' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+compute_fn_summary (struct cgraph_node *node, bool early)
+{
+  HOST_WIDE_INT self_stack_size;
+  struct cgraph_edge *e;
+
+  gcc_assert (!node->inlined_to);
+
+  if (!ipa_fn_summaries)
+    ipa_fn_summary_alloc ();
+
+  /* Create a new ipa_fn_summary.  */
+  ((ipa_fn_summary_t *)ipa_fn_summaries)->remove_callees (node);
+  ipa_fn_summaries->remove (node);
+  class ipa_fn_summary *info = ipa_fn_summaries->get_create (node);
+  class ipa_size_summary *size_info = ipa_size_summaries->get_create (node);
+
+  /* Estimate the stack size for the function if we're optimizing.  */
+  self_stack_size = optimize && !node->thunk.thunk_p
+		    ? estimated_stack_frame_size (node) : 0;
+  size_info->estimated_self_stack_size = self_stack_size;
+  info->estimated_stack_size = self_stack_size;
+
+  if (node->thunk.thunk_p)
+    {
+      ipa_call_summary *es = ipa_call_summaries->get_create (node->callees);
+      predicate t = true;
+
+      node->can_change_signature = false;
+      es->call_stmt_size = eni_size_weights.call_cost;
+      es->call_stmt_time = eni_time_weights.call_cost;
+      info->account_size_time (ipa_fn_summary::size_scale
+			       * opt_for_fn (node->decl,
+				 param_uninlined_function_thunk_insns),
+			       opt_for_fn (node->decl,
+				 param_uninlined_function_thunk_time), t, t);
+      t = predicate::not_inlined ();
+      info->account_size_time (2 * ipa_fn_summary::size_scale, 0, t, t);
+      ipa_update_overall_fn_summary (node);
+      size_info->self_size = size_info->size;
+      if (stdarg_p (TREE_TYPE (node->decl)))
+	{
+	  info->inlinable = false;
+	  node->callees->inline_failed = CIF_VARIADIC_THUNK;
+	}
+      else
+        info->inlinable = true;
+    }
+  else
+    {
+       /* Even is_gimple_min_invariant rely on current_function_decl.  */
+       push_cfun (DECL_STRUCT_FUNCTION (node->decl));
+
+       /* During IPA profile merging we may be called w/o virtual SSA form
+	  built.  */
+       update_ssa (TODO_update_ssa_only_virtuals);
+
+       /* Can this function be inlined at all?  */
+       if (!opt_for_fn (node->decl, optimize)
+	   && !lookup_attribute ("always_inline",
+				 DECL_ATTRIBUTES (node->decl)))
+	 info->inlinable = false;
+       else
+	 info->inlinable = tree_inlinable_function_p (node->decl);
+
+       /* Type attributes can use parameter indices to describe them.  */
+       if (TYPE_ATTRIBUTES (TREE_TYPE (node->decl))
+	   /* Likewise for #pragma omp declare simd functions or functions
+	      with simd attribute.  */
+	   || lookup_attribute ("omp declare simd",
+				DECL_ATTRIBUTES (node->decl)))
+	 node->can_change_signature = false;
+       else
+	 {
+	   /* Otherwise, inlinable functions always can change signature.  */
+	   if (info->inlinable)
+	     node->can_change_signature = true;
+	   else
+	     {
+	       /* Functions calling builtin_apply cannot change signature.  */
+	       for (e = node->callees; e; e = e->next_callee)
+		 {
+		   tree cdecl = e->callee->decl;
+		   if (fndecl_built_in_p (cdecl, BUILT_IN_APPLY_ARGS)
+		       || fndecl_built_in_p (cdecl, BUILT_IN_VA_START))
+		     break;
+		 }
+	       node->can_change_signature = !e;
+	     }
+	 }
+       analyze_function_body (node, early);
+       pop_cfun ();
+     }
+
+  /* Inlining characteristics are maintained by the cgraph_mark_inline.  */
+  size_info->size = size_info->self_size;
+  info->estimated_stack_size = size_info->estimated_self_stack_size;
+
+  /* Code above should compute exactly the same result as
+     ipa_update_overall_fn_summary except for case when speculative
+     edges are present since these are accounted to size but not
+     self_size. Do not compare time since different order the roundoff
+     errors result in slight changes.  */
+  ipa_update_overall_fn_summary (node);
+  if (flag_checking)
+    {
+      for (e = node->indirect_calls; e; e = e->next_callee)
+       if (e->speculative)
+	 break;
+      gcc_assert (e || size_info->size == size_info->self_size);
+    }
+}
+
+
+// Source: ipa-fnsummary.c
+// Lines 2891-3001
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,53 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'wc' at line 18
+2. Pointer 'wc' at line 18
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static inline size_t my_strnxfrm_unicode_tmpl(const CHARSET_INFO *cs,
+                                              Mb_wc mb_wc, uchar *dst,
+                                              size_t dstlen, uint nweights,
+                                              const uchar *src, size_t srclen,
+                                              uint flags) {
+  uchar *dst0 = dst;
+  uchar *de = dst + dstlen;
+  const uchar *se = src + srclen;
+  assert(src);
+
+  // We manually hoist this if test out of the loop; seemingly GCC
+  // (at least 6.1.1) isn't smart enough to do it on its own.
+  if (cs->state & MY_CS_BINSORT) {
+    // Do as many whole characters as we can.
+    const size_t nweights_fast_path =
+        std::min<size_t>((de - dst) / 2, nweights);
+    for (size_t i = 0; i < nweights_fast_path; ++i, --nweights) {
+      my_wc_t wc;
+      int res = mb_wc(&wc, src, se);
+      if (res <= 0)  // End of string, or invalid character.
+        goto pad;
+      src += res;
+      dst = store16be(dst, wc);
+    }
+
+    // Leftover single byte, if any.
+    if (dst < de && nweights) {
+      my_wc_t wc;
+      int res = mb_wc(&wc, src, se);
+      if (res > 0) {
+        src += res;
+        *dst++ = (uchar)(wc >> 8);
+      }
+    }
+
+
+// Source: ctype-utf8.cc
+// Lines 5029-5062
+
+
+[ANSWER]
+MAY

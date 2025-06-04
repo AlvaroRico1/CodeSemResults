@@ -1,0 +1,1 @@
+triggering,linux/drivers/acpi/pci_link.c,1,device,linux/drivers/acpi/pci_link.c,5,2

@@ -1,0 +1,1 @@
+signature,libgit2/tests/libgit2/checkout/tree.c,8,index_entry,libgit2/tests/libgit2/checkout/tree.c,9,0

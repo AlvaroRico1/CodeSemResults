@@ -1,0 +1,27 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'l_ctx' at line 3
+2. Pointer 'data' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static bool nfs3_nlm_unlock_prepare(struct rpc_task *task, void *data)
+{
+	struct nfs_lock_context *l_ctx = data;
+	if (l_ctx && test_bit(NFS_CONTEXT_UNLOCK, &l_ctx->open_context->flags))
+		return nfs_async_iocounter_wait(task, l_ctx);
+	return false;
+
+}
+
+
+// Source: nfs3proc.c
+// Lines 871-878
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,1 @@
+type,linux/drivers/acpi/acpica/exoparg1.c,7,operand,linux/drivers/acpi/acpica/exoparg1.c,3,2

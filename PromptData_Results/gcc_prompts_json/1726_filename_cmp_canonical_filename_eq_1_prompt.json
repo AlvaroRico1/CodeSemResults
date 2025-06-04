@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'cb' at line 4\n2. Pointer 'ca' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ncanonical_filename_eq (const char * a, const char * b)\n{\n  char * ca = lrealpath(a);\n  char * cb = lrealpath(b);\n  int res = filename_eq (ca, cb);\n  free (ca);\n  free (cb);\n  return res;\n}\n\n\n// Source: filename_cmp.c\n// Lines 213-221\n",
+  "ANSWER": "MAY"
+}

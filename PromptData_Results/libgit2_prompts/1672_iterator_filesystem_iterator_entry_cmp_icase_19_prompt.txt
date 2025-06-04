@@ -1,0 +1,26 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'a' at line 3
+2. Pointer '_a' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int filesystem_iterator_entry_cmp_icase(const void *_a, const void *_b)
+{
+	const filesystem_iterator_entry *a = (const filesystem_iterator_entry *)_a;
+	const filesystem_iterator_entry *b = (const filesystem_iterator_entry *)_b;
+
+	return git__strcasecmp(a->path, b->path);
+}
+
+
+// Source: iterator.c
+// Lines 1080-1086
+
+
+[ANSWER]
+MUST

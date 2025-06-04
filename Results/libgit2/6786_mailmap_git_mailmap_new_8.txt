@@ -1,0 +1,1 @@
+out,libgit2/src/libgit2/mailmap.c,1,mm,libgit2/src/libgit2/mailmap.c,4,1

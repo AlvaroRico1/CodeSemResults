@@ -1,0 +1,61 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'data' at line 4
+2. Pointer 'cb_data' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int send_ref(const char *refname, const struct object_id *oid,
+		    int flag, void *cb_data)
+{
+	struct ls_refs_data *data = cb_data;
+	const char *refname_nons = strip_namespace(refname);
+
+	strbuf_reset(&data->buf);
+
+	if (ref_is_hidden(refname_nons, refname))
+		return 0;
+
+	if (!ref_match(&data->prefixes, refname_nons))
+		return 0;
+
+	if (oid)
+		strbuf_addf(&data->buf, "%s %s", oid_to_hex(oid), refname_nons);
+	else
+		strbuf_addf(&data->buf, "unborn %s", refname_nons);
+	if (data->symrefs && flag & REF_ISSYMREF) {
+		struct object_id unused;
+		const char *symref_target = resolve_ref_unsafe(refname, 0,
+							       &unused,
+							       &flag);
+
+		if (!symref_target)
+			die("'%s' is a symref but it is not?", refname);
+
+		strbuf_addf(&data->buf, " symref-target:%s",
+			    strip_namespace(symref_target));
+	}
+
+	if (data->peel && oid) {
+		struct object_id peeled;
+		if (!peel_iterated_oid(oid, &peeled))
+			strbuf_addf(&data->buf, " peeled:%s", oid_to_hex(&peeled));
+	}
+
+	strbuf_addch(&data->buf, '\n');
+	packet_fwrite(stdout, data->buf.buf, data->buf.len);
+
+	return 0;
+}
+
+
+// Source: ls-refs.c
+// Lines 78-119
+
+
+[ANSWER]
+MUST

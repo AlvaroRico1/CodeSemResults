@@ -1,0 +1,50 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'out' at line 1
+2. Pointer 'config' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_config_snapshot(git_config **out, git_config *in)
+{
+	int error = 0;
+	size_t i;
+	backend_internal *internal;
+	git_config *config;
+
+	*out = NULL;
+
+	if (git_config_new(&config) < 0)
+		return -1;
+
+	git_vector_foreach(&in->backends, i, internal) {
+		git_config_backend *b;
+
+		if ((error = internal->backend->snapshot(&b, internal->backend)) < 0)
+			break;
+
+		if ((error = git_config_add_backend(config, b, internal->level, NULL, 0)) < 0) {
+			b->free(b);
+			break;
+		}
+	}
+
+	if (error < 0)
+		git_config_free(config);
+	else
+		*out = config;
+
+	return error;
+}
+
+
+// Source: config.c
+// Lines 153-183
+
+
+[ANSWER]
+MUST

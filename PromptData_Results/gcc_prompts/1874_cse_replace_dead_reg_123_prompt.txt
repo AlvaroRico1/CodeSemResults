@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'replacements' at line 3
+2. Pointer 'data' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+replace_dead_reg (rtx x, const_rtx old_rtx ATTRIBUTE_UNUSED, void *data)
+{
+  rtx *replacements = (rtx *) data;
+
+  if (REG_P (x)
+      && REGNO (x) >= FIRST_PSEUDO_REGISTER
+      && replacements[REGNO (x)] != NULL_RTX)
+    {
+      if (GET_MODE (x) == GET_MODE (replacements[REGNO (x)]))
+	return replacements[REGNO (x)];
+      return lowpart_subreg (GET_MODE (x), replacements[REGNO (x)],
+			     GET_MODE (replacements[REGNO (x)]));
+    }
+  return NULL_RTX;
+}
+
+
+// Source: cse.c
+// Lines 7033-7047
+
+
+[ANSWER]
+MUST

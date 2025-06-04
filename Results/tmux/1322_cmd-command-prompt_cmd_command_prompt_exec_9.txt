@@ -1,0 +1,1 @@
+next_prompt,tmux/cmd-command-prompt.c,8,prompts,tmux/cmd-command-prompt.c,8,1

@@ -1,0 +1,46 @@
+int git_diff_format_email(
+	git_buf *out,
+	git_diff *diff,
+	const git_diff_format_email_options *opts)
+{
+	git_email_create_options email_create_opts = GIT_EMAIL_CREATE_OPTIONS_INIT;
+	git_str email = GIT_STR_INIT;
+	int error;
+
+	GIT_ASSERT_ARG(out);
+	GIT_ASSERT_ARG(diff);
+	GIT_ASSERT_ARG(opts && opts->summary && opts->id && opts->author);
+
+	GIT_ERROR_CHECK_VERSION(opts,
+		GIT_DIFF_FORMAT_EMAIL_OPTIONS_VERSION,
+		"git_format_email_options");
+
+	/* This is a `git_buf` special case; subsequent calls append. */
+	email.ptr = out->ptr;
+	email.asize = out->reserved;
+	email.size = out->size;
+
+	out->ptr = git_str__initstr;
+	out->reserved = 0;
+	out->size = 0;
+
+	if ((opts->flags & GIT_DIFF_FORMAT_EMAIL_EXCLUDE_SUBJECT_PATCH_MARKER) != 0)
+		email_create_opts.subject_prefix = "";
+
+	error = git_email__append_from_diff(&email, diff, opts->patch_no,
+		opts->total_patches, opts->id, opts->summary, opts->body,
+		opts->author, &email_create_opts);
+
+	if (error < 0)
+		goto done;
+
+	error = git_buf_fromstr(out, &email);
+
+done:
+	git_str_dispose(&email);
+	return error;
+}
+
+
+// Source: diff.c
+// Lines 160-201

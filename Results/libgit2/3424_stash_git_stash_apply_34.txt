@@ -1,0 +1,1 @@
+untracked_index,libgit2/src/libgit2/stash.c,18,error,libgit2/src/libgit2/stash.c,19,2

@@ -1,0 +1,1 @@
+ptr,linux/kernel/trace/trace_uprobe.c,104,argv,linux/kernel/trace/trace_uprobe.c,1,2

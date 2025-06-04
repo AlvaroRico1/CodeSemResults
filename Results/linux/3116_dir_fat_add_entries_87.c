@@ -1,0 +1,137 @@
+int fat_add_entries(struct inode *dir, void *slots, int nr_slots,
+		    struct fat_slot_info *sinfo)
+{
+	struct super_block *sb = dir->i_sb;
+	struct msdos_sb_info *sbi = MSDOS_SB(sb);
+	struct buffer_head *bh, *prev, *bhs[3]; /* 32*slots (672bytes) */
+	struct msdos_dir_entry *uninitialized_var(de);
+	int err, free_slots, i, nr_bhs;
+	loff_t pos, i_pos;
+
+	sinfo->nr_slots = nr_slots;
+
+	/* First stage: search free directory entries */
+	free_slots = nr_bhs = 0;
+	bh = prev = NULL;
+	pos = 0;
+	err = -ENOSPC;
+	while (fat_get_entry(dir, &pos, &bh, &de) > -1) {
+		/* check the maximum size of directory */
+		if (pos >= FAT_MAX_DIR_SIZE)
+			goto error;
+
+		if (IS_FREE(de->name)) {
+			if (prev != bh) {
+				get_bh(bh);
+				bhs[nr_bhs] = prev = bh;
+				nr_bhs++;
+			}
+			free_slots++;
+			if (free_slots == nr_slots)
+				goto found;
+		} else {
+			for (i = 0; i < nr_bhs; i++)
+				brelse(bhs[i]);
+			prev = NULL;
+			free_slots = nr_bhs = 0;
+		}
+	}
+	if (dir->i_ino == MSDOS_ROOT_INO) {
+		if (!is_fat32(sbi))
+			goto error;
+	} else if (MSDOS_I(dir)->i_start == 0) {
+		fat_msg(sb, KERN_ERR, "Corrupted directory (i_pos %lld)",
+		       MSDOS_I(dir)->i_pos);
+		err = -EIO;
+		goto error;
+	}
+
+found:
+	err = 0;
+	pos -= free_slots * sizeof(*de);
+	nr_slots -= free_slots;
+	if (free_slots) {
+		/*
+		 * Second stage: filling the free entries with new entries.
+		 * NOTE: If this slots has shortname, first, we write
+		 * the long name slots, then write the short name.
+		 */
+		int size = free_slots * sizeof(*de);
+		int offset = pos & (sb->s_blocksize - 1);
+		int long_bhs = nr_bhs - (nr_slots == 0);
+
+		/* Fill the long name slots. */
+		for (i = 0; i < long_bhs; i++) {
+			int copy = min_t(int, sb->s_blocksize - offset, size);
+			memcpy(bhs[i]->b_data + offset, slots, copy);
+			mark_buffer_dirty_inode(bhs[i], dir);
+			offset = 0;
+			slots += copy;
+			size -= copy;
+		}
+		if (long_bhs && IS_DIRSYNC(dir))
+			err = fat_sync_bhs(bhs, long_bhs);
+		if (!err && i < nr_bhs) {
+			/* Fill the short name slot. */
+			int copy = min_t(int, sb->s_blocksize - offset, size);
+			memcpy(bhs[i]->b_data + offset, slots, copy);
+			mark_buffer_dirty_inode(bhs[i], dir);
+			if (IS_DIRSYNC(dir))
+				err = sync_dirty_buffer(bhs[i]);
+		}
+		for (i = 0; i < nr_bhs; i++)
+			brelse(bhs[i]);
+		if (err)
+			goto error_remove;
+	}
+
+	if (nr_slots) {
+		int cluster, nr_cluster;
+
+		/*
+		 * Third stage: allocate the cluster for new entries.
+		 * And initialize the cluster with new entries, then
+		 * add the cluster to dir.
+		 */
+		cluster = fat_add_new_entries(dir, slots, nr_slots, &nr_cluster,
+					      &de, &bh, &i_pos);
+		if (cluster < 0) {
+			err = cluster;
+			goto error_remove;
+		}
+		err = fat_chain_add(dir, cluster, nr_cluster);
+		if (err) {
+			fat_free_clusters(dir, cluster);
+			goto error_remove;
+		}
+		if (dir->i_size & (sbi->cluster_size - 1)) {
+			fat_fs_error(sb, "Odd directory size");
+			dir->i_size = (dir->i_size + sbi->cluster_size - 1)
+				& ~((loff_t)sbi->cluster_size - 1);
+		}
+		dir->i_size += nr_cluster << sbi->cluster_bits;
+		MSDOS_I(dir)->mmu_private += nr_cluster << sbi->cluster_bits;
+	}
+	sinfo->slot_off = pos;
+	sinfo->de = de;
+	sinfo->bh = bh;
+	sinfo->i_pos = fat_make_i_pos(sb, sinfo->bh, sinfo->de);
+
+	return 0;
+
+error:
+	brelse(bh);
+	for (i = 0; i < nr_bhs; i++)
+		brelse(bhs[i]);
+	return err;
+
+error_remove:
+	brelse(bh);
+	if (free_slots)
+		__fat_remove_entries(dir, pos, free_slots);
+	return err;
+}
+
+
+// Source: dir.c
+// Lines 1287-1419

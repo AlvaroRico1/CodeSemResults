@@ -1,0 +1,1 @@
+plugin,mysql/sql/sql_plugin.cc,24,builtins,mysql/sql/sql_plugin.cc,16,1

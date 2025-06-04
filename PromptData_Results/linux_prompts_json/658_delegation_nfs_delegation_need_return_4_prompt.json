@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'inode' at line 10\n2. Pointer 'delegation' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic bool nfs_delegation_need_return(struct nfs_delegation *delegation)\n{\n\tbool ret = false;\n\n\tif (test_bit(NFS_DELEGATION_RETURNING, &delegation->flags))\n\t\tgoto out;\n\tif (test_and_clear_bit(NFS_DELEGATION_RETURN, &delegation->flags))\n\t\tret = true;\n\tif (test_and_clear_bit(NFS_DELEGATION_RETURN_IF_CLOSED, &delegation->flags) && !ret) {\n\t\tstruct inode *inode;\n\n\t\tspin_lock(&delegation->lock);\n\t\tinode = delegation->inode;\n\t\tif (inode && list_empty(&NFS_I(inode)->open_files))\n\t\t\tret = true;\n\t\tspin_unlock(&delegation->lock);\n\t}\n\n\n// Source: delegation.c\n// Lines 458-474\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,56 @@
+propagate_comdat_group (struct symtab_node *symbol,
+			tree newgroup, hash_map<symtab_node *, tree> &map)
+{
+  int i;
+  struct ipa_ref *ref;
+
+  /* Walk all references to SYMBOL, recursively dive into aliases.  */
+
+  for (i = 0;
+       symbol->iterate_referring (i, ref)
+       && newgroup != error_mark_node; i++)
+    {
+      struct symtab_node *symbol2 = ref->referring;
+
+      if (ref->use == IPA_REF_ALIAS)
+	{
+	  newgroup = propagate_comdat_group (symbol2, newgroup, map);
+	  continue;
+	}
+
+      /* One COMDAT group cannot hold both variables and functions at
+	 a same time.  For now we just go to BOTTOM, in future we may
+	 invent special comdat groups for this case.  */
+
+      if (symbol->type != symbol2->type)
+	{
+	  newgroup = error_mark_node;
+	  break;
+	}
+
+      /* If we see inline clone, its comdat group actually
+	 corresponds to the comdat group of the function it is inlined
+	 to.  */
+
+      if (cgraph_node * cn = dyn_cast <cgraph_node *> (symbol2))
+	{
+	  if (cn->inlined_to)
+	    symbol2 = cn->inlined_to;
+	}
+
+      /* The actual merge operation.  */
+
+      tree *val2 = map.get (symbol2);
+
+      if (val2 && *val2 != newgroup)
+	{
+	  if (!newgroup)
+	    newgroup = *val2;
+	  else
+	    newgroup = error_mark_node;
+	}
+    }
+
+
+// Source: ipa-comdats.c
+// Lines 65-116

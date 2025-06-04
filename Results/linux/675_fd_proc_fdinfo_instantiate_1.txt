@@ -1,0 +1,1 @@
+data,linux/fs/proc/fd.c,4,ptr,linux/fs/proc/fd.c,2,1

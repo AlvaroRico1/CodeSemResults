@@ -1,0 +1,1 @@
+s,tmux/input.c,5,sctx,tmux/input.c,3,1

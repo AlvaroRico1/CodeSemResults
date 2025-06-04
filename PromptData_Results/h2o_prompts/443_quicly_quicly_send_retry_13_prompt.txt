@@ -1,0 +1,78 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'retry_aead_cache' at line 4
+2. Pointer 'aead' at line 51
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+size_t quicly_send_retry(quicly_context_t *ctx, ptls_aead_context_t *token_encrypt_ctx, uint32_t protocol_version,
+                         struct sockaddr *dest_addr, ptls_iovec_t dest_cid, struct sockaddr *src_addr, ptls_iovec_t src_cid,
+                         ptls_iovec_t odcid, ptls_iovec_t token_prefix, ptls_iovec_t appdata,
+                         ptls_aead_context_t **retry_aead_cache, uint8_t *datagram)
+{
+    quicly_address_token_plaintext_t token;
+    ptls_buffer_t buf;
+    int ret;
+
+    assert(!(src_cid.len == odcid.len && memcmp(src_cid.base, odcid.base, src_cid.len) == 0));
+
+    /* build token as plaintext */
+    token = (quicly_address_token_plaintext_t){QUICLY_ADDRESS_TOKEN_TYPE_RETRY, ctx->now->cb(ctx->now)};
+    set_address(&token.remote, dest_addr);
+    set_address(&token.local, src_addr);
+
+    quicly_set_cid(&token.retry.original_dcid, odcid);
+    quicly_set_cid(&token.retry.client_cid, dest_cid);
+    quicly_set_cid(&token.retry.server_cid, src_cid);
+    if (appdata.len != 0) {
+        assert(appdata.len <= sizeof(token.appdata.bytes));
+        memcpy(token.appdata.bytes, appdata.base, appdata.len);
+        token.appdata.len = appdata.len;
+    }
+
+    /* start building the packet */
+    ptls_buffer_init(&buf, datagram, QUICLY_MIN_CLIENT_INITIAL_SIZE);
+
+    /* first generate a pseudo packet */
+    ptls_buffer_push_block(&buf, 1, { ptls_buffer_pushv(&buf, odcid.base, odcid.len); });
+    ctx->tls->random_bytes(buf.base + buf.off, 1);
+    buf.base[buf.off] = QUICLY_PACKET_TYPE_RETRY | (buf.base[buf.off] & 0x0f);
+    ++buf.off;
+    ptls_buffer_push32(&buf, protocol_version);
+    ptls_buffer_push_block(&buf, 1, { ptls_buffer_pushv(&buf, dest_cid.base, dest_cid.len); });
+    ptls_buffer_push_block(&buf, 1, { ptls_buffer_pushv(&buf, src_cid.base, src_cid.len); });
+    if (token_prefix.len != 0) {
+        assert(token_prefix.len <= buf.capacity - buf.off);
+        memcpy(buf.base + buf.off, token_prefix.base, token_prefix.len);
+        buf.off += token_prefix.len;
+    }
+    if ((ret = quicly_encrypt_address_token(ctx->tls->random_bytes, token_encrypt_ctx, &buf, buf.off - token_prefix.len, &token)) !=
+        0)
+        goto Exit;
+
+    /* append AEAD tag */
+    ret = ptls_buffer_reserve(&buf, PTLS_AESGCM_TAG_SIZE);
+    assert(ret == 0);
+    assert(!buf.is_allocated && "retry packet is too large");
+    {
+        ptls_aead_context_t *aead =
+            retry_aead_cache != NULL && *retry_aead_cache != NULL ? *retry_aead_cache : create_retry_aead(ctx, protocol_version, 1);
+        ptls_aead_encrypt(aead, buf.base + buf.off, "", 0, 0, buf.base, buf.off);
+        if (retry_aead_cache != NULL) {
+            *retry_aead_cache = aead;
+        } else {
+            ptls_aead_free(aead);
+        }
+    }
+
+
+// Source: quicly.c
+// Lines 4002-4060
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,29 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'p' at line 6
+2. Pointer 'n' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+  pointer allocate(size_type n,
+                   const_pointer hint MY_ATTRIBUTE((unused)) = nullptr) {
+    if (n == 0) return nullptr;
+    if (n > max_size()) throw std::bad_alloc();
+
+    pointer p = static_cast<pointer>(
+        my_malloc(m_key, n * sizeof(T), MYF(MY_WME | ME_FATALERROR)));
+    if (p == nullptr) throw std::bad_alloc();
+    return p;
+  }
+
+
+// Source: malloc_allocator.h
+// Lines 92-101
+
+
+[ANSWER]
+MUST-NOT

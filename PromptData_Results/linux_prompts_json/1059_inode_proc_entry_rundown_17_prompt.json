@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'de' at line 1\n2. Pointer 'c' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid proc_entry_rundown(struct proc_dir_entry *de)\n{\n\tDECLARE_COMPLETION_ONSTACK(c);\n\t/* Wait until all existing callers into module are done. */\n\tde->pde_unload_completion = &c;\n\tif (atomic_add_return(BIAS, &de->in_use) != BIAS)\n\t\twait_for_completion(&c);\n\n\t/* ->pde_openers list can't grow from now on. */\n\n\tspin_lock(&de->pde_unload_lock);\n\twhile (!list_empty(&de->pde_openers)) {\n\t\tstruct pde_opener *pdeo;\n\t\tpdeo = list_first_entry(&de->pde_openers, struct pde_opener, lh);\n\t\tclose_pdeo(de, pdeo);\n\t\tspin_lock(&de->pde_unload_lock);\n\t}\n\tspin_unlock(&de->pde_unload_lock);\n}\n\n\n// Source: inode.c\n// Lines 178-196\n",
+  "ANSWER": "MUST"
+}

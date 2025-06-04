@@ -1,0 +1,32 @@
+gimplify_case_label_expr (tree *expr_p, gimple_seq *pre_p)
+{
+  struct gimplify_ctx *ctxp;
+  glabel *label_stmt;
+
+  /* Invalid programs can play Duff's Device type games with, for example,
+     #pragma omp parallel.  At least in the C front end, we don't
+     detect such invalid branches until after gimplification, in the
+     diagnose_omp_blocks pass.  */
+  for (ctxp = gimplify_ctxp; ; ctxp = ctxp->prev_context)
+    if (ctxp->case_labels.exists ())
+      break;
+
+  tree label = CASE_LABEL (*expr_p);
+  label_stmt = gimple_build_label (label);
+  gimple_set_location (label_stmt, EXPR_LOCATION (*expr_p));
+  ctxp->case_labels.safe_push (*expr_p);
+  gimplify_seq_add_stmt (pre_p, label_stmt);
+
+  if (lookup_attribute ("cold", DECL_ATTRIBUTES (label)))
+    gimple_seq_add_stmt (pre_p, gimple_build_predict (PRED_COLD_LABEL,
+						      NOT_TAKEN));
+  else if (lookup_attribute ("hot", DECL_ATTRIBUTES (label)))
+    gimple_seq_add_stmt (pre_p, gimple_build_predict (PRED_HOT_LABEL,
+						      TAKEN));
+
+  return GS_ALL_DONE;
+}
+
+
+// Source: gimplify.c
+// Lines 2598-2625

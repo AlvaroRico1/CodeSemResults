@@ -1,0 +1,48 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'zl' at line 6
+2. Pointer 'o' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int hashTypeGetFromZiplist(robj *o, sds field,
+                           unsigned char **vstr,
+                           unsigned int *vlen,
+                           long long *vll)
+{
+    unsigned char *zl, *fptr = NULL, *vptr = NULL;
+    int ret;
+
+    serverAssert(o->encoding == OBJ_ENCODING_ZIPLIST);
+
+    zl = o->ptr;
+    fptr = ziplistIndex(zl, ZIPLIST_HEAD);
+    if (fptr != NULL) {
+        fptr = ziplistFind(zl, fptr, (unsigned char*)field, sdslen(field), 1);
+        if (fptr != NULL) {
+            /* Grab pointer to the value (fptr points to the field) */
+            vptr = ziplistNext(zl, fptr);
+            serverAssert(vptr != NULL);
+        }
+    }
+
+    if (vptr != NULL) {
+        ret = ziplistGet(vptr, vstr, vlen, vll);
+        serverAssert(ret);
+        return 0;
+    }
+
+    return -1;
+}
+
+
+// Source: t_hash.c
+// Lines 62-90
+
+
+[ANSWER]
+MUST

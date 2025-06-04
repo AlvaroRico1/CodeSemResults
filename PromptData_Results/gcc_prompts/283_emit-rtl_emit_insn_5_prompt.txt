@@ -1,0 +1,44 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'insn' at line 4
+2. Pointer 'next' at line 21
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+emit_insn (rtx x)
+{
+  rtx_insn *last = get_last_insn ();
+  rtx_insn *insn;
+
+  if (x == NULL_RTX)
+    return last;
+
+  switch (GET_CODE (x))
+    {
+    case DEBUG_INSN:
+    case INSN:
+    case JUMP_INSN:
+    case CALL_INSN:
+    case CODE_LABEL:
+    case BARRIER:
+    case NOTE:
+      insn = as_a <rtx_insn *> (x);
+      while (insn)
+	{
+	  rtx_insn *next = NEXT_INSN (insn);
+	  add_insn (insn);
+	  last = insn;
+	  insn = next;
+	}
+
+
+// Source: emit-rtl.c
+// Lines 5057-5081
+
+
+[ANSWER]
+MUST

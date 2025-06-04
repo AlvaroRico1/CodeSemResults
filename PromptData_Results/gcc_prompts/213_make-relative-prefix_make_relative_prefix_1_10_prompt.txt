@@ -1,0 +1,103 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'prog_num' at line 5
+2. Pointer 'startp' at line 23
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+make_relative_prefix_1 (const char *progname, const char *bin_prefix,
+			const char *prefix, const int resolve_links)
+{
+  char **prog_dirs = NULL, **bin_dirs = NULL, **prefix_dirs = NULL;
+  int prog_num, bin_num, prefix_num;
+  int i, n, common;
+  int needed_len;
+  char *ret = NULL, *ptr, *full_progname;
+  char *alloc_ptr = NULL;
+
+  if (progname == NULL || bin_prefix == NULL || prefix == NULL)
+    return NULL;
+
+  /* If there is no full pathname, try to find the program by checking in each
+     of the directories specified in the PATH environment variable.  */
+  if (lbasename (progname) == progname)
+    {
+      char *temp;
+
+      temp = getenv ("PATH");
+      if (temp)
+	{
+	  char *startp, *endp, *nstore;
+	  size_t prefixlen = strlen (temp) + 1;
+	  size_t len;
+	  if (prefixlen < 2)
+	    prefixlen = 2;
+
+	  len = prefixlen + strlen (progname) + 1;
+#ifdef HAVE_HOST_EXECUTABLE_SUFFIX
+	  len += strlen (HOST_EXECUTABLE_SUFFIX);
+#endif
+	  if (len < MAX_ALLOCA_SIZE)
+	    nstore = (char *) alloca (len);
+	  else
+	    alloc_ptr = nstore = (char *) malloc (len);
+
+	  startp = endp = temp;
+	  while (1)
+	    {
+	      if (*endp == PATH_SEPARATOR || *endp == 0)
+		{
+		  if (endp == startp)
+		    {
+		      nstore[0] = '.';
+		      nstore[1] = DIR_SEPARATOR;
+		      nstore[2] = '\0';
+		    }
+		  else
+		    {
+		      memcpy (nstore, startp, endp - startp);
+		      if (! IS_DIR_SEPARATOR (endp[-1]))
+			{
+			  nstore[endp - startp] = DIR_SEPARATOR;
+			  nstore[endp - startp + 1] = 0;
+			}
+		      else
+			nstore[endp - startp] = 0;
+		    }
+		  strcat (nstore, progname);
+		  if (! access (nstore, X_OK)
+#ifdef HAVE_HOST_EXECUTABLE_SUFFIX
+                      || ! access (strcat (nstore, HOST_EXECUTABLE_SUFFIX), X_OK)
+#endif
+		      )
+		    {
+#if defined (HAVE_SYS_STAT_H) && defined (S_ISREG)
+		      struct stat st;
+		      if (stat (nstore, &st) >= 0 && S_ISREG (st.st_mode))
+#endif
+			{
+			  progname = nstore;
+			  break;
+			}
+		    }
+
+		  if (*endp == 0)
+		    break;
+		  endp = startp = endp + 1;
+		}
+	      else
+		endp++;
+	    }
+	}
+
+
+// Source: make-relative-prefix.c
+// Lines 230-313
+
+
+[ANSWER]
+MAY

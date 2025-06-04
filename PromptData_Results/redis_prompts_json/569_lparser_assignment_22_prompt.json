@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'nv' at line 6\n2. Pointer 'lh' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void assignment (LexState *ls, struct LHS_assign *lh, int nvars) {\n  expdesc e;\n  check_condition(ls, VLOCAL <= lh->v.k && lh->v.k <= VINDEXED,\n                      \"syntax error\");\n  if (testnext(ls, ',')) {  /* assignment -> `,' primaryexp assignment */\n    struct LHS_assign nv;\n    nv.prev = lh;\n    primaryexp(ls, &nv.v);\n    if (nv.v.k == VLOCAL)\n      check_conflict(ls, lh, &nv.v);\n    luaY_checklimit(ls->fs, nvars, LUAI_MAXCCALLS - ls->L->nCcalls,\n                    \"variables in assignment\");\n    assignment(ls, &nv, nvars+1);\n  }\n\n\n// Source: lparser.c\n// Lines 931-944\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,125 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'temp' at line 5
+2. Pointer 'unsignedp' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+eval_token (cpp_reader *pfile, const cpp_token *token,
+	    location_t virtual_location)
+{
+  cpp_num result;
+  unsigned int temp;
+  int unsignedp = 0;
+
+  result.unsignedp = false;
+  result.overflow = false;
+
+  switch (token->type)
+    {
+    case CPP_NUMBER:
+      temp = cpp_classify_number (pfile, token, NULL, virtual_location);
+      if (temp & CPP_N_USERDEF)
+	cpp_error (pfile, CPP_DL_ERROR,
+		   "user-defined literal in preprocessor expression");
+      switch (temp & CPP_N_CATEGORY)
+	{
+	case CPP_N_FLOATING:
+	  cpp_error_with_line (pfile, CPP_DL_ERROR, virtual_location, 0,
+			       "floating constant in preprocessor expression");
+	  break;
+	case CPP_N_INTEGER:
+	  if (!(temp & CPP_N_IMAGINARY))
+	    return cpp_interpret_integer (pfile, token, temp);
+	  cpp_error_with_line (pfile, CPP_DL_ERROR, virtual_location, 0,
+			       "imaginary number in preprocessor expression");
+	  break;
+
+	case CPP_N_INVALID:
+	  /* Error already issued.  */
+	  break;
+	}
+      result.high = result.low = 0;
+      break;
+
+    case CPP_WCHAR:
+    case CPP_CHAR:
+    case CPP_CHAR16:
+    case CPP_CHAR32:
+    case CPP_UTF8CHAR:
+      {
+	cppchar_t cc = cpp_interpret_charconst (pfile, token,
+						&temp, &unsignedp);
+
+	result.high = 0;
+	result.low = cc;
+	/* Sign-extend the result if necessary.  */
+	if (!unsignedp && (cppchar_signed_t) cc < 0)
+	  {
+	    if (PART_PRECISION > BITS_PER_CPPCHAR_T)
+	      result.low |= ~(~(cpp_num_part) 0
+			      >> (PART_PRECISION - BITS_PER_CPPCHAR_T));
+	    result.high = ~(cpp_num_part) 0;
+	    result = num_trim (result, CPP_OPTION (pfile, precision));
+	  }
+      }
+      break;
+
+    case CPP_NAME:
+      if (token->val.node.node == pfile->spec_nodes.n_defined)
+	return parse_defined (pfile);
+      else if (CPP_OPTION (pfile, cplusplus)
+	       && (token->val.node.node == pfile->spec_nodes.n_true
+		   || token->val.node.node == pfile->spec_nodes.n_false))
+	{
+	  result.high = 0;
+	  result.low = (token->val.node.node == pfile->spec_nodes.n_true);
+	}
+      else
+	{
+	  result.high = 0;
+	  result.low = 0;
+	  if (CPP_OPTION (pfile, warn_undef) && !pfile->state.skip_eval)
+	    cpp_warning_with_line (pfile, CPP_W_UNDEF, virtual_location, 0,
+				   "\"%s\" is not defined, evaluates to 0",
+				   NODE_NAME (token->val.node.node));
+	}
+      break;
+
+    case CPP_HASH:
+      if (!pfile->state.skipping)
+	{
+	  /* A pedantic warning takes precedence over a deprecated
+	     warning here.  */
+	  if (CPP_PEDANTIC (pfile))
+	    cpp_error_with_line (pfile, CPP_DL_PEDWARN,
+				 virtual_location, 0,
+				 "assertions are a GCC extension");
+	  else if (CPP_OPTION (pfile, cpp_warn_deprecated))
+	    cpp_warning_with_line (pfile, CPP_W_DEPRECATED, virtual_location, 0,
+				   "assertions are a deprecated extension");
+	}
+      _cpp_test_assertion (pfile, &temp);
+      result.high = 0;
+      result.low = temp;
+      break;
+
+    default:
+      abort ();
+    }
+
+  result.unsignedp = !!unsignedp;
+  return result;
+}
+
+
+// Source: expr.c
+// Lines 1097-1202
+
+
+[ANSWER]
+MUST-NOT

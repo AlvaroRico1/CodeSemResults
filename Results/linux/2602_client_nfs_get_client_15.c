@@ -1,0 +1,43 @@
+struct nfs_client *nfs_get_client(const struct nfs_client_initdata *cl_init)
+{
+	struct nfs_client *clp, *new = NULL;
+	struct nfs_net *nn = net_generic(cl_init->net, nfs_net_id);
+	const struct nfs_rpc_ops *rpc_ops = cl_init->nfs_mod->rpc_ops;
+
+	if (cl_init->hostname == NULL) {
+		WARN_ON(1);
+		return NULL;
+	}
+
+	/* see if the client already exists */
+	do {
+		spin_lock(&nn->nfs_client_lock);
+
+		clp = nfs_match_client(cl_init);
+		if (clp) {
+			spin_unlock(&nn->nfs_client_lock);
+			if (new)
+				new->rpc_ops->free_client(new);
+			if (IS_ERR(clp))
+				return clp;
+			return nfs_found_client(cl_init, clp);
+		}
+		if (new) {
+			list_add_tail(&new->cl_share_link,
+					&nn->nfs_client_list);
+			spin_unlock(&nn->nfs_client_lock);
+			new->cl_flags = cl_init->init_flags;
+			return rpc_ops->init_client(new, cl_init);
+		}
+
+		spin_unlock(&nn->nfs_client_lock);
+
+		new = rpc_ops->alloc_client(cl_init);
+	} while (!IS_ERR(new));
+
+	return new;
+}
+
+
+// Source: client.c
+// Lines 393-431

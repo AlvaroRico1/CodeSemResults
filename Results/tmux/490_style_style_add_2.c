@@ -1,0 +1,25 @@
+style_add(struct grid_cell *gc, struct options *oo, const char *name,
+    struct format_tree *ft)
+{
+	struct style		*sy;
+	struct format_tree	*ft0 = NULL;
+
+	if (ft == NULL)
+		ft = ft0 = format_create(NULL, NULL, 0, FORMAT_NOJOBS);
+
+	sy = options_string_to_style(oo, name, ft);
+	if (sy == NULL)
+		sy = &style_default;
+	if (sy->gc.fg != 8)
+		gc->fg = sy->gc.fg;
+	if (sy->gc.bg != 8)
+		gc->bg = sy->gc.bg;
+	gc->attr |= sy->gc.attr;
+
+	if (ft0 != NULL)
+		format_free(ft0);
+}
+
+
+// Source: style.c
+// Lines 274-294

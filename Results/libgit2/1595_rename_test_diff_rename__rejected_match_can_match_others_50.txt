@@ -1,0 +1,1 @@
+selfsimilar,libgit2/tests/libgit2/diff/rename.c,3,ptr,libgit2/tests/libgit2/diff/rename.c,15,0

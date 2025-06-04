@@ -1,0 +1,70 @@
+popup_display(int flags, enum box_lines lines, struct cmdq_item *item, u_int px,
+    u_int py, u_int sx, u_int sy, struct environ *env, const char *shellcmd,
+    int argc, char **argv, const char *cwd, const char *title, struct client *c,
+    struct session *s, popup_close_cb cb, void *arg)
+{
+	struct popup_data	*pd;
+	u_int			 jx, jy;
+	struct options		*o;
+
+	if (lines == BOX_LINES_DEFAULT) {
+		if (s != NULL)
+			o = s->curw->window->options;
+		else
+			o = c->session->curw->window->options;
+		lines = options_get_number(o, "popup-border-lines");
+	}
+	if (lines == BOX_LINES_NONE) {
+		if (sx < 1 || sy < 1)
+			return (-1);
+		jx = sx;
+		jy = sy;
+	} else {
+		if (sx < 3 || sy < 3)
+			return (-1);
+		jx = sx - 2;
+		jy = sy - 2;
+	}
+	if (c->tty.sx < sx || c->tty.sy < sy)
+		return (-1);
+
+	pd = xcalloc(1, sizeof *pd);
+	pd->item = item;
+	pd->flags = flags;
+	pd->lines = lines;
+	pd->title = xstrdup(title);
+
+	pd->c = c;
+	pd->c->references++;
+
+	pd->cb = cb;
+	pd->arg = arg;
+	pd->status = 128 + SIGHUP;
+
+	screen_init(&pd->s, sx - 2, sy - 2, 0);
+	colour_palette_init(&pd->palette);
+	colour_palette_from_option(&pd->palette, global_w_options);
+
+	pd->px = px;
+	pd->py = py;
+	pd->sx = sx;
+	pd->sy = sy;
+
+	pd->ppx = px;
+	pd->ppy = py;
+	pd->psx = sx;
+	pd->psy = sy;
+
+	pd->job = job_run(shellcmd, argc, argv, env, s, cwd,
+	    popup_job_update_cb, popup_job_complete_cb, NULL, pd,
+	    JOB_NOWAIT|JOB_PTY|JOB_KEEPWRITE, jx, jy);
+	pd->ictx = input_init(NULL, job_get_event(pd->job), &pd->palette);
+
+	server_client_set_overlay(c, 0, popup_check_cb, popup_mode_cb,
+	    popup_draw_cb, popup_key_cb, popup_free_cb, popup_resize_cb, pd);
+	return (0);
+}
+
+
+// Source: popup.c
+// Lines 635-700

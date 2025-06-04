@@ -1,0 +1,67 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'net_async' at line 7
+2. Pointer 'command' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+net_async_status net_write_command_nonblocking(NET *net, uchar command,
+                                               const uchar *prefix,
+                                               size_t prefix_len,
+                                               const uchar *packet,
+                                               size_t packet_len, bool *res) {
+  net_async_status status;
+  NET_ASYNC *net_async = NET_ASYNC_DATA(net);
+  ssize_t rc;
+  DBUG_TRACE;
+  DBUG_DUMP("net write prefix", prefix, prefix_len);
+  DBUG_DUMP("net write pkt", packet, packet_len);
+  if (unlikely(!net->vio)) {
+    /* nowhere to write */
+    *res = false;
+    goto done;
+  }
+
+  switch (net_async->async_operation) {
+    case NET_ASYNC_OP_IDLE:
+      if (!begin_packet_write_state(net, command, packet, packet_len, prefix,
+                                    prefix_len)) {
+        *res = false;
+        goto done;
+      }
+      net_async->async_operation = NET_ASYNC_OP_WRITING;
+      /* fallthrough */
+    case NET_ASYNC_OP_WRITING:
+      status = net_write_vector_nonblocking(net, &rc);
+      if (status == NET_ASYNC_COMPLETE) {
+        if (rc < 0) {
+          *res = true;
+        } else {
+          *res = false;
+        }
+        goto done;
+      }
+      return NET_ASYNC_NOT_READY;
+    default:
+      assert(false);
+      *res = true;
+      return NET_ASYNC_COMPLETE;
+  }
+
+done:
+  reset_packet_write_state(net);
+  net_async->async_operation = NET_ASYNC_OP_IDLE;
+  return NET_ASYNC_COMPLETE;
+}
+
+
+// Source: net_serv.cc
+// Lines 784-831
+
+
+[ANSWER]
+MUST-NOT

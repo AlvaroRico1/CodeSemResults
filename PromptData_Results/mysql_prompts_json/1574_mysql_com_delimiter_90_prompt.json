@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'tmp' at line 2\n2. Pointer 'line' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int com_delimiter(String *buffer MY_ATTRIBUTE((unused)), char *line) {\n  char buff[256], *tmp;\n\n  strmake(buff, line, sizeof(buff) - 1);\n  tmp = get_arg(buff, false);\n\n  if (!tmp || !*tmp) {\n    put_info(\"DELIMITER must be followed by a 'delimiter' character or string\",\n             INFO_ERROR);\n    return 0;\n  } else {\n    if (strstr(tmp, \"\\\\\")) {\n      put_info(\"DELIMITER cannot contain a backslash character\", INFO_ERROR);\n      return 0;\n    }\n  }\n  strmake(delimiter, tmp, sizeof(delimiter) - 1);\n  delimiter_length = (int)strlen(delimiter);\n  delimiter_str = delimiter;\n  return 0;\n}\n\n\n// Source: mysql.cc\n// Lines 4239-4259\n",
+  "ANSWER": "MUST-NOT"
+}

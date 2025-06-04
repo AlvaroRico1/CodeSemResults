@@ -1,0 +1,57 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'cur' at line 4
+2. Pointer 'query' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void print_warnings() {
+  const char *query;
+  MYSQL_RES *result;
+  MYSQL_ROW cur;
+  uint64_t num_rows;
+
+  /* Save current error before calling "show warnings" */
+  uint error = mysql_errno(&mysql);
+
+  /* Get the warnings */
+  query = "show warnings";
+  mysql_real_query_for_lazy(query, strlen(query));
+  mysql_store_result_for_lazy(&result);
+
+  /* Bail out when no warnings */
+  if (!result || !(num_rows = mysql_num_rows(result))) goto end;
+
+  cur = mysql_fetch_row(result);
+
+  /*
+    Don't print a duplicate of the current error.  It is possible for SHOW
+    WARNINGS to return multiple errors with the same code, but different
+    messages.  To be safe, skip printing the duplicate only if it is the only
+    warning.
+  */
+  if (!cur || (num_rows == 1 && error == (uint)strtoul(cur[1], nullptr, 10)))
+    goto end;
+
+  /* Print the warnings */
+  init_pager();
+  do {
+    tee_fprintf(PAGER, "%s (Code %s): %s\n", cur[0], cur[1], cur[2]);
+  } while ((cur = mysql_fetch_row(result)));
+  end_pager();
+
+end:
+  mysql_free_result(result);
+}
+
+
+// Source: mysql.cc
+// Lines 3875-3912
+
+
+[ANSWER]
+MUST-NOT

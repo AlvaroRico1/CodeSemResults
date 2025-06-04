@@ -1,0 +1,106 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'features' at line 9
+2. Pointer 'feature_len' at line 12
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void receive_needs(struct upload_pack_data *data,
+			  struct packet_reader *reader)
+{
+	int has_non_tip = 0;
+
+	data->shallow_nr = 0;
+	for (;;) {
+		struct object *o;
+		const char *features;
+		struct object_id oid_buf;
+		const char *arg;
+		int feature_len;
+
+		reset_timeout(data->timeout);
+		if (packet_reader_read(reader) != PACKET_READ_NORMAL)
+			break;
+
+		if (process_shallow(reader->line, &data->shallows))
+			continue;
+		if (process_deepen(reader->line, &data->depth))
+			continue;
+		if (process_deepen_since(reader->line, &data->deepen_since, &data->deepen_rev_list))
+			continue;
+		if (process_deepen_not(reader->line, &data->deepen_not, &data->deepen_rev_list))
+			continue;
+
+		if (skip_prefix(reader->line, "filter ", &arg)) {
+			if (!data->filter_capability_requested)
+				die("git upload-pack: filtering capability not negotiated");
+			list_objects_filter_die_if_populated(&data->filter_options);
+			parse_list_objects_filter(&data->filter_options, arg);
+			die_if_using_banned_filter(data);
+			continue;
+		}
+
+		if (!skip_prefix(reader->line, "want ", &arg) ||
+		    parse_oid_hex(arg, &oid_buf, &features))
+			die("git upload-pack: protocol error, "
+			    "expected to get object ID, not '%s'", reader->line);
+
+		if (parse_feature_request(features, "deepen-relative"))
+			data->deepen_relative = 1;
+		if (parse_feature_request(features, "multi_ack_detailed"))
+			data->multi_ack = MULTI_ACK_DETAILED;
+		else if (parse_feature_request(features, "multi_ack"))
+			data->multi_ack = MULTI_ACK;
+		if (parse_feature_request(features, "no-done"))
+			data->no_done = 1;
+		if (parse_feature_request(features, "thin-pack"))
+			data->use_thin_pack = 1;
+		if (parse_feature_request(features, "ofs-delta"))
+			data->use_ofs_delta = 1;
+		if (parse_feature_request(features, "side-band-64k"))
+			data->use_sideband = LARGE_PACKET_MAX;
+		else if (parse_feature_request(features, "side-band"))
+			data->use_sideband = DEFAULT_PACKET_MAX;
+		if (parse_feature_request(features, "no-progress"))
+			data->no_progress = 1;
+		if (parse_feature_request(features, "include-tag"))
+			data->use_include_tag = 1;
+		if (data->allow_filter &&
+		    parse_feature_request(features, "filter"))
+			data->filter_capability_requested = 1;
+
+		arg = parse_feature_value(features, "session-id", &feature_len, NULL);
+		if (arg) {
+			char *client_sid = xstrndup(arg, feature_len);
+			trace2_data_string("transfer", NULL, "client-sid", client_sid);
+			free(client_sid);
+		}
+
+		o = parse_object(the_repository, &oid_buf);
+		if (!o) {
+			packet_writer_error(&data->writer,
+					    "upload-pack: not our ref %s",
+					    oid_to_hex(&oid_buf));
+			die("git upload-pack: not our ref %s",
+			    oid_to_hex(&oid_buf));
+		}
+		if (!(o->flags & WANTED)) {
+			o->flags |= WANTED;
+			if (!((data->allow_uor & ALLOW_ANY_SHA1) == ALLOW_ANY_SHA1
+			      || is_our_ref(o, data->allow_uor)))
+				has_non_tip = 1;
+			add_object_array(o, NULL, &data->want_obj);
+		}
+	}
+
+
+// Source: upload-pack.c
+// Lines 1045-1131
+
+
+[ANSWER]
+MAY

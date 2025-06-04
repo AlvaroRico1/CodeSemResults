@@ -1,0 +1,123 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'argv' at line None
+2. Pointer 'c' at line None
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int prepareForShutdown(int flags) {
+    /* When SHUTDOWN is called while the server is loading a dataset in
+     * memory we need to make sure no attempt is performed to save
+     * the dataset on shutdown (otherwise it could overwrite the current DB
+     * with half-read data).
+     *
+     * Also when in Sentinel mode clear the SAVE flag and force NOSAVE. */
+    if (server.loading || server.sentinel_mode)
+        flags = (flags & ~SHUTDOWN_SAVE) | SHUTDOWN_NOSAVE;
+
+    int save = flags & SHUTDOWN_SAVE;
+    int nosave = flags & SHUTDOWN_NOSAVE;
+
+    serverLog(LL_WARNING,"User requested shutdown...");
+    if (server.supervised_mode == SUPERVISED_SYSTEMD)
+        redisCommunicateSystemd("STOPPING=1\n");
+
+    /* Kill all the Lua debugger forked sessions. */
+    ldbKillForkedSessions();
+
+    /* Kill the saving child if there is a background saving in progress.
+       We want to avoid race conditions, for instance our saving child may
+       overwrite the synchronous saving did by SHUTDOWN. */
+    if (server.child_type == CHILD_TYPE_RDB) {
+        serverLog(LL_WARNING,"There is a child saving an .rdb. Killing it!");
+        killRDBChild();
+        /* Note that, in killRDBChild normally has backgroundSaveDoneHandler
+         * doing it's cleanup, but in this case this code will not be reached,
+         * so we need to call rdbRemoveTempFile which will close fd(in order
+         * to unlink file actully) in background thread.
+         * The temp rdb file fd may won't be closed when redis exits quickly,
+         * but OS will close this fd when process exits. */
+        rdbRemoveTempFile(server.child_pid, 0);
+    }
+
+    /* Kill module child if there is one. */
+    if (server.child_type == CHILD_TYPE_MODULE) {
+        serverLog(LL_WARNING,"There is a module fork child. Killing it!");
+        TerminateModuleForkChild(server.child_pid,0);
+    }
+
+    if (server.aof_state != AOF_OFF) {
+        /* Kill the AOF saving child as the AOF we already have may be longer
+         * but contains the full dataset anyway. */
+        if (server.child_type == CHILD_TYPE_AOF) {
+            /* If we have AOF enabled but haven't written the AOF yet, don't
+             * shutdown or else the dataset will be lost. */
+            if (server.aof_state == AOF_WAIT_REWRITE) {
+                serverLog(LL_WARNING, "Writing initial AOF, can't exit.");
+                return C_ERR;
+            }
+            serverLog(LL_WARNING,
+                "There is a child rewriting the AOF. Killing it!");
+            killAppendOnlyChild();
+        }
+        /* Append only file: flush buffers and fsync() the AOF at exit */
+        serverLog(LL_NOTICE,"Calling fsync() on the AOF file.");
+        flushAppendOnlyFile(1);
+        if (redis_fsync(server.aof_fd) == -1) {
+            serverLog(LL_WARNING,"Fail to fsync the AOF file: %s.",
+                                 strerror(errno));
+        }
+    }
+
+    /* Create a new RDB file before exiting. */
+    if ((server.saveparamslen > 0 && !nosave) || save) {
+        serverLog(LL_NOTICE,"Saving the final RDB snapshot before exiting.");
+        if (server.supervised_mode == SUPERVISED_SYSTEMD)
+            redisCommunicateSystemd("STATUS=Saving the final RDB snapshot\n");
+        /* Snapshotting. Perform a SYNC SAVE and exit */
+        rdbSaveInfo rsi, *rsiptr;
+        rsiptr = rdbPopulateSaveInfo(&rsi);
+        if (rdbSave(server.rdb_filename,rsiptr) != C_OK) {
+            /* Ooops.. error saving! The best we can do is to continue
+             * operating. Note that if there was a background saving process,
+             * in the next cron() Redis will be notified that the background
+             * saving aborted, handling special stuff like slaves pending for
+             * synchronization... */
+            serverLog(LL_WARNING,"Error trying to save the DB, can't exit.");
+            if (server.supervised_mode == SUPERVISED_SYSTEMD)
+                redisCommunicateSystemd("STATUS=Error trying to save the DB, can't exit.\n");
+            return C_ERR;
+        }
+    }
+
+    /* Fire the shutdown modules event. */
+    moduleFireServerEvent(REDISMODULE_EVENT_SHUTDOWN,0,NULL);
+
+    /* Remove the pid file if possible and needed. */
+    if (server.daemonize || server.pidfile) {
+        serverLog(LL_NOTICE,"Removing the pid file.");
+        unlink(server.pidfile);
+    }
+
+    /* Best effort flush of slave output buffers, so that we hopefully
+     * send them pending writes. */
+    flushSlavesOutputBuffers();
+
+    /* Close the listening sockets. Apparently this allows faster restarts. */
+    closeListeningSockets(1);
+    serverLog(LL_WARNING,"%s is now ready to exit, bye bye...",
+        server.sentinel_mode ? "Sentinel" : "Redis");
+    return C_OK;
+}
+
+
+// Source: server.c
+// Lines 4280-4383
+
+
+[ANSWER]
+MUST

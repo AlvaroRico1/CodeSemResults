@@ -1,0 +1,1 @@
+SXFP,linux/drivers/pci/quirks.c,3,SXIO,linux/drivers/pci/quirks.c,3,2

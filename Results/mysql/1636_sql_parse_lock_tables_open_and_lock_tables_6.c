@@ -1,0 +1,96 @@
+static bool lock_tables_open_and_lock_tables(THD *thd, TABLE_LIST *tables) {
+  Lock_tables_prelocking_strategy lock_tables_prelocking_strategy;
+  MDL_deadlock_and_lock_abort_error_handler deadlock_handler;
+  MDL_savepoint mdl_savepoint = thd->mdl_context.mdl_savepoint();
+  uint counter;
+  TABLE_LIST *table;
+
+  thd->in_lock_tables = true;
+
+retry:
+
+  if (open_tables(thd, &tables, &counter, 0, &lock_tables_prelocking_strategy))
+    goto err;
+
+  deadlock_handler.init();
+  thd->push_internal_handler(&deadlock_handler);
+
+  for (table = tables; table; table = table->next_global) {
+    if (!table->is_placeholder()) {
+      if (table->table->s->tmp_table) {
+        /*
+          We allow to change temporary tables even if they were locked for read
+          by LOCK TABLES. To avoid a discrepancy between lock acquired at LOCK
+          TABLES time and by the statement which is later executed under LOCK
+          TABLES we ensure that for temporary tables we always request a write
+          lock (such discrepancy can cause problems for the storage engine).
+          We don't set TABLE_LIST::lock_type in this case as this might result
+          in extra warnings from THD::decide_logging_format() even though
+          binary logging is totally irrelevant for LOCK TABLES.
+        */
+        table->table->reginfo.lock_type = TL_WRITE;
+      } else if (table->lock_descriptor().type == TL_READ &&
+                 !table->prelocking_placeholder &&
+                 table->table->file->ha_table_flags() & HA_NO_READ_LOCAL_LOCK) {
+        /*
+          In case when LOCK TABLE ... READ LOCAL was issued for table with
+          storage engine which doesn't support READ LOCAL option and doesn't
+          use THR_LOCK locks we need to upgrade weak SR metadata lock acquired
+          in open_tables() to stronger SRO metadata lock.
+          This is not needed for tables used through stored routines or
+          triggers as we always acquire SRO (or even stronger SNRW) metadata
+          lock for them.
+        */
+        bool result = thd->mdl_context.upgrade_shared_lock(
+            table->table->mdl_ticket, MDL_SHARED_READ_ONLY,
+            thd->variables.lock_wait_timeout);
+
+        if (deadlock_handler.need_reopen()) {
+          /*
+            Deadlock occurred during upgrade of metadata lock.
+            Let us restart acquring and opening tables for LOCK TABLES.
+          */
+          thd->pop_internal_handler();
+          close_tables_for_reopen(thd, &tables, mdl_savepoint);
+          if (open_temporary_tables(thd, tables)) goto err;
+          goto retry;
+        }
+
+        if (result) {
+          thd->pop_internal_handler();
+          goto err;
+        }
+      }
+    }
+  }
+
+  thd->pop_internal_handler();
+
+  if (lock_tables(thd, tables, counter, 0) ||
+      thd->locked_tables_list.init_locked_tables(thd))
+    goto err;
+
+  thd->in_lock_tables = false;
+
+  return false;
+
+err:
+  thd->in_lock_tables = false;
+
+  trans_rollback_stmt(thd);
+  /*
+    Need to end the current transaction, so the storage engine (InnoDB)
+    can free its locks if LOCK TABLES locked some tables before finding
+    that it can't lock a table in its list
+  */
+  trans_rollback(thd);
+  /* Close tables and release metadata locks. */
+  close_thread_tables(thd);
+  assert(!thd->locked_tables_mode);
+  thd->mdl_context.release_transactional_locks();
+  return true;
+}
+
+
+// Source: sql_parse.cc
+// Lines 2536-2627

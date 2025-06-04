@@ -1,0 +1,66 @@
+static int git_commit__create_internal(
+	git_oid *id,
+	git_repository *repo,
+	const char *update_ref,
+	const git_signature *author,
+	const git_signature *committer,
+	const char *message_encoding,
+	const char *message,
+	const git_oid *tree,
+	git_commit_parent_callback parent_cb,
+	void *parent_payload,
+	bool validate)
+{
+	int error;
+	git_odb *odb;
+	git_reference *ref = NULL;
+	git_str buf = GIT_STR_INIT;
+	const git_oid *current_id = NULL;
+	git_array_oid_t parents = GIT_ARRAY_INIT;
+
+	if (update_ref) {
+		error = git_reference_lookup_resolved(&ref, repo, update_ref, 10);
+		if (error < 0 && error != GIT_ENOTFOUND)
+			return error;
+	}
+	git_error_clear();
+
+	if (ref)
+		current_id = git_reference_target(ref);
+
+	if ((error = validate_tree_and_parents(&parents, repo, tree, parent_cb, parent_payload, current_id, validate)) < 0)
+		goto cleanup;
+
+	error = git_commit__create_buffer_internal(&buf, author, committer,
+		message_encoding, message, tree,
+		&parents);
+
+	if (error < 0)
+		goto cleanup;
+
+	if (git_repository_odb__weakptr(&odb, repo) < 0)
+		goto cleanup;
+
+	if (git_odb__freshen(odb, tree) < 0)
+		goto cleanup;
+
+	if (git_odb_write(id, odb, buf.ptr, buf.size, GIT_OBJECT_COMMIT) < 0)
+		goto cleanup;
+
+
+	if (update_ref != NULL) {
+		error = git_reference__update_for_commit(
+			repo, ref, update_ref, id, "commit");
+		goto cleanup;
+	}
+
+cleanup:
+	git_array_clear(parents);
+	git_reference_free(ref);
+	git_str_dispose(&buf);
+	return error;
+}
+
+
+// Source: commit.c
+// Lines 123-184

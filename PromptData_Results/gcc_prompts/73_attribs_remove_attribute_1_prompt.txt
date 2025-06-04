@@ -1,0 +1,37 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'p' at line 3
+2. Pointer 'attr_name' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+remove_attribute (const char *attr_name, tree list)
+{
+  tree *p;
+  gcc_checking_assert (attr_name[0] != '_');
+
+  for (p = &list; *p;)
+    {
+      tree l = *p;
+
+      tree attr = get_attribute_name (l);
+      if (is_attribute_p (attr_name, attr))
+	*p = TREE_CHAIN (l);
+      else
+	p = &TREE_CHAIN (l);
+    }
+
+  return list;
+}
+
+
+// Source: attribs.c
+// Lines 1407-1424
+
+
+[ANSWER]
+MUST-NOT

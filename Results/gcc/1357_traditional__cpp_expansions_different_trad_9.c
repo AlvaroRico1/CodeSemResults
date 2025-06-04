@@ -1,0 +1,49 @@
+_cpp_expansions_different_trad (const cpp_macro *macro1,
+				const cpp_macro *macro2)
+{
+  uchar *p1 = XNEWVEC (uchar, macro1->count + macro2->count);
+  uchar *p2 = p1 + macro1->count;
+  uchar quote1 = 0, quote2 = 0;
+  bool mismatch;
+  size_t len1, len2;
+
+  if (macro1->paramc > 0)
+    {
+      const uchar *exp1 = macro1->exp.text, *exp2 = macro2->exp.text;
+
+      mismatch = true;
+      for (;;)
+	{
+	  struct block *b1 = (struct block *) exp1;
+	  struct block *b2 = (struct block *) exp2;
+
+	  if (b1->arg_index != b2->arg_index)
+	    break;
+
+	  len1 = canonicalize_text (p1, b1->text, b1->text_len, &quote1);
+	  len2 = canonicalize_text (p2, b2->text, b2->text_len, &quote2);
+	  if (len1 != len2 || memcmp (p1, p2, len1))
+	    break;
+	  if (b1->arg_index == 0)
+	    {
+	      mismatch = false;
+	      break;
+	    }
+	  exp1 += BLOCK_LEN (b1->text_len);
+	  exp2 += BLOCK_LEN (b2->text_len);
+	}
+    }
+  else
+    {
+      len1 = canonicalize_text (p1, macro1->exp.text, macro1->count, &quote1);
+      len2 = canonicalize_text (p2, macro2->exp.text, macro2->count, &quote2);
+      mismatch = (len1 != len2 || memcmp (p1, p2, len1));
+    }
+
+  free (p1);
+  return mismatch;
+}
+
+
+// Source: traditional.c
+// Lines 1272-1316

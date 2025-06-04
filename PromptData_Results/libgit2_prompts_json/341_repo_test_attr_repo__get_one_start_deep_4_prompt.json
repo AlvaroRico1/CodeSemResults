@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'i' at line 3\n2. Pointer 'scan' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid test_attr_repo__get_one_start_deep(void)\n{\n\tint i;\n\n\tfor (i = (int)ARRAY_SIZE(get_one_test_cases) - 1; i >= 0; --i) {\n\t\tstruct attr_expected *scan = &get_one_test_cases[i];\n\t\tconst char *value;\n\n\t\tcl_git_pass(git_attr_get(&value, g_repo, 0, scan->path, scan->attr));\n\t\tattr_check_expected(\n\t\t\tscan->expected, scan->expected_str, scan->attr, value);\n\t}\n\n\n// Source: repo.c\n// Lines 81-92\n",
+  "ANSWER": "MUST-NOT"
+}

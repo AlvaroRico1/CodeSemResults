@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'opt' at line 16\n2. Pointer 'opts_count' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid prepend_xassembler_to_collect_as_options (const char *collect_as_options,\n\t\t\t\t\t       obstack *o)\n{\n  obstack opts_obstack;\n  int opts_count;\n\n  obstack_init (&opts_obstack);\n  parse_options_from_collect_gcc_options (collect_as_options,\n\t\t\t\t\t  &opts_obstack, &opts_count);\n  const char **assembler_opts = XOBFINISH (&opts_obstack, const char **);\n\n  for (int i = 0; i < opts_count; i++)\n    {\n      obstack_grow (o, \" '-Xassembler' \",\n\t\t    strlen (\" '-Xassembler' \"));\n      const char *opt = assembler_opts[i];\n      obstack_1grow (o, '\\'');\n      obstack_grow (o, opt, strlen (opt));\n      obstack_1grow (o, '\\'');\n    }\n\n\n// Source: opts-common.c\n// Lines 1787-1806\n",
+  "ANSWER": "MAY"
+}

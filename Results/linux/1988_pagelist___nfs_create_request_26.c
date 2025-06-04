@@ -1,0 +1,37 @@
+__nfs_create_request(struct nfs_lock_context *l_ctx, struct page *page,
+		   unsigned int pgbase, unsigned int offset,
+		   unsigned int count)
+{
+	struct nfs_page		*req;
+	struct nfs_open_context *ctx = l_ctx->open_context;
+
+	if (test_bit(NFS_CONTEXT_BAD, &ctx->flags))
+		return ERR_PTR(-EBADF);
+	/* try to allocate the request struct */
+	req = nfs_page_alloc();
+	if (req == NULL)
+		return ERR_PTR(-ENOMEM);
+
+	req->wb_lock_context = l_ctx;
+	refcount_inc(&l_ctx->count);
+	atomic_inc(&l_ctx->io_count);
+
+	/* Initialize the request struct. Initially, we assume a
+	 * long write-back delay. This will be adjusted in
+	 * update_nfs_request below if the region is not locked. */
+	req->wb_page    = page;
+	if (page) {
+		req->wb_index = page_index(page);
+		get_page(page);
+	}
+	req->wb_offset  = offset;
+	req->wb_pgbase	= pgbase;
+	req->wb_bytes   = count;
+	kref_init(&req->wb_kref);
+	req->wb_nio = 0;
+	return req;
+}
+
+
+// Source: pagelist.c
+// Lines 300-332

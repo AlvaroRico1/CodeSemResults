@@ -1,0 +1,68 @@
+static ssize_t sel_write_user(struct file *file, char *buf, size_t size)
+{
+	struct selinux_fs_info *fsi = file_inode(file)->i_sb->s_fs_info;
+	struct selinux_state *state = fsi->state;
+	char *con = NULL, *user = NULL, *ptr;
+	u32 sid, *sids = NULL;
+	ssize_t length;
+	char *newcon;
+	int i, rc;
+	u32 len, nsids;
+
+	length = avc_has_perm(&selinux_state,
+			      current_sid(), SECINITSID_SECURITY,
+			      SECCLASS_SECURITY, SECURITY__COMPUTE_USER,
+			      NULL);
+	if (length)
+		goto out;
+
+	length = -ENOMEM;
+	con = kzalloc(size + 1, GFP_KERNEL);
+	if (!con)
+		goto out;
+
+	length = -ENOMEM;
+	user = kzalloc(size + 1, GFP_KERNEL);
+	if (!user)
+		goto out;
+
+	length = -EINVAL;
+	if (sscanf(buf, "%s %s", con, user) != 2)
+		goto out;
+
+	length = security_context_str_to_sid(state, con, &sid, GFP_KERNEL);
+	if (length)
+		goto out;
+
+	length = security_get_user_sids(state, sid, user, &sids, &nsids);
+	if (length)
+		goto out;
+
+	length = sprintf(buf, "%u", nsids) + 1;
+	ptr = buf + length;
+	for (i = 0; i < nsids; i++) {
+		rc = security_sid_to_context(state, sids[i], &newcon, &len);
+		if (rc) {
+			length = rc;
+			goto out;
+		}
+		if ((length + len) >= SIMPLE_TRANSACTION_LIMIT) {
+			kfree(newcon);
+			length = -ERANGE;
+			goto out;
+		}
+		memcpy(ptr, newcon, len);
+		kfree(newcon);
+		ptr += len;
+		length += len;
+	}
+out:
+	kfree(sids);
+	kfree(user);
+	kfree(con);
+	return length;
+}
+
+
+// Source: selinuxfs.c
+// Lines 1028-1091

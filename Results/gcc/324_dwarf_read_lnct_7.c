@@ -1,0 +1,80 @@
+read_lnct (struct backtrace_state *state, struct dwarf_data *ddata,
+	   struct unit *u, struct dwarf_buf *hdr_buf,
+	   const struct line_header *hdr, size_t formats_count,
+	   const struct line_header_format *formats, const char **string)
+{
+  size_t i;
+  const char *dir;
+  const char *path;
+
+  dir = NULL;
+  path = NULL;
+  for (i = 0; i < formats_count; i++)
+    {
+      struct attr_val val;
+
+      if (!read_attribute (formats[i].form, 0, hdr_buf, u->is_dwarf64,
+			   u->version, hdr->addrsize, &ddata->dwarf_sections,
+			   ddata->altlink, &val))
+	return 0;
+      switch (formats[i].lnct)
+	{
+	case DW_LNCT_path:
+	  if (!resolve_string (&ddata->dwarf_sections, u->is_dwarf64,
+			       ddata->is_bigendian, u->str_offsets_base,
+			       &val, hdr_buf->error_callback, hdr_buf->data,
+			       &path))
+	    return 0;
+	  break;
+	case DW_LNCT_directory_index:
+	  if (val.encoding == ATTR_VAL_UINT)
+	    {
+	      if (val.u.uint >= hdr->dirs_count)
+		{
+		  dwarf_buf_error (hdr_buf,
+				   ("invalid directory index in "
+				    "line number program header"));
+		  return 0;
+		}
+	      dir = hdr->dirs[val.u.uint];
+	    }
+	  break;
+	default:
+	  /* We don't care about timestamps or sizes or hashes.  */
+	  break;
+	}
+    }
+
+  if (path == NULL)
+    {
+      dwarf_buf_error (hdr_buf,
+		       "missing file name in line number program header");
+      return 0;
+    }
+
+  if (dir == NULL)
+    *string = path;
+  else
+    {
+      size_t dir_len;
+      size_t path_len;
+      char *s;
+
+      dir_len = strlen (dir);
+      path_len = strlen (path);
+      s = (char *) backtrace_alloc (state, dir_len + path_len + 2,
+				    hdr_buf->error_callback, hdr_buf->data);
+      if (s == NULL)
+	return 0;
+      memcpy (s, dir, dir_len);
+      /* FIXME: If we are on a DOS-based file system, and the
+	 directory or the path name use backslashes, then we should
+	 use a backslash here.  */
+      s[dir_len] = '/';
+      memcpy (s + dir_len + 1, path, path_len + 1);
+      *string = s;
+    }
+
+
+// Source: dwarf.c
+// Lines 2442-2517

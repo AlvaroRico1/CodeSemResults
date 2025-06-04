@@ -1,0 +1,1 @@
+temp_operand1,linux/drivers/acpi/acpica/exconcat.c,8,local_operand0,linux/drivers/acpi/acpica/exconcat.c,6,2

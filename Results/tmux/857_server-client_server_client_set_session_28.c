@@ -1,0 +1,34 @@
+server_client_set_session(struct client *c, struct session *s)
+{
+	struct session	*old = c->session;
+
+	if (s != NULL && c->session != NULL && c->session != s)
+		c->last_session = c->session;
+	else if (s == NULL)
+		c->last_session = NULL;
+	c->session = s;
+	c->flags |= CLIENT_FOCUSED;
+
+	if (old != NULL && old->curw != NULL)
+		window_update_focus(old->curw->window);
+	if (s != NULL) {
+		recalculate_sizes();
+		window_update_focus(s->curw->window);
+		session_update_activity(s, NULL);
+		gettimeofday(&s->last_attached_time, NULL);
+		s->curw->flags &= ~WINLINK_ALERTFLAGS;
+		s->curw->window->latest = c;
+		alerts_check_session(s);
+		tty_update_client_offset(c);
+		status_timer_start(c);
+		notify_client("client-session-changed", c);
+		server_redraw_client(c);
+	}
+
+	server_check_unattached();
+	server_update_socket();
+}
+
+
+// Source: server-client.c
+// Lines 359-388

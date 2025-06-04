@@ -1,0 +1,38 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'cpos' at line 5
+2. Pointer 'bh' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int fat_dir_empty(struct inode *dir)
+{
+	struct buffer_head *bh;
+	struct msdos_dir_entry *de;
+	loff_t cpos;
+	int result = 0;
+
+	bh = NULL;
+	cpos = 0;
+	while (fat_get_short_entry(dir, &cpos, &bh, &de) >= 0) {
+		if (strncmp(de->name, MSDOS_DOT   , MSDOS_NAME) &&
+		    strncmp(de->name, MSDOS_DOTDOT, MSDOS_NAME)) {
+			result = -ENOTEMPTY;
+			break;
+		}
+	}
+	brelse(bh);
+	return result;
+}
+
+
+// Source: dir.c
+// Lines 911-929
+
+
+[ANSWER]
+MAY

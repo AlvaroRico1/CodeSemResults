@@ -1,0 +1,1 @@
+out,libgit2/deps/ntlmclient/ntlm.c,2,str,libgit2/deps/ntlmclient/ntlm.c,7,1

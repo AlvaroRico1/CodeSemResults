@@ -1,0 +1,1 @@
+result,protobuf/src/google/protobuf/extension_set.cc,None,descriptor,protobuf/src/google/protobuf/extension_set.cc,None,1

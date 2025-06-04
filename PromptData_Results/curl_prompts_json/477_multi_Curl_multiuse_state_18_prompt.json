@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'conn' at line 4\n2. Pointer 'data' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid Curl_multiuse_state(struct Curl_easy *data,\n                         int bundlestate) /* use BUNDLE_* defines */\n{\n  struct connectdata *conn;\n  DEBUGASSERT(data);\n  DEBUGASSERT(data->multi);\n  conn = data->conn;\n  DEBUGASSERT(conn);\n  DEBUGASSERT(conn->bundle);\n\n  conn->bundle->multiuse = bundlestate;\n  process_pending_handles(data->multi);\n}\n\n\n// Source: multi.c\n// Lines 3481-3493\n",
+  "ANSWER": "MUST"
+}

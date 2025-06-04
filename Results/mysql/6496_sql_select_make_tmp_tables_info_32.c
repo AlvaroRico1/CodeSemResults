@@ -1,0 +1,185 @@
+bool JOIN::make_tmp_tables_info() {
+  assert(!join_tab);
+  mem_root_deque<Item *> *curr_fields = fields;
+  bool materialize_join = false;
+  uint curr_tmp_table = const_tables;
+  TABLE *exec_tmp_table = nullptr;
+
+  /*
+    If the plan is constant, we will not do window tmp table processing
+    cf. special code path in do_query_block.
+  */
+  m_windowing_steps = m_windows.elements > 0 && !plan_is_const() &&
+                      !implicit_grouping && !group_optimized_away;
+  const bool may_trace =  // just to avoid an empty trace block
+      need_tmp_before_win || implicit_grouping || m_windowing_steps ||
+      !group_list.empty() || !order.empty();
+
+  Opt_trace_context *const trace = &thd->opt_trace;
+  Opt_trace_disable_I_S trace_disabled(trace, !may_trace);
+  Opt_trace_object wrapper(trace);
+  Opt_trace_array trace_tmp(trace, "considering_tmp_tables");
+
+  DBUG_TRACE;
+
+  /*
+    In this function, we may change having_cond into a condition on a
+    temporary sort/group table, so we have to assign having_for_explain now:
+  */
+  having_for_explain = having_cond;
+
+  const bool has_group_by = this->grouped;
+
+  /*
+    The loose index scan access method guarantees that all grouping or
+    duplicate row elimination (for distinct) is already performed
+    during data retrieval, and that all MIN/MAX functions are already
+    computed for each group. Thus all MIN/MAX functions should be
+    treated as regular functions, and there is no need to perform
+    grouping in the main execution loop.
+    Notice that currently loose index scan is applicable only for
+    single table queries, thus it is sufficient to test only the first
+    join_tab element of the plan for its access method.
+  */
+  if (qep_tab && qep_tab[0].quick() &&
+      qep_tab[0].quick()->is_loose_index_scan())
+    tmp_table_param.precomputed_group_by =
+        !qep_tab[0].quick()->is_agg_loose_index_scan();
+
+  uint last_slice_before_windowing = REF_SLICE_ACTIVE;
+
+  /*
+    Create the first temporary table if distinct elimination is requested or
+    if the sort is too complicated to be evaluated as a filesort.
+  */
+  if (need_tmp_before_win) {
+    curr_tmp_table = primary_tables;
+    Opt_trace_object trace_this_outer(trace);
+    trace_this_outer.add("adding_tmp_table_in_plan_at_position",
+                         curr_tmp_table);
+    tmp_tables++;
+
+    /*
+      Make a copy of the base slice in the save slice.
+      This is needed because later steps will overwrite the base slice with
+      another slice (1-3).
+      After this slice has been used, overwrite the base slice again with
+      the copy in the save slice.
+    */
+    if (alloc_ref_item_slice(thd, REF_SLICE_SAVED_BASE)) return true;
+
+    copy_ref_item_slice(REF_SLICE_SAVED_BASE, REF_SLICE_ACTIVE);
+    current_ref_item_slice = REF_SLICE_SAVED_BASE;
+
+    /*
+      Create temporary table for use in a single execution.
+      (Will be reused if this is a subquery that is executed several times
+       for one execution of the statement)
+      Don't use tmp table grouping for json aggregate funcs as it's
+      very ineffective.
+    */
+    ORDER_with_src tmp_group;
+    if (!simple_group && !(test_flags & TEST_NO_KEY_GROUP) && !with_json_agg)
+      tmp_group = group_list;
+
+    tmp_table_param.hidden_field_count = CountHiddenFields(*fields);
+
+    if (create_intermediate_table(&qep_tab[curr_tmp_table], *fields, tmp_group,
+                                  !group_list.empty() && simple_group))
+      return true;
+    exec_tmp_table = qep_tab[curr_tmp_table].table();
+
+    if (exec_tmp_table->s->is_distinct) optimize_distinct();
+
+    /*
+      If there is no sorting or grouping, 'use_order'
+      index result should not have been requested.
+      Exception: LooseScan strategy for semijoin requires
+      sorted access even if final result is not to be sorted.
+    */
+    assert(
+        !(m_ordered_index_usage == ORDERED_INDEX_VOID && !plan_is_const() &&
+          qep_tab[const_tables].position()->sj_strategy != SJ_OPT_LOOSE_SCAN &&
+          qep_tab[const_tables].use_order()));
+
+    /*
+      Allocate a slice of ref items that describe the items to be copied
+      from the first temporary table.
+    */
+    if (alloc_ref_item_slice(thd, REF_SLICE_TMP1)) return true;
+
+    // Change sum_fields reference to calculated fields in tmp_table
+    if (streaming_aggregation || qep_tab[curr_tmp_table].table()->group ||
+        tmp_table_param.precomputed_group_by) {
+      if (change_to_use_tmp_fields(fields, thd, ref_items[REF_SLICE_TMP1],
+                                   &tmp_fields[REF_SLICE_TMP1],
+                                   query_block->m_added_non_hidden_fields))
+        return true;
+    } else {
+      if (change_to_use_tmp_fields_except_sums(
+              fields, thd, query_block, ref_items[REF_SLICE_TMP1],
+              &tmp_fields[REF_SLICE_TMP1],
+              query_block->m_added_non_hidden_fields))
+        return true;
+    }
+    curr_fields = &tmp_fields[REF_SLICE_TMP1];
+    // Need to set them now for correct group_fields setup, reset at the end.
+    set_ref_item_slice(REF_SLICE_TMP1);
+    qep_tab[curr_tmp_table].ref_item_slice = REF_SLICE_TMP1;
+    setup_tmptable_write_func(&qep_tab[curr_tmp_table], &trace_this_outer);
+    last_slice_before_windowing = REF_SLICE_TMP1;
+
+    /*
+      If having is not handled here, it will be checked before the row is sent
+      to the client.
+    */
+    if (having_cond &&
+        (streaming_aggregation ||
+         (exec_tmp_table->s->is_distinct && group_list.empty()))) {
+      /*
+        If there is no select distinct or rollup, then move the having to table
+        conds of tmp table.
+        NOTE : We cannot apply having after distinct. If columns of having are
+               not part of select distinct, then distinct may remove rows
+               which can satisfy having.
+
+        As this condition will read the tmp table, it is appropriate that
+        REF_SLICE_TMP1 is in effect when we create it below.
+      */
+      if ((!select_distinct && rollup_state == RollupState::NONE) &&
+          add_having_as_tmp_table_cond(curr_tmp_table))
+        return true;
+
+      /*
+        Having condition which we are not able to add as tmp table conds are
+        kept as before. And, this will be applied before storing the rows in
+        tmp table.
+      */
+      qep_tab[curr_tmp_table].having = having_cond;
+      having_cond = nullptr;  // Already done
+    }
+
+    tmp_table_param.func_count = 0;
+
+    if (streaming_aggregation || qep_tab[curr_tmp_table].table()->group) {
+      tmp_table_param.field_count += tmp_table_param.sum_func_count;
+      tmp_table_param.sum_func_count = 0;
+    }
+
+    if (exec_tmp_table->group) {  // Already grouped
+                                  /*
+                                    Check if group by has to respect ordering. If true, move group by to
+                                    order by.
+                                  */
+      if (order.empty() && !skip_sort_order) {
+        for (ORDER *group = group_list.order; group; group = group->next) {
+          if (group->direction != ORDER_NOT_RELEVANT) {
+            order = group_list; /* order by group */
+            break;
+          }
+        }
+      }
+
+
+// Source: sql_select.cc
+// Lines 4183-4363

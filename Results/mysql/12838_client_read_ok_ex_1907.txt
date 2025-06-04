@@ -1,0 +1,1 @@
+charset_name_length,mysql/sql-common/client.cc,146,affected_rows,mysql/sql-common/client.cc,4,0

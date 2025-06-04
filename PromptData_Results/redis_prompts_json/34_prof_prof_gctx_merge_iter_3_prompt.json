@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'arg' at line 2\n2. Pointer 'opaque' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nprof_gctx_merge_iter(prof_gctx_tree_t *gctxs, prof_gctx_t *gctx, void *opaque) {\n\tstruct prof_gctx_merge_iter_arg_s *arg =\n\t    (struct prof_gctx_merge_iter_arg_s *)opaque;\n\n\tmalloc_mutex_lock(arg->tsdn, gctx->lock);\n\ttctx_tree_iter(&gctx->tctxs, NULL, prof_tctx_merge_iter,\n\t    (void *)arg->tsdn);\n\tif (gctx->cnt_summed.curobjs != 0) {\n\t\targ->leak_ngctx++;\n\t}\n\tmalloc_mutex_unlock(arg->tsdn, gctx->lock);\n\n\treturn NULL;\n}\n\n\n// Source: prof.c\n// Lines 1203-1216\n",
+  "ANSWER": "MUST"
+}

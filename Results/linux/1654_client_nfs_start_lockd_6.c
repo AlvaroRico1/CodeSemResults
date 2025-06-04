@@ -1,0 +1,42 @@
+static int nfs_start_lockd(struct nfs_server *server)
+{
+	struct nlm_host *host;
+	struct nfs_client *clp = server->nfs_client;
+	struct nlmclnt_initdata nlm_init = {
+		.hostname	= clp->cl_hostname,
+		.address	= (struct sockaddr *)&clp->cl_addr,
+		.addrlen	= clp->cl_addrlen,
+		.nfs_version	= clp->rpc_ops->version,
+		.noresvport	= server->flags & NFS_MOUNT_NORESVPORT ?
+					1 : 0,
+		.net		= clp->cl_net,
+		.nlmclnt_ops 	= clp->cl_nfs_mod->rpc_ops->nlmclnt_ops,
+		.cred		= current_cred(),
+	};
+
+	if (nlm_init.nfs_version > 3)
+		return 0;
+	if ((server->flags & NFS_MOUNT_LOCAL_FLOCK) &&
+			(server->flags & NFS_MOUNT_LOCAL_FCNTL))
+		return 0;
+
+	switch (clp->cl_proto) {
+		default:
+			nlm_init.protocol = IPPROTO_TCP;
+			break;
+		case XPRT_TRANSPORT_UDP:
+			nlm_init.protocol = IPPROTO_UDP;
+	}
+
+	host = nlmclnt_init(&nlm_init);
+	if (IS_ERR(host))
+		return PTR_ERR(host);
+
+	server->nlm_host = host;
+	server->destroy = nfs_destroy_server;
+	return 0;
+}
+
+
+// Source: client.c
+// Lines 547-584

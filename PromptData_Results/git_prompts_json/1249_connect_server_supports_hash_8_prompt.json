@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'hash' at line 5\n2. Pointer 'feature_supported' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint server_supports_hash(const char *desired, int *feature_supported)\n{\n\tint offset = 0;\n\tint len;\n\tconst char *hash;\n\n\thash = next_server_feature_value(\"object-format\", &len, &offset);\n\tif (feature_supported)\n\t\t*feature_supported = !!hash;\n\tif (!hash) {\n\t\thash = hash_algos[GIT_HASH_SHA1].name;\n\t\tlen = strlen(hash);\n\t}\n\twhile (hash) {\n\t\tif (!xstrncmpz(desired, hash, len))\n\t\t\treturn 1;\n\n\t\thash = next_server_feature_value(\"object-format\", &len, &offset);\n\t}\n\treturn 0;\n}\n\n\n// Source: connect.c\n// Lines 586-606\n",
+  "ANSWER": "MAY"
+}

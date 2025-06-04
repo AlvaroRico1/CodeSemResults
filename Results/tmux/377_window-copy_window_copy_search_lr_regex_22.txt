@@ -1,0 +1,1 @@
+buf,tmux/window-copy.c,6,foundx,tmux/window-copy.c,5,2

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'cp' at line None\n2. Pointer 'cp_p' at line None\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint diff_opt_parse(struct diff_options *options,\n\t\t   const char **av, int ac, const char *prefix)\n{\n\tif (!prefix)\n\t\tprefix = \"\";\n\n\tac = parse_options(ac, av, prefix, options->parseopts, NULL,\n\t\t\t   PARSE_OPT_KEEP_DASHDASH |\n\t\t\t   PARSE_OPT_KEEP_UNKNOWN |\n\t\t\t   PARSE_OPT_NO_INTERNAL_HELP |\n\t\t\t   PARSE_OPT_ONE_SHOT |\n\t\t\t   PARSE_OPT_STOP_AT_NON_OPTION);\n\n\treturn ac;\n}\n\n\n// Source: diff.c\n// Lines 5658-5672\n",
+  "ANSWER": "MAY"
+}

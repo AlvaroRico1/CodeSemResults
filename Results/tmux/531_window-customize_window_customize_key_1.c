@@ -1,0 +1,114 @@
+window_customize_key(struct window_mode_entry *wme, struct client *c,
+    __unused struct session *s, __unused struct winlink *wl, key_code key,
+    struct mouse_event *m)
+{
+	struct window_pane			*wp = wme->wp;
+	struct window_customize_modedata	*data = wme->data;
+	struct window_customize_itemdata	*item, *new_item;
+	int					 finished, idx;
+	char					*prompt;
+	u_int					 tagged;
+
+	item = mode_tree_get_current(data->data);
+	finished = mode_tree_key(data->data, c, &key, m, NULL, NULL);
+	if (item != (new_item = mode_tree_get_current(data->data)))
+		item = new_item;
+
+	switch (key) {
+	case '\r':
+	case 's':
+		if (item == NULL)
+			break;
+		if (item->scope == WINDOW_CUSTOMIZE_KEY)
+			window_customize_set_key(c, data, item);
+		else {
+			window_customize_set_option(c, data, item, 0, 1);
+			options_push_changes(item->name);
+		}
+		mode_tree_build(data->data);
+		break;
+	case 'w':
+		if (item == NULL || item->scope == WINDOW_CUSTOMIZE_KEY)
+			break;
+		window_customize_set_option(c, data, item, 0, 0);
+		options_push_changes(item->name);
+		mode_tree_build(data->data);
+		break;
+	case 'S':
+	case 'W':
+		if (item == NULL || item->scope == WINDOW_CUSTOMIZE_KEY)
+			break;
+		window_customize_set_option(c, data, item, 1, 0);
+		options_push_changes(item->name);
+		mode_tree_build(data->data);
+		break;
+	case 'd':
+		if (item == NULL || item->idx != -1)
+			break;
+		xasprintf(&prompt, "Reset %s to default? ", item->name);
+		data->references++;
+		data->change = WINDOW_CUSTOMIZE_RESET;
+		status_prompt_set(c, NULL, prompt, "",
+		    window_customize_change_current_callback,
+		    window_customize_free_callback, data,
+		    PROMPT_SINGLE|PROMPT_NOFORMAT, PROMPT_TYPE_COMMAND);
+		free(prompt);
+		break;
+	case 'D':
+		tagged = mode_tree_count_tagged(data->data);
+		if (tagged == 0)
+			break;
+		xasprintf(&prompt, "Reset %u tagged to default? ", tagged);
+		data->references++;
+		data->change = WINDOW_CUSTOMIZE_RESET;
+		status_prompt_set(c, NULL, prompt, "",
+		    window_customize_change_tagged_callback,
+		    window_customize_free_callback, data,
+		    PROMPT_SINGLE|PROMPT_NOFORMAT, PROMPT_TYPE_COMMAND);
+		free(prompt);
+		break;
+	case 'u':
+		if (item == NULL)
+			break;
+		idx = item->idx;
+		if (idx != -1)
+			xasprintf(&prompt, "Unset %s[%d]? ", item->name, idx);
+		else
+			xasprintf(&prompt, "Unset %s? ", item->name);
+		data->references++;
+		data->change = WINDOW_CUSTOMIZE_UNSET;
+		status_prompt_set(c, NULL, prompt, "",
+		    window_customize_change_current_callback,
+		    window_customize_free_callback, data,
+		    PROMPT_SINGLE|PROMPT_NOFORMAT, PROMPT_TYPE_COMMAND);
+		free(prompt);
+		break;
+	case 'U':
+		tagged = mode_tree_count_tagged(data->data);
+		if (tagged == 0)
+			break;
+		xasprintf(&prompt, "Unset %u tagged? ", tagged);
+		data->references++;
+		data->change = WINDOW_CUSTOMIZE_UNSET;
+		status_prompt_set(c, NULL, prompt, "",
+		    window_customize_change_tagged_callback,
+		    window_customize_free_callback, data,
+		    PROMPT_SINGLE|PROMPT_NOFORMAT, PROMPT_TYPE_COMMAND);
+		free(prompt);
+		break;
+	case 'H':
+		data->hide_global = !data->hide_global;
+		mode_tree_build(data->data);
+		break;
+	}
+	if (finished)
+		window_pane_reset_mode(wp);
+	else {
+		mode_tree_draw(data->data);
+		wp->flags |= PANE_REDRAW;
+	}
+}
+
+
+// Source: window-customize.c
+// Lines 1405-1514

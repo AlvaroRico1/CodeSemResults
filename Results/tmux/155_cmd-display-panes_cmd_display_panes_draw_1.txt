@@ -1,0 +1,1 @@
+w,tmux/cmd-display-panes.c,4,c,tmux/cmd-display-panes.c,1,1

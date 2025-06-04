@@ -1,0 +1,1 @@
+cur_arg,mysql/mysys/my_getopt.cc,71,error,mysql/mysys/my_getopt.cc,132,2

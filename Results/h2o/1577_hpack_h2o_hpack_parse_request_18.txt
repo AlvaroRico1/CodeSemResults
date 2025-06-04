@@ -1,0 +1,1 @@
+err_desc,h2o/lib/http2/hpack.c,4,decode_err,h2o/lib/http2/hpack.c,12,1

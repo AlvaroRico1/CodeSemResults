@@ -1,0 +1,120 @@
+loop_cand::analyze_iloop_reduction_var (tree var)
+{
+  gphi *phi = as_a <gphi *> (SSA_NAME_DEF_STMT (var));
+  gphi *lcssa_phi = NULL, *use_phi;
+  tree init = PHI_ARG_DEF_FROM_EDGE (phi, loop_preheader_edge (m_loop));
+  tree next = PHI_ARG_DEF_FROM_EDGE (phi, loop_latch_edge (m_loop));
+  reduction_p re;
+  gimple *stmt, *next_def, *single_use = NULL;
+  use_operand_p use_p;
+  imm_use_iterator iterator;
+
+  if (TREE_CODE (next) != SSA_NAME)
+    return false;
+
+  next_def = SSA_NAME_DEF_STMT (next);
+  basic_block bb = gimple_bb (next_def);
+  if (!bb || !flow_bb_inside_loop_p (m_loop, bb))
+    return false;
+
+  /* In restricted reduction, the var is (and must be) used in defining
+     the updated var.  The process can be depicted as below:
+
+		var ;; = PHI<init, next>
+		 |
+		 |
+		 v
+      +---------------------+
+      | reduction operators | <-- other operands
+      +---------------------+
+		 |
+		 |
+		 v
+		next
+
+     In terms loop interchange, we don't change how NEXT is computed based
+     on VAR and OTHER OPERANDS.  In case of double reduction in loop nest
+     to be interchanged, we don't changed it at all.  In the case of simple
+     reduction in inner loop, we only make change how VAR/NEXT is loaded or
+     stored.  With these conditions, we can relax restrictions on reduction
+     in a way that reduction operation is seen as black box.  In general,
+     we can ignore reassociation of reduction operator; we can handle fake
+     reductions in which VAR is not even used to compute NEXT.  */
+  if (! single_imm_use (var, &use_p, &single_use)
+      || ! flow_bb_inside_loop_p (m_loop, gimple_bb (single_use)))
+    return false;
+
+  /* Check the reduction operation.  We require a left-associative operation.
+     For FP math we also need to be allowed to associate operations.  */
+  if (gassign *ass = dyn_cast <gassign *> (single_use))
+    {
+      enum tree_code code = gimple_assign_rhs_code (ass);
+      if (! (associative_tree_code (code)
+	     || (code == MINUS_EXPR
+		 && use_p->use == gimple_assign_rhs1_ptr (ass)))
+	  || (FLOAT_TYPE_P (TREE_TYPE (var))
+	      && ! flag_associative_math))
+	return false;
+    }
+  else
+    return false;
+
+  /* Handle and verify a series of stmts feeding the reduction op.  */
+  if (single_use != next_def
+      && !check_reduction_path (dump_user_location_t (), m_loop, phi, next,
+				gimple_assign_rhs_code (single_use)))
+    return false;
+
+  /* Only support cases in which INIT is used in inner loop.  */
+  if (TREE_CODE (init) == SSA_NAME)
+    FOR_EACH_IMM_USE_FAST (use_p, iterator, init)
+      {
+	stmt = USE_STMT (use_p);
+	if (is_gimple_debug (stmt))
+	  continue;
+
+	if (!flow_bb_inside_loop_p (m_loop, gimple_bb (stmt)))
+	  return false;
+      }
+
+  FOR_EACH_IMM_USE_FAST (use_p, iterator, next)
+    {
+      stmt = USE_STMT (use_p);
+      if (is_gimple_debug (stmt))
+	continue;
+
+      /* Or else it's used in PHI itself.  */
+      use_phi = dyn_cast <gphi *> (stmt);
+      if (use_phi == phi)
+	continue;
+
+      if (use_phi != NULL
+	  && lcssa_phi == NULL
+	  && gimple_bb (stmt) == m_exit->dest
+	  && PHI_ARG_DEF_FROM_EDGE (use_phi, m_exit) == next)
+	lcssa_phi = use_phi;
+      else
+	return false;
+    }
+  if (!lcssa_phi)
+    return false;
+
+  re = XCNEW (struct reduction);
+  re->var = var;
+  re->init = init;
+  re->next = next;
+  re->phi = phi;
+  re->lcssa_phi = lcssa_phi;
+
+  classify_simple_reduction (re);
+
+  if (dump_file && (dump_flags & TDF_DETAILS))
+    dump_reduction (re);
+
+  m_reductions.safe_push (re);
+  return true;
+}
+
+
+// Source: gimple-loop-interchange.cc
+// Lines 463-578

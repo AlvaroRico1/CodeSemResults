@@ -1,0 +1,69 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'remote' at line 31
+2. Pointer 'ref' at line 45
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void do_time_travelling_fetch(git_oid *commit1id, git_oid *commit2id,
+		bool force) {
+	char *refspec_strs = {
+		force ? FORCE_FETCHSPEC : NON_FORCE_FETCHSPEC,
+	};
+	git_strarray refspecs = {
+		.count = 1,
+		.strings = &refspec_strs,
+	};
+
+	/* create two commits in repo 1 and a reference to them */
+	{
+		git_oid empty_tree_id;
+		git_tree *empty_tree;
+		git_signature *sig;
+		git_treebuilder *tb;
+		cl_git_pass(git_treebuilder_new(&tb, repo1, NULL));
+		cl_git_pass(git_treebuilder_write(&empty_tree_id, tb));
+		cl_git_pass(git_tree_lookup(&empty_tree, repo1, &empty_tree_id));
+		cl_git_pass(git_signature_default(&sig, repo1));
+		cl_git_pass(git_commit_create(commit1id, repo1, REPO1_REFNAME, sig,
+					sig, NULL, "one", empty_tree, 0, NULL));
+		cl_git_pass(git_commit_create_v(commit2id, repo1, REPO1_REFNAME, sig,
+					sig, NULL, "two", empty_tree, 1, commit1id));
+
+		git_tree_free(empty_tree);
+		git_signature_free(sig);
+		git_treebuilder_free(tb);
+	}
+
+	/* fetch the reference via the remote */
+	{
+		git_remote *remote;
+
+		cl_git_pass(git_remote_create_anonymous(&remote, repo2,
+					git_repository_path(repo1)));
+		cl_git_pass(git_remote_fetch(remote, &refspecs, NULL, "some message"));
+
+		git_remote_free(remote);
+	}
+
+	/* assert that repo2 references the second commit */
+	{
+		const git_oid *target;
+		git_reference *ref;
+		cl_git_pass(git_reference_lookup(&ref, repo2, REPO2_REFNAME));
+		target = git_reference_target(ref);
+		cl_assert_equal_b(git_oid_cmp(target, commit2id), 0);
+		git_reference_free(ref);
+	}
+
+
+// Source: fetch.c
+// Lines 65-114
+
+
+[ANSWER]
+MAY

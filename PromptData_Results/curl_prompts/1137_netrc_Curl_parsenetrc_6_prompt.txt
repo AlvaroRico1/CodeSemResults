@@ -1,0 +1,45 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'home' at line 12
+2. Pointer 'pw' at line 19
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int Curl_parsenetrc(const char *host,
+                    char **loginp,
+                    char **passwordp,
+                    bool *login_changed,
+                    bool *password_changed,
+                    char *netrcfile)
+{
+  int retcode = 1;
+  char *filealloc = NULL;
+
+  if(!netrcfile) {
+    char *home = NULL;
+    char *homea = curl_getenv("HOME"); /* portable environment reader */
+    if(homea) {
+      home = homea;
+#if defined(HAVE_GETPWUID_R) && defined(HAVE_GETEUID)
+    }
+    else {
+      struct passwd pw, *pw_res;
+      char pwbuf[1024];
+      if(!getpwuid_r(geteuid(), &pw, pwbuf, sizeof(pwbuf), &pw_res)
+         && pw_res) {
+        home = pw.pw_dir;
+      }
+#elif defined(HAVE_GETPWUID) && defined(HAVE_GETEUID)
+    }
+
+
+// Source: netrc.c
+// Lines 227-252
+
+
+[ANSWER]
+MUST

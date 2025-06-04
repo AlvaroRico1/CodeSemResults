@@ -1,0 +1,44 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'out' at line 1
+2. Pointer 'o' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int make_origin(git_blame__origin **out, git_commit *commit, const char *path)
+{
+	git_blame__origin *o;
+	git_object *blob;
+	size_t path_len = strlen(path), alloc_len;
+	int error = 0;
+
+	if ((error = git_object_lookup_bypath(&blob, (git_object*)commit,
+			path, GIT_OBJECT_BLOB)) < 0)
+		return error;
+
+	GIT_ERROR_CHECK_ALLOC_ADD(&alloc_len, sizeof(*o), path_len);
+	GIT_ERROR_CHECK_ALLOC_ADD(&alloc_len, alloc_len, 1);
+	o = git__calloc(1, alloc_len);
+	GIT_ERROR_CHECK_ALLOC(o);
+
+	o->commit = commit;
+	o->blob = (git_blob *) blob;
+	o->refcnt = 1;
+	strcpy(o->path, path);
+
+	*out = o;
+
+	return 0;
+}
+
+
+// Source: blame_git.c
+// Lines 38-62
+
+
+[ANSWER]
+MUST

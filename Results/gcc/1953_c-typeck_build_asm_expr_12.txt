@@ -1,0 +1,1 @@
+constraint,gcc/gcc/c/c-typeck.c,7,is_inout,gcc/gcc/c/c-typeck.c,9,0

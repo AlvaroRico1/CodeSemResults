@@ -1,0 +1,1 @@
+dir_gone,git/builtin/clean.c,2,gone,git/builtin/clean.c,7,0

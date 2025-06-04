@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'next' at line 4\n2. Pointer 'before' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nemit_pattern_before (rtx pattern, rtx_insn *before, bool skip_debug_insns,\n\t\t     bool insnp, rtx_insn *(*make_raw) (rtx))\n{\n  rtx_insn *next = before;\n\n  if (skip_debug_insns)\n    while (DEBUG_INSN_P (next))\n      next = PREV_INSN (next);\n\n  if (INSN_P (next))\n    return emit_pattern_before_setloc (pattern, before, INSN_LOCATION (next),\n\t\t\t\t       insnp, make_raw);\n  else\n    return emit_pattern_before_noloc (pattern, before,\n\t\t\t\t      insnp ? before : NULL,\n                                      NULL, make_raw);\n}\n\n\n// Source: emit-rtl.c\n// Lines 4966-4982\n",
+  "ANSWER": "MUST"
+}

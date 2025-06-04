@@ -1,0 +1,42 @@
+static uint32 get_partition_id_cols_range_for_endpoint(
+    partition_info *part_info, bool is_left_endpoint, bool include_endpoint,
+    uint32 nparts) {
+  uint min_part_id = 0, max_part_id = part_info->num_parts, loc_part_id;
+  part_column_list_val *range_col_array = part_info->range_col_array;
+  uint num_columns = part_info->part_field_list.elements;
+  DBUG_TRACE;
+
+  /* Find the matching partition (including taking endpoint into account). */
+  do {
+    /* Midpoint, adjusted down, so it can never be > last partition. */
+    loc_part_id = (max_part_id + min_part_id) >> 1;
+    if (0 <=
+        cmp_rec_and_tuple_prune(range_col_array + loc_part_id * num_columns,
+                                nparts, is_left_endpoint, include_endpoint))
+      min_part_id = loc_part_id + 1;
+    else
+      max_part_id = loc_part_id;
+  } while (max_part_id > min_part_id);
+  loc_part_id = max_part_id;
+
+  /* Given value must be LESS THAN the found partition. */
+  assert(loc_part_id == part_info->num_parts ||
+         (0 >
+          cmp_rec_and_tuple_prune(range_col_array + loc_part_id * num_columns,
+                                  nparts, is_left_endpoint, include_endpoint)));
+  /* Given value must be GREATER THAN or EQUAL to the previous partition. */
+  assert(loc_part_id == 0 ||
+         (0 <= cmp_rec_and_tuple_prune(
+                   range_col_array + (loc_part_id - 1) * num_columns, nparts,
+                   is_left_endpoint, include_endpoint)));
+
+  if (!is_left_endpoint) {
+    /* Set the end after this partition if not already after the last. */
+    if (loc_part_id < part_info->num_parts) loc_part_id++;
+  }
+  return loc_part_id;
+}
+
+
+// Source: sql_partition.cc
+// Lines 5580-5617

@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'status' at line 5
+2. Pointer 'mysql' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static mysql_state_machine_status csm_authenticate(mysql_async_connect *ctx) {
+  DBUG_TRACE;
+  MYSQL *mysql = ctx->mysql;
+  if (ctx->non_blocking) {
+    mysql_state_machine_status status = run_plugin_auth_nonblocking(
+        ctx->mysql, ctx->scramble_data, ctx->scramble_data_len,
+        ctx->scramble_plugin, ctx->db);
+    if (status != STATE_MACHINE_DONE) {
+      return status;
+    }
+  } else {
+    if (run_plugin_auth(mysql, ctx->scramble_buffer, ctx->scramble_data_len,
+                        ctx->scramble_plugin, ctx->db)) {
+      return STATE_MACHINE_FAILED;
+    }
+  }
+
+
+// Source: client.cc
+// Lines 6451-6466
+
+
+[ANSWER]
+MUST-NOT

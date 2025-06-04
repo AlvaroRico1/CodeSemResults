@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'date' at line 1\n2. Pointer 'errors' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint parse_expiry_date(const char *date, timestamp_t *timestamp)\n{\n\tint errors = 0;\n\n\tif (!strcmp(date, \"never\") || !strcmp(date, \"false\"))\n\t\t*timestamp = 0;\n\telse if (!strcmp(date, \"all\") || !strcmp(date, \"now\"))\n\t\t/*\n\t\t * We take over \"now\" here, which usually translates\n\t\t * to the current timestamp.  This is because the user\n\t\t * really means to expire everything that was done in\n\t\t * the past, and by definition reflogs are the record\n\t\t * of the past, and there is nothing from the future\n\t\t * to be kept.\n\t\t */\n\t\t*timestamp = TIME_MAX;\n\telse\n\t\t*timestamp = approxidate_careful(date, &errors);\n\n\treturn errors;\n}\n\n\n// Source: date.c\n// Lines 901-921\n",
+  "ANSWER": "MAY"
+}

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'offset' at line 1\n2. Pointer 'tmp' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint traceprobe_split_symbol_offset(char *symbol, long *offset)\n{\n\tchar *tmp;\n\tint ret;\n\n\tif (!offset)\n\t\treturn -EINVAL;\n\n\ttmp = strpbrk(symbol, \"+-\");\n\tif (tmp) {\n\t\tret = kstrtol(tmp, 0, offset);\n\t\tif (ret)\n\t\t\treturn ret;\n\t\t*tmp = '\\0';\n\t} else\n\t\t*offset = 0;\n\n\treturn 0;\n}\n\n\n// Source: trace_probe.c\n// Lines 198-216\n",
+  "ANSWER": "MAY"
+}

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'b' at line None\n2. Pointer 'b_' at line None\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\n\tstruct string_list offsets;\n\n\t/*\n\t * last_directory: directory that previously processed file found in\n\t *\n\t * last_directory starts NULL, but records the directory in which the\n\t * previous file was found within.  As soon as\n\t *    directory(current_file) != last_directory\n\t * then we need to start updating accounting in versions & offsets.\n\t * Note that last_directory is always the last path in \"offsets\" (or\n\t * NULL if \"offsets\" is empty) so this exists just for quick access.\n\t */\n\tconst char *last_directory;\n\n\t/* last_directory_len: cached computation of strlen(last_directory) */\n\tunsigned last_directory_len;\n};\n\n\n// Source: merge-ort.c\n// Lines 3293-3309\n",
+  "ANSWER": "MUST"
+}

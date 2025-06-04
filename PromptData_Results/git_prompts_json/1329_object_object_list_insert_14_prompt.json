@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'list_p' at line 2\n2. Pointer 'new_list' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstruct object_list *object_list_insert(struct object *item,\n\t\t\t\t       struct object_list **list_p)\n{\n\tstruct object_list *new_list = xmalloc(sizeof(struct object_list));\n\tnew_list->item = item;\n\tnew_list->next = *list_p;\n\t*list_p = new_list;\n\treturn new_list;\n}\n\n\n// Source: object.c\n// Lines 308-316\n",
+  "ANSWER": "MUST"
+}

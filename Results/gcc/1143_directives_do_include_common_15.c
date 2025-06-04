@@ -1,0 +1,57 @@
+do_include_common (cpp_reader *pfile, enum include_type type)
+{
+  const char *fname;
+  int angle_brackets;
+  const cpp_token **buf = NULL;
+  location_t location;
+
+  /* Re-enable saving of comments if requested, so that the include
+     callback can dump comments which follow #include.  */
+  pfile->state.save_comments = ! CPP_OPTION (pfile, discard_comments);
+
+  /* Tell the lexer this is an include directive -- we want it to
+     increment the line number even if this is the last line of a file.  */
+  pfile->state.in_directive = 2;
+
+  fname = parse_include (pfile, &angle_brackets, &buf, &location);
+  if (!fname)
+    goto done;
+
+  if (!*fname)
+    {
+      cpp_error_with_line (pfile, CPP_DL_ERROR, location, 0,
+			   "empty filename in #%s",
+			   pfile->directive->name);
+      goto done;
+    }
+
+  /* Prevent #include recursion.  */
+  if (pfile->line_table->depth >= CPP_OPTION (pfile, max_include_depth))
+    cpp_error (pfile, 
+	       CPP_DL_ERROR, 
+	       "#include nested depth %u exceeds maximum of %u"
+	       " (use -fmax-include-depth=DEPTH to increase the maximum)",
+	       pfile->line_table->depth,
+	       CPP_OPTION (pfile, max_include_depth));
+  else
+    {
+      /* Get out of macro context, if we are.  */
+      skip_rest_of_line (pfile);
+
+      if (pfile->cb.include)
+	pfile->cb.include (pfile, pfile->directive_line,
+			   pfile->directive->name, fname, angle_brackets,
+			   buf);
+
+      _cpp_stack_include (pfile, fname, angle_brackets, type, location);
+    }
+
+ done:
+  XDELETEVEC (fname);
+  if (buf)
+    XDELETEVEC (buf);
+}
+
+
+// Source: directives.c
+// Lines 807-859

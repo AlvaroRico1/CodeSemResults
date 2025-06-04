@@ -1,0 +1,82 @@
+void test_diff_diffiter__max_size_threshold(void)
+{
+	git_repository *repo = cl_git_sandbox_init("status");
+	git_diff_options opts = GIT_DIFF_OPTIONS_INIT;
+	git_diff *diff = NULL;
+	int file_count = 0, binary_count = 0, hunk_count = 0;
+	size_t d, num_d;
+
+	opts.context_lines = 3;
+	opts.interhunk_lines = 1;
+	opts.flags |= GIT_DIFF_INCLUDE_IGNORED | GIT_DIFF_INCLUDE_UNTRACKED;
+
+	cl_git_pass(git_diff_index_to_workdir(&diff, repo, NULL, &opts));
+	num_d = git_diff_num_deltas(diff);
+
+	for (d = 0; d < num_d; ++d) {
+		git_patch *patch;
+		const git_diff_delta *delta;
+
+		cl_git_pass(git_patch_from_diff(&patch, diff, d));
+		cl_assert(patch);
+		delta = git_patch_get_delta(patch);
+		cl_assert(delta);
+
+		file_count++;
+		hunk_count += (int)git_patch_num_hunks(patch);
+
+		assert((delta->flags & (GIT_DIFF_FLAG_BINARY|GIT_DIFF_FLAG_NOT_BINARY)) != 0);
+		binary_count += ((delta->flags & GIT_DIFF_FLAG_BINARY) != 0);
+
+		git_patch_free(patch);
+	}
+
+	cl_assert_equal_i(13, file_count);
+	cl_assert_equal_i(0, binary_count);
+	cl_assert_equal_i(8, hunk_count);
+
+	git_diff_free(diff);
+
+	/* try again with low file size threshold */
+
+	file_count = binary_count = hunk_count = 0;
+
+	opts.context_lines = 3;
+	opts.interhunk_lines = 1;
+	opts.flags |= GIT_DIFF_INCLUDE_IGNORED | GIT_DIFF_INCLUDE_UNTRACKED;
+	opts.max_size = 50; /* treat anything over 50 bytes as binary! */
+
+	cl_git_pass(git_diff_index_to_workdir(&diff, repo, NULL, &opts));
+	num_d = git_diff_num_deltas(diff);
+
+	for (d = 0; d < num_d; ++d) {
+		git_patch *patch;
+		const git_diff_delta *delta;
+
+		cl_git_pass(git_patch_from_diff(&patch, diff, d));
+		delta = git_patch_get_delta(patch);
+
+		file_count++;
+		hunk_count += (int)git_patch_num_hunks(patch);
+
+		assert((delta->flags & (GIT_DIFF_FLAG_BINARY|GIT_DIFF_FLAG_NOT_BINARY)) != 0);
+		binary_count += ((delta->flags & GIT_DIFF_FLAG_BINARY) != 0);
+
+		git_patch_free(patch);
+	}
+
+	cl_assert_equal_i(13, file_count);
+	/* Three files are over the 50 byte threshold:
+	 * - staged_changes_file_deleted
+	 * - staged_changes_modified_file
+	 * - staged_new_file_modified_file
+	 */
+	cl_assert_equal_i(3, binary_count);
+	cl_assert_equal_i(5, hunk_count);
+
+	git_diff_free(diff);
+}
+
+
+// Source: diffiter.c
+// Lines 121-198

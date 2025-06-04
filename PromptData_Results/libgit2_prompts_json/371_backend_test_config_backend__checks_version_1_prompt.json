@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'cfg' at line 3\n2. Pointer 'err' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid test_config_backend__checks_version(void)\n{\n\tgit_config *cfg;\n\tgit_config_backend backend = GIT_CONFIG_BACKEND_INIT;\n\tconst git_error *err;\n\n\tbackend.version = 1024;\n\n\tcl_git_pass(git_config_new(&cfg));\n\tcl_git_fail(git_config_add_backend(cfg, &backend, 0, NULL, false));\n\terr = git_error_last();\n\tcl_assert_equal_i(GIT_ERROR_INVALID, err->klass);\n\n\tgit_error_clear();\n\tbackend.version = 1024;\n\tcl_git_fail(git_config_add_backend(cfg, &backend, 0, NULL, false));\n\terr = git_error_last();\n\tcl_assert_equal_i(GIT_ERROR_INVALID, err->klass);\n\n\tgit_config_free(cfg);\n}\n\n\n// Source: backend.c\n// Lines 4-24\n",
+  "ANSWER": "MUST-NOT"
+}

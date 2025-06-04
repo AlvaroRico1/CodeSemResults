@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'tsdn' at line 2\n2. Pointer 'arg' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nprof_tctx_merge_iter(prof_tctx_tree_t *tctxs, prof_tctx_t *tctx, void *arg) {\n\ttsdn_t *tsdn = (tsdn_t *)arg;\n\n\tmalloc_mutex_assert_owner(tsdn, tctx->gctx->lock);\n\n\tswitch (tctx->state) {\n\tcase prof_tctx_state_nominal:\n\t\t/* New since dumping started; ignore. */\n\t\tbreak;\n\tcase prof_tctx_state_dumping:\n\tcase prof_tctx_state_purgatory:\n\t\tprof_tctx_merge_gctx(tsdn, tctx, tctx->gctx);\n\t\tbreak;\n\tdefault:\n\t\tnot_reached();\n\t}\n\n\treturn NULL;\n}\n\n\n// Source: prof.c\n// Lines 1099-1117\n",
+  "ANSWER": "MUST"
+}

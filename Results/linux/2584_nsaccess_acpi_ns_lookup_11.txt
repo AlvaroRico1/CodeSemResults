@@ -1,0 +1,1 @@
+external_path,linux/drivers/acpi/acpica/nsaccess.c,11,path,linux/drivers/acpi/acpica/nsaccess.c,10,2

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'revs' at line None\n2. Pointer 'cb_data' at line None\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstruct bitmap_commit_cb {\n\tstruct commit **commits;\n\tsize_t commits_nr, commits_alloc;\n\n\tstruct write_midx_context *ctx;\n};\n\n\n// Source: midx.c\n// Lines 924-929\n",
+  "ANSWER": "MUST"
+}

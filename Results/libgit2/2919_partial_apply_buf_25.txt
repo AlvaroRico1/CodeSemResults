@@ -1,0 +1,1 @@
+hunk_cb,libgit2/tests/libgit2/apply/partial.c,8,error,libgit2/tests/libgit2/apply/partial.c,17,0

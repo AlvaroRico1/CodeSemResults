@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'skr' at line 7\n2. Pointer 'str' at line 8\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid read_user_name(char *name) {\n  DBUG_TRACE;\n  if (geteuid() == 0)\n    (void)my_stpcpy(name, \"root\"); /* allow use of surun */\n  else {\n#ifdef HAVE_GETPWUID\n    struct passwd *skr;\n    const char *str;\n    if ((str = getlogin()) == nullptr) {\n      if ((skr = getpwuid(geteuid())) != nullptr)\n        str = skr->pw_name;\n      else if (!(str = getenv(\"USER\")) && !(str = getenv(\"LOGNAME\")) &&\n               !(str = getenv(\"LOGIN\")))\n        str = \"UNKNOWN_USER\";\n    }\n    (void)strmake(name, str, USERNAME_LENGTH);\n#elif HAVE_CUSERID\n    (void)cuserid(name);\n#else\n    my_stpcpy(name, \"UNKNOWN_USER\");\n#endif\n  }\n\n\n// Source: libmysql.cc\n// Lines 333-354\n",
+  "ANSWER": "MUST-NOT"
+}

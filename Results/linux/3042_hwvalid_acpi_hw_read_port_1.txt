@@ -1,0 +1,1 @@
+one_byte,linux/drivers/acpi/acpica/hwvalid.c,4,value,linux/drivers/acpi/acpica/hwvalid.c,1,2

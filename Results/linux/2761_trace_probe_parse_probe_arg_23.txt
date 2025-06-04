@@ -1,0 +1,1 @@
+offset,linux/kernel/trace/trace_probe.c,8,param,linux/kernel/trace/trace_probe.c,6,2

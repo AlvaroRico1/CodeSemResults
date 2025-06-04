@@ -1,0 +1,66 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tableLog' at line 5
+2. Pointer 'nbSymbols' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+size_t HUF_readCTable (HUF_CElt* CTable, unsigned* maxSymbolValuePtr, const void* src, size_t srcSize)
+{
+    BYTE huffWeight[HUF_SYMBOLVALUE_MAX + 1];   /* init not required, even though some static analyzer may complain */
+    U32 rankVal[HUF_TABLELOG_ABSOLUTEMAX + 1];   /* large enough for values from 0 to 16 */
+    U32 tableLog = 0;
+    U32 nbSymbols = 0;
+
+    /* get symbol weights */
+    CHECK_V_F(readSize, HUF_readStats(huffWeight, HUF_SYMBOLVALUE_MAX+1, rankVal, &nbSymbols, &tableLog, src, srcSize));
+
+    /* check result */
+    if (tableLog > HUF_TABLELOG_MAX) return ERROR(tableLog_tooLarge);
+    if (nbSymbols > *maxSymbolValuePtr+1) return ERROR(maxSymbolValue_tooSmall);
+
+    /* Prepare base value per rank */
+    {   U32 n, nextRankStart = 0;
+        for (n=1; n<=tableLog; n++) {
+            U32 current = nextRankStart;
+            nextRankStart += (rankVal[n] << (n-1));
+            rankVal[n] = current;
+    }   }
+
+    /* fill nbBits */
+    {   U32 n; for (n=0; n<nbSymbols; n++) {
+            const U32 w = huffWeight[n];
+            CTable[n].nbBits = (BYTE)(tableLog + 1 - w);
+    }   }
+
+    /* fill val */
+    {   U16 nbPerRank[HUF_TABLELOG_MAX+2]  = {0};  /* support w=0=>n=tableLog+1 */
+        U16 valPerRank[HUF_TABLELOG_MAX+2] = {0};
+        { U32 n; for (n=0; n<nbSymbols; n++) nbPerRank[CTable[n].nbBits]++; }
+        /* determine stating value per rank */
+        valPerRank[tableLog+1] = 0;   /* for w==0 */
+        {   U16 min = 0;
+            U32 n; for (n=tableLog; n>0; n--) {  /* start at n=tablelog <-> w=1 */
+                valPerRank[n] = min;     /* get starting value within each rank */
+                min += nbPerRank[n];
+                min >>= 1;
+        }   }
+        /* assign value within rank, symbol order */
+        { U32 n; for (n=0; n<nbSymbols; n++) CTable[n].val = valPerRank[CTable[n].nbBits]++; }
+    }
+
+    *maxSymbolValuePtr = nbSymbols - 1;
+    return readSize;
+}
+
+
+// Source: huf_compress.c
+// Lines 172-218
+
+
+[ANSWER]
+MAY

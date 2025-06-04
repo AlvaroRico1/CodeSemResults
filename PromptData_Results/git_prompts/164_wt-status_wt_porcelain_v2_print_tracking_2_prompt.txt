@@ -1,0 +1,76 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'nr_behind' at line 6
+2. Pointer 'base' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void wt_porcelain_v2_print_tracking(struct wt_status *s)
+{
+	struct branch *branch;
+	const char *base;
+	const char *branch_name;
+	int ab_info, nr_ahead, nr_behind;
+	char eol = s->null_termination ? '\0' : '\n';
+
+	fprintf(s->fp, "# branch.oid %s%c",
+			(s->is_initial ? "(initial)" : oid_to_hex(&s->oid_commit)),
+			eol);
+
+	if (!s->branch)
+		fprintf(s->fp, "# branch.head %s%c", "(unknown)", eol);
+	else {
+		if (!strcmp(s->branch, "HEAD")) {
+			fprintf(s->fp, "# branch.head %s%c", "(detached)", eol);
+
+			if (s->state.rebase_in_progress ||
+			    s->state.rebase_interactive_in_progress)
+				branch_name = s->state.onto;
+			else if (s->state.detached_from)
+				branch_name = s->state.detached_from;
+			else
+				branch_name = "";
+		} else {
+			branch_name = NULL;
+			skip_prefix(s->branch, "refs/heads/", &branch_name);
+
+			fprintf(s->fp, "# branch.head %s%c", branch_name, eol);
+		}
+
+		/* Lookup stats on the upstream tracking branch, if set. */
+		branch = branch_get(branch_name);
+		base = NULL;
+		ab_info = stat_tracking_info(branch, &nr_ahead, &nr_behind,
+					     &base, 0, s->ahead_behind_flags);
+		if (base) {
+			base = shorten_unambiguous_ref(base, 0);
+			fprintf(s->fp, "# branch.upstream %s%c", base, eol);
+			free((char *)base);
+
+			if (ab_info > 0) {
+				/* different */
+				if (nr_ahead || nr_behind)
+					fprintf(s->fp, "# branch.ab +%d -%d%c",
+						nr_ahead, nr_behind, eol);
+				else
+					fprintf(s->fp, "# branch.ab +? -?%c",
+						eol);
+			} else if (!ab_info) {
+				/* same */
+				fprintf(s->fp, "# branch.ab +0 -0%c", eol);
+			}
+		}
+	}
+}
+
+
+// Source: wt-status.c
+// Lines 2121-2177
+
+
+[ANSWER]
+MAY

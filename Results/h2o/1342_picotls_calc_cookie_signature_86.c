@@ -1,0 +1,42 @@
+static int calc_cookie_signature(ptls_t *tls, ptls_handshake_properties_t *properties,
+                                 ptls_key_exchange_algorithm_t *negotiated_group, ptls_iovec_t tbs, uint8_t *sig)
+{
+    ptls_hash_algorithm_t *algo = tls->ctx->cipher_suites[0]->hash;
+    ptls_hash_context_t *hctx;
+
+    if ((hctx = ptls_hmac_create(algo, properties->server.cookie.key, algo->digest_size)) == NULL)
+        return PTLS_ERROR_NO_MEMORY;
+
+#define UPDATE_BLOCK(p, _len)                                                                                                      \
+    do {                                                                                                                           \
+        size_t len = (_len);                                                                                                       \
+        assert(len < UINT8_MAX);                                                                                                   \
+        uint8_t len8 = (uint8_t)len;                                                                                               \
+        hctx->update(hctx, &len8, 1);                                                                                              \
+        hctx->update(hctx, (p), len);                                                                                              \
+    } while (0)
+#define UPDATE16(_v)                                                                                                               \
+    do {                                                                                                                           \
+        uint16_t v = (_v);                                                                                                         \
+        uint8_t b[2] = {v >> 8, v & 0xff};                                                                                         \
+        hctx->update(hctx, b, 2);                                                                                                  \
+    } while (0)
+
+    UPDATE_BLOCK(tls->client_random, sizeof(tls->client_random));
+    UPDATE_BLOCK(tls->server_name, tls->server_name != NULL ? strlen(tls->server_name) : 0);
+    UPDATE16(tls->cipher_suite->id);
+    UPDATE16(negotiated_group->id);
+    UPDATE_BLOCK(properties->server.cookie.additional_data.base, properties->server.cookie.additional_data.len);
+
+    UPDATE_BLOCK(tbs.base, tbs.len);
+
+#undef UPDATE_BLOCK
+#undef UPDATE16
+
+    hctx->final(hctx, sig, PTLS_HASH_FINAL_MODE_FREE);
+    return 0;
+}
+
+
+// Source: picotls.c
+// Lines 3599-3636

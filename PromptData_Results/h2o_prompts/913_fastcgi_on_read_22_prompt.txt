@@ -1,0 +1,94 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'generator' at line 3
+2. Pointer 'sock' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void on_read(h2o_socket_t *sock, const char *err)
+{
+    struct st_fcgi_generator_t *generator = sock->data;
+    int can_keepalive = 0;
+    int sent_headers_before = generator->sent_headers;
+
+    if (err != NULL) {
+        /* note: FastCGI server is allowed to close the connection any time after sending an empty FCGI_STDOUT record */
+        if (!generator->sent_headers)
+            h2o_req_log_error(generator->req, MODULE_NAME, "fastcgi connection closed unexpectedly");
+        errorclose(generator);
+        return;
+    }
+
+    /* handle the records */
+    while (1) {
+        struct st_fcgi_record_header_t header;
+        size_t recsize;
+        if (sock->input->size < FCGI_RECORD_HEADER_SIZE)
+            break;
+        decode_header(&header, sock->input->bytes);
+        recsize = FCGI_RECORD_HEADER_SIZE + header.contentLength + header.paddingLength;
+        if (sock->input->size < recsize)
+            break;
+        /* we have a complete record */
+        switch (header.type) {
+        case FCGI_STDOUT:
+            if (handle_stdin_record(generator, &header) != 0)
+                goto Error;
+            h2o_buffer_consume(&sock->input, recsize);
+            break;
+        case FCGI_STDERR:
+            if (header.contentLength != 0)
+                h2o_req_log_error(generator->req, MODULE_NAME, "%.*s", (int)header.contentLength,
+                                  sock->input->bytes + FCGI_RECORD_HEADER_SIZE);
+            h2o_buffer_consume(&sock->input, recsize);
+            break;
+        case FCGI_END_REQUEST:
+            if (!generator->sent_headers) {
+                h2o_req_log_error(generator->req, MODULE_NAME, "received FCGI_END_REQUEST before end of the headers");
+                goto Error;
+            }
+            h2o_buffer_consume(&sock->input, recsize);
+            can_keepalive = 1;
+            goto EOS_Received;
+        default:
+            h2o_req_log_error(generator->req, MODULE_NAME, "received unexpected record, type: %u", header.type);
+            h2o_buffer_consume(&sock->input, recsize);
+            if (!generator->sent_headers)
+                goto Error;
+            goto EOS_Received;
+        }
+    }
+
+    /* send data if necessary */
+    if (generator->sent_headers) {
+        if (!sent_headers_before && generator->resp.receiving->size == 0) {
+            /* send headers immediately */
+            h2o_doublebuffer_prepare_empty(&generator->resp.sending);
+            h2o_send(generator->req, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
+        } else if (!generator->resp.sending.inflight) {
+            do_send(generator);
+        }
+    }
+
+    set_timeout(generator, generator->handler->config.io_timeout, on_rw_timeout);
+    return;
+
+EOS_Received:
+    send_eos_and_close(generator, can_keepalive);
+    return;
+
+Error:
+    errorclose(generator);
+}
+
+
+// Source: fastcgi.c
+// Lines 651-725
+
+
+[ANSWER]
+MUST

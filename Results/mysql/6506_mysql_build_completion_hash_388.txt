@@ -1,0 +1,1 @@
+cmd,mysql/client/mysql.cc,2,write_info,mysql/client/mysql.cc,1,0

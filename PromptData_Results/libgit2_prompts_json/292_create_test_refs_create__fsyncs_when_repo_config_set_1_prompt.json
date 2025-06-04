@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'create_count' at line 3\n2. Pointer 'compress_count' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid test_refs_create__fsyncs_when_repo_config_set(void)\n{\n\tsize_t create_count, compress_count;\n\n\tcl_repo_set_bool(g_repo, \"core.fsyncObjectFiles\", true);\n\n\tcount_fsyncs(&create_count, &compress_count);\n\n\tcl_assert_equal_i(expected_fsyncs_create, create_count);\n\tcl_assert_equal_i(expected_fsyncs_compress, compress_count);\n}\n\n\n// Source: create.c\n// Lines 352-362\n",
+  "ANSWER": "MAY"
+}

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'type' at line 3\n2. Pointer 'val' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int write_mapped_var(git_repository *repo, const char *name, git_configmap *maps, size_t nmaps, const char *var, int ival)\n{\n\tgit_configmap_t type;\n\tconst char *val;\n\n\tif (git_config_lookup_map_enum(&type, &val, maps, nmaps, ival) < 0) {\n\t\tgit_error_set(GIT_ERROR_SUBMODULE, \"invalid value for %s\", var);\n\t\treturn -1;\n\t}\n\n\tif (type == GIT_CONFIGMAP_TRUE)\n\t\tval = \"true\";\n\n\treturn write_var(repo, name, var, val);\n}\n\n\n// Source: submodule.c\n// Lines 1109-1123\n",
+  "ANSWER": "MAY"
+}

@@ -1,0 +1,1 @@
+slot,git/pretty.c,11,next,git/pretty.c,39,2

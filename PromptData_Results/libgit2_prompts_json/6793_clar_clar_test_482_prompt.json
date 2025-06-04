@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'argc' at line 1\n2. Pointer 'errors' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nclar_test(int argc, char **argv)\n{\n\tint errors;\n\n\tclar_test_init(argc, argv);\n\terrors = clar_test_run();\n\tclar_test_shutdown();\n\n\treturn errors;\n}\n\n\n// Source: clar.c\n// Lines 583-592\n",
+  "ANSWER": "MUST-NOT"
+}

@@ -1,0 +1,53 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'start' at line 6
+2. Pointer 'end' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+window_buffer_draw(__unused void *modedata, void *itemdata,
+    struct screen_write_ctx *ctx, u_int sx, u_int sy)
+{
+	struct window_buffer_itemdata	*item = itemdata;
+	struct paste_buffer		*pb;
+	const char			*pdata, *start, *end;
+	char				*buf = NULL;
+	size_t				 psize;
+	u_int				 i, cx = ctx->s->cx, cy = ctx->s->cy;
+
+	pb = paste_get_name(item->name);
+	if (pb == NULL)
+		return;
+
+	pdata = end = paste_buffer_data(pb, &psize);
+	for (i = 0; i < sy; i++) {
+		start = end;
+		while (end != pdata + psize && *end != '\n')
+			end++;
+		buf = xreallocarray(buf, 4, end - start + 1);
+		utf8_strvis(buf, start, end - start,
+		    VIS_OCTAL|VIS_CSTYLE|VIS_TAB);
+		if (*buf != '\0') {
+			screen_write_cursormove(ctx, cx, cy + i, 0);
+			screen_write_nputs(ctx, sx, &grid_default_cell, "%s",
+			    buf);
+		}
+
+		if (end == pdata + psize)
+			break;
+		end++;
+	}
+	free(buf);
+}
+
+
+// Source: window-buffer.c
+// Lines 227-260
+
+
+[ANSWER]
+MUST

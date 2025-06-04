@@ -1,0 +1,1 @@
+tclass,linux/security/selinux/selinuxfs.c,7,newcon,linux/security/selinux/selinuxfs.c,9,2

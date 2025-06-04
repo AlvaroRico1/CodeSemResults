@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'fmt' at line 8\n2. Pointer 'other' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nDateFormat::operator==(const Format& other) const\n{\n    // This protected comparison operator should only be called by subclasses\n    // which have confirmed that the other object being compared against is\n    // an instance of a sublcass of DateFormat.  THIS IS IMPORTANT.\n\n    // Format::operator== guarantees that this cast is safe\n    DateFormat* fmt = (DateFormat*)&other;\n\n    return (this == fmt) ||\n        (Format::operator==(other) &&\n         fCalendar&&(fCalendar->isEquivalentTo(*fmt->fCalendar)) &&\n         (fNumberFormat && *fNumberFormat == *fmt->fNumberFormat) &&\n         (fCapitalizationContext == fmt->fCapitalizationContext) );\n}\n\n\n// Source: datefmt.cpp\n// Lines 178-192\n",
+  "ANSWER": "MUST"
+}

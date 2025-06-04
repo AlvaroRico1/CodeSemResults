@@ -1,0 +1,67 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'prev' at line 3
+2. Pointer 'prev' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bitmap_elt_clear_from (bitmap head, bitmap_element *elt)
+{
+  bitmap_element *prev;
+  bitmap_obstack *bit_obstack = head->obstack;
+
+  if (!elt)
+    return;
+
+  if (head->tree_form)
+    elt = bitmap_tree_listify_from (head, elt);
+
+  if (GATHER_STATISTICS)
+    {
+      int n = 0;
+      for (prev = elt; prev; prev = prev->next)
+	n++;
+      release_overhead (head, sizeof (bitmap_element) * n, false);
+    }
+
+  prev = elt->prev;
+  if (prev)
+    {
+      prev->next = NULL;
+      if (head->current->indx > prev->indx)
+	{
+	  head->current = prev;
+	  head->indx = prev->indx;
+	}
+    }
+  else
+    {
+      head->first = NULL;
+      head->current = NULL;
+      head->indx = 0;
+    }
+
+  /* Put the entire list onto the freelist in one operation. */
+  if (bit_obstack)
+    {
+      elt->prev = bit_obstack->elements;
+      bit_obstack->elements = elt;
+    }
+  else
+    {
+      elt->prev = bitmap_ggc_free;
+      bitmap_ggc_free = elt;
+    }
+}
+
+
+// Source: bitmap.c
+// Lines 155-202
+
+
+[ANSWER]
+MUST

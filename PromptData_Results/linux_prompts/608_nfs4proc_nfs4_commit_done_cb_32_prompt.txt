@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'inode' at line 3
+2. Pointer 'data' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int nfs4_commit_done_cb(struct rpc_task *task, struct nfs_commit_data *data)
+{
+	struct inode *inode = data->inode;
+
+	trace_nfs4_commit(data, task->tk_status);
+	if (nfs4_async_handle_error(task, NFS_SERVER(inode),
+				    NULL, NULL) == -EAGAIN) {
+		rpc_restart_call_prepare(task);
+		return -EAGAIN;
+	}
+	return 0;
+}
+
+
+// Source: nfs4proc.c
+// Lines 5247-5258
+
+
+[ANSWER]
+MUST

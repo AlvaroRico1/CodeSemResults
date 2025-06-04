@@ -1,0 +1,1 @@
+text,libgit2/tests/libgit2/diff/parse.c,3,delta,libgit2/tests/libgit2/diff/parse.c,6,0

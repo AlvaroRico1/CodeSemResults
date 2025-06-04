@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ctx' at line 3\n2. Pointer 'parent' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic h2o_configurator_context_t *create_context(h2o_configurator_context_t *parent, int is_custom_handler)\n{\n    h2o_configurator_context_t *ctx = h2o_mem_alloc(sizeof(*ctx));\n    if (parent == NULL) {\n        *ctx = (h2o_configurator_context_t){NULL};\n        return ctx;\n    }\n    *ctx = *parent;\n    if (ctx->env != NULL)\n        h2o_mem_addref_shared(ctx->env);\n    ctx->parent = parent;\n    return ctx;\n}\n\n\n// Source: configurator.c\n// Lines 48-60\n",
+  "ANSWER": "MUST"
+}

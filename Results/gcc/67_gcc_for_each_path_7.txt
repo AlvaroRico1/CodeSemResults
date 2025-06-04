@@ -1,0 +1,1 @@
+just_multi_suffix,gcc/gcc/gcc.c,12,multi_dir,gcc/gcc/gcc.c,8,2

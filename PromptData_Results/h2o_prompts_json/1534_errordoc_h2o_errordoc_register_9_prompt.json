@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'src' at line 10\n2. Pointer 'errdocs' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid h2o_errordoc_register(h2o_pathconf_t *pathconf, h2o_errordoc_t *errdocs, size_t cnt)\n{\n    struct st_errordoc_filter_t *self = (void *)h2o_create_filter(pathconf, sizeof(*self));\n    size_t i;\n\n    self->super.on_setup_ostream = on_filter_setup_ostream;\n    h2o_vector_reserve(NULL, &self->errordocs, cnt);\n    self->errordocs.size = cnt;\n    for (i = 0; i != cnt; ++i) {\n        const h2o_errordoc_t *src = errdocs + i;\n        h2o_errordoc_t *dst = self->errordocs.entries + i;\n        dst->status = src->status;\n        dst->url = h2o_strdup(NULL, src->url.base, src->url.len);\n    }\n\n\n// Source: errordoc.c\n// Lines 131-144\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,213 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tls' at line 1
+2. Pointer 'cs' at line 181
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptls_iovec_t message,
+                               ptls_handshake_properties_t *properties)
+{
+#define EMIT_SERVER_HELLO(sched, fill_rand, extensions)                                                                            \
+    ptls_push_message(emitter, (sched), PTLS_HANDSHAKE_TYPE_SERVER_HELLO, {                                                        \
+        ptls_buffer_push16(emitter->buf, 0x0303 /* legacy version */);                                                             \
+        if ((ret = ptls_buffer_reserve(emitter->buf, PTLS_HELLO_RANDOM_SIZE)) != 0)                                                \
+            goto Exit;                                                                                                             \
+        do {                                                                                                                       \
+            fill_rand                                                                                                              \
+        } while (0);                                                                                                               \
+        emitter->buf->off += PTLS_HELLO_RANDOM_SIZE;                                                                               \
+        ptls_buffer_push_block(emitter->buf, 1,                                                                                    \
+                               { ptls_buffer_pushv(emitter->buf, ch->legacy_session_id.base, ch->legacy_session_id.len); });       \
+        ptls_buffer_push16(emitter->buf, tls->cipher_suite->id);                                                                   \
+        ptls_buffer_push(emitter->buf, 0);                                                                                         \
+        ptls_buffer_push_block(emitter->buf, 2, {                                                                                  \
+            buffer_push_extension(emitter->buf, PTLS_EXTENSION_TYPE_SUPPORTED_VERSIONS,                                            \
+                                  { ptls_buffer_push16(emitter->buf, ch->selected_version); });                                    \
+            do {                                                                                                                   \
+                extensions                                                                                                         \
+            } while (0);                                                                                                           \
+        });                                                                                                                        \
+    });
+
+#define EMIT_HELLO_RETRY_REQUEST(sched, negotiated_group, additional_extensions)                                                   \
+    EMIT_SERVER_HELLO((sched), { memcpy(emitter->buf->base + emitter->buf->off, hello_retry_random, PTLS_HELLO_RANDOM_SIZE); },    \
+                      {                                                                                                            \
+                          ptls_key_exchange_algorithm_t *_negotiated_group = (negotiated_group);                                   \
+                          if (_negotiated_group != NULL) {                                                                         \
+                              buffer_push_extension(emitter->buf, PTLS_EXTENSION_TYPE_KEY_SHARE,                                   \
+                                                    { ptls_buffer_push16(emitter->buf, _negotiated_group->id); });                 \
+                          }                                                                                                        \
+                          do {                                                                                                     \
+                              additional_extensions                                                                                \
+                          } while (0);                                                                                             \
+                      })
+    struct st_ptls_client_hello_t *ch;
+    struct {
+        ptls_key_exchange_algorithm_t *algorithm;
+        ptls_iovec_t peer_key;
+    } key_share = {NULL};
+    enum { HANDSHAKE_MODE_FULL, HANDSHAKE_MODE_PSK, HANDSHAKE_MODE_PSK_DHE } mode;
+    size_t psk_index = SIZE_MAX;
+    ptls_iovec_t pubkey = {0}, ecdh_secret = {0};
+    int accept_early_data = 0, is_second_flight = tls->state == PTLS_STATE_SERVER_EXPECT_SECOND_CLIENT_HELLO, ret;
+
+    if ((ch = malloc(sizeof(*ch))) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+
+    *ch = (struct st_ptls_client_hello_t){0,      NULL,   {NULL},     {NULL}, 0,     {NULL},   {NULL}, {NULL}, {{0}},
+                                          {NULL}, {NULL}, {{{NULL}}}, {{0}},  {{0}}, {{NULL}}, {NULL}, {{0}},  {{UINT16_MAX}}};
+
+    /* decode ClientHello */
+    if ((ret = decode_client_hello(tls, ch, message.base + PTLS_HANDSHAKE_HEADER_SIZE, message.base + message.len, properties)) !=
+        0)
+        goto Exit;
+
+    /* bail out if CH cannot be handled as TLS 1.3, providing the application the raw CH and SNI, to help them fallback */
+    if (!is_supported_version(ch->selected_version)) {
+        if (!is_second_flight && tls->ctx->on_client_hello != NULL) {
+            ptls_on_client_hello_parameters_t params = {
+                .server_name = ch->server_name,
+                .raw_message = message,
+                .negotiated_protocols = {ch->alpn.list, ch->alpn.count},
+                .incompatible_version = 1,
+            };
+            if ((ret = tls->ctx->on_client_hello->cb(tls->ctx->on_client_hello, tls, &params)) != 0)
+                goto Exit;
+        }
+        ret = PTLS_ALERT_PROTOCOL_VERSION;
+        goto Exit;
+    }
+
+    /* Check TLS 1.3-specific constraints. Hereafter, we might exit without calling on_client_hello. That's fine because this CH is
+     * ought to be rejected. */
+    if (ch->legacy_version <= 0x0300) {
+        /* RFC 8446 Appendix D.5: any endpoint receiving a Hello message with legacy_version set to 0x0300 MUST abort the handshake
+         * with a "protocol_version" alert. */
+        ret = PTLS_ALERT_PROTOCOL_VERSION;
+        goto Exit;
+    }
+    if (!(ch->compression_methods.count == 1 && ch->compression_methods.ids[0] == 0)) {
+        ret = PTLS_ALERT_ILLEGAL_PARAMETER;
+        goto Exit;
+    }
+    /* esni */
+    if (ch->esni.cipher != NULL) {
+        if (ch->key_shares.base == NULL) {
+            ret = PTLS_ALERT_ILLEGAL_PARAMETER;
+            goto Exit;
+        }
+    }
+    /* pre-shared key */
+    if (ch->psk.hash_end != NULL) {
+        /* PSK must be the last extension */
+        if (!ch->psk.is_last_extension) {
+            ret = PTLS_ALERT_ILLEGAL_PARAMETER;
+            goto Exit;
+        }
+    } else {
+        if (ch->psk.early_data_indication) {
+            ret = PTLS_ALERT_ILLEGAL_PARAMETER;
+            goto Exit;
+        }
+    }
+
+    if (tls->ctx->require_dhe_on_psk)
+        ch->psk.ke_modes &= ~(1u << PTLS_PSK_KE_MODE_PSK);
+
+    /* handle client_random, legacy_session_id, SNI, ESNI */
+    if (!is_second_flight) {
+        memcpy(tls->client_random, ch->random_bytes, sizeof(tls->client_random));
+        log_client_random(tls);
+        if (ch->legacy_session_id.len != 0)
+            tls->send_change_cipher_spec = 1;
+        ptls_iovec_t server_name = {NULL};
+        int is_esni = 0;
+        if (ch->esni.cipher != NULL && tls->ctx->esni != NULL) {
+            if ((ret = client_hello_decrypt_esni(tls->ctx, &server_name, &tls->esni, ch)) != 0)
+                goto Exit;
+            if (tls->ctx->update_esni_key != NULL) {
+                if ((ret = tls->ctx->update_esni_key->cb(tls->ctx->update_esni_key, tls, tls->esni->secret, ch->esni.cipher->hash,
+                                                         tls->esni->esni_contents_hash)) != 0)
+                    goto Exit;
+            }
+            is_esni = 1;
+        } else if (ch->server_name.base != NULL) {
+            server_name = ch->server_name;
+        }
+        if (tls->ctx->on_client_hello != NULL) {
+            ptls_on_client_hello_parameters_t params = {server_name,
+                                                        message,
+                                                        {ch->alpn.list, ch->alpn.count},
+                                                        {ch->signature_algorithms.list, ch->signature_algorithms.count},
+                                                        {ch->cert_compression_algos.list, ch->cert_compression_algos.count},
+                                                        {ch->client_ciphers.list, ch->client_ciphers.count},
+                                                        {ch->server_certificate_types.list, ch->server_certificate_types.count},
+                                                        is_esni};
+            ret = tls->ctx->on_client_hello->cb(tls->ctx->on_client_hello, tls, &params);
+        } else {
+            ret = 0;
+        }
+
+        if (is_esni)
+            free(server_name.base);
+        if (ret != 0)
+            goto Exit;
+
+        if (!certificate_type_exists(ch->server_certificate_types.list, ch->server_certificate_types.count,
+                                     tls->ctx->use_raw_public_keys ? PTLS_CERTIFICATE_TYPE_RAW_PUBLIC_KEY
+                                                                   : PTLS_CERTIFICATE_TYPE_X509)) {
+            ret = PTLS_ALERT_UNSUPPORTED_CERTIFICATE;
+            goto Exit;
+        }
+    } else {
+        if (ch->psk.early_data_indication) {
+            ret = PTLS_ALERT_DECODE_ERROR;
+            goto Exit;
+        }
+        /* the following check is necessary so that we would be able to track the connection in SSLKEYLOGFILE, even though it
+         * might not be for the safety of the protocol */
+        if (!ptls_mem_equal(tls->client_random, ch->random_bytes, sizeof(tls->client_random))) {
+            ret = PTLS_ALERT_HANDSHAKE_FAILURE;
+            goto Exit;
+        }
+        /* We compare SNI only when the value is saved by the on_client_hello callback. This should be OK because we are
+         * ignoring the value unless the callback saves the server-name. */
+        if (tls->server_name != NULL) {
+            size_t l = strlen(tls->server_name);
+            if (!(ch->server_name.len == l && memcmp(ch->server_name.base, tls->server_name, l) == 0)) {
+                ret = PTLS_ALERT_HANDSHAKE_FAILURE;
+                goto Exit;
+            }
+        }
+    }
+
+    { /* select (or check) cipher-suite, create key_schedule */
+        ptls_cipher_suite_t *cs;
+        if ((ret = select_cipher(&cs, tls->ctx->cipher_suites, ch->cipher_suites.base,
+                                 ch->cipher_suites.base + ch->cipher_suites.len, tls->ctx->server_cipher_preference)) != 0)
+            goto Exit;
+        if (!is_second_flight) {
+            tls->cipher_suite = cs;
+            tls->key_schedule = key_schedule_new(cs, NULL, tls->ctx->hkdf_label_prefix__obsolete);
+        } else {
+            if (tls->cipher_suite != cs) {
+                ret = PTLS_ALERT_HANDSHAKE_FAILURE;
+                goto Exit;
+            }
+        }
+    }
+
+
+// Source: picotls.c
+// Lines 3650-3843
+
+
+[ANSWER]
+MUST

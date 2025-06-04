@@ -1,0 +1,1 @@
+type_b,linux/drivers/acpi/sleep.c,4,type_a,linux/drivers/acpi/sleep.c,4,2

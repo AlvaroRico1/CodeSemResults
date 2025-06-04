@@ -1,0 +1,1 @@
+ntlm,libgit2/deps/ntlmclient/ntlm.c,2,reserved,libgit2/deps/ntlmclient/ntlm.c,67,2

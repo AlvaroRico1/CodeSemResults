@@ -1,0 +1,17 @@
+bool and_conditions(Item **e1, Item *e2) {
+  assert(!(*e1) || (*e1)->fixed);
+  assert(!e2 || e2->fixed);
+  if (*e1) {
+    if (!e2) return false;
+    Item *res = new Item_cond_and(*e1, e2);
+    if (unlikely(!res)) return true;
+
+    *e1 = res;
+    res->quick_fix_field();
+    res->update_used_tables();
+
+  } else
+
+
+// Source: sql_select.cc
+// Lines 2590-2602

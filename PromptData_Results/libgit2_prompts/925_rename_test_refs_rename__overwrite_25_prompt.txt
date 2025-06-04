@@ -1,0 +1,51 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'refdb' at line 5
+2. Pointer 'ref_one' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_refs_rename__overwrite(void)
+{
+	/* can not overwrite name of existing reference */
+	git_reference *ref, *ref_one, *ref_one_new, *ref_two;
+	git_refdb *refdb;
+	git_oid id;
+
+	cl_git_pass(git_reference_lookup(&ref, g_repo, ref_master_name));
+	cl_assert(git_reference_type(ref) & GIT_REFERENCE_DIRECT);
+
+	git_oid_cpy(&id, git_reference_target(ref));
+
+	/* Create loose references */
+	cl_git_pass(git_reference_create(&ref_one, g_repo, ref_one_name, &id, 0, NULL));
+	cl_git_pass(git_reference_create(&ref_two, g_repo, ref_two_name, &id, 0, NULL));
+
+	/* Pack everything */
+	cl_git_pass(git_repository_refdb(&refdb, g_repo));
+	cl_git_pass(git_refdb_compress(refdb));
+
+	/* Attempt to create illegal reference */
+	cl_git_fail(git_reference_create(&ref_one_new, g_repo, ref_one_name_new, &id, 0, NULL));
+
+	/* Illegal reference couldn't be created so this is supposed to fail */
+	cl_git_fail(git_reference_lookup(&ref_one_new, g_repo, ref_one_name_new));
+
+	git_reference_free(ref);
+	git_reference_free(ref_one);
+	git_reference_free(ref_one_new);
+	git_reference_free(ref_two);
+	git_refdb_free(refdb);
+}
+
+
+// Source: rename.c
+// Lines 259-290
+
+
+[ANSWER]
+MAY

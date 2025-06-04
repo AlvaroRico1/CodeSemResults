@@ -1,0 +1,92 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'does_not_exist' at line 36
+2. Pointer 'fileline_fn' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+fileline_initialize (struct backtrace_state *state,
+		     backtrace_error_callback error_callback, void *data)
+{
+  int failed;
+  fileline fileline_fn;
+  int pass;
+  int called_error_callback;
+  int descriptor;
+  const char *filename;
+  char buf[64];
+
+  if (!state->threaded)
+    failed = state->fileline_initialization_failed;
+  else
+    failed = backtrace_atomic_load_int (&state->fileline_initialization_failed);
+
+  if (failed)
+    {
+      error_callback (data, "failed to read executable information", -1);
+      return 0;
+    }
+
+  if (!state->threaded)
+    fileline_fn = state->fileline_fn;
+  else
+    fileline_fn = backtrace_atomic_load_pointer (&state->fileline_fn);
+  if (fileline_fn != NULL)
+    return 1;
+
+  /* We have not initialized the information.  Do it now.  */
+
+  descriptor = -1;
+  called_error_callback = 0;
+  for (pass = 0; pass < 5; ++pass)
+    {
+      int does_not_exist;
+
+      switch (pass)
+	{
+	case 0:
+	  filename = state->filename;
+	  break;
+	case 1:
+	  filename = getexecname ();
+	  break;
+	case 2:
+	  filename = "/proc/self/exe";
+	  break;
+	case 3:
+	  filename = "/proc/curproc/file";
+	  break;
+	case 4:
+	  snprintf (buf, sizeof (buf), "/proc/%ld/object/a.out",
+		    (long) getpid ());
+	  filename = buf;
+	  break;
+	default:
+	  abort ();
+	}
+
+      if (filename == NULL)
+	continue;
+
+      descriptor = backtrace_open (filename, error_callback, data,
+				   &does_not_exist);
+      if (descriptor < 0 && !does_not_exist)
+	{
+	  called_error_callback = 1;
+	  break;
+	}
+      if (descriptor >= 0)
+	break;
+    }
+
+
+// Source: fileline.c
+// Lines 53-125
+
+
+[ANSWER]
+MAY

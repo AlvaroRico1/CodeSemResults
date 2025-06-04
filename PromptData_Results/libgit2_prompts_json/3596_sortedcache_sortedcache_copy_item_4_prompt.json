@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'sc' at line 3\n2. Pointer 'payload' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int sortedcache_copy_item(void *payload, void *tgt_item, void *src_item)\n{\n\tgit_sortedcache *sc = payload;\n\t/* path will already have been copied by upsert */\n\tmemcpy(tgt_item, src_item, sc->item_path_offset);\n\treturn 0;\n}\n\n\n// Source: sortedcache.c\n// Lines 107-113\n",
+  "ANSWER": "MUST"
+}

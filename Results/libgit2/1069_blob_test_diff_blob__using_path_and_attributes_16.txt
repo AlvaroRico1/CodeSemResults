@@ -1,0 +1,1 @@
+bin_len,libgit2/tests/libgit2/diff/blob.c,9,p,libgit2/tests/libgit2/diff/blob.c,11,0

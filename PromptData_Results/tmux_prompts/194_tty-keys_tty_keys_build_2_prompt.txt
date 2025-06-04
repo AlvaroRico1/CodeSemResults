@@ -1,0 +1,73 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 's' at line 7
+2. Pointer 'tdkr' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+tty_keys_build(struct tty *tty)
+{
+	const struct tty_default_key_raw	*tdkr;
+	const struct tty_default_key_xterm	*tdkx;
+	const struct tty_default_key_code	*tdkc;
+	u_int					 i, j;
+	const char				*s;
+	struct options_entry			*o;
+	struct options_array_item		*a;
+	union options_value			*ov;
+	char					 copy[16];
+	key_code				 key;
+
+	if (tty->key_tree != NULL)
+		tty_keys_free(tty);
+	tty->key_tree = NULL;
+
+	for (i = 0; i < nitems(tty_default_xterm_keys); i++) {
+		tdkx = &tty_default_xterm_keys[i];
+		for (j = 2; j < nitems(tty_default_xterm_modifiers); j++) {
+			strlcpy(copy, tdkx->template, sizeof copy);
+			copy[strcspn(copy, "_")] = '0' + j;
+
+			key = tdkx->key|tty_default_xterm_modifiers[j];
+			tty_keys_add(tty, copy, key);
+		}
+	}
+	for (i = 0; i < nitems(tty_default_raw_keys); i++) {
+		tdkr = &tty_default_raw_keys[i];
+
+		s = tdkr->string;
+		if (*s != '\0')
+			tty_keys_add(tty, s, tdkr->key);
+	}
+	for (i = 0; i < nitems(tty_default_code_keys); i++) {
+		tdkc = &tty_default_code_keys[i];
+
+		s = tty_term_string(tty->term, tdkc->code);
+		if (*s != '\0')
+			tty_keys_add(tty, s, tdkc->key);
+
+	}
+
+	o = options_get(global_options, "user-keys");
+	if (o != NULL) {
+		a = options_array_first(o);
+		while (a != NULL) {
+			i = options_array_item_index(a);
+			ov = options_array_item_value(a);
+			tty_keys_add(tty, ov->string, KEYC_USER + i);
+			a = options_array_next(a);
+		}
+	}
+}
+
+
+// Source: tty-keys.c
+// Lines 487-540
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,1 @@
+previous_table_ref,mysql/sql/sql_parse.cc,6,ptr,mysql/sql/sql_parse.cc,42,1

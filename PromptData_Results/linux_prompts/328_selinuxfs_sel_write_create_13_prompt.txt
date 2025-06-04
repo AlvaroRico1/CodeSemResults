@@ -1,0 +1,122 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tclass' at line 8
+2. Pointer 'tsid' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static ssize_t sel_write_create(struct file *file, char *buf, size_t size)
+{
+	struct selinux_fs_info *fsi = file_inode(file)->i_sb->s_fs_info;
+	struct selinux_state *state = fsi->state;
+	char *scon = NULL, *tcon = NULL;
+	char *namebuf = NULL, *objname = NULL;
+	u32 ssid, tsid, newsid;
+	u16 tclass;
+	ssize_t length;
+	char *newcon = NULL;
+	u32 len;
+	int nargs;
+
+	length = avc_has_perm(&selinux_state,
+			      current_sid(), SECINITSID_SECURITY,
+			      SECCLASS_SECURITY, SECURITY__COMPUTE_CREATE,
+			      NULL);
+	if (length)
+		goto out;
+
+	length = -ENOMEM;
+	scon = kzalloc(size + 1, GFP_KERNEL);
+	if (!scon)
+		goto out;
+
+	length = -ENOMEM;
+	tcon = kzalloc(size + 1, GFP_KERNEL);
+	if (!tcon)
+		goto out;
+
+	length = -ENOMEM;
+	namebuf = kzalloc(size + 1, GFP_KERNEL);
+	if (!namebuf)
+		goto out;
+
+	length = -EINVAL;
+	nargs = sscanf(buf, "%s %s %hu %s", scon, tcon, &tclass, namebuf);
+	if (nargs < 3 || nargs > 4)
+		goto out;
+	if (nargs == 4) {
+		/*
+		 * If and when the name of new object to be queried contains
+		 * either whitespace or multibyte characters, they shall be
+		 * encoded based on the percentage-encoding rule.
+		 * If not encoded, the sscanf logic picks up only left-half
+		 * of the supplied name; splitted by a whitespace unexpectedly.
+		 */
+		char   *r, *w;
+		int     c1, c2;
+
+		r = w = namebuf;
+		do {
+			c1 = *r++;
+			if (c1 == '+')
+				c1 = ' ';
+			else if (c1 == '%') {
+				c1 = hex_to_bin(*r++);
+				if (c1 < 0)
+					goto out;
+				c2 = hex_to_bin(*r++);
+				if (c2 < 0)
+					goto out;
+				c1 = (c1 << 4) | c2;
+			}
+			*w++ = c1;
+		} while (c1 != '\0');
+
+		objname = namebuf;
+	}
+
+	length = security_context_str_to_sid(state, scon, &ssid, GFP_KERNEL);
+	if (length)
+		goto out;
+
+	length = security_context_str_to_sid(state, tcon, &tsid, GFP_KERNEL);
+	if (length)
+		goto out;
+
+	length = security_transition_sid_user(state, ssid, tsid, tclass,
+					      objname, &newsid);
+	if (length)
+		goto out;
+
+	length = security_sid_to_context(state, newsid, &newcon, &len);
+	if (length)
+		goto out;
+
+	length = -ERANGE;
+	if (len > SIMPLE_TRANSACTION_LIMIT) {
+		pr_err("SELinux: %s:  context size (%u) exceeds "
+			"payload max\n", __func__, len);
+		goto out;
+	}
+
+	memcpy(buf, newcon, len);
+	length = len;
+out:
+	kfree(newcon);
+	kfree(namebuf);
+	kfree(tcon);
+	kfree(scon);
+	return length;
+}
+
+
+// Source: selinuxfs.c
+// Lines 863-965
+
+
+[ANSWER]
+MAY

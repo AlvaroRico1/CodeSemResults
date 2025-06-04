@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'testp' at line 6\n2. Pointer 'test' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid memrevifle(void *ptr, size_t len) {\n    unsigned char   *p = (unsigned char *)ptr,\n                    *e = (unsigned char *)p+len-1,\n                    aux;\n    int test = 1;\n    unsigned char *testp = (unsigned char*) &test;\n\n    if (testp[0] == 0) return; /* Big endian, nothing to do. */\n    len /= 2;\n    while(len--) {\n        aux = *p;\n        *p = *e;\n        *e = aux;\n        p++;\n        e--;\n    }\n}\n\n\n// Source: lua_cmsgpack.c\n// Lines 69-85\n",
+  "ANSWER": "MUST"
+}

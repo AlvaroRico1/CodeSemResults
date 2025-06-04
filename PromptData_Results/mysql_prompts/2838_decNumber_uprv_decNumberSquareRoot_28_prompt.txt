@@ -1,0 +1,348 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'a' at line 20
+2. Pointer 'bufa' at line 21
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+U_CAPI decNumber * U_EXPORT2 uprv_decNumberSquareRoot(decNumber *res, const decNumber *rhs,
+                                decContext *set) {
+  decContext workset, approxset;   /* work contexts  */
+  decNumber dzero;                 /* used for constant zero  */
+  Int  maxp;                       /* largest working precision  */
+  Int  workp;                      /* working precision  */
+  Int  residue=0;                  /* rounding residue  */
+  uInt status=0, ignore=0;         /* status accumulators  */
+  uInt rstatus;                    /* ..  */
+  Int  exp;                        /* working exponent  */
+  Int  ideal;                      /* ideal (preferred) exponent  */
+  Int  needbytes;                  /* work  */
+  Int  dropped;                    /* ..  */
+
+  #if DECSUBSET
+  decNumber *allocrhs=NULL;        /* non-NULL if rounded rhs allocated  */
+  #endif
+  /* buffer for f [needs +1 in case DECBUFFER 0]  */
+  decNumber buff[D2N(DECBUFFER+1)];
+  /* buffer for a [needs +2 to match likely maxp]  */
+  decNumber bufa[D2N(DECBUFFER+2)];
+  /* buffer for temporary, b [must be same size as a]  */
+  decNumber bufb[D2N(DECBUFFER+2)];
+  decNumber *allocbuff=NULL;       /* -> allocated buff, iff allocated  */
+  decNumber *allocbufa=NULL;       /* -> allocated bufa, iff allocated  */
+  decNumber *allocbufb=NULL;       /* -> allocated bufb, iff allocated  */
+  decNumber *f=buff;               /* reduced fraction  */
+  decNumber *a=bufa;               /* approximation to result  */
+  decNumber *b=bufb;               /* intermediate result  */
+  /* buffer for temporary variable, up to 3 digits  */
+  decNumber buft[D2N(3)];
+  decNumber *t=buft;               /* up-to-3-digit constant or work  */
+
+  #if DECCHECK
+  if (decCheckOperands(res, DECUNUSED, rhs, set)) return res;
+  #endif
+
+  do {                             /* protect allocated storage  */
+    #if DECSUBSET
+    if (!set->extended) {
+      /* reduce operand and set lostDigits status, as needed  */
+      if (rhs->digits>set->digits) {
+        allocrhs=decRoundOperand(rhs, set, &status);
+        if (allocrhs==NULL) break;
+        /* [Note: 'f' allocation below could reuse this buffer if  */
+        /* used, but as this is rare they are kept separate for clarity.]  */
+        rhs=allocrhs;
+        }
+      }
+    #endif
+    /* [following code does not require input rounding]  */
+
+    /* handle infinities and NaNs  */
+    if (SPECIALARG) {
+      if (decNumberIsInfinite(rhs)) {         /* an infinity  */
+        if (decNumberIsNegative(rhs)) status|=DEC_Invalid_operation;
+         else uprv_decNumberCopy(res, rhs);        /* +Infinity  */
+        }
+       else decNaNs(res, rhs, NULL, set, &status); /* a NaN  */
+      break;
+      }
+
+    /* calculate the ideal (preferred) exponent [floor(exp/2)]  */
+    /* [It would be nicer to write: ideal=rhs->exponent>>1, but this  */
+    /* generates a compiler warning.  Generated code is the same.]  */
+    ideal=(rhs->exponent&~1)/2;         /* target  */
+
+    /* handle zeros  */
+    if (ISZERO(rhs)) {
+      uprv_decNumberCopy(res, rhs);          /* could be 0 or -0  */
+      res->exponent=ideal;              /* use the ideal [safe]  */
+      /* use decFinish to clamp any out-of-range exponent, etc.  */
+      decFinish(res, set, &residue, &status);
+      break;
+      }
+
+    /* any other -x is an oops  */
+    if (decNumberIsNegative(rhs)) {
+      status|=DEC_Invalid_operation;
+      break;
+      }
+
+    /* space is needed for three working variables  */
+    /*   f -- the same precision as the RHS, reduced to 0.01->0.99...  */
+    /*   a -- Hull's approximation -- precision, when assigned, is  */
+    /*        currentprecision+1 or the input argument precision,  */
+    /*        whichever is larger (+2 for use as temporary)  */
+    /*   b -- intermediate temporary result (same size as a)  */
+    /* if any is too long for local storage, then allocate  */
+    workp=MAXI(set->digits+1, rhs->digits);  /* actual rounding precision  */
+    workp=MAXI(workp, 7);                    /* at least 7 for low cases  */
+    maxp=workp+2;                            /* largest working precision  */
+
+    needbytes=sizeof(decNumber)+(D2U(rhs->digits)-1)*sizeof(Unit);
+    if (needbytes>(Int)sizeof(buff)) {
+      allocbuff=(decNumber *)malloc(needbytes);
+      if (allocbuff==NULL) {  /* hopeless -- abandon  */
+        status|=DEC_Insufficient_storage;
+        break;}
+      f=allocbuff;            /* use the allocated space  */
+      }
+    /* a and b both need to be able to hold a maxp-length number  */
+    needbytes=sizeof(decNumber)+(D2U(maxp)-1)*sizeof(Unit);
+    if (needbytes>(Int)sizeof(bufa)) {            /* [same applies to b]  */
+      allocbufa=(decNumber *)malloc(needbytes);
+      allocbufb=(decNumber *)malloc(needbytes);
+      if (allocbufa==NULL || allocbufb==NULL) {   /* hopeless  */
+        status|=DEC_Insufficient_storage;
+        break;}
+      a=allocbufa;            /* use the allocated spaces  */
+      b=allocbufb;            /* ..  */
+      }
+
+    /* copy rhs -> f, save exponent, and reduce so 0.1 <= f < 1  */
+    uprv_decNumberCopy(f, rhs);
+    exp=f->exponent+f->digits;               /* adjusted to Hull rules  */
+    f->exponent=-(f->digits);                /* to range  */
+
+    /* set up working context  */
+    uprv_decContextDefault(&workset, DEC_INIT_DECIMAL64);
+    workset.emax=DEC_MAX_EMAX;
+    workset.emin=DEC_MIN_EMIN;
+
+    /* [Until further notice, no error is possible and status bits  */
+    /* (Rounded, etc.) should be ignored, not accumulated.]  */
+
+    /* Calculate initial approximation, and allow for odd exponent  */
+    workset.digits=workp;                    /* p for initial calculation  */
+    t->bits=0; t->digits=3;
+    a->bits=0; a->digits=3;
+    if ((exp & 1)==0) {                      /* even exponent  */
+      /* Set t=0.259, a=0.819  */
+      t->exponent=-3;
+      a->exponent=-3;
+      #if DECDPUN>=3
+        t->lsu[0]=259;
+        a->lsu[0]=819;
+      #elif DECDPUN==2
+        t->lsu[0]=59; t->lsu[1]=2;
+        a->lsu[0]=19; a->lsu[1]=8;
+      #else
+        t->lsu[0]=9; t->lsu[1]=5; t->lsu[2]=2;
+        a->lsu[0]=9; a->lsu[1]=1; a->lsu[2]=8;
+      #endif
+      }
+     else {                                  /* odd exponent  */
+      /* Set t=0.0819, a=2.59  */
+      f->exponent--;                         /* f=f/10  */
+      exp++;                                 /* e=e+1  */
+      t->exponent=-4;
+      a->exponent=-2;
+      #if DECDPUN>=3
+        t->lsu[0]=819;
+        a->lsu[0]=259;
+      #elif DECDPUN==2
+        t->lsu[0]=19; t->lsu[1]=8;
+        a->lsu[0]=59; a->lsu[1]=2;
+      #else
+        t->lsu[0]=9; t->lsu[1]=1; t->lsu[2]=8;
+        a->lsu[0]=9; a->lsu[1]=5; a->lsu[2]=2;
+      #endif
+      }
+
+    decMultiplyOp(a, a, f, &workset, &ignore);    /* a=a*f  */
+    decAddOp(a, a, t, &workset, 0, &ignore);      /* ..+t  */
+    /* [a is now the initial approximation for sqrt(f), calculated with  */
+    /* currentprecision, which is also a's precision.]  */
+
+    /* the main calculation loop  */
+    uprv_decNumberZero(&dzero);                   /* make 0  */
+    uprv_decNumberZero(t);                        /* set t = 0.5  */
+    t->lsu[0]=5;                             /* ..  */
+    t->exponent=-1;                          /* ..  */
+    workset.digits=3;                        /* initial p  */
+    for (; workset.digits<maxp;) {
+      /* set p to min(2*p - 2, maxp)  [hence 3; or: 4, 6, 10, ... , maxp]  */
+      workset.digits=MINI(workset.digits*2-2, maxp);
+      /* a = 0.5 * (a + f/a)  */
+      /* [calculated at p then rounded to currentprecision]  */
+      decDivideOp(b, f, a, &workset, DIVIDE, &ignore); /* b=f/a  */
+      decAddOp(b, b, a, &workset, 0, &ignore);         /* b=b+a  */
+      decMultiplyOp(a, b, t, &workset, &ignore);       /* a=b*0.5  */
+      } /* loop  */
+
+    /* Here, 0.1 <= a < 1 [Hull], and a has maxp digits  */
+    /* now reduce to length, etc.; this needs to be done with a  */
+    /* having the correct exponent so as to handle subnormals  */
+    /* correctly  */
+    approxset=*set;                          /* get emin, emax, etc.  */
+    approxset.round=DEC_ROUND_HALF_EVEN;
+    a->exponent+=exp/2;                      /* set correct exponent  */
+    rstatus=0;                               /* clear status  */
+    residue=0;                               /* .. and accumulator  */
+    decCopyFit(a, a, &approxset, &residue, &rstatus);  /* reduce (if needed)  */
+    decFinish(a, &approxset, &residue, &rstatus);      /* clean and finalize  */
+
+    /* Overflow was possible if the input exponent was out-of-range,  */
+    /* in which case quit  */
+    if (rstatus&DEC_Overflow) {
+      status=rstatus;                        /* use the status as-is  */
+      uprv_decNumberCopy(res, a);                 /* copy to result  */
+      break;
+      }
+
+    /* Preserve status except Inexact/Rounded  */
+    status|=(rstatus & ~(DEC_Rounded|DEC_Inexact));
+
+    /* Carry out the Hull correction  */
+    a->exponent-=exp/2;                      /* back to 0.1->1  */
+
+    /* a is now at final precision and within 1 ulp of the properly  */
+    /* rounded square root of f; to ensure proper rounding, compare  */
+    /* squares of (a - l/2 ulp) and (a + l/2 ulp) with f.  */
+    /* Here workset.digits=maxp and t=0.5, and a->digits determines  */
+    /* the ulp  */
+    workset.digits--;                             /* maxp-1 is OK now  */
+    t->exponent=-a->digits-1;                     /* make 0.5 ulp  */
+    decAddOp(b, a, t, &workset, DECNEG, &ignore); /* b = a - 0.5 ulp  */
+    workset.round=DEC_ROUND_UP;
+    decMultiplyOp(b, b, b, &workset, &ignore);    /* b = mulru(b, b)  */
+    decCompareOp(b, f, b, &workset, COMPARE, &ignore); /* b ? f, reversed  */
+    if (decNumberIsNegative(b)) {                 /* f < b [i.e., b > f]  */
+      /* this is the more common adjustment, though both are rare  */
+      t->exponent++;                              /* make 1.0 ulp  */
+      t->lsu[0]=1;                                /* ..  */
+      decAddOp(a, a, t, &workset, DECNEG, &ignore); /* a = a - 1 ulp  */
+      /* assign to approx [round to length]  */
+      approxset.emin-=exp/2;                      /* adjust to match a  */
+      approxset.emax-=exp/2;
+      decAddOp(a, &dzero, a, &approxset, 0, &ignore);
+      }
+     else {
+      decAddOp(b, a, t, &workset, 0, &ignore);    /* b = a + 0.5 ulp  */
+      workset.round=DEC_ROUND_DOWN;
+      decMultiplyOp(b, b, b, &workset, &ignore);  /* b = mulrd(b, b)  */
+      decCompareOp(b, b, f, &workset, COMPARE, &ignore);   /* b ? f  */
+      if (decNumberIsNegative(b)) {               /* b < f  */
+        t->exponent++;                            /* make 1.0 ulp  */
+        t->lsu[0]=1;                              /* ..  */
+        decAddOp(a, a, t, &workset, 0, &ignore);  /* a = a + 1 ulp  */
+        /* assign to approx [round to length]  */
+        approxset.emin-=exp/2;                    /* adjust to match a  */
+        approxset.emax-=exp/2;
+        decAddOp(a, &dzero, a, &approxset, 0, &ignore);
+        }
+      }
+    /* [no errors are possible in the above, and rounding/inexact during  */
+    /* estimation are irrelevant, so status was not accumulated]  */
+
+    /* Here, 0.1 <= a < 1  (still), so adjust back  */
+    a->exponent+=exp/2;                      /* set correct exponent  */
+
+    /* count droppable zeros [after any subnormal rounding] by  */
+    /* trimming a copy  */
+    uprv_decNumberCopy(b, a);
+    decTrim(b, set, 1, 1, &dropped);         /* [drops trailing zeros]  */
+
+    /* Set Inexact and Rounded.  The answer can only be exact if  */
+    /* it is short enough so that squaring it could fit in workp  */
+    /* digits, so this is the only (relatively rare) condition that  */
+    /* a careful check is needed  */
+    if (b->digits*2-1 > workp) {             /* cannot fit  */
+      status|=DEC_Inexact|DEC_Rounded;
+      }
+     else {                                  /* could be exact/unrounded  */
+      uInt mstatus=0;                        /* local status  */
+      decMultiplyOp(b, b, b, &workset, &mstatus); /* try the multiply  */
+      if (mstatus&DEC_Overflow) {            /* result just won't fit  */
+        status|=DEC_Inexact|DEC_Rounded;
+        }
+       else {                                /* plausible  */
+        decCompareOp(t, b, rhs, &workset, COMPARE, &mstatus); /* b ? rhs  */
+        if (!ISZERO(t)) status|=DEC_Inexact|DEC_Rounded; /* not equal  */
+         else {                              /* is Exact  */
+          /* here, dropped is the count of trailing zeros in 'a'  */
+          /* use closest exponent to ideal...  */
+          Int todrop=ideal-a->exponent;      /* most that can be dropped  */
+          if (todrop<0) status|=DEC_Rounded; /* ideally would add 0s  */
+           else {                            /* unrounded  */
+            /* there are some to drop, but emax may not allow all  */
+            Int maxexp=set->emax-set->digits+1;
+            Int maxdrop=maxexp-a->exponent;
+            if (todrop>maxdrop && set->clamp) { /* apply clamping  */
+              todrop=maxdrop;
+              status|=DEC_Clamped;
+              }
+            if (dropped<todrop) {            /* clamp to those available  */
+              todrop=dropped;
+              status|=DEC_Clamped;
+              }
+            if (todrop>0) {                  /* have some to drop  */
+              decShiftToLeast(a->lsu, D2U(a->digits), todrop);
+              a->exponent+=todrop;           /* maintain numerical value  */
+              a->digits-=todrop;             /* new length  */
+              }
+            }
+          }
+        }
+      }
+
+    /* double-check Underflow, as perhaps the result could not have  */
+    /* been subnormal (initial argument too big), or it is now Exact  */
+    if (status&DEC_Underflow) {
+      Int ae=rhs->exponent+rhs->digits-1;    /* adjusted exponent  */
+      /* check if truly subnormal  */
+      #if DECEXTFLAG                         /* DEC_Subnormal too  */
+        if (ae>=set->emin*2) status&=~(DEC_Subnormal|DEC_Underflow);
+      #else
+        if (ae>=set->emin*2) status&=~DEC_Underflow;
+      #endif
+      /* check if truly inexact  */
+      if (!(status&DEC_Inexact)) status&=~DEC_Underflow;
+      }
+
+    uprv_decNumberCopy(res, a);                   /* a is now the result  */
+    } while(0);                              /* end protected  */
+
+  if (allocbuff!=NULL) free(allocbuff);      /* drop any storage used  */
+  if (allocbufa!=NULL) free(allocbufa);      /* ..  */
+  if (allocbufb!=NULL) free(allocbufb);      /* ..  */
+  #if DECSUBSET
+  if (allocrhs !=NULL) free(allocrhs);       /* ..  */
+  #endif
+  if (status!=0) decStatus(res, status, set);/* then report status  */
+  #if DECCHECK
+  decCheckInexact(res, set);
+  #endif
+  return res;
+  } /* decNumberSquareRoot  */
+
+
+// Source: decNumber.cpp
+// Lines 2833-3161
+
+
+[ANSWER]
+MUST

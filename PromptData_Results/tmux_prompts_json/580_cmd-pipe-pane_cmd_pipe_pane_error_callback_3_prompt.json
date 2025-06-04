@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'wp' at line 4\n2. Pointer 'data' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ncmd_pipe_pane_error_callback(__unused struct bufferevent *bufev,\n    __unused short what, void *data)\n{\n\tstruct window_pane\t*wp = data;\n\n\tlog_debug(\"%%%u pipe error\", wp->id);\n\n\tbufferevent_free(wp->pipe_event);\n\tclose(wp->pipe_fd);\n\twp->pipe_fd = -1;\n\n\tif (window_pane_destroy_ready(wp))\n\t\tserver_destroy_pane(wp, 1);\n}\n\n\n// Source: cmd-pipe-pane.c\n// Lines 211-224\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'value' at line 4\n2. Pointer 'row' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void fetch_result_double(MYSQL_BIND *param,\n                                MYSQL_FIELD *field MY_ATTRIBUTE((unused)),\n                                uchar **row) {\n  double value = float8get(*row);\n  doublestore(pointer_cast<uchar *>(param->buffer), value);\n  *row += 8;\n}\n\n\n// Source: libmysql.cc\n// Lines 3287-3293\n",
+  "ANSWER": "MUST-NOT"
+}

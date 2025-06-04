@@ -1,0 +1,109 @@
+bool handle_reload_request(THD *thd, unsigned long options, TABLE_LIST *tables,
+                           int *write_to_binlog) {
+  bool result = false;
+  select_errors = 0; /* Write if more errors */
+  int tmp_write_to_binlog = *write_to_binlog = 1;
+
+  assert(!thd || !thd->in_sub_stmt);
+
+  if (options & REFRESH_GRANT) {
+    THD *tmp_thd = nullptr;
+    /*
+      If handle_reload_request() is called from SIGHUP handler we have to
+      allocate temporary THD for execution of acl_reload()/grant_reload().
+    */
+    if (!thd && (thd = (tmp_thd = new THD))) {
+      thd->thread_stack = (char *)&tmp_thd;
+      thd->store_globals();
+    }
+
+    if (thd) {
+      bool reload_acl_failed = reload_acl_caches(thd, false);
+      bool reload_servers_failed = servers_reload(thd);
+      notify_flush_event(thd);
+      if (reload_acl_failed || reload_servers_failed) {
+        result = true;
+        /*
+          When an error is returned, my_message may have not been called and
+          the client will hang waiting for a response.
+        */
+        my_error(ER_UNKNOWN_ERROR, MYF(0));
+      }
+    }
+
+    reset_mqh(thd, (LEX_USER *)nullptr, true);
+    if (tmp_thd) {
+      delete tmp_thd;
+      thd = nullptr;
+    }
+  }
+
+  if (options & REFRESH_LOG) {
+    /*
+      Flush the normal query log, the update log, the binary log,
+      the slow query log, the relay log (if it exists) and the log
+      tables.
+    */
+
+    options |= REFRESH_BINARY_LOG;
+    options |= REFRESH_RELAY_LOG;
+    options |= REFRESH_SLOW_LOG;
+    options |= REFRESH_GENERAL_LOG;
+    options |= REFRESH_ENGINE_LOG;
+    options |= REFRESH_ERROR_LOG;
+  }
+
+  if (options & REFRESH_ERROR_LOG) {
+    if (reopen_error_log()) result = true;
+  }
+
+  if ((options & REFRESH_SLOW_LOG) && opt_slow_log &&
+      (log_output_options & LOG_FILE))
+    if (query_logger.reopen_log_file(QUERY_LOG_SLOW)) result = true;
+
+  if ((options & REFRESH_GENERAL_LOG) && opt_general_log &&
+      (log_output_options & LOG_FILE))
+    if (query_logger.reopen_log_file(QUERY_LOG_GENERAL)) result = true;
+
+  if (options & REFRESH_ENGINE_LOG) {
+    if (ha_flush_logs()) {
+      result = true;
+    }
+  }
+  if ((options & REFRESH_BINARY_LOG) || (options & REFRESH_RELAY_LOG)) {
+    /*
+      If handle_reload_request() is called from SIGHUP handler we have to
+      allocate temporary THD for execution of binlog/relay log rotation.
+     */
+    THD *tmp_thd = nullptr;
+    if (!thd && (thd = (tmp_thd = new THD))) {
+      thd->thread_stack = (char *)(&tmp_thd);
+      thd->store_globals();
+    }
+
+    if (options & REFRESH_BINARY_LOG) {
+      /*
+        Writing this command to the binlog may result in infinite loops
+        when doing mysqlbinlog|mysql, and anyway it does not really make
+        sense to log it automatically (would cause more trouble to users
+        than it would help them)
+       */
+      tmp_write_to_binlog = 0;
+      if (mysql_bin_log.is_open()) {
+        if (mysql_bin_log.rotate_and_purge(thd, true)) *write_to_binlog = -1;
+      }
+    }
+    if (options & REFRESH_RELAY_LOG) {
+      if (flush_relay_logs_cmd(thd)) *write_to_binlog = -1;
+    }
+    if (tmp_thd) {
+      delete tmp_thd;
+      /* Remember that we don't have a THD */
+      current_thd = nullptr;
+      thd = nullptr;
+    }
+  }
+
+
+// Source: sql_reload.cc
+// Lines 142-246

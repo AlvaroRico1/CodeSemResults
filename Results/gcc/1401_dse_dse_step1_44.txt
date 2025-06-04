@@ -1,0 +1,1 @@
+ptr,gcc/gcc/dse.c,19,ptr,gcc/gcc/dse.c,19,1

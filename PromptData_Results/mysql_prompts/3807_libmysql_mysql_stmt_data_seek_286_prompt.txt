@@ -1,0 +1,33 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tmp' at line 2
+2. Pointer 'stmt' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void STDCALL mysql_stmt_data_seek(MYSQL_STMT *stmt, uint64_t row) {
+  MYSQL_ROWS *tmp = stmt->result.data;
+  DBUG_TRACE;
+  DBUG_PRINT("enter", ("row id to seek: %ld", (long)row));
+
+  for (; tmp && row; --row, tmp = tmp->next)
+    ;
+  stmt->data_cursor = tmp;
+  if (!row && tmp) {
+    /*  Rewind the counter */
+    stmt->read_row_func = stmt_read_row_buffered;
+    stmt->state = MYSQL_STMT_EXECUTE_DONE;
+  }
+}
+
+
+// Source: libmysql.cc
+// Lines 4038-4051
+
+
+[ANSWER]
+MUST-NOT

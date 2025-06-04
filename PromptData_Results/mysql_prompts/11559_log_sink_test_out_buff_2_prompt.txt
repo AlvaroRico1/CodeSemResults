@@ -1,0 +1,242 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'out_writepos' at line 2
+2. Pointer 'out_buff' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+  char out_buff[LOG_BUFF_MAX];
+  char *out_writepos = out_buff;
+  size_t out_left = LOG_BUFF_MAX - 1,  // bytes left in output buffer
+      len;                             // length of current output particle
+  int out_fields = 0,                  // number of fields in output
+      wellknown_label;                 // index of label in wellknowns[]
+  enum loglevel level = ERROR_LEVEL;   // default severity
+  log_item_type t = LOG_ITEM_END;
+  log_item_type_mask out_types = 0;
+  log_item_iter *it;
+  log_item *li;
+
+  /*
+    If we have detected some sort of massive failure (disk full, out of
+    memory, etc.), we set the "failed" flag.  While this is set, any call
+    to run() will immediately return.  As a result of this, we may call
+    the error logger with information about this failure (AFTER first
+    setting the failed flag to prevent a potential endless loop!) in case
+    another log_sink is active that may show this alert.
+  */
+  if (failed) return LOG_SERVICE_NOT_AVAILABLE;
+
+  if ((it = log_bi->line_item_iter_acquire(ll)) == nullptr)
+    return LOG_SERVICE_MISC_ERROR; /* purecov: inspected */
+
+  li = log_bi->line_item_iter_first(it);
+
+  // Iterate until we're out of items, or out of space in the resulting row.
+  while ((li != nullptr) && (out_left > 0)) {
+    t = li->type;
+
+    // Sanity-check the item.
+    if (log_bi->item_inconsistent(li)) {
+      len = log_bs->substitute(out_writepos, out_left,
+                               "[%s=log_sink_test: broken item with class %d, "
+                               "type %d];",
+                               (li->key == nullptr) ? "_null" : li->key,
+                               li->item_class, li->type);
+      t = LOG_ITEM_END;  // do not flag current item-type as added
+      goto broken_item;  // add this notice if there is enough space left
+    }
+
+    if (t == LOG_ITEM_LOG_PRIO) {
+      level = static_cast<enum loglevel>(li->data.data_integer);
+    }
+
+    // Write the item according to its item-class.
+    switch (li->item_class) {
+      case LOG_LEX_STRING:
+        if (li->data.data_string.str != nullptr)
+          len = log_bs->substitute(out_writepos, out_left, "[%s=%.*s];",
+                                   li->key, (int)li->data.data_string.length,
+                                   li->data.data_string.str);
+        else
+          len = 0;
+        break;
+      case LOG_INTEGER:
+        len = log_bs->substitute(out_writepos, out_left, "[%s=%lld];", li->key,
+                                 li->data.data_integer);
+        break;
+      case LOG_FLOAT:
+        len = log_bs->substitute(out_writepos, out_left, "[%s=%.12lf];",
+                                 li->key, li->data.data_float);
+        break;
+
+      default:          // unknown item-class
+        goto skip_item; /* purecov: inspected */
+    }
+
+    // label: item is malformed or otherwise broken; notice inserted instead
+  broken_item:
+
+    // item is too large, skip it
+    if (len >= out_left) {  // "remove" truncated write
+      *out_writepos = '\0'; /* purecov: inspected */
+      goto skip_item;       /* purecov: inspected */
+    }
+
+    out_types |= t;
+
+    out_fields++;
+    out_left -= len;
+    out_writepos += len;
+
+  skip_item:
+    li = log_bi->line_item_iter_next(it);
+  }
+
+  log_bi->line_item_iter_release(it);
+
+  if (out_fields > 0) {
+    // If we have prio, but no label, auto-generate a label now.
+    // If there's no space, we'll go on without a label.
+    if (!(out_types & LOG_ITEM_LOG_LABEL) && (out_left > 0) &&
+        (out_types & LOG_ITEM_LOG_PRIO)) {
+      const char *label = log_bi->label_from_prio(level);
+
+      wellknown_label = log_bi->wellknown_by_type(LOG_ITEM_LOG_LABEL);
+      len = log_bs->substitute(
+          out_writepos, out_left, "[%s=%.*s];",
+          log_bi->wellknown_get_name((log_item_type)wellknown_label),
+          (int)log_bs->length(label), label);
+      if (len < out_left) {
+        out_fields++;
+        out_left -= len;
+        out_writepos += len;
+        out_types |= LOG_ITEM_LOG_LABEL;
+      } else
+        *out_writepos = '\0'; /* purecov: inspected */
+    }
+
+    log_bi->write_errstream(nullptr, out_buff, (size_t)LOG_BUFF_MAX - out_left);
+  }
+
+  /*
+    Run some tests of the error logging system.
+  */
+
+  /*
+    Normally, each filter has its own separate rule-set.
+    This debug-function gets us the rule-set used by the
+    built-in filter, log_filter_internal, that provides
+    log-error-verbosity and log-error-suppression-rules.
+
+    This function must not be used by anything that isn't
+    a test. (Also, this depends on the built-in's characteristic
+    that the built-in ruleset's header never moves or goes away;
+    otherwise a get-function that did not also acquire a lock
+    would be questionable.)
+
+    Conversely, this entire sink should not be used in production.
+  */
+  log_filter_ruleset *test_rules = log_fd->filter_debug_ruleset_get();
+
+  // "This should never happen."
+  if (log_bf->filter_ruleset_lock(test_rules, LOG_BUILTINS_LOCK_EXCLUSIVE) < 0)
+    return LOG_SERVICE_LOCK_ERROR; /* purecov: inspected */
+
+  if (run_tests) {
+    /*
+      We'll be calling the logger below, so let's first
+      prevent any more activations of these tests, otherwise,
+      we might create an endless loop!
+
+      We're changing this while holding the above X-lock to
+      prevent race conditions.
+    */
+    run_tests = false;
+
+    /*
+      The first rule in the internal filter is,
+
+        IF prio<WARNING THEN RETURN.
+
+      which prevents users from setting configurations
+      (verbosity, suppression-list) in the subsequent
+      rules that drop or modify SYSTEM or ERROR level
+      events.
+
+      For our tests, we temporarily disable that rule,
+      so our tests can in fact drop and modify SYSTEM
+      or ERROR level events.
+
+      If we suspended the first rule, we note the fact
+      in prio_protection_suspended so we'll know to
+      unsuspend the rule once we're down.
+    */
+    bool prio_protection_suspended = false;
+    if ((test_rules->count > 0) &&
+        (test_rules->rule[0].verb == LOG_FILTER_RETURN) &&
+        !(test_rules->rule[0].flags & LOG_FILTER_FLAG_DISABLED)) {
+      prio_protection_suspended = true;
+      test_rules->rule[0].flags |= LOG_FILTER_FLAG_DISABLED;
+    }
+
+    // subsequent tests need to re-acquired S- or X-lock as needed
+    log_bf->filter_ruleset_unlock(test_rules);
+
+    // log a message from this here external service
+    banner();
+
+    // show that the rate-limiter actually works
+    test_throttle(test_rules);
+
+    // show that adding key/value pairs actually works
+    test_add_item(test_rules);
+
+    // show that flow control works
+    test_if_then_else();
+
+    // get coverage for assorted built-ins
+    test_builtins();
+
+    /*
+      There wasn't actually a failure; we're just testing
+      the failure code: this disables this log_writer.
+
+      Similar to "run_tests" above, if we had hit a real
+      error and wanted to report on it using the error logger,
+      we would need to set "failed" before calling the logger
+      to prevent potential endless loops!
+    */
+    failed = true;
+
+    /*
+      We do not release the rule-set here, as it's not ours.
+      We do however re-enable the first rule in the set
+      (that normally prevents us from dropping or modifying SYSTEM/ERROR
+      level events) if we previously disabled it.
+    */
+    if (log_bf->filter_ruleset_lock(test_rules, LOG_BUILTINS_LOCK_EXCLUSIVE) <
+        0)
+      return LOG_SERVICE_LOCK_ERROR; /* purecov: inspected */
+
+    if (prio_protection_suspended)
+      test_rules->rule[0].flags &= ~LOG_FILTER_FLAG_DISABLED;
+  }
+
+  // release lock on rule-set (held here no matter whether if() fired).
+  log_bf->filter_ruleset_unlock(test_rules);
+
+  return out_fields;  // returning number of processed items
+}
+
+
+// Source: log_sink_test.cc
+// Lines 789-1011
+
+
+[ANSWER]
+MUST

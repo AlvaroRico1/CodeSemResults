@@ -1,0 +1,53 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'f_ptr' at line 4
+2. Pointer 'table' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void calc_used_field_length(TABLE *table, bool needs_rowid,
+                            uint *p_used_fieldlength) {
+  uint null_fields, blobs, fields, rec_length;
+  Field **f_ptr, *field;
+  uint uneven_bit_fields;
+  MY_BITMAP *read_set = table->read_set;
+
+  uneven_bit_fields = null_fields = blobs = fields = rec_length = 0;
+  for (f_ptr = table->field; (field = *f_ptr); f_ptr++) {
+    if (bitmap_is_set(read_set, field->field_index())) {
+      fields++;
+      rec_length += field->pack_length();
+      if (field->is_flag_set(BLOB_FLAG) || field->is_array()) blobs++;
+      if (!field->is_flag_set(NOT_NULL_FLAG)) null_fields++;
+      if (field->type() == MYSQL_TYPE_BIT && ((Field_bit *)field)->bit_len)
+        uneven_bit_fields++;
+    }
+  }
+  if (null_fields || uneven_bit_fields)
+    rec_length += (table->s->null_fields + 7) / 8;
+  if (table->is_nullable()) rec_length += sizeof(bool);
+  if (blobs) {
+    uint blob_length = (uint)(table->file->stats.mean_rec_length -
+                              (table->s->reclength - rec_length));
+    rec_length += max<uint>(4U, blob_length);
+  }
+
+  if (needs_rowid) {
+    rec_length += table->file->ref_length;
+    fields++;
+  }
+
+  *p_used_fieldlength = rec_length;
+}
+
+
+// Source: sql_select.cc
+// Lines 1970-2003
+
+
+[ANSWER]
+MUST

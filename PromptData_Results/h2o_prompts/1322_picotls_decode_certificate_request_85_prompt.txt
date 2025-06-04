@@ -1,0 +1,65 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'end' at line 2
+2. Pointer 'src' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int decode_certificate_request(ptls_t *tls, struct st_ptls_certificate_request_t *cr, const uint8_t *src,
+                                      const uint8_t *const end)
+{
+    int ret;
+    uint16_t exttype = 0;
+
+    /* certificate request context */
+    ptls_decode_open_block(src, end, 1, {
+        size_t len = end - src;
+        if (len > 255) {
+            ret = PTLS_ALERT_DECODE_ERROR;
+            goto Exit;
+        }
+        if ((cr->context.base = malloc(len != 0 ? len : 1)) == NULL) {
+            ret = PTLS_ERROR_NO_MEMORY;
+            goto Exit;
+        }
+        cr->context.len = len;
+        memcpy(cr->context.base, src, len);
+        src = end;
+    });
+
+    /* decode extensions */
+    decode_extensions(src, end, PTLS_HANDSHAKE_TYPE_CERTIFICATE_REQUEST, &exttype, {
+        if (tls->ctx->on_extension != NULL &&
+            (ret = tls->ctx->on_extension->cb(tls->ctx->on_extension, tls, PTLS_HANDSHAKE_TYPE_CERTIFICATE_REQUEST, exttype,
+                                              ptls_iovec_init(src, end - src)) != 0))
+            goto Exit;
+        switch (exttype) {
+        case PTLS_EXTENSION_TYPE_SIGNATURE_ALGORITHMS:
+            if ((ret = decode_signature_algorithms(&cr->signature_algorithms, &src, end)) != 0)
+                goto Exit;
+            break;
+        }
+        src = end;
+    });
+
+    if (cr->signature_algorithms.count == 0) {
+        ret = PTLS_ALERT_MISSING_EXTENSION;
+        goto Exit;
+    }
+
+    ret = 0;
+Exit:
+    return ret;
+}
+
+
+// Source: picotls.c
+// Lines 2575-2620
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'save_pos' at line 7
+2. Pointer 'net' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void net_read_uncompressed_packet(NET *net, size_t &len) {
+  size_t complen;
+  assert(!net->compress);
+  len = net_read_packet(net, &complen);
+  if (len == MAX_PACKET_LENGTH) {
+    /* First packet of a multi-packet.  Concatenate the packets */
+    ulong save_pos = net->where_b;
+    size_t total_length = 0;
+    do {
+      net->where_b += len;
+      total_length += len;
+      len = net_read_packet(net, &complen);
+    } while (len == MAX_PACKET_LENGTH);
+    if (len != packet_error) len += total_length;
+    net->where_b = save_pos;
+  }
+
+
+// Source: net_serv.cc
+// Lines 2124-2139
+
+
+[ANSWER]
+MUST-NOT

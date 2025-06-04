@@ -1,0 +1,45 @@
+static void __uprobe_trace_func(struct trace_uprobe *tu,
+				unsigned long func, struct pt_regs *regs,
+				struct uprobe_cpu_buffer *ucb, int dsize,
+				struct trace_event_file *trace_file)
+{
+	struct uprobe_trace_entry_head *entry;
+	struct ring_buffer_event *event;
+	struct ring_buffer *buffer;
+	void *data;
+	int size, esize;
+	struct trace_event_call *call = trace_probe_event_call(&tu->tp);
+
+	WARN_ON(call != trace_file->event_call);
+
+	if (WARN_ON_ONCE(tu->tp.size + dsize > PAGE_SIZE))
+		return;
+
+	if (trace_trigger_soft_disabled(trace_file))
+		return;
+
+	esize = SIZEOF_TRACE_ENTRY(is_ret_probe(tu));
+	size = esize + tu->tp.size + dsize;
+	event = trace_event_buffer_lock_reserve(&buffer, trace_file,
+						call->event.type, size, 0, 0);
+	if (!event)
+		return;
+
+	entry = ring_buffer_event_data(event);
+	if (is_ret_probe(tu)) {
+		entry->vaddr[0] = func;
+		entry->vaddr[1] = instruction_pointer(regs);
+		data = DATAOF_TRACE_ENTRY(entry, true);
+	} else {
+		entry->vaddr[0] = instruction_pointer(regs);
+		data = DATAOF_TRACE_ENTRY(entry, false);
+	}
+
+	memcpy(data, ucb->buf, tu->tp.size + dsize);
+
+	event_trigger_unlock_commit(trace_file, buffer, event, entry, 0, 0);
+}
+
+
+// Source: trace_uprobe.c
+// Lines 819-859

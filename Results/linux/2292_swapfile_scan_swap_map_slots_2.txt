@@ -1,0 +1,1 @@
+scan_base,linux/mm/swapfile.c,7,offset,linux/mm/swapfile.c,6,2

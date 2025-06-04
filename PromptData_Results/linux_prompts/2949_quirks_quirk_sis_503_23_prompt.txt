@@ -1,0 +1,40 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'devid' at line 4
+2. Pointer 'reg' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void quirk_sis_503(struct pci_dev *dev)
+{
+	u8 reg;
+	u16 devid;
+
+	pci_read_config_byte(dev, SIS_DETECT_REGISTER, &reg);
+	pci_write_config_byte(dev, SIS_DETECT_REGISTER, reg | (1 << 6));
+	pci_read_config_word(dev, PCI_DEVICE_ID, &devid);
+	if (((devid & 0xfff0) != 0x0960) && (devid != 0x0018)) {
+		pci_write_config_byte(dev, SIS_DETECT_REGISTER, reg);
+		return;
+	}
+
+	/*
+	 * Ok, it now shows up as a 96x.  Run the 96x quirk by hand in case
+	 * it has already been processed.  (Depends on link order, which is
+	 * apparently not guaranteed)
+	 */
+	dev->device = devid;
+	quirk_sis_96x_smbus(dev);
+}
+
+
+// Source: quirks.c
+// Lines 1644-1664
+
+
+[ANSWER]
+MAY

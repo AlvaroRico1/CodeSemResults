@@ -1,0 +1,37 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 's' at line 7
+2. Pointer 'ptr' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+  DEFINE_MEMBERS(Subpackage, SUB_PACKAGE, sub_package_file_descriptor)
+
+  // Enum values have two different parents.
+  // We use two different identitied for the same object to determine the two
+  // different insertions in the map.
+  static Symbol EnumValue(EnumValueDescriptor* value, int n) {
+    Symbol s;
+    internal::SymbolBase* ptr;
+    if (n == 0) {
+      ptr = static_cast<internal::SymbolBaseN<0>*>(value);
+      ptr->symbol_type_ = ENUM_VALUE;
+    } else {
+      ptr = static_cast<internal::SymbolBaseN<1>*>(value);
+      ptr->symbol_type_ = ENUM_VALUE_OTHER_PARENT;
+    }
+    s.ptr_ = ptr;
+    return s;
+  }
+
+
+// Source: descriptor.cc
+// Lines 614-631
+
+
+[ANSWER]
+MUST

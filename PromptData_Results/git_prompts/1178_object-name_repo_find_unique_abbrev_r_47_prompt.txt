@@ -1,0 +1,74 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ds' at line 4
+2. Pointer 'mad' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int repo_find_unique_abbrev_r(struct repository *r, char *hex,
+			      const struct object_id *oid, int len)
+{
+	struct disambiguate_state ds;
+	struct min_abbrev_data mad;
+	struct object_id oid_ret;
+	const unsigned hexsz = r->hash_algo->hexsz;
+
+	if (len < 0) {
+		unsigned long count = repo_approximate_object_count(r);
+		/*
+		 * Add one because the MSB only tells us the highest bit set,
+		 * not including the value of all the _other_ bits (so "15"
+		 * is only one off of 2^4, but the MSB is the 3rd bit.
+		 */
+		len = msb(count) + 1;
+		/*
+		 * We now know we have on the order of 2^len objects, which
+		 * expects a collision at 2^(len/2). But we also care about hex
+		 * chars, not bits, and there are 4 bits per hex. So all
+		 * together we need to divide by 2 and round up.
+		 */
+		len = DIV_ROUND_UP(len, 2);
+		/*
+		 * For very small repos, we stick with our regular fallback.
+		 */
+		if (len < FALLBACK_DEFAULT_ABBREV)
+			len = FALLBACK_DEFAULT_ABBREV;
+	}
+
+	oid_to_hex_r(hex, oid);
+	if (len == hexsz || !len)
+		return hexsz;
+
+	mad.repo = r;
+	mad.init_len = len;
+	mad.cur_len = len;
+	mad.hex = hex;
+	mad.oid = oid;
+
+	find_abbrev_len_packed(&mad);
+
+	if (init_object_disambiguation(r, hex, mad.cur_len, &ds) < 0)
+		return -1;
+
+	ds.fn = repo_extend_abbrev_len;
+	ds.always_call_fn = 1;
+	ds.cb_data = (void *)&mad;
+
+	find_short_object_filename(&ds);
+	(void)finish_object_disambiguation(&ds, &oid_ret);
+
+	hex[mad.cur_len] = 0;
+	return mad.cur_len;
+}
+
+
+// Source: object-name.c
+// Lines 663-717
+
+
+[ANSWER]
+MUST

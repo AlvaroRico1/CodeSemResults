@@ -1,0 +1,28 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'md' at line 4
+2. Pointer 'data' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+menu_check_cb(__unused struct client *c, void *data, u_int px, u_int py,
+    u_int nx, struct overlay_ranges *r)
+{
+	struct menu_data	*md = data;
+	struct menu		*menu = md->menu;
+
+	server_client_overlay_range(md->px, md->py, menu->width + 4,
+	    menu->count + 2, px, py, nx, r);
+}
+
+
+// Source: menu.c
+// Lines 167-175
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,36 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'nanoseconds' at line 3
+2. Pointer 'tv' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool my_timeval_round(struct timeval *tv, uint decimals) {
+  assert(decimals <= DATETIME_MAX_DECIMALS);
+  uint nanoseconds = msec_round_add[decimals];
+  tv->tv_usec += (nanoseconds + 500) / 1000;
+  if (tv->tv_usec < 1000000) goto ret;
+
+  tv->tv_usec = 0;
+  tv->tv_sec++;
+  if (!is_time_t_valid_for_timestamp(tv->tv_sec)) {
+    tv->tv_sec = TIMESTAMP_MAX_VALUE;
+    return true;
+  }
+
+ret:
+  my_timeval_trunc(tv, decimals);
+  return false;
+}
+
+
+// Source: my_time.cc
+// Lines 2617-2633
+
+
+[ANSWER]
+MUST-NOT

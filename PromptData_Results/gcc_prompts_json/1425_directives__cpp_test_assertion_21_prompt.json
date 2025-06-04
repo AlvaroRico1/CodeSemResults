@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'answer' at line 3\n2. Pointer 'value' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\n_cpp_test_assertion (cpp_reader *pfile, unsigned int *value)\n{\n  cpp_macro *answer;\n  cpp_hashnode *node = parse_assertion (pfile, T_IF, &answer);\n\n  /* For recovery, an erroneous assertion expression is handled as a\n     failing assertion.  */\n  *value = 0;\n\n  if (node)\n    {\n      if (node->value.answers)\n\t*value = !answer || *find_answer (node, answer);\n    }\n  else if (pfile->cur_token[-1].type == CPP_EOF)\n    _cpp_backup_tokens (pfile, 1);\n\n  /* We don't commit the memory for the answer - it's temporary only.  */\n  return node == 0;\n}\n\n\n// Source: directives.c\n// Lines 2289-2308\n",
+  "ANSWER": "MAY"
+}

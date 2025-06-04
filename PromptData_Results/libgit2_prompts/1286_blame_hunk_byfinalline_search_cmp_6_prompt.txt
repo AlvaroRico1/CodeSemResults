@@ -1,0 +1,33 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'hunk' at line 3
+2. Pointer 'entry' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int hunk_byfinalline_search_cmp(const void *key, const void *entry)
+{
+	git_blame_hunk *hunk = (git_blame_hunk*)entry;
+
+	size_t lineno = *(size_t*)key;
+	size_t lines_in_hunk = hunk->lines_in_hunk;
+	size_t final_start_line_number = hunk->final_start_line_number;
+
+	if (lineno < final_start_line_number)
+		return -1;
+	if (lineno >= final_start_line_number + lines_in_hunk)
+		return 1;
+	return 0;
+}
+
+
+// Source: blame.c
+// Lines 23-36
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,42 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'cf' at line 4
+2. Pointer 'peer' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+file_create_with_peer(struct tmuxpeer *peer, struct client_files *files,
+    int stream, client_file_cb cb, void *cbdata)
+{
+	struct client_file	*cf;
+
+	cf = xcalloc(1, sizeof *cf);
+	cf->c = NULL;
+	cf->references = 1;
+	cf->stream = stream;
+
+	cf->buffer = evbuffer_new();
+	if (cf->buffer == NULL)
+		fatalx("out of memory");
+
+	cf->cb = cb;
+	cf->data = cbdata;
+
+	cf->peer = peer;
+	cf->tree = files;
+	RB_INSERT(client_files, files, cf);
+
+	return (cf);
+}
+
+
+// Source: file.c
+// Lines 71-93
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,1325 @@
+static bool eq_ref_table(JOIN *join, ORDER *start_order, JOIN_TAB *tab,
+                         table_map *cached_eq_ref_tables,
+                         table_map *eq_ref_tables) {
+  /* We can skip const tables only if not an outer table */
+  if (tab->type() == JT_CONST && tab->first_inner() == NO_PLAN_IDX) return true;
+  if (tab->type() != JT_EQ_REF || tab->table()->is_nullable()) return false;
+
+  const table_map map = tab->table_ref->map();
+  uint found = 0;
+
+  for (Item **ref_item = tab->ref().items,
+            **end = ref_item + tab->ref().key_parts;
+       ref_item != end; ref_item++) {
+    if (!(*ref_item)->const_item()) {  // Not a const ref
+      ORDER *order;
+      for (order = start_order; order; order = order->next) {
+        if ((*ref_item)->eq(order->item[0], false)) break;
+      }
+      if (order) {
+        if (!(order->used & map)) {
+          found++;
+          order->used |= map;
+        }
+        continue;  // Used in ORDER BY
+      }
+      if (!only_eq_ref_tables(join, start_order, (*ref_item)->used_tables(),
+                              cached_eq_ref_tables, eq_ref_tables))
+        return false;
+    }
+  }
+  /* Check that there was no reference to table before sort order */
+  for (; found && start_order; start_order = start_order->next) {
+    if (start_order->used & map) {
+      found--;
+      continue;
+    }
+    if (start_order->depend_map & map) return false;
+  }
+  return true;
+}
+
+/// @see eq_ref_table()
+static bool only_eq_ref_tables(JOIN *join, ORDER *order, table_map tables,
+                               table_map *cached_eq_ref_tables,
+                               table_map *eq_ref_tables) {
+  tables &= ~PSEUDO_TABLE_BITS;
+  for (JOIN_TAB **tab = join->map2table; tables; tab++, tables >>= 1) {
+    if (tables & 1) {
+      const table_map map = (*tab)->table_ref->map();
+      bool is_eq_ref;
+      if (*cached_eq_ref_tables & map)  // then there exists a cached bit
+        is_eq_ref = *eq_ref_tables & map;
+      else {
+        is_eq_ref = eq_ref_table(join, order, *tab, cached_eq_ref_tables,
+                                 eq_ref_tables);
+        if (is_eq_ref)
+          *eq_ref_tables |= map;
+        else
+          *eq_ref_tables &= ~map;
+        *cached_eq_ref_tables |= map;  // now there exists a cached bit
+      }
+      if (!is_eq_ref) return false;
+    }
+  }
+  return true;
+}
+
+/**
+  Check if an expression in ORDER BY or GROUP BY is a duplicate of a
+  preceding expression.
+
+  @param  first_order   the first expression in the ORDER BY or
+                        GROUP BY clause
+  @param  possible_dup  the expression that might be a duplicate of
+                        another expression preceding it the ORDER BY
+                        or GROUP BY clause
+
+  @returns true if possible_dup is a duplicate, false otherwise
+*/
+static bool duplicate_order(const ORDER *first_order,
+                            const ORDER *possible_dup) {
+  const ORDER *order;
+  for (order = first_order; order; order = order->next) {
+    if (order == possible_dup) {
+      // all expressions preceding possible_dup have been checked.
+      return false;
+    } else {
+      const Item *it1 = order->item[0]->real_item();
+      const Item *it2 = possible_dup->item[0]->real_item();
+
+      if (it1->eq(it2, false)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+  Remove all constants and check if ORDER only contains simple
+  expressions.
+
+  simple_order is set to true if sort_order only uses fields from head table
+  and the head table is not a LEFT JOIN table.
+
+  @param first_order   List of GROUP BY or ORDER BY sub-clauses.
+  @param cond          WHERE condition.
+  @param change        If true, remove sub-clauses that need not be evaluated.
+                       If this is not set, then only simple_order is calculated.
+  @param simple_order[out]  Set to true if we are only using simple expressions.
+  @param group_by      True if first_order represents a grouping operation.
+
+  @returns new sort order, after const elimination (when change is true).
+*/
+
+ORDER *JOIN::remove_const(ORDER *first_order, Item *cond, bool change,
+                          bool *simple_order, bool group_by) {
+  DBUG_TRACE;
+
+  ASSERT_BEST_REF_IN_JOIN_ORDER(this);
+
+  if (plan_is_const())
+    return change ? nullptr : first_order;  // No need to sort
+
+  Opt_trace_context *const trace = &thd->opt_trace;
+  Opt_trace_disable_I_S trace_disabled(trace, first_order == nullptr);
+  Opt_trace_object trace_simpl(
+      trace, group_by ? "simplifying_group_by" : "simplifying_order_by");
+  if (trace->is_started()) {
+    String str;
+    Query_block::print_order(
+        thd, &str, first_order,
+        enum_query_type(QT_TO_SYSTEM_CHARSET | QT_SHOW_SELECT_NUMBER |
+                        QT_NO_DEFAULT_DB));
+    trace_simpl.add_utf8("original_clause", str.ptr(), str.length());
+  }
+  Opt_trace_array trace_each_item(trace, "items");
+
+  JOIN_TAB *const first_tab = best_ref[const_tables];
+  table_map first_table = first_tab->table_ref->map();
+  table_map not_const_tables = ~const_table_map;
+  table_map ref;
+  // Caches to avoid repeating eq_ref_table() calls, @see eq_ref_table()
+  table_map eq_ref_tables = 0, cached_eq_ref_tables = 0;
+
+  ORDER **prev_ptr = &first_order;
+  *simple_order = !first_tab->join_cond();
+
+  // De-optimization in conjunction with window functions
+  if (group_by && m_windows.elements > 0) *simple_order = false;
+
+  update_depend_map(first_order);
+
+  for (ORDER *order = first_order; order; order = order->next) {
+    Opt_trace_object trace_one_item(trace);
+    trace_one_item.add("item", order->item[0]);
+    table_map order_tables = order->item[0]->used_tables();
+
+    if (order->item[0]->has_aggregation() || order->item[0]->has_wf() ||
+        /*
+          If the outer table of an outer join is const (either by itself or
+          after applying WHERE condition), grouping on a field from such a
+          table will be optimized away and filesort without temporary table
+          will be used unless we prevent that now. Filesort is not fit to
+          handle joins and the join condition is not applied. We can't detect
+          the case without an expensive test, however, so we force temporary
+          table for all queries containing more than one table, ROLLUP, and an
+          outer join.
+         */
+        (primary_tables > 1 && rollup_state == RollupState::INITED &&
+         query_block->outer_join)) {
+      *simple_order = false;  // Must use a temporary table to sort
+    } else if ((order_tables & not_const_tables) == 0 &&
+               evaluate_during_optimization(order->item[0], query_block)) {
+      if (order->item[0]->has_subquery()) {
+        if (!thd->lex->is_explain()) {
+          Opt_trace_array trace_subselect(trace, "subselect_evaluation");
+          String str;
+          order->item[0]->val_str(&str);
+        }
+        order->item[0]->mark_subqueries_optimized_away();
+      }
+      trace_one_item.add("uses_only_constant_tables", true);
+      continue;  // skip const item
+    } else if (duplicate_order(first_order, order)) {
+      /*
+        If 'order' is a duplicate of an expression earlier in the
+        ORDER/GROUP BY sequence, it can be removed from the ORDER BY
+        or GROUP BY clause.
+      */
+      trace_one_item.add("duplicate_item", true);
+      continue;
+    } else if (order->in_field_list && order->item[0]->has_subquery()) {
+      /*
+        If the order item is a subquery that is also in the field
+        list, a temp table should be used to avoid evaluating the
+        subquery for each row both when a) creating a sort index and
+        b) getting the value.
+          Example: "SELECT (SELECT ... ) as a ... GROUP BY a;"
+       */
+      *simple_order = false;
+    } else if (order_tables & (RAND_TABLE_BIT | OUTER_REF_TABLE_BIT)) {
+      *simple_order = false;
+    } else {
+      if (cond != nullptr && check_field_is_const(cond, order->item[0])) {
+        trace_one_item.add("equals_constant_in_where", true);
+        continue;
+      }
+      if ((ref = order_tables & (not_const_tables ^ first_table))) {
+        if (!(order_tables & first_table) &&
+            only_eq_ref_tables(this, first_order, ref, &cached_eq_ref_tables,
+                               &eq_ref_tables)) {
+          trace_one_item.add("eq_ref_to_preceding_items", true);
+          continue;
+        }
+        *simple_order = false;  // Must do a temp table to sort
+      }
+    }
+    if (change) *prev_ptr = order;  // use this entry
+    prev_ptr = &order->next;
+  }
+  if (change) *prev_ptr = nullptr;
+  if (prev_ptr == &first_order)  // Nothing to sort/group
+    *simple_order = true;
+  DBUG_PRINT("exit", ("simple_order: %d", (int)*simple_order));
+
+  trace_each_item.end();
+  trace_simpl.add("resulting_clause_is_simple", *simple_order);
+  if (trace->is_started() && change) {
+    String str;
+    Query_block::print_order(
+        thd, &str, first_order,
+        enum_query_type(QT_TO_SYSTEM_CHARSET | QT_SHOW_SELECT_NUMBER |
+                        QT_NO_DEFAULT_DB));
+    trace_simpl.add_utf8("resulting_clause", str.ptr(), str.length());
+  }
+
+  return first_order;
+}
+
+/**
+  Optimize conditions by
+
+     a) applying transitivity to build multiple equality predicates
+        (MEP): if x=y and y=z the MEP x=y=z is built.
+     b) apply constants where possible. If the value of x is known to be
+        42, x is replaced with a constant of value 42. By transitivity, this
+        also applies to MEPs, so the MEP in a) will become 42=x=y=z.
+     c) remove conditions that are always false or always true
+
+  @param thd                Thread handler
+  @param[in,out] cond       WHERE or HAVING condition to optimize
+  @param[out] cond_equal    The built multiple equalities
+  @param join_list          list of join operations with join conditions
+                            = NULL: Called for HAVING condition
+  @param[out] cond_value    Not changed if cond was empty
+                              COND_TRUE if cond is always true
+                              COND_FALSE if cond is impossible
+                              COND_OK otherwise
+
+
+  @returns false if success, true if error
+*/
+
+bool optimize_cond(THD *thd, Item **cond, COND_EQUAL **cond_equal,
+                   mem_root_deque<TABLE_LIST *> *join_list,
+                   Item::cond_result *cond_value) {
+  DBUG_TRACE;
+  Opt_trace_context *const trace = &thd->opt_trace;
+
+  Opt_trace_object trace_wrapper(trace);
+  Opt_trace_object trace_cond(trace, "condition_processing");
+  trace_cond.add_alnum("condition", join_list ? "WHERE" : "HAVING");
+  trace_cond.add("original_condition", *cond);
+  Opt_trace_array trace_steps(trace, "steps");
+
+  /*
+    Enter this function
+    a) For a WHERE condition or a query having outer join.
+    b) For a HAVING condition.
+  */
+  assert(*cond || join_list);
+
+  /*
+    Build all multiple equality predicates and eliminate equality
+    predicates that can be inferred from these multiple equalities.
+    For each reference of a field included into a multiple equality
+    that occurs in a function set a pointer to the multiple equality
+    predicate. Substitute a constant instead of this field if the
+    multiple equality contains a constant.
+    This is performed for the WHERE condition and any join conditions, but
+    not for the HAVING condition.
+  */
+  if (join_list) {
+    Opt_trace_object step_wrapper(trace);
+    step_wrapper.add_alnum("transformation", "equality_propagation");
+    {
+      Opt_trace_disable_I_S disable_trace_wrapper(
+          trace, !(*cond && (*cond)->has_subquery()));
+      Opt_trace_array trace_subselect(trace, "subselect_evaluation");
+      if (build_equal_items(thd, *cond, cond, nullptr, true, join_list,
+                            cond_equal))
+        return true;
+    }
+    step_wrapper.add("resulting_condition", *cond);
+  }
+  /*
+    change field = field to field = const for each found field = const
+    Note: Since we disable multi-equalities in the hypergraph optimizer for now,
+    we also cannot run this optimization; it causes spurious “Impossible WHERE”
+    in e.g. main.select_none.
+   */
+  if (*cond && !thd->lex->using_hypergraph_optimizer) {
+    Opt_trace_object step_wrapper(trace);
+    step_wrapper.add_alnum("transformation", "constant_propagation");
+    {
+      Opt_trace_disable_I_S disable_trace_wrapper(trace,
+                                                  !(*cond)->has_subquery());
+      Opt_trace_array trace_subselect(trace, "subselect_evaluation");
+      if (propagate_cond_constants(thd, nullptr, *cond, *cond)) return true;
+    }
+    step_wrapper.add("resulting_condition", *cond);
+  }
+
+  /*
+    Remove all instances of item == item
+    Remove all and-levels where CONST item != CONST item
+  */
+  DBUG_EXECUTE("where",
+               print_where(thd, *cond, "after const change", QT_ORDINARY););
+  if (*cond) {
+    Opt_trace_object step_wrapper(trace);
+    step_wrapper.add_alnum("transformation", "trivial_condition_removal");
+    {
+      Opt_trace_disable_I_S disable_trace_wrapper(trace,
+                                                  !(*cond)->has_subquery());
+      Opt_trace_array trace_subselect(trace, "subselect_evaluation");
+      if (remove_eq_conds(thd, *cond, cond, cond_value)) return true;
+    }
+    step_wrapper.add("resulting_condition", *cond);
+  }
+  if (thd->is_error()) return true;
+  return false;
+}
+
+/**
+  Checks if a condition can be evaluated during constant folding. It can be
+  evaluated if it is constant during execution and not expensive to evaluate. If
+  it contains a subquery, it should not be evaluated if the option
+  OPTION_NO_SUBQUERY_DURING_OPTIMIZATION is active.
+*/
+static bool can_evaluate_condition(THD *thd, Item *condition) {
+  return condition->const_for_execution() && !condition->is_expensive() &&
+         evaluate_during_optimization(condition,
+                                      thd->lex->current_query_block());
+}
+
+/**
+  Calls fold_condition. If that made the condition constant for execution,
+  simplify and fold again. @see fold_condition() for arguments.
+*/
+static bool fold_condition_exec(THD *thd, Item *cond, Item **retcond,
+                                Item::cond_result *cond_value) {
+  if (fold_condition(thd, cond, retcond, cond_value)) return true;
+  if (*retcond != nullptr &&
+      can_evaluate_condition(thd, *retcond))  // simplify further maybe
+    return remove_eq_conds(thd, *retcond, retcond, cond_value);
+  return false;
+}
+
+/**
+  Removes const and eq items. Returns the new item, or nullptr if no condition.
+
+  @param      thd        thread handler
+  @param      cond       the condition to handle
+  @param[out] retcond    condition after const removal
+  @param[out] cond_value resulting value of the condition
+              =COND_OK    condition must be evaluated (e.g. field = constant)
+              =COND_TRUE  always true                 (e.g. 1 = 1)
+              =COND_FALSE always false                (e.g. 1 = 2)
+
+  @returns false if success, true if error
+*/
+bool remove_eq_conds(THD *thd, Item *cond, Item **retcond,
+                     Item::cond_result *cond_value) {
+  assert(cond->real_item()->is_bool_func());
+  if (cond->type() == Item::COND_ITEM) {
+    Item_cond *const item_cond = down_cast<Item_cond *>(cond);
+    const bool and_level = item_cond->functype() == Item_func::COND_AND_FUNC;
+    List_iterator<Item> li(*item_cond->argument_list());
+    bool should_fix_fields = false;
+    *cond_value = Item::COND_UNDEF;
+    Item *item;
+    while ((item = li++)) {
+      Item *new_item;
+      Item::cond_result tmp_cond_value;
+      if (remove_eq_conds(thd, item, &new_item, &tmp_cond_value)) return true;
+
+      if (new_item == nullptr)
+        li.remove();
+      else if (item != new_item) {
+        (void)li.replace(new_item);
+        should_fix_fields = true;
+      }
+      if (*cond_value == Item::COND_UNDEF) *cond_value = tmp_cond_value;
+      switch (tmp_cond_value) {
+        case Item::COND_OK:  // Not true or false
+          if (and_level || *cond_value == Item::COND_FALSE)
+            *cond_value = tmp_cond_value;
+          break;
+        case Item::COND_FALSE:
+          if (and_level)  // Always false
+          {
+            *cond_value = tmp_cond_value;
+            *retcond = nullptr;
+            return false;
+          }
+          break;
+        case Item::COND_TRUE:
+          if (!and_level)  // Always true
+          {
+            *cond_value = tmp_cond_value;
+            *retcond = nullptr;
+            return false;
+          }
+          break;
+        case Item::COND_UNDEF:  // Impossible
+          assert(false);        /* purecov: deadcode */
+      }
+    }
+    if (should_fix_fields) item_cond->update_used_tables();
+
+    if (item_cond->argument_list()->elements == 0 ||
+        *cond_value != Item::COND_OK) {
+      *retcond = nullptr;
+      return false;
+    }
+    if (item_cond->argument_list()->elements == 1) {
+      /*
+        BUG#11765699:
+        We're dealing with an AND or OR item that has only one
+        argument. However, it is not an option to empty the list
+        because:
+
+         - this function is called for either JOIN::conds or
+           JOIN::having, but these point to the same condition as
+           Query_block::where and Query_block::having do.
+
+         - The return value of remove_eq_conds() is assigned to
+           JOIN::conds and JOIN::having, so emptying the list and
+           returning the only remaining item "replaces" the AND or OR
+           with item for the variables in JOIN. However, the return
+           value is not assigned to the Query_block counterparts. Thus,
+           if argument_list is emptied, Query_block forgets the item in
+           argument_list()->head().
+
+        item is therefore returned, but argument_list is not emptied.
+      */
+      item = item_cond->argument_list()->head();
+      /*
+        Consider reenabling the line below when the optimizer has been
+        split into properly separated phases.
+
+        item_cond->argument_list()->empty();
+      */
+      *retcond = item;
+      return false;
+    }
+  } else if (can_evaluate_condition(thd, cond)) {
+    bool value;
+    if (eval_const_cond(thd, cond, &value)) return true;
+    *cond_value = value ? Item::COND_TRUE : Item::COND_FALSE;
+    *retcond = nullptr;
+    return false;
+  } else {  // Boolean compare function
+    *cond_value = cond->eq_cmp_result();
+    if (*cond_value == Item::COND_OK) {
+      return fold_condition_exec(thd, cond, retcond, cond_value);
+    }
+    Item *left_item = down_cast<Item_func *>(cond)->arguments()[0];
+    Item *right_item = down_cast<Item_func *>(cond)->arguments()[1];
+    if (left_item->eq(right_item, true) && !cond->is_non_deterministic()) {
+      /*
+       Two identical items are being compared:
+       1) If the items are not nullable, return result from eq_cmp_result(),
+          that is, we can short circuit because result is statically always
+          known to be true or false, depending on which operator we are
+          dealing with. If the operator allows equality, *cond_value is
+          Item::COND_TRUE (a non-null value is always equal to itself), else
+          Item::COND_FALSE (a non-null value is never unequal to itself).
+       2) If the items are nullable and the result from eq_cmp_result() is
+          false, result is always false, that is, the operator doesn't
+          allow for equality, the result is always false: Any non-null
+          value cannot obviously be unequal to itself, and any NULL value
+          would yield an undefined result (e.g. NULL < NULL
+          is undefined), and hence Item::COND_FALSE in this context is the
+          effective result.
+          (Call order ensures test is not applied to conditions with explicit
+          truth value test)
+       3) If the <=> operator is used, result is always true because
+          NULL = NULL is true for this operator
+      */
+      if (!left_item->is_nullable() || *cond_value == Item::COND_FALSE ||
+          down_cast<Item_func *>(cond)->functype() == Item_func::EQUAL_FUNC) {
+        *retcond = nullptr;
+        return false;
+      }
+    }
+  }
+  return fold_condition_exec(thd, cond, retcond, cond_value);
+}
+
+/**
+  Check if GROUP BY/DISTINCT can be optimized away because the set is
+  already known to be distinct.
+
+  Used in removing the GROUP BY/DISTINCT of the following types of
+  statements:
+  @code
+    SELECT [DISTINCT] <unique_key_cols>... FROM <single_table_ref>
+      [GROUP BY <unique_key_cols>,...]
+  @endcode
+
+    If (a,b,c is distinct)
+    then <any combination of a,b,c>,{whatever} is also distinct
+
+    This function checks if all the key parts of any of the unique keys
+    of the table are referenced by a list : either the select list
+    through find_field_in_item_list or GROUP BY list through
+    find_field_in_order_list.
+    If the above holds and the key parts cannot contain NULLs then we
+    can safely remove the GROUP BY/DISTINCT,
+    as no result set can be more distinct than an unique key.
+
+  @param tab                  The join table to operate on.
+  @param find_func            function to iterate over the list and search
+                              for a field
+  @param data                 data that's passed through to to find_func
+
+  @retval
+    1                    found
+  @retval
+    0                    not found.
+
+  @note
+    The function assumes that make_outerjoin_info() has been called in
+    order for the check for outer tables to work.
+*/
+
+static bool list_contains_unique_index(JOIN_TAB *tab,
+                                       bool (*find_func)(Field *, void *),
+                                       void *data) {
+  TABLE *table = tab->table();
+
+  if (tab->is_inner_table_of_outer_join()) return false;
+  for (uint keynr = 0; keynr < table->s->keys; keynr++) {
+    if (keynr == table->s->primary_key ||
+        (table->key_info[keynr].flags & HA_NOSAME)) {
+      KEY *keyinfo = table->key_info + keynr;
+      KEY_PART_INFO *key_part, *key_part_end;
+
+      for (key_part = keyinfo->key_part,
+          key_part_end = key_part + keyinfo->user_defined_key_parts;
+           key_part < key_part_end; key_part++) {
+        if (key_part->field->is_nullable() || !find_func(key_part->field, data))
+          break;
+      }
+      if (key_part == key_part_end) return true;
+    }
+  }
+  return false;
+}
+
+/**
+  Helper function for list_contains_unique_index.
+  Find a field reference in a list of ORDER structures.
+  Finds a direct reference of the Field in the list.
+
+  @param field                The field to search for.
+  @param data                 ORDER *.The list to search in
+
+  @retval
+    1                    found
+  @retval
+    0                    not found.
+*/
+
+static bool find_field_in_order_list(Field *field, void *data) {
+  ORDER *group = (ORDER *)data;
+  bool part_found = false;
+  for (ORDER *tmp_group = group; tmp_group; tmp_group = tmp_group->next) {
+    const Item *item = (*tmp_group->item)->real_item();
+    if (item->type() == Item::FIELD_ITEM &&
+        down_cast<const Item_field *>(item)->field->eq(field)) {
+      part_found = true;
+      break;
+    }
+  }
+  return part_found;
+}
+
+/**
+  Helper function for list_contains_unique_index.
+  Find a field reference in a dynamic list of Items.
+  Finds a direct reference of the Field in the list.
+
+  @param[in] field             The field to search for.
+  @param[in] data              List<Item> *.The list to search in
+
+  @retval
+    1                    found
+  @retval
+    0                    not found.
+*/
+
+static bool find_field_in_item_list(Field *field, void *data) {
+  mem_root_deque<Item *> *fields =
+      reinterpret_cast<mem_root_deque<Item *> *>(data);
+  bool part_found = false;
+
+  for (const Item *item : VisibleFields(*fields)) {
+    if (item->type() == Item::FIELD_ITEM &&
+        down_cast<const Item_field *>(item)->field->eq(field)) {
+      part_found = true;
+      break;
+    }
+  }
+  return part_found;
+}
+
+ORDER *create_order_from_distinct(THD *thd, Ref_item_array ref_item_array,
+                                  ORDER *order_list,
+                                  mem_root_deque<Item *> *fields,
+                                  bool skip_aggregates,
+                                  bool convert_bit_fields_to_long,
+                                  bool *all_order_by_fields_used) {
+  ORDER *group = nullptr, **prev = &group;
+
+  *all_order_by_fields_used = true;
+
+  for (ORDER *order = order_list; order; order = order->next) {
+    if (order->in_field_list) {
+      ORDER *ord = (ORDER *)thd->memdup((char *)order, sizeof(ORDER));
+      if (!ord) return nullptr;
+      *prev = ord;
+      prev = &ord->next;
+      (*ord->item)->marker = Item::MARKER_DISTINCT_GROUP;
+    } else
+      *all_order_by_fields_used = false;
+  }
+
+  Mem_root_array<std::pair<Item *, ORDER *>> bit_fields_to_add(thd->mem_root);
+
+  for (Item *&item : VisibleFields(*fields)) {
+    if (!item->const_item() && (!skip_aggregates || !item->has_aggregation()) &&
+        item->marker != Item::MARKER_DISTINCT_GROUP) {
+      /*
+        Don't put duplicate columns from the SELECT list into the
+        GROUP BY list.
+      */
+      ORDER *ord_iter;
+      for (ord_iter = group; ord_iter; ord_iter = ord_iter->next)
+        if ((*ord_iter->item)->eq(item, true)) goto next_item;
+
+      ORDER *ord = (ORDER *)thd->mem_calloc(sizeof(ORDER));
+      if (!ord) return nullptr;
+
+      if (item->type() == Item::FIELD_ITEM &&
+          item->data_type() == MYSQL_TYPE_BIT && convert_bit_fields_to_long) {
+        /*
+          Because HEAP tables can't index BIT fields we need to use an
+          additional hidden field for grouping because later it will be
+          converted to a LONG field. Original field will remain of the
+          BIT type and will be returned to a client.
+          @note setup_ref_array() needs to account for the extra space.
+          @note We need to defer the actual adding to after the loop,
+            or we will invalidate the iterator to “fields”.
+        */
+        Item_field *new_item = new Item_field(thd, (Item_field *)item);
+        ord->item = &item;  // Temporary; for the duplicate check above.
+        bit_fields_to_add.push_back(std::make_pair(new_item, ord));
+      } else if (ref_item_array.is_null()) {
+        // No slices are in use, so just use the field from the list.
+        ord->item = &item;
+      } else {
+        /*
+          We have here only visible fields, so we can use simple indexing
+          of ref_item_array (order in the array and in the list are same)
+        */
+        ord->item = &ref_item_array[0];
+      }
+      ord->direction = ORDER_ASC;
+      *prev = ord;
+      prev = &ord->next;
+    }
+  next_item:
+    if (!ref_item_array.is_null()) {
+      ref_item_array.pop_front();
+    }
+  }
+  for (const auto &item_and_order : bit_fields_to_add) {
+    item_and_order.second->item =
+        thd->lex->current_query_block()->add_hidden_item(item_and_order.first);
+    thd->lex->current_query_block()->hidden_items_from_optimization++;
+  }
+  *prev = nullptr;
+  return group;
+}
+
+/**
+  Return table number if there is only one table in sort order
+  and group and order is compatible, else return 0.
+*/
+
+static TABLE *get_sort_by_table(ORDER *a, ORDER *b, TABLE_LIST *tables) {
+  DBUG_TRACE;
+  table_map map = (table_map)0;
+
+  if (!a)
+    a = b;  // Only one need to be given
+  else if (!b)
+    b = a;
+
+  for (; a && b; a = a->next, b = b->next) {
+    if (!(*a->item)->eq(*b->item, true)) return nullptr;
+    map |= a->item[0]->used_tables();
+  }
+  map &= ~INNER_TABLE_BIT;
+  if (!map || (map & (RAND_TABLE_BIT | OUTER_REF_TABLE_BIT))) return nullptr;
+
+  for (; !(map & tables->map()); tables = tables->next_leaf)
+    ;
+  if (map != tables->map()) return nullptr;  // More than one table
+  DBUG_PRINT("exit", ("sort by table: %d", tables->tableno()));
+  return tables->table;
+}
+
+/**
+  Update some values in keyuse for faster choose_table_order() loop.
+
+  @todo Check if this is the real meaning of ref_table_rows.
+*/
+
+void JOIN::optimize_keyuse() {
+  for (size_t ix = 0; ix < keyuse_array.size(); ++ix) {
+    Key_use *keyuse = &keyuse_array.at(ix);
+    table_map map;
+    /*
+      If we find a ref, assume this table matches a proportional
+      part of this table.
+      For example 100 records matching a table with 5000 records
+      gives 5000/100 = 50 records per key
+      Constant tables are ignored.
+      To avoid bad matches, we don't make ref_table_rows less than 100.
+    */
+    keyuse->ref_table_rows = ~(ha_rows)0;  // If no ref
+    if (keyuse->used_tables &
+        (map = keyuse->used_tables & ~(const_table_map | PSEUDO_TABLE_BITS))) {
+      uint tableno;
+      for (tableno = 0; !(map & 1); map >>= 1, tableno++) {
+      }
+      if (map == 1)  // Only one table
+      {
+        TABLE *tmp_table = join_tab[tableno].table();
+
+        keyuse->ref_table_rows =
+            max<ha_rows>(tmp_table->file->stats.records, 100);
+      }
+    }
+    /*
+      Outer reference (external field) is constant for single executing
+      of subquery
+    */
+    if (keyuse->used_tables == OUTER_REF_TABLE_BIT) keyuse->ref_table_rows = 1;
+  }
+}
+
+/**
+  Function sets FT hints, initializes FT handlers
+  and checks if FT index can be used as covered.
+*/
+
+bool JOIN::optimize_fts_query() {
+  ASSERT_BEST_REF_IN_JOIN_ORDER(this);
+
+  assert(query_block->has_ft_funcs());
+
+  for (uint i = const_tables; i < tables; i++) {
+    JOIN_TAB *tab = best_ref[i];
+    if (tab->type() != JT_FT) continue;
+
+    Item_func_match *ifm;
+    Item_func_match *ft_func =
+        down_cast<Item_func_match *>(tab->position()->key->val);
+    List_iterator<Item_func_match> li(*(query_block->ftfunc_list));
+
+    while ((ifm = li++)) {
+      if (!(ifm->used_tables() & tab->table_ref->map()) || ifm->master)
+        continue;
+
+      if (ifm != ft_func) {
+        if (ifm->can_skip_ranking())
+          ifm->set_hints(this, FT_NO_RANKING, HA_POS_ERROR, false);
+      }
+    }
+
+    /*
+      Check if internal sorting is needed. FT_SORTED flag is set
+      if no ORDER BY clause or ORDER BY MATCH function is the same
+      as the function that is used for FT index and FT table is
+      the first non-constant table in the JOIN.
+    */
+    if (i == const_tables && !(ft_func->get_hints()->get_flags() & FT_BOOL) &&
+        (order.empty() || ft_func == test_if_ft_index_order(order.order)))
+      ft_func->set_hints(this, FT_SORTED, m_select_limit, false);
+
+    /*
+      Check if ranking is not needed. FT_NO_RANKING flag is set if
+      MATCH function is used only in WHERE condition and  MATCH
+      function is not part of an expression.
+    */
+    if (ft_func->can_skip_ranking())
+      ft_func->set_hints(this, FT_NO_RANKING,
+                         order.empty() ? m_select_limit : HA_POS_ERROR, false);
+  }
+
+  return init_ftfuncs(thd, query_block);
+}
+
+/**
+  Check if FTS index only access is possible.
+
+  @param tab  pointer to JOIN_TAB structure.
+
+  @return  true if index only access is possible,
+           false otherwise.
+*/
+
+bool JOIN::fts_index_access(JOIN_TAB *tab) {
+  assert(tab->type() == JT_FT);
+  TABLE *table = tab->table();
+
+  if ((table->file->ha_table_flags() & HA_CAN_FULLTEXT_EXT) == 0)
+    return false;  // Optimizations requires extended FTS support by table
+                   // engine
+
+  /*
+    This optimization does not work with filesort nor GROUP BY
+  */
+  if (grouped ||
+      (!order.empty() && m_ordered_index_usage != ORDERED_INDEX_ORDER_BY))
+    return false;
+
+  /*
+    Check whether the FTS result is covering.  If only document id
+    and rank is needed, there is no need to access table rows.
+  */
+  for (uint i = bitmap_get_first_set(table->read_set); i < table->s->fields;
+       i = bitmap_get_next_set(table->read_set, i)) {
+    if (table->field[i] != table->fts_doc_id_field ||
+        !tab->ft_func()->docid_in_result())
+      return false;
+  }
+
+  return true;
+}
+
+/**
+   For {semijoin,subquery} materialization: calculates various cost
+   information, based on a plan in join->best_positions covering the
+   to-be-materialized query block and only this.
+
+   @param join     JOIN where plan can be found
+   @param sj_nest  sj materialization nest (NULL if subquery materialization)
+   @param n_tables number of to-be-materialized tables
+   @param[out] sjm where computed costs will be stored
+
+   @note that this function modifies join->map2table, which has to be filled
+   correctly later.
+*/
+static void calculate_materialization_costs(JOIN *join, TABLE_LIST *sj_nest,
+                                            uint n_tables,
+                                            Semijoin_mat_optimize *sjm) {
+  double mat_cost;           // Estimated cost of materialization
+  double mat_rowcount;       // Estimated row count before duplicate removal
+  double distinct_rowcount;  // Estimated rowcount after duplicate removal
+  mem_root_deque<Item *> *inner_expr_list;
+
+  if (sj_nest) {
+    /*
+      get_partial_join_cost() assumes a regular join, which is correct when
+      we optimize a sj-materialization nest (always executed as regular
+      join).
+    */
+    get_partial_join_cost(join, n_tables, &mat_cost, &mat_rowcount);
+    n_tables += join->const_tables;
+    inner_expr_list = &sj_nest->nested_join->sj_inner_exprs;
+  } else {
+    mat_cost = join->best_read;
+    mat_rowcount = static_cast<double>(join->best_rowcount);
+    inner_expr_list = &join->query_block->fields;
+  }
+
+  /*
+    Adjust output cardinality estimates. If the subquery has form
+
+    ... oe IN (SELECT t1.colX, t2.colY, func(X,Y,Z) )
+
+    then the number of distinct output record combinations has an
+    upper bound of product of number of records matching the tables
+    that are used by the SELECT clause.
+    TODO:
+    We can get a more precise estimate if we
+     - use rec_per_key cardinality estimates. For simple cases like
+     "oe IN (SELECT t.key ...)" it is trivial.
+     - Functional dependencies between the tables in the semi-join
+     nest (the payoff is probably less here?)
+  */
+  {
+    for (uint i = 0; i < n_tables; i++) {
+      JOIN_TAB *const tab = join->best_positions[i].table;
+      join->map2table[tab->table_ref->tableno()] = tab;
+    }
+    table_map map = 0;
+    for (Item *item : VisibleFields(*inner_expr_list)) {
+      map |= item->used_tables();
+    }
+    map &= ~PSEUDO_TABLE_BITS;
+    Table_map_iterator tm_it(map);
+    int tableno;
+    double rows = 1.0;
+    while ((tableno = tm_it.next_bit()) != Table_map_iterator::BITMAP_END)
+      rows *= join->map2table[tableno]->table()->quick_condition_rows;
+    distinct_rowcount = min(mat_rowcount, rows);
+  }
+  /*
+    Calculate temporary table parameters and usage costs
+  */
+  const uint rowlen = get_tmp_table_rec_length(*inner_expr_list);
+
+  const Cost_model_server *cost_model = join->cost_model();
+
+  Cost_model_server::enum_tmptable_type tmp_table_type;
+  if (rowlen * distinct_rowcount < join->thd->variables.max_heap_table_size)
+    tmp_table_type = Cost_model_server::MEMORY_TMPTABLE;
+  else
+    tmp_table_type = Cost_model_server::DISK_TMPTABLE;
+
+  /*
+    Let materialization cost include the cost to create the temporary
+    table and write the rows into it:
+  */
+  mat_cost += cost_model->tmptable_create_cost(tmp_table_type);
+  mat_cost +=
+      cost_model->tmptable_readwrite_cost(tmp_table_type, mat_rowcount, 0.0);
+
+  sjm->materialization_cost.reset();
+  sjm->materialization_cost.add_io(mat_cost);
+
+  sjm->expected_rowcount = distinct_rowcount;
+
+  /*
+    Set the cost to do a full scan of the temptable (will need this to
+    consider doing sjm-scan):
+  */
+  sjm->scan_cost.reset();
+  if (distinct_rowcount > 0.0) {
+    const double scan_cost = cost_model->tmptable_readwrite_cost(
+        tmp_table_type, 0.0, distinct_rowcount);
+    sjm->scan_cost.add_io(scan_cost);
+  }
+
+  // The cost to lookup a row in temp. table
+  const double row_cost =
+      cost_model->tmptable_readwrite_cost(tmp_table_type, 0.0, 1.0);
+  sjm->lookup_cost.reset();
+  sjm->lookup_cost.add_io(row_cost);
+}
+
+/**
+   Decides between EXISTS and materialization; performs last steps to set up
+   the chosen strategy.
+   @returns 'false' if no error
+
+   @note If UNION this is called on each contained JOIN.
+
+ */
+bool JOIN::decide_subquery_strategy() {
+  assert(query_expression()->item);
+
+  switch (query_expression()->item->substype()) {
+    case Item_subselect::IN_SUBS:
+    case Item_subselect::ALL_SUBS:
+    case Item_subselect::ANY_SUBS:
+      // All of those are children of Item_in_subselect and may use EXISTS
+      break;
+    default:
+      return false;
+  }
+
+  Item_in_subselect *const in_pred =
+      static_cast<Item_in_subselect *>(query_expression()->item);
+
+  Subquery_strategy chosen_method = in_pred->strategy;
+  // Materialization does not allow UNION so this can't happen:
+  assert(chosen_method != Subquery_strategy::SUBQ_MATERIALIZATION);
+
+  if ((chosen_method == Subquery_strategy::CANDIDATE_FOR_IN2EXISTS_OR_MAT) &&
+      compare_costs_of_subquery_strategies(&chosen_method))
+    return true;
+
+  switch (chosen_method) {
+    case Subquery_strategy::SUBQ_EXISTS:
+      if (query_block->m_windows.elements > 0)  // grep for WL#10431
+      {
+        my_error(ER_NOT_SUPPORTED_YET, MYF(0),
+                 "the combination of this ALL/ANY/SOME/IN subquery with this"
+                 " comparison operator and with contained window functions");
+        return true;
+      }
+      return in_pred->finalize_exists_transform(thd, query_block);
+    case Subquery_strategy::SUBQ_MATERIALIZATION:
+      return in_pred->finalize_materialization_transform(thd, this);
+    default:
+      assert(false);
+      return true;
+  }
+}
+
+/**
+   Tells what is the cheapest between IN->EXISTS and subquery materialization,
+   in terms of cost, for the subquery's JOIN.
+   Input:
+   - join->{best_positions,best_read,best_rowcount} must contain the
+   execution plan of EXISTS (where 'join' is the subquery's JOIN)
+   - join2->{best_positions,best_read,best_rowcount} must be correctly set
+   (where 'join2' is the parent join, the grandparent join, etc).
+   Output:
+   join->{best_positions,best_read,best_rowcount} contain the cheapest
+   execution plan (where 'join' is the subquery's JOIN).
+
+   This plan choice has to happen before calling functions which set up
+   execution structures, like JOIN::get_best_combination().
+
+   @param[out] method  chosen method (EXISTS or materialization) will be put
+                       here.
+   @returns false if success
+*/
+bool JOIN::compare_costs_of_subquery_strategies(Subquery_strategy *method) {
+  *method = Subquery_strategy::SUBQ_EXISTS;
+
+  Subquery_strategy allowed_strategies = query_block->subquery_strategy(thd);
+
+  /*
+    A non-deterministic subquery should not use materialization, unless forced.
+    For a detailed explanation, see Query_block::decorrelate_where_cond().
+    Here, the same logic is applied also for subqueries that are not converted
+    to semi-join.
+  */
+  if (allowed_strategies == Subquery_strategy::CANDIDATE_FOR_IN2EXISTS_OR_MAT &&
+      (query_expression()->uncacheable & UNCACHEABLE_RAND))
+    allowed_strategies = Subquery_strategy::SUBQ_EXISTS;
+
+  if (allowed_strategies == Subquery_strategy::SUBQ_EXISTS) return false;
+
+  assert(allowed_strategies ==
+             Subquery_strategy::CANDIDATE_FOR_IN2EXISTS_OR_MAT ||
+         allowed_strategies == Subquery_strategy::SUBQ_MATERIALIZATION);
+
+  const JOIN *parent_join = query_expression()->outer_query_block()->join;
+  if (!parent_join || !parent_join->child_subquery_can_materialize)
+    return false;
+
+  Item_in_subselect *const in_pred =
+      static_cast<Item_in_subselect *>(query_expression()->item);
+
+  /*
+    Testing subquery_allows_etc() at each optimization is necessary as each
+    execution of a prepared statement may use a different type of parameter.
+  */
+  if (!in_pred->subquery_allows_materialization(
+          thd, query_block, query_block->outer_query_block()))
+    return false;
+
+  Opt_trace_context *const trace = &thd->opt_trace;
+  Opt_trace_object trace_wrapper(trace);
+  Opt_trace_object trace_subqmat(
+      trace, "execution_plan_for_potential_materialization");
+  const double saved_best_read = best_read;
+  const ha_rows saved_best_rowcount = best_rowcount;
+  POSITION *const saved_best_pos = best_positions;
+
+  if (in_pred->in2exists_added_to_where()) {
+    Opt_trace_array trace_subqmat_steps(trace, "steps");
+
+    // Up to one extra slot per semi-join nest is needed (if materialized)
+    const uint sj_nests = query_block->sj_nests.size();
+
+    if (!(best_positions = new (thd->mem_root) POSITION[tables + sj_nests]))
+      return true;
+
+    // Compute plans which do not use outer references
+
+    assert(allow_outer_refs);
+    allow_outer_refs = false;
+
+    if (optimize_semijoin_nests_for_materialization(this)) return true;
+
+    if (Optimize_table_order(thd, this, nullptr).choose_table_order())
+      return true;
+  } else {
+    /*
+      If IN->EXISTS didn't add any condition to WHERE (only to HAVING, which
+      can happen if subquery has aggregates) then the plan for materialization
+      will be the same as for EXISTS - don't compute it again.
+    */
+    trace_subqmat.add("surely_same_plan_as_EXISTS", true)
+        .add_alnum("cause", "EXISTS_did_not_change_WHERE");
+  }
+
+  Semijoin_mat_optimize sjm;
+  calculate_materialization_costs(this, nullptr, primary_tables, &sjm);
+
+  /*
+    The number of evaluations of the subquery influences costs, we need to
+    compute it.
+  */
+  Opt_trace_object trace_subq_mat_decision(trace, "subq_mat_decision");
+  const double subq_executions = calculate_subquery_executions(in_pred, trace);
+  const double cost_exists = subq_executions * saved_best_read;
+  const double cost_mat_table = sjm.materialization_cost.total_cost();
+  const double cost_mat =
+      cost_mat_table + subq_executions * sjm.lookup_cost.total_cost();
+  const bool mat_chosen =
+      (allowed_strategies == Subquery_strategy::CANDIDATE_FOR_IN2EXISTS_OR_MAT)
+          ? (cost_mat < cost_exists)
+          : true;
+  trace_subq_mat_decision
+      .add("cost_to_create_and_fill_materialized_table", cost_mat_table)
+      .add("cost_of_one_EXISTS", saved_best_read)
+      .add("number_of_subquery_evaluations", subq_executions)
+      .add("cost_of_materialization", cost_mat)
+      .add("cost_of_EXISTS", cost_exists)
+      .add("chosen", mat_chosen);
+  if (mat_chosen) {
+    *method = Subquery_strategy::SUBQ_MATERIALIZATION;
+  } else {
+    best_read = saved_best_read;
+    best_rowcount = saved_best_rowcount;
+    best_positions = saved_best_pos;
+    /*
+      Don't restore JOIN::positions or best_ref, they're not used
+      afterwards. best_positions is (like: by get_sj_strategy()).
+    */
+  }
+  return false;
+}
+
+double calculate_subquery_executions(const Item_subselect *subquery,
+                                     Opt_trace_context *trace) {
+  Opt_trace_array trace_parents(trace, "parent_fanouts");
+  double subquery_executions = 1.0;
+  for (;;) {
+    const Query_block *const parent_query_block =
+        subquery->unit->outer_query_block();
+    const JOIN *const parent_join = parent_query_block->join;
+    if (parent_join == nullptr) {
+      /*
+        May be single-table UPDATE/DELETE, has no join.
+        @todo  we should find how many rows it plans to UPDATE/DELETE, taking
+        inspiration in Explain_table::explain_rows_and_filtered().
+        This is not a priority as it applies only to
+        UPDATE - child(non-mat-subq) - grandchild(may-be-mat-subq).
+        And it will autosolve the day UPDATE gets a JOIN.
+      */
+      break;
+    }
+
+    Opt_trace_object trace_parent(trace);
+    trace_parent.add_select_number(parent_query_block->select_number);
+    double parent_fanout;
+    if (  // safety, not sure needed
+        parent_join->plan_is_const() ||
+        // if subq is in condition on constant table:
+        !parent_join->child_subquery_can_materialize) {
+      parent_fanout = 1.0;
+      trace_parent.add("subq_attached_to_const_table", true);
+    } else {
+      if (subquery->in_cond_of_tab != NO_PLAN_IDX) {
+        /*
+          Subquery is attached to a certain 'pos', pos[-1].prefix_rowcount
+          is the number of times we'll start a loop accessing 'pos'; each such
+          loop will read pos->rows_fetched rows of 'pos', so subquery will
+          be evaluated pos[-1].prefix_rowcount * pos->rows_fetched times.
+          Exceptions:
+          - if 'pos' is first, use 1.0 instead of pos[-1].prefix_rowcount
+          - if 'pos' is first of a sj-materialization nest, same.
+
+          If in a sj-materialization nest, pos->rows_fetched and
+          pos[-1].prefix_rowcount are of the "nest materialization" plan
+          (copied back in fix_semijoin_strategies()), which is
+          appropriate as it corresponds to evaluations of our subquery.
+
+          pos->prefix_rowcount is not suitable because if we have:
+          select ... from ot1 where ot1.col in
+            (select it1.col1 from it1 where it1.col2 not in (subq));
+          and subq does subq-mat, and plan is ot1 - it1+firstmatch(ot1),
+          then:
+          - t1.prefix_rowcount==1 (due to firstmatch)
+          - subq is attached to it1, and is evaluated for each row read from
+            t1, potentially way more than 1.
+         */
+        const uint idx = subquery->in_cond_of_tab;
+        assert((int)idx >= 0 && idx < parent_join->tables);
+        trace_parent.add("subq_attached_to_table", true);
+        QEP_TAB *const parent_tab = &parent_join->qep_tab[idx];
+        trace_parent.add_utf8_table(parent_tab->table_ref);
+        parent_fanout = parent_tab->position()->rows_fetched;
+        if ((idx > parent_join->const_tables) &&
+            !sj_is_materialize_strategy(parent_tab->position()->sj_strategy))
+          parent_fanout *= parent_tab[-1].position()->prefix_rowcount;
+      } else {
+        /*
+          Subquery is SELECT list, GROUP BY, ORDER BY, HAVING: it is evaluated
+          at the end of the parent join's execution.
+          It can be evaluated once per row-before-grouping:
+          SELECT SUM(t1.col IN (subq)) FROM t1 GROUP BY expr;
+          or once per row-after-grouping:
+          SELECT SUM(t1.col) AS s FROM t1 GROUP BY expr HAVING s IN (subq),
+          SELECT SUM(t1.col) IN (subq) FROM t1 GROUP BY expr
+          It's hard to tell. We simply assume 'once per
+          row-before-grouping'.
+
+          Another approximation:
+          SELECT ... HAVING x IN (subq) LIMIT 1
+          best_rowcount=1 due to LIMIT, though HAVING (and thus the subquery)
+          may be evaluated many times before HAVING becomes true and the limit
+          is reached.
+        */
+        trace_parent.add("subq_attached_to_join_result", true);
+        parent_fanout = static_cast<double>(parent_join->best_rowcount);
+      }
+    }
+    subquery_executions *= parent_fanout;
+    trace_parent.add("fanout", parent_fanout);
+    const bool cacheable = parent_query_block->is_cacheable();
+    trace_parent.add("cacheable", cacheable);
+    if (cacheable) {
+      // Parent executed only once
+      break;
+    }
+    /*
+      Parent query is executed once per outer row => go up to find number of
+      outer rows. Example:
+      SELECT ... IN(subq-with-in2exists WHERE ... IN (subq-with-mat))
+    */
+    subquery = parent_join->query_expression()->item;
+    if (subquery == nullptr) {
+      // derived table, materialized only once
+      break;
+    }
+  }  // for(;;)
+  return subquery_executions;
+}
+
+/**
+  Optimize rollup specification.
+
+  Allocate objects needed for rollup processing.
+
+  @returns false if success, true if error.
+*/
+
+bool JOIN::optimize_rollup() {
+  tmp_table_param.allow_group_via_temp_table = false;
+  rollup_state = RollupState::INITED;
+  tmp_table_param.group_parts = send_group_parts;
+  return false;
+}
+
+/**
+  Refine the best_rowcount estimation based on what happens after tables
+  have been joined: LIMIT and type of result sink.
+ */
+void JOIN::refine_best_rowcount() {
+  // If plan is const, 0 or 1 rows should be returned
+  assert(!plan_is_const() || best_rowcount <= 1);
+
+  if (plan_is_const()) return;
+
+  /*
+    If a derived table, or a member of a UNION which itself forms a derived
+    table:
+    setting estimate to 0 or 1 row would mark the derived table as const.
+    The row count is bumped to the nearest higher value, so that the
+    query block will not be evaluated during optimization.
+  */
+  if (best_rowcount <= 1 &&
+      query_block->master_query_expression()->first_query_block()->linkage ==
+          DERIVED_TABLE_TYPE)
+    best_rowcount = PLACEHOLDER_TABLE_ROW_ESTIMATE;
+
+  /*
+    There will be no more rows than defined in the LIMIT clause. Use it
+    as an estimate. If LIMIT 1 is specified, the query block will be
+    considered "const", with actual row count 0 or 1.
+  */
+  best_rowcount = std::min(best_rowcount, query_expression()->select_limit_cnt);
+}
+
+mem_root_deque<Item *> *JOIN::get_current_fields() {
+  assert((int)current_ref_item_slice >= 0);
+  if (current_ref_item_slice == REF_SLICE_SAVED_BASE) return fields;
+  return &tmp_fields[current_ref_item_slice];
+}
+
+const Cost_model_server *JOIN::cost_model() const {
+  assert(thd != nullptr);
+  return thd->cost_model();
+}
+
+/**
+  @} (end of group Query_Optimizer)
+
+
+// Source: sql_optimizer.cc
+// Lines 9609-10929

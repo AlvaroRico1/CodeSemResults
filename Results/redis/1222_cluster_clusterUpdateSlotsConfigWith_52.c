@@ -1,0 +1,74 @@
+void clusterUpdateSlotsConfigWith(clusterNode *sender, uint64_t senderConfigEpoch, unsigned char *slots) {
+    int j;
+    clusterNode *curmaster = NULL, *newmaster = NULL;
+    /* The dirty slots list is a list of slots for which we lose the ownership
+     * while having still keys inside. This usually happens after a failover
+     * or after a manual cluster reconfiguration operated by the admin.
+     *
+     * If the update message is not able to demote a master to slave (in this
+     * case we'll resync with the master updating the whole key space), we
+     * need to delete all the keys in the slots we lost ownership. */
+    uint16_t dirty_slots[CLUSTER_SLOTS];
+    int dirty_slots_count = 0;
+
+    /* We should detect if sender is new master of our shard.
+     * We will know it if all our slots were migrated to sender, and sender
+     * has no slots except ours */
+    int sender_slots = 0;
+    int migrated_our_slots = 0;
+
+    /* Here we set curmaster to this node or the node this node
+     * replicates to if it's a slave. In the for loop we are
+     * interested to check if slots are taken away from curmaster. */
+    curmaster = nodeIsMaster(myself) ? myself : myself->slaveof;
+
+    if (sender == myself) {
+        serverLog(LL_WARNING,"Discarding UPDATE message about myself.");
+        return;
+    }
+
+    for (j = 0; j < CLUSTER_SLOTS; j++) {
+        if (bitmapTestBit(slots,j)) {
+            sender_slots++;
+
+            /* The slot is already bound to the sender of this message. */
+            if (server.cluster->slots[j] == sender) continue;
+
+            /* The slot is in importing state, it should be modified only
+             * manually via redis-trib (example: a resharding is in progress
+             * and the migrating side slot was already closed and is advertising
+             * a new config. We still want the slot to be closed manually). */
+            if (server.cluster->importing_slots_from[j]) continue;
+
+            /* We rebind the slot to the new node claiming it if:
+             * 1) The slot was unassigned or the new node claims it with a
+             *    greater configEpoch.
+             * 2) We are not currently importing the slot. */
+            if (server.cluster->slots[j] == NULL ||
+                server.cluster->slots[j]->configEpoch < senderConfigEpoch)
+            {
+                /* Was this slot mine, and still contains keys? Mark it as
+                 * a dirty slot. */
+                if (server.cluster->slots[j] == myself &&
+                    countKeysInSlot(j) &&
+                    sender != myself)
+                {
+                    dirty_slots[dirty_slots_count] = j;
+                    dirty_slots_count++;
+                }
+
+                if (server.cluster->slots[j] == curmaster) {
+                    newmaster = sender;
+                    migrated_our_slots++;
+                }
+                clusterDelSlot(j);
+                clusterAddSlot(sender,j);
+                clusterDoBeforeSleep(CLUSTER_TODO_SAVE_CONFIG|
+                                     CLUSTER_TODO_UPDATE_STATE|
+                                     CLUSTER_TODO_FSYNC_CONFIG);
+            }
+        }
+
+
+// Source: cluster.c
+// Lines 1635-1704

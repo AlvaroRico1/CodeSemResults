@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'state' at line 8\n2. Pointer 'repo' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint git_commit_graph_writer_add_index_file(\n\t\tgit_commit_graph_writer *w,\n\t\tgit_repository *repo,\n\t\tconst char *idx_path)\n{\n\tint error;\n\tstruct git_pack_file *p = NULL;\n\tstruct object_entry_cb_state state = {0};\n\tstate.repo = repo;\n\tstate.commits = &w->commits;\n\n\terror = git_repository_odb(&state.db, repo);\n\tif (error < 0)\n\t\tgoto cleanup;\n\n\terror = git_mwindow_get_pack(&p, idx_path);\n\tif (error < 0)\n\t\tgoto cleanup;\n\n\terror = git_pack_foreach_entry(p, object_entry__cb, &state);\n\tif (error < 0)\n\t\tgoto cleanup;\n\ncleanup:\n\tif (p)\n\t\tgit_mwindow_put_pack(p);\n\tgit_odb_free(state.db);\n\treturn error;\n}\n\n\n// Source: commit_graph.c\n// Lines 700-728\n",
+  "ANSWER": "MUST"
+}

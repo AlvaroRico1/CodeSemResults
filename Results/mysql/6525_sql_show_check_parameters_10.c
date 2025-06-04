@@ -1,0 +1,53 @@
+bool Sql_cmd_show_table_base::check_parameters(THD *thd) {
+  // No MDL lock required for temporary tables
+  if (m_temporary) return false;
+  bool can_deadlock = thd->mdl_context.has_locks();
+  TABLE_LIST *table = thd->lex->query_tables;
+  TABLE_LIST *dst_table = table->schema_query_block->table_list.first;
+  if (try_acquire_high_prio_shared_mdl_lock(thd, dst_table, can_deadlock)) {
+    /*
+      Some error occurred (most probably we have been killed while
+      waiting for conflicting locks to go away), let the caller to
+      handle the situation.
+    */
+    return true;
+  }
+
+  if (dst_table->mdl_request.ticket == nullptr) {
+    /*
+      We are in situation when we have encountered conflicting metadata
+      lock and deadlocks can occur due to waiting for it to go away.
+      So instead of waiting skip this table with an appropriate warning.
+    */
+    assert(can_deadlock);
+    my_error(ER_WARN_I_S_SKIPPED_TABLE, MYF(0), dst_table->db,
+             dst_table->table_name);
+    return true;
+  }
+
+  // Stop if given database does not exist.
+  dd::Schema_MDL_locker mdl_handler(thd);
+  dd::cache::Dictionary_client::Auto_releaser releaser(thd->dd_client());
+  const dd::Schema *schema = nullptr;
+  if (mdl_handler.ensure_locked(dst_table->db) ||
+      thd->dd_client()->acquire(dst_table->db, &schema))
+    return true;
+
+  if (schema == nullptr) {
+    my_error(ER_BAD_DB_ERROR, MYF(0), dst_table->db);
+    return true;
+  }
+
+  const dd::Abstract_table *at = nullptr;
+  if (thd->dd_client()->acquire(dst_table->db, dst_table->table_name, &at))
+    return true;
+  if (at == nullptr) {
+    my_error(ER_NO_SUCH_TABLE, MYF(0), dst_table->db, dst_table->table_name);
+    return true;
+  }
+  return false;
+}
+
+
+// Source: sql_show.cc
+// Lines 694-742

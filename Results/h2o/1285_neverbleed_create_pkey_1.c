@@ -1,0 +1,37 @@
+static EVP_PKEY *create_pkey(neverbleed_t *nb, size_t key_index, const char *ebuf, const char *nbuf)
+{
+    struct st_neverbleed_rsa_exdata_t *exdata;
+    RSA *rsa;
+    EVP_PKEY *pkey;
+    BIGNUM *e = NULL, *n = NULL;
+
+    if ((exdata = malloc(sizeof(*exdata))) == NULL) {
+        fprintf(stderr, "no memory\n");
+        abort();
+    }
+    exdata->nb = nb;
+    exdata->key_index = key_index;
+
+    rsa = RSA_new_method(nb->engine);
+    RSA_set_ex_data(rsa, 0, exdata);
+    if (BN_hex2bn(&e, ebuf) == 0) {
+        fprintf(stderr, "failed to parse e:%s\n", ebuf);
+        abort();
+    }
+    if (BN_hex2bn(&n, nbuf) == 0) {
+        fprintf(stderr, "failed to parse n:%s\n", nbuf);
+        abort();
+    }
+    RSA_set0_key(rsa, n, e, NULL);
+    RSA_set_flags(rsa, RSA_FLAG_EXT_PKEY);
+
+    pkey = EVP_PKEY_new();
+    EVP_PKEY_set1_RSA(pkey, rsa);
+    RSA_free(rsa);
+
+    return pkey;
+}
+
+
+// Source: neverbleed.c
+// Lines 687-719

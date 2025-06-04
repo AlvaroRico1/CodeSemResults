@@ -1,0 +1,108 @@
+static bool compare_table_with_partition(THD *thd, TABLE *table,
+                                         TABLE *part_table,
+                                         partition_element *part_elem,
+                                         uint part_id) {
+  HA_CREATE_INFO table_create_info, part_create_info;
+  Alter_info part_alter_info(thd->mem_root);
+  Alter_table_ctx part_alter_ctx;  // Not used
+  DBUG_TRACE;
+
+  dd::cache::Dictionary_client::Auto_releaser releaser(thd->dd_client());
+  const dd::Table *part_table_def = nullptr;
+  if (!part_table->s->tmp_table) {
+    if (thd->dd_client()->acquire(part_table->s->db.str,
+                                  part_table->s->table_name.str,
+                                  &part_table_def)) {
+      return true;
+    }
+    // Should not happen, we know the table exists and can be opened.
+    assert(part_table_def != nullptr);
+  }
+
+  bool metadata_equal = false;
+
+  update_create_info_from_table(&table_create_info, table);
+  /* get the current auto_increment value */
+  table->file->update_create_info(&table_create_info);
+  /* mark all columns used, since they are used when preparing the new table */
+  part_table->use_all_columns();
+  table->use_all_columns();
+
+  /* db_type is not set in prepare_alter_table */
+  part_create_info.db_type = part_table->part_info->default_engine_type;
+
+  if (mysql_prepare_alter_table(thd, part_table_def, part_table,
+                                &part_create_info, &part_alter_info,
+                                &part_alter_ctx)) {
+    my_error(ER_TABLES_DIFFERENT_METADATA, MYF(0));
+    return true;
+  }
+
+  /*
+    Since we exchange the partition with the table, allow exchanging
+    auto_increment value as well.
+  */
+  part_create_info.auto_increment_value =
+      table_create_info.auto_increment_value;
+
+  /* Check compatible row_types and set create_info accordingly. */
+  Partition_handler *part_handler;
+  part_handler = part_table->file->get_partition_handler();
+  auto part_row_type =
+      part_handler->get_partition_row_type(part_table_def, part_id);
+
+  if (part_row_type != table->s->real_row_type) {
+    my_error(ER_PARTITION_EXCHANGE_DIFFERENT_OPTION, MYF(0), "ROW_FORMAT");
+    return true;
+  }
+  part_create_info.row_type = table->s->row_type;
+
+  /*
+    NOTE: ha_blackhole does not support check_if_compatible_data,
+    so this always fail for blackhole tables.
+    ha_myisam compares pointers to verify that DATA/INDEX DIRECTORY is
+    the same, so any table using data/index_file_name will fail.
+  */
+  if (mysql_compare_tables(thd, table, &part_alter_info, &part_create_info,
+                           &metadata_equal)) {
+    my_error(ER_TABLES_DIFFERENT_METADATA, MYF(0));
+    return true;
+  }
+
+  DEBUG_SYNC(thd, "swap_partition_after_compare_tables");
+  if (!metadata_equal) {
+    my_error(ER_TABLES_DIFFERENT_METADATA, MYF(0));
+    return true;
+  }
+  assert(table->s->db_create_options == part_table->s->db_create_options);
+  assert(table->s->db_options_in_use == part_table->s->db_options_in_use);
+
+  if (table_create_info.avg_row_length != part_create_info.avg_row_length) {
+    my_error(ER_PARTITION_EXCHANGE_DIFFERENT_OPTION, MYF(0), "AVG_ROW_LENGTH");
+    return true;
+  }
+
+  if (table_create_info.table_options != part_create_info.table_options) {
+    my_error(ER_PARTITION_EXCHANGE_DIFFERENT_OPTION, MYF(0), "TABLE OPTION");
+    return true;
+  }
+
+  if (table->s->table_charset != part_table->s->table_charset) {
+    my_error(ER_PARTITION_EXCHANGE_DIFFERENT_OPTION, MYF(0), "CHARACTER SET");
+    return true;
+  }
+
+  /*
+    NOTE: We do not support update of frm-file, i.e. change
+    max/min_rows, data/index_file_name etc.
+    The workaround is to use REORGANIZE PARTITION to rewrite
+    the frm file and then use EXCHANGE PARTITION when they are the same.
+  */
+  if (compare_partition_options(&table_create_info, part_elem)) return true;
+
+  return false;
+}
+
+
+// Source: sql_partition_admin.cc
+// Lines 182-285

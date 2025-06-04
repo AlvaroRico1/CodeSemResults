@@ -1,0 +1,46 @@
+static int rebase_copy_note(
+	git_rebase *rebase,
+	const char *notes_ref,
+	git_oid *from,
+	git_oid *to,
+	const git_signature *committer)
+{
+	git_note *note = NULL;
+	git_oid note_id;
+	git_signature *who = NULL;
+	int error;
+
+	if ((error = git_note_read(&note, rebase->repo, notes_ref, from)) < 0) {
+		if (error == GIT_ENOTFOUND) {
+			git_error_clear();
+			error = 0;
+		}
+
+		goto done;
+	}
+
+	if (!committer) {
+		if((error = git_signature_default(&who, rebase->repo)) < 0) {
+			if (error != GIT_ENOTFOUND ||
+				(error = git_signature_now(&who, "unknown", "unknown")) < 0)
+				goto done;
+
+			git_error_clear();
+		}
+
+		committer = who;
+	}
+
+	error = git_note_create(&note_id, rebase->repo, notes_ref,
+		git_note_author(note), committer, to, git_note_message(note), 0);
+
+done:
+	git_note_free(note);
+	git_signature_free(who);
+
+	return error;
+}
+
+
+// Source: rebase.c
+// Lines 1251-1292

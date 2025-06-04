@@ -1,0 +1,59 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'e' at line 4
+2. Pointer 'e' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+summarize_calls_size_and_time (struct cgraph_node *node,
+    			       ipa_fn_summary *sum)
+{
+  struct cgraph_edge *e;
+  for (e = node->callees; e; e = e->next_callee)
+    {
+      if (!e->inline_failed)
+	{
+	  gcc_checking_assert (!ipa_call_summaries->get (e));
+	  summarize_calls_size_and_time (e->callee, sum);
+	  continue;
+	}
+      int size = 0;
+      sreal time = 0;
+
+      estimate_edge_size_and_time (e, &size, NULL, &time,
+				   vNULL, vNULL, vNULL, NULL);
+
+      struct predicate pred = true;
+      class ipa_call_summary *es = ipa_call_summaries->get (e);
+
+      if (es->predicate)
+	pred = *es->predicate;
+      sum->account_size_time (size, time, pred, pred, true);
+    }
+  for (e = node->indirect_calls; e; e = e->next_callee)
+    {
+      int size = 0;
+      sreal time = 0;
+
+      estimate_edge_size_and_time (e, &size, NULL, &time,
+				   vNULL, vNULL, vNULL, NULL);
+      struct predicate pred = true;
+      class ipa_call_summary *es = ipa_call_summaries->get (e);
+
+      if (es->predicate)
+	pred = *es->predicate;
+      sum->account_size_time (size, time, pred, pred, true);
+    }
+}
+
+
+// Source: ipa-fnsummary.c
+// Lines 3156-3195
+
+
+[ANSWER]
+MUST

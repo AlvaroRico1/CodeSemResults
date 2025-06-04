@@ -1,0 +1,153 @@
+bool MessageDifferencer::CompareRepeatedRep(
+    const Message& message1, const Message& message2,
+    const FieldDescriptor* repeated_field,
+    std::vector<SpecificField>* parent_fields) {
+  // the input FieldDescriptor is guaranteed to be repeated field.
+  GOOGLE_DCHECK(repeated_field->is_repeated());
+  const Reflection* reflection1 = message1.GetReflection();
+  const Reflection* reflection2 = message2.GetReflection();
+
+  const int count1 = reflection1->FieldSize(message1, repeated_field);
+  const int count2 = reflection2->FieldSize(message2, repeated_field);
+  const bool treated_as_subset = IsTreatedAsSubset(repeated_field);
+
+  // If the field is not treated as subset and no detailed reports is needed,
+  // we do a quick check on the number of the elements to avoid unnecessary
+  // comparison.
+  if (count1 != count2 && reporter_ == NULL && !treated_as_subset) {
+    return false;
+  }
+  // A match can never be found if message1 has more items than message2.
+  if (count1 > count2 && reporter_ == NULL) {
+    return false;
+  }
+
+  // These two list are used for store the index of the correspondent
+  // element in peer repeated field.
+  std::vector<int> match_list1;
+  std::vector<int> match_list2;
+
+  const MapKeyComparator* key_comparator = GetMapKeyComparator(repeated_field);
+  bool smart_list = IsTreatedAsSmartList(repeated_field);
+  bool simple_list = key_comparator == nullptr &&
+                     !IsTreatedAsSet(repeated_field) &&
+                     !IsTreatedAsSmartSet(repeated_field) && !smart_list;
+
+  // For simple lists, we avoid matching repeated field indices, saving the
+  // memory allocations that would otherwise be needed for match_list1 and
+  // match_list2.
+  if (!simple_list) {
+    // Try to match indices of the repeated fields. Return false if match fails.
+    if (!MatchRepeatedFieldIndices(message1, message2, repeated_field,
+                                   key_comparator, *parent_fields, &match_list1,
+                                   &match_list2) &&
+        reporter_ == nullptr) {
+      return false;
+    }
+  }
+
+  bool fieldDifferent = false;
+  SpecificField specific_field;
+  specific_field.field = repeated_field;
+
+  // At this point, we have already matched pairs of fields (with the reporting
+  // to be done later). Now to check if the paired elements are different.
+  int next_unmatched_index = 0;
+  for (int i = 0; i < count1; i++) {
+    if (simple_list && i >= count2) {
+      break;
+    }
+    if (!simple_list && match_list1[i] == -1) {
+      if (smart_list) {
+        if (reporter_ == nullptr) return false;
+        AddSpecificIndex(&specific_field, message1, repeated_field, i);
+        parent_fields->push_back(specific_field);
+        reporter_->ReportDeleted(message1, message2, *parent_fields);
+        parent_fields->pop_back();
+        fieldDifferent = true;
+        // Use -2 to mark this element has been reported.
+        match_list1[i] = -2;
+      }
+      continue;
+    }
+    if (smart_list) {
+      for (int j = next_unmatched_index; j < match_list1[i]; ++j) {
+        GOOGLE_CHECK_LE(0, j);
+        if (reporter_ == nullptr) return false;
+        specific_field.index = j;
+        AddSpecificNewIndex(&specific_field, message2, repeated_field, j);
+        parent_fields->push_back(specific_field);
+        reporter_->ReportAdded(message1, message2, *parent_fields);
+        parent_fields->pop_back();
+        fieldDifferent = true;
+        // Use -2 to mark this element has been reported.
+        match_list2[j] = -2;
+      }
+    }
+    AddSpecificIndex(&specific_field, message1, repeated_field, i);
+    if (simple_list) {
+      AddSpecificNewIndex(&specific_field, message2, repeated_field, i);
+    } else {
+      AddSpecificNewIndex(&specific_field, message2, repeated_field,
+                          match_list1[i]);
+      next_unmatched_index = match_list1[i] + 1;
+    }
+
+    const bool result = CompareFieldValueUsingParentFields(
+        message1, message2, repeated_field, i, specific_field.new_index,
+        parent_fields);
+
+    // If we have found differences, either report them or terminate if
+    // no reporter is present. Note that ReportModified, ReportMoved, and
+    // ReportMatched are all mutually exclusive.
+    if (!result) {
+      if (reporter_ == NULL) return false;
+      parent_fields->push_back(specific_field);
+      reporter_->ReportModified(message1, message2, *parent_fields);
+      parent_fields->pop_back();
+      fieldDifferent = true;
+    } else if (reporter_ != NULL &&
+               specific_field.index != specific_field.new_index &&
+               !specific_field.field->is_map() && report_moves_) {
+      parent_fields->push_back(specific_field);
+      reporter_->ReportMoved(message1, message2, *parent_fields);
+      parent_fields->pop_back();
+    } else if (report_matches_ && reporter_ != NULL) {
+      parent_fields->push_back(specific_field);
+      reporter_->ReportMatched(message1, message2, *parent_fields);
+      parent_fields->pop_back();
+    }
+  }
+
+  // Report any remaining additions or deletions.
+  for (int i = 0; i < count2; ++i) {
+    if (!simple_list && match_list2[i] != -1) continue;
+    if (simple_list && i < count1) continue;
+    if (!treated_as_subset) {
+      fieldDifferent = true;
+    }
+
+    if (reporter_ == NULL) continue;
+    specific_field.index = i;
+    AddSpecificNewIndex(&specific_field, message2, repeated_field, i);
+    parent_fields->push_back(specific_field);
+    reporter_->ReportAdded(message1, message2, *parent_fields);
+    parent_fields->pop_back();
+  }
+
+  for (int i = 0; i < count1; ++i) {
+    if (!simple_list && match_list1[i] != -1) continue;
+    if (simple_list && i < count2) continue;
+    assert(reporter_ != NULL);
+    AddSpecificIndex(&specific_field, message1, repeated_field, i);
+    parent_fields->push_back(specific_field);
+    reporter_->ReportDeleted(message1, message2, *parent_fields);
+    parent_fields->pop_back();
+    fieldDifferent = true;
+  }
+  return !fieldDifferent;
+}
+
+
+// Source: message_differencer.cc
+// Lines 1120-1268

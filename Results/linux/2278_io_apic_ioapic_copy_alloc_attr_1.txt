@@ -1,0 +1,1 @@
+polarity,linux/arch/x86/kernel/apic/io_apic.c,5,trigger,linux/arch/x86/kernel/apic/io_apic.c,5,2

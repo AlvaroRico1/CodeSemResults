@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'next' at line 4
+2. Pointer 'current' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void listEmpty(list *list)
+{
+    unsigned long len;
+    listNode *current, *next;
+
+    current = list->head;
+    len = list->len;
+    while(len--) {
+        next = current->next;
+        if (list->free) list->free(current->value);
+        zfree(current);
+        current = next;
+    }
+    list->head = list->tail = NULL;
+    list->len = 0;
+}
+
+
+// Source: adlist.c
+// Lines 57-72
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,1 @@
+new_value_reg,gcc/gcc/hsa-gen.c,59,shifted_value_reg,gcc/gcc/hsa-gen.c,68,1

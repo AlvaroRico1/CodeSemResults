@@ -1,0 +1,41 @@
+bool Sql_cmd_dml::check_all_table_privileges(THD *thd) {
+  // Check for all possible DML privileges
+
+  for (TABLE_LIST *tr = lex->query_tables; tr != nullptr;
+       tr = tr->next_global) {
+    if (tr->is_internal())  // No privilege check required for internal tables
+      continue;
+    // Calculated wanted privilege based on how table/view is used:
+    ulong want_privilege = 0;
+    if (tr->is_inserted()) {
+      want_privilege |= INSERT_ACL;
+    }
+    if (tr->is_updated()) {
+      want_privilege |= UPDATE_ACL;
+    }
+    if (tr->is_deleted()) {
+      want_privilege |= DELETE_ACL;
+    }
+    if (want_privilege == 0) {
+      want_privilege = SELECT_ACL;
+    }
+    if (tr->referencing_view == nullptr) {
+      // This is a base table
+      if (check_single_table_access(thd, want_privilege, tr, false))
+        return true;
+    } else {
+      // This is a view, set handler for transformation of errors
+      Internal_error_handler_holder<View_error_handler, TABLE_LIST>
+          view_handler(thd, true, tr);
+      for (TABLE_LIST *t = tr; t->referencing_view; t = t->referencing_view) {
+        if (check_single_table_access(thd, want_privilege, t, false))
+          return true;
+      }
+    }
+  }
+  return false;
+}
+
+
+// Source: sql_select.cc
+// Lines 947-983

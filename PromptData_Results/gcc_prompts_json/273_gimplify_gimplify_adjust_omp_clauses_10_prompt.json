@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'octx' at line 11\n2. Pointer 'octx' at line 11\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ngimplify_adjust_omp_clauses (gimple_seq *pre_p, gimple_seq body, tree *list_p,\n\t\t\t     enum tree_code code)\n{\n  struct gimplify_omp_ctx *ctx = gimplify_omp_ctxp;\n  tree *orig_list_p = list_p;\n  tree c, decl;\n  bool has_inscan_reductions = false;\n\n  if (body)\n    {\n      struct gimplify_omp_ctx *octx;\n      for (octx = ctx; octx; octx = octx->outer_context)\n\tif ((octx->region_type & (ORT_PARALLEL | ORT_TASK | ORT_TEAMS)) != 0)\n\t  break;\n      if (octx)\n\t{\n\t  struct walk_stmt_info wi;\n\t  memset (&wi, 0, sizeof (wi));\n\t  walk_gimple_seq (body, omp_find_stores_stmt,\n\t\t\t   omp_find_stores_op, &wi);\n\t}\n    }\n\n\n// Source: gimplify.c\n// Lines 10166-10187\n",
+  "ANSWER": "MUST"
+}

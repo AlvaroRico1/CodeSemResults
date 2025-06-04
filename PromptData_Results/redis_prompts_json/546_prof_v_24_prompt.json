@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'gctx' at line 2\n2. Pointer 'tgctx' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\n\t\tvoid\t\t*v;\n\t} gctx, tgctx;\n\n\n// Source: prof.c\n// Lines 724-725\n",
+  "ANSWER": "MUST"
+}

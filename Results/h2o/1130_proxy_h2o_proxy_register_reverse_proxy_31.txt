@@ -1,0 +1,1 @@
+self,h2o/lib/handler/proxy.c,3,sockpool,h2o/lib/handler/proxy.c,1,1

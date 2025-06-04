@@ -1,0 +1,167 @@
+static int read_patches(const char *range, struct string_list *list,
+			const struct strvec *other_arg)
+{
+	struct child_process cp = CHILD_PROCESS_INIT;
+	struct strbuf buf = STRBUF_INIT, contents = STRBUF_INIT;
+	struct patch_util *util = NULL;
+	int in_header = 1;
+	char *line, *current_filename = NULL;
+	ssize_t len;
+	size_t size;
+
+	strvec_pushl(&cp.args, "log", "--no-color", "-p", "--no-merges",
+		     "--reverse", "--date-order", "--decorate=no",
+		     "--no-prefix",
+		     /*
+		      * Choose indicators that are not used anywhere
+		      * else in diffs, but still look reasonable
+		      * (e.g. will not be confusing when debugging)
+		      */
+		     "--output-indicator-new=>",
+		     "--output-indicator-old=<",
+		     "--output-indicator-context=#",
+		     "--no-abbrev-commit",
+		     "--pretty=medium",
+		     "--notes",
+		     NULL);
+	if (other_arg)
+		strvec_pushv(&cp.args, other_arg->v);
+	strvec_push(&cp.args, range);
+	cp.out = -1;
+	cp.no_stdin = 1;
+	cp.git_cmd = 1;
+
+	if (start_command(&cp))
+		return error_errno(_("could not start `log`"));
+	if (strbuf_read(&contents, cp.out, 0) < 0) {
+		error_errno(_("could not read `log` output"));
+		finish_command(&cp);
+		return -1;
+	}
+	if (finish_command(&cp))
+		return -1;
+
+	line = contents.buf;
+	size = contents.len;
+	for (; size > 0; size -= len, line += len) {
+		const char *p;
+		char *eol;
+
+		eol = memchr(line, '\n', size);
+		if (eol) {
+			*eol = '\0';
+			len = eol + 1 - line;
+		} else {
+			len = size;
+		}
+
+		if (skip_prefix(line, "commit ", &p)) {
+			if (util) {
+				string_list_append(list, buf.buf)->util = util;
+				strbuf_reset(&buf);
+			}
+			CALLOC_ARRAY(util, 1);
+			if (get_oid(p, &util->oid)) {
+				error(_("could not parse commit '%s'"), p);
+				free(util);
+				free(current_filename);
+				string_list_clear(list, 1);
+				strbuf_release(&buf);
+				strbuf_release(&contents);
+				return -1;
+			}
+			util->matching = -1;
+			in_header = 1;
+			continue;
+		}
+
+		if (!util) {
+			error(_("could not parse first line of `log` output: "
+				"did not start with 'commit ': '%s'"),
+			      line);
+			free(current_filename);
+			string_list_clear(list, 1);
+			strbuf_release(&buf);
+			strbuf_release(&contents);
+			return -1;
+		}
+
+		if (starts_with(line, "diff --git")) {
+			struct patch patch = { 0 };
+			struct strbuf root = STRBUF_INIT;
+			int linenr = 0;
+			int orig_len;
+
+			in_header = 0;
+			strbuf_addch(&buf, '\n');
+			if (!util->diff_offset)
+				util->diff_offset = buf.len;
+			if (eol)
+				*eol = '\n';
+			orig_len = len;
+			len = parse_git_diff_header(&root, &linenr, 0, line,
+						    len, size, &patch);
+			if (len < 0) {
+				error(_("could not parse git header '%.*s'"),
+				      orig_len, line);
+				free(util);
+				free(current_filename);
+				string_list_clear(list, 1);
+				strbuf_release(&buf);
+				strbuf_release(&contents);
+				return -1;
+			}
+			strbuf_addstr(&buf, " ## ");
+			if (patch.is_new > 0)
+				strbuf_addf(&buf, "%s (new)", patch.new_name);
+			else if (patch.is_delete > 0)
+				strbuf_addf(&buf, "%s (deleted)", patch.old_name);
+			else if (patch.is_rename)
+				strbuf_addf(&buf, "%s => %s", patch.old_name, patch.new_name);
+			else
+				strbuf_addstr(&buf, patch.new_name);
+
+			free(current_filename);
+			if (patch.is_delete > 0)
+				current_filename = xstrdup(patch.old_name);
+			else
+				current_filename = xstrdup(patch.new_name);
+
+			if (patch.new_mode && patch.old_mode &&
+			    patch.old_mode != patch.new_mode)
+				strbuf_addf(&buf, " (mode change %06o => %06o)",
+					    patch.old_mode, patch.new_mode);
+
+			strbuf_addstr(&buf, " ##");
+		} else if (in_header) {
+			if (starts_with(line, "Author: ")) {
+				strbuf_addstr(&buf, " ## Metadata ##\n");
+				strbuf_addstr(&buf, line);
+				strbuf_addstr(&buf, "\n\n");
+				strbuf_addstr(&buf, " ## Commit message ##\n");
+			} else if (starts_with(line, "Notes") &&
+				   line[strlen(line) - 1] == ':') {
+				strbuf_addstr(&buf, "\n\n");
+				/* strip the trailing colon */
+				strbuf_addf(&buf, " ## %.*s ##\n",
+					    (int)(strlen(line) - 1), line);
+			} else if (starts_with(line, "    ")) {
+				p = line + len - 2;
+				while (isspace(*p) && p >= line)
+					p--;
+				strbuf_add(&buf, line, p - line + 1);
+				strbuf_addch(&buf, '\n');
+			}
+			continue;
+		} else if (skip_prefix(line, "@@ ", &p)) {
+			p = strstr(p, "@@");
+			strbuf_addstr(&buf, "@@");
+			if (current_filename && p[2])
+				strbuf_addf(&buf, " %s:", current_filename);
+			if (p)
+				strbuf_addstr(&buf, p + 2);
+		} else if (!line[0])
+
+
+// Source: range-diff.c
+// Lines 33-195

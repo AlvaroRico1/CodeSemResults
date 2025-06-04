@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'data' at line 3
+2. Pointer 'wme' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+window_copy_free(struct window_mode_entry *wme)
+{
+	struct window_copy_mode_data	*data = wme->data;
+
+	evtimer_del(&data->dragtimer);
+
+	free(data->searchmark);
+	free(data->searchstr);
+	free(data->jumpchar);
+
+	screen_free(data->backing);
+	free(data->backing);
+
+	screen_free(&data->screen);
+	free(data);
+}
+
+
+// Source: window-copy.c
+// Lines 485-500
+
+
+[ANSWER]
+MUST

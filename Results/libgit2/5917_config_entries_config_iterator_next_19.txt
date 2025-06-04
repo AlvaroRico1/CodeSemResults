@@ -1,0 +1,1 @@
+entry,libgit2/src/libgit2/config_entries.c,2,it,libgit2/src/libgit2/config_entries.c,5,1

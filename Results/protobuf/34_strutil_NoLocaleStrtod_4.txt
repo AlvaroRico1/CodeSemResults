@@ -1,0 +1,1 @@
+temp_endptr,protobuf/src/google/protobuf/stubs/strutil.cc,8,localized_endptr,protobuf/src/google/protobuf/stubs/strutil.cc,18,2

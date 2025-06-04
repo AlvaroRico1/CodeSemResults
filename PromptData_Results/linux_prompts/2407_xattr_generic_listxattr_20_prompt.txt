@@ -1,0 +1,48 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'buf' at line 14
+2. Pointer 'handlers' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+generic_listxattr(struct dentry *dentry, char *buffer, size_t buffer_size)
+{
+	const struct xattr_handler *handler, **handlers = dentry->d_sb->s_xattr;
+	unsigned int size = 0;
+
+	if (!buffer) {
+		for_each_xattr_handler(handlers, handler) {
+			if (!handler->name ||
+			    (handler->list && !handler->list(dentry)))
+				continue;
+			size += strlen(handler->name) + 1;
+		}
+	} else {
+		char *buf = buffer;
+		size_t len;
+
+		for_each_xattr_handler(handlers, handler) {
+			if (!handler->name ||
+			    (handler->list && !handler->list(dentry)))
+				continue;
+			len = strlen(handler->name);
+			if (len + 1 > buffer_size)
+				return -ERANGE;
+			memcpy(buf, handler->name, len + 1);
+			buf += len + 1;
+			buffer_size -= len + 1;
+		}
+		size = buf - buffer;
+	}
+
+
+// Source: xattr.c
+// Lines 750-778
+
+
+[ANSWER]
+MAY

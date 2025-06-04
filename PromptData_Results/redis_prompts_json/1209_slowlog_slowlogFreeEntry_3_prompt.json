@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'se' at line 2\n2. Pointer 'septr' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid slowlogFreeEntry(void *septr) {\n    slowlogEntry *se = septr;\n    int j;\n\n    for (j = 0; j < se->argc; j++)\n        decrRefCount(se->argv[j]);\n    zfree(se->argv);\n    sdsfree(se->peerid);\n    sdsfree(se->cname);\n    zfree(se);\n}\n\n\n// Source: slowlog.c\n// Lines 100-110\n",
+  "ANSWER": "MUST"
+}

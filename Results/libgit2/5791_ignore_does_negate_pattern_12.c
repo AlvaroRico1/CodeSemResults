@@ -1,0 +1,43 @@
+static int does_negate_pattern(git_attr_fnmatch *rule, git_attr_fnmatch *neg)
+{
+	int (*cmp)(const char *, const char *, size_t);
+	git_attr_fnmatch *longer, *shorter;
+	char *p;
+
+	if ((rule->flags & GIT_ATTR_FNMATCH_NEGATIVE) != 0
+	    || (neg->flags & GIT_ATTR_FNMATCH_NEGATIVE) == 0)
+		return false;
+
+	if (neg->flags & GIT_ATTR_FNMATCH_ICASE)
+		cmp = git__strncasecmp;
+	else
+		cmp = git__strncmp;
+
+	/* If lengths match we need to have an exact match */
+	if (rule->length == neg->length) {
+		return cmp(rule->pattern, neg->pattern, rule->length) == 0;
+	} else if (rule->length < neg->length) {
+		shorter = rule;
+		longer = neg;
+	} else {
+		shorter = neg;
+		longer = rule;
+	}
+
+	/* Otherwise, we need to check if the shorter
+	 * rule is a basename only (that is, it contains
+	 * no path separator) and, if so, if it
+	 * matches the tail of the longer rule */
+	p = longer->pattern + longer->length - shorter->length;
+
+	if (p[-1] != '/')
+		return false;
+	if (memchr(shorter->pattern, '/', shorter->length) != NULL)
+		return false;
+
+	return cmp(p, shorter->pattern, shorter->length) == 0;
+}
+
+
+// Source: ignore.c
+// Lines 50-88

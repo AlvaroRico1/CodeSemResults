@@ -1,0 +1,93 @@
+proc_map_files_readdir(struct file *file, struct dir_context *ctx)
+{
+	struct vm_area_struct *vma;
+	struct task_struct *task;
+	struct mm_struct *mm;
+	unsigned long nr_files, pos, i;
+	GENRADIX(struct map_files_info) fa;
+	struct map_files_info *p;
+	int ret;
+
+	genradix_init(&fa);
+
+	ret = -ENOENT;
+	task = get_proc_task(file_inode(file));
+	if (!task)
+		goto out;
+
+	ret = -EACCES;
+	if (!ptrace_may_access(task, PTRACE_MODE_READ_FSCREDS))
+		goto out_put_task;
+
+	ret = 0;
+	if (!dir_emit_dots(file, ctx))
+		goto out_put_task;
+
+	mm = get_task_mm(task);
+	if (!mm)
+		goto out_put_task;
+
+	ret = down_read_killable(&mm->mmap_sem);
+	if (ret) {
+		mmput(mm);
+		goto out_put_task;
+	}
+
+	nr_files = 0;
+
+	/*
+	 * We need two passes here:
+	 *
+	 *  1) Collect vmas of mapped files with mmap_sem taken
+	 *  2) Release mmap_sem and instantiate entries
+	 *
+	 * otherwise we get lockdep complained, since filldir()
+	 * routine might require mmap_sem taken in might_fault().
+	 */
+
+	for (vma = mm->mmap, pos = 2; vma; vma = vma->vm_next) {
+		if (!vma->vm_file)
+			continue;
+		if (++pos <= ctx->pos)
+			continue;
+
+		p = genradix_ptr_alloc(&fa, nr_files++, GFP_KERNEL);
+		if (!p) {
+			ret = -ENOMEM;
+			up_read(&mm->mmap_sem);
+			mmput(mm);
+			goto out_put_task;
+		}
+
+		p->start = vma->vm_start;
+		p->end = vma->vm_end;
+		p->mode = vma->vm_file->f_mode;
+	}
+	up_read(&mm->mmap_sem);
+	mmput(mm);
+
+	for (i = 0; i < nr_files; i++) {
+		char buf[4 * sizeof(long) + 2];	/* max: %lx-%lx\0 */
+		unsigned int len;
+
+		p = genradix_ptr(&fa, i);
+		len = snprintf(buf, sizeof(buf), "%lx-%lx", p->start, p->end);
+		if (!proc_fill_cache(file, ctx,
+				      buf, len,
+				      proc_map_files_instantiate,
+				      task,
+				      (void *)(unsigned long)p->mode))
+			break;
+		ctx->pos++;
+	}
+
+out_put_task:
+	put_task_struct(task);
+out:
+	genradix_free(&fa);
+	return ret;
+}
+
+
+// Source: base.c
+// Lines 2163-2251

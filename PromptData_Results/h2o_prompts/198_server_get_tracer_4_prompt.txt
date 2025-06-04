@@ -1,0 +1,24 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'conn' at line 3
+2. Pointer '_conn' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static quicly_tracer_t *get_tracer(h2o_conn_t *_conn)
+{
+    struct st_h2o_http3_server_conn_t *conn = (void *)_conn;
+    return quicly_get_tracer(conn->h3.super.quic);
+}
+
+
+// Source: server.c
+// Lines 511-515
+
+
+[ANSWER]
+MUST

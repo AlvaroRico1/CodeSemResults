@@ -1,0 +1,30 @@
+tty_add_features(int *feat, const char *s, const char *separators)
+{
+	const struct tty_feature	 *tf;
+	char				 *next, *loop, *copy;
+	u_int				  i;
+
+	log_debug("adding terminal features %s", s);
+
+	loop = copy = xstrdup(s);
+	while ((next = strsep(&loop, separators)) != NULL) {
+		for (i = 0; i < nitems(tty_features); i++) {
+			tf = tty_features[i];
+			if (strcasecmp(tf->name, next) == 0)
+				break;
+		}
+		if (i == nitems(tty_features)) {
+			log_debug("unknown terminal feature: %s", next);
+			break;
+		}
+		if (~(*feat) & (1 << i)) {
+			log_debug("adding terminal feature: %s", tf->name);
+			(*feat) |= (1 << i);
+		}
+	}
+	free(copy);
+}
+
+
+// Source: tty-features.c
+// Lines 262-287

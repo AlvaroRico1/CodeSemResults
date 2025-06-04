@@ -1,0 +1,58 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'file' at line 3
+2. Pointer 'num_d' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void check_diff_patches_at_line(
+	git_diff *diff, const char **expected,
+	const char *file, const char *func, int line)
+{
+	const git_diff_delta *delta;
+	git_patch *patch = NULL;
+	size_t d, num_d = git_diff_num_deltas(diff);
+	git_buf buf = GIT_BUF_INIT;
+
+	for (d = 0; d < num_d; ++d, git_patch_free(patch)) {
+		cl_git_pass(git_patch_from_diff(&patch, diff, d));
+		cl_assert((delta = git_patch_get_delta(patch)) != NULL);
+
+		if (delta->status == GIT_DELTA_UNMODIFIED) {
+			cl_assert_at_line(expected[d] == NULL, file, func, line);
+			continue;
+		}
+
+		if (expected[d] && !strcmp(expected[d], "<SKIP>"))
+			continue;
+		if (expected[d] && !strcmp(expected[d], "<UNTRACKED>")) {
+			cl_assert_at_line(delta->status == GIT_DELTA_UNTRACKED, file, func, line);
+			continue;
+		}
+		if (expected[d] && !strcmp(expected[d], "<END>")) {
+			cl_git_pass(git_patch_to_buf(&buf, patch));
+			cl_assert_at_line(!strcmp(expected[d], "<END>"), file, func, line);
+		}
+
+		cl_git_pass(git_patch_to_buf(&buf, patch));
+
+		clar__assert_equal(
+			file, func, line, "expected diff did not match actual diff", 1,
+			"%s", expected[d], get_buf_ptr(&buf));
+		git_buf_dispose(&buf);
+	}
+
+	cl_assert_at_line(expected[d] && !strcmp(expected[d], "<END>"), file, func, line);
+}
+
+
+// Source: submodules.c
+// Lines 20-58
+
+
+[ANSWER]
+MUST-NOT

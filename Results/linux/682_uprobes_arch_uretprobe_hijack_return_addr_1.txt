@@ -1,0 +1,1 @@
+orig_ret_vaddr,linux/arch/x86/kernel/uprobes.c,4,trampoline_vaddr,linux/arch/x86/kernel/uprobes.c,1,2

@@ -1,0 +1,56 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'last' at line 6
+2. Pointer 'val' at line 26
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int ext4_xattr_set_entry(struct ext4_xattr_info *i,
+				struct ext4_xattr_search *s,
+				handle_t *handle, struct inode *inode,
+				bool is_block)
+{
+	struct ext4_xattr_entry *last, *next;
+	struct ext4_xattr_entry *here = s->here;
+	size_t min_offs = s->end - s->base, name_len = strlen(i->name);
+	int in_inode = i->in_inode;
+	struct inode *old_ea_inode = NULL;
+	struct inode *new_ea_inode = NULL;
+	size_t old_size, new_size;
+	int ret;
+
+	/* Space used by old and new values. */
+	old_size = (!s->not_found && !here->e_value_inum) ?
+			EXT4_XATTR_SIZE(le32_to_cpu(here->e_value_size)) : 0;
+	new_size = (i->value && !in_inode) ? EXT4_XATTR_SIZE(i->value_len) : 0;
+
+	/*
+	 * Optimization for the simple case when old and new values have the
+	 * same padded sizes. Not applicable if external inodes are involved.
+	 */
+	if (new_size && new_size == old_size) {
+		size_t offs = le16_to_cpu(here->e_value_offs);
+		void *val = s->base + offs;
+
+		here->e_value_size = cpu_to_le32(i->value_len);
+		if (i->value == EXT4_ZERO_XATTR_VALUE) {
+			memset(val, 0, new_size);
+		} else {
+			memcpy(val, i->value, i->value_len);
+			/* Clear padding bytes. */
+			memset(val + i->value_len, 0, new_size - i->value_len);
+		}
+		goto update_hash;
+	}
+
+
+// Source: xattr.c
+// Lines 1560-1596
+
+
+[ANSWER]
+MAY

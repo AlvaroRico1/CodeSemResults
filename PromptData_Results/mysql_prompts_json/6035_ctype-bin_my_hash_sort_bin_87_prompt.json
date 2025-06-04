@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'nr1' at line 2\n2. Pointer 'len' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void my_hash_sort_bin(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),\n                             const uchar *key, size_t len, uint64 *nr1,\n                             uint64 *nr2) {\n  const uchar *pos = key;\n  uint64 tmp1;\n  uint64 tmp2;\n\n  key += len;\n\n  tmp1 = *nr1;\n  tmp2 = *nr2;\n\n  for (; pos < key; pos++) {\n    tmp1 ^= (uint64)((((uint)tmp1 & 63) + tmp2) * ((uint)*pos)) + (tmp1 << 8);\n    tmp2 += 3;\n  }\n\n  *nr1 = tmp1;\n  *nr2 = tmp2;\n}\n}  // extern \"C\"\n\n\n// Source: ctype-bin.cc\n// Lines 278-298\n",
+  "ANSWER": "MUST-NOT"
+}

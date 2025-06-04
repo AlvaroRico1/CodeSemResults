@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'end' at line 4\n2. Pointer 'start' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ninline bool safe_parse_sign(std::string *text /*inout*/,\n                            bool *negative_ptr /*output*/) {\n  const char* start = text->data();\n  const char* end = start + text->size();\n\n  // Consume whitespace.\n  while (start < end && (start[0] == ' ')) {\n    ++start;\n  }\n  while (start < end && (end[-1] == ' ')) {\n    --end;\n  }\n  if (start >= end) {\n    return false;\n  }\n\n  // Consume sign.\n  *negative_ptr = (start[0] == '-');\n  if (*negative_ptr || start[0] == '+') {\n    ++start;\n    if (start >= end) {\n      return false;\n    }\n  }\n  *text = text->substr(start - text->data(), end - start);\n  return true;\n}\n\n\n// Source: strutil.cc\n// Lines 666-692\n",
+  "ANSWER": "MUST"
+}

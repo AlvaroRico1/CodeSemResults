@@ -1,0 +1,129 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'w' at line 6
+2. Pointer 'tc' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+cmd_refresh_client_exec(struct cmd *self, struct cmdq_item *item)
+{
+	struct args		*args = cmd_get_args(self);
+	struct client		*tc = cmdq_get_target_client(item);
+	struct tty		*tty = &tc->tty;
+	struct window		*w;
+	const char		*errstr;
+	u_int			 adjust;
+	struct args_value	*av;
+
+	if (args_has(args, 'c') ||
+	    args_has(args, 'L') ||
+	    args_has(args, 'R') ||
+	    args_has(args, 'U') ||
+	    args_has(args, 'D'))
+	{
+		if (args_count(args) == 0)
+			adjust = 1;
+		else {
+			adjust = strtonum(args_string(args, 0), 1, INT_MAX,
+			    &errstr);
+			if (errstr != NULL) {
+				cmdq_error(item, "adjustment %s", errstr);
+				return (CMD_RETURN_ERROR);
+			}
+		}
+
+		if (args_has(args, 'c'))
+			tc->pan_window = NULL;
+		else {
+			w = tc->session->curw->window;
+			if (tc->pan_window != w) {
+				tc->pan_window = w;
+				tc->pan_ox = tty->oox;
+				tc->pan_oy = tty->ooy;
+			}
+			if (args_has(args, 'L')) {
+				if (tc->pan_ox > adjust)
+					tc->pan_ox -= adjust;
+				else
+					tc->pan_ox = 0;
+			} else if (args_has(args, 'R')) {
+				tc->pan_ox += adjust;
+				if (tc->pan_ox > w->sx - tty->osx)
+					tc->pan_ox = w->sx - tty->osx;
+			} else if (args_has(args, 'U')) {
+				if (tc->pan_oy > adjust)
+					tc->pan_oy -= adjust;
+				else
+					tc->pan_oy = 0;
+			} else if (args_has(args, 'D')) {
+				tc->pan_oy += adjust;
+				if (tc->pan_oy > w->sy - tty->osy)
+					tc->pan_oy = w->sy - tty->osy;
+			}
+		}
+		tty_update_client_offset(tc);
+		server_redraw_client(tc);
+		return (CMD_RETURN_NORMAL);
+	}
+
+	if (args_has(args, 'l')) {
+		tty_putcode_ptr2(&tc->tty, TTYC_MS, "", "?");
+		return (CMD_RETURN_NORMAL);
+	}
+
+	if (args_has(args, 'F')) /* -F is an alias for -f */
+		server_client_set_flags(tc, args_get(args, 'F'));
+	if (args_has(args, 'f'))
+		server_client_set_flags(tc, args_get(args, 'f'));
+
+	if (args_has(args, 'A')) {
+		if (~tc->flags & CLIENT_CONTROL)
+			goto not_control_client;
+		av = args_first_value(args, 'A');
+		while (av != NULL) {
+			cmd_refresh_client_update_offset(tc, av->string);
+			av = args_next_value(av);
+		}
+		return (CMD_RETURN_NORMAL);
+	}
+	if (args_has(args, 'B')) {
+		if (~tc->flags & CLIENT_CONTROL)
+			goto not_control_client;
+		av = args_first_value(args, 'B');
+		while (av != NULL) {
+			cmd_refresh_client_update_subscription(tc, av->string);
+			av = args_next_value(av);
+		}
+		return (CMD_RETURN_NORMAL);
+	}
+	if (args_has(args, 'C')) {
+		if (~tc->flags & CLIENT_CONTROL)
+			goto not_control_client;
+		return (cmd_refresh_client_control_client_size(self, item));
+	}
+
+	if (args_has(args, 'S')) {
+		tc->flags |= CLIENT_STATUSFORCE;
+		server_status_client(tc);
+	} else {
+		tc->flags |= CLIENT_STATUSFORCE;
+		server_redraw_client(tc);
+	}
+	return (CMD_RETURN_NORMAL);
+
+not_control_client:
+	cmdq_error(item, "not a control client");
+	return (CMD_RETURN_ERROR);
+}
+
+
+// Source: cmd-refresh-client.c
+// Lines 166-275
+
+
+[ANSWER]
+MUST

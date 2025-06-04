@@ -1,0 +1,33 @@
+bool mysql_test_parse_for_slave(THD *thd) {
+  LEX *lex = thd->lex;
+  bool ignorable = false;
+  sql_digest_state *parent_digest = thd->m_digest;
+  PSI_statement_locker *parent_locker = thd->m_statement_psi;
+  DBUG_TRACE;
+
+  assert(thd->slave_thread);
+
+  Parser_state parser_state;
+  if (parser_state.init(thd, thd->query().str, thd->query().length) == 0) {
+    lex_start(thd);
+    mysql_reset_thd_for_next_command(thd);
+
+    thd->m_digest = nullptr;
+    thd->m_statement_psi = nullptr;
+    if (parse_sql(thd, &parser_state, nullptr) == 0) {
+      if (all_tables_not_ok(thd, lex->query_block->table_list.first))
+        ignorable = true;
+      else if (!check_database_filters(thd, thd->db().str, lex->sql_command))
+        ignorable = true;
+    }
+    thd->m_digest = parent_digest;
+    thd->m_statement_psi = parent_locker;
+    thd->end_statement();
+  }
+  thd->cleanup_after_query();
+  return ignorable;
+}
+
+
+// Source: sql_parse.cc
+// Lines 5063-5091

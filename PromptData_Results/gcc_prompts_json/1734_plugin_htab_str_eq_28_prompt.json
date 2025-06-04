@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'plugin' at line 3\n2. Pointer 's1' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nhtab_str_eq (const void *s1, const void *s2)\n{\n  const struct plugin_name_args *plugin = (const struct plugin_name_args *) s1;\n  return !strcmp (plugin->base_name, (const char *) s2);\n}\n\n\n// Source: plugin.c\n// Lines 141-145\n",
+  "ANSWER": "MUST"
+}

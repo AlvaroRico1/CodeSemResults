@@ -1,0 +1,1 @@
+string,linux/drivers/acpi/acpica/exconvrt.c,1,digit,linux/drivers/acpi/acpica/exconvrt.c,3,2

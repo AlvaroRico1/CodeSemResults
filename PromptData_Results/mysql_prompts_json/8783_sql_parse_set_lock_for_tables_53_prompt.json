@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'table' at line 5\n2. Pointer 'table' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid Query_block::set_lock_for_tables(thr_lock_type lock_type) {\n  DBUG_TRACE;\n  DBUG_PRINT(\"enter\", (\"lock_type: %d  for_update: %d\", lock_type,\n                       lock_type >= TL_READ_NO_INSERT));\n  for (TABLE_LIST *table = table_list.first; table; table = table->next_local)\n    set_lock_for_table({lock_type, THR_WAIT}, table);\n}\n\n\n// Source: sql_parse.cc\n// Lines 5970-5976\n",
+  "ANSWER": "MUST"
+}

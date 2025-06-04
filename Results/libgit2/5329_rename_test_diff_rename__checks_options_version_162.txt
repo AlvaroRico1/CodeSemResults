@@ -1,0 +1,1 @@
+old_tree,libgit2/tests/libgit2/diff/rename.c,5,err,libgit2/tests/libgit2/diff/rename.c,9,0

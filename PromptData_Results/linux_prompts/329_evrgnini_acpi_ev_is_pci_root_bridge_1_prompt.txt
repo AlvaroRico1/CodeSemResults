@@ -1,0 +1,60 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'cid' at line 5
+2. Pointer 'hid' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+u8 acpi_ev_is_pci_root_bridge(struct acpi_namespace_node *node)
+{
+	acpi_status status;
+	struct acpi_pnp_device_id *hid;
+	struct acpi_pnp_device_id_list *cid;
+	u32 i;
+	u8 match;
+
+	/* Get the _HID and check for a PCI Root Bridge */
+
+	status = acpi_ut_execute_HID(node, &hid);
+	if (ACPI_FAILURE(status)) {
+		return (FALSE);
+	}
+
+	match = acpi_ut_is_pci_root_bridge(hid->string);
+	ACPI_FREE(hid);
+
+	if (match) {
+		return (TRUE);
+	}
+
+	/* The _HID did not match. Get the _CID and check for a PCI Root Bridge */
+
+	status = acpi_ut_execute_CID(node, &cid);
+	if (ACPI_FAILURE(status)) {
+		return (FALSE);
+	}
+
+	/* Check all _CIDs in the returned list */
+
+	for (i = 0; i < cid->count; i++) {
+		if (acpi_ut_is_pci_root_bridge(cid->ids[i].string)) {
+			ACPI_FREE(cid);
+			return (TRUE);
+		}
+	}
+
+	ACPI_FREE(cid);
+	return (FALSE);
+}
+
+
+// Source: evrgnini.c
+// Lines 312-352
+
+
+[ANSWER]
+MAY

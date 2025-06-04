@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'src' at line 3\n2. Pointer 'message' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int handle_key_update(ptls_t *tls, ptls_message_emitter_t *emitter, ptls_iovec_t message)\n{\n    const uint8_t *src = message.base + PTLS_HANDSHAKE_HEADER_SIZE, *const end = message.base + message.len;\n    int ret;\n\n    /* validate */\n    if (end - src != 1 || *src > 1)\n        return PTLS_ALERT_DECODE_ERROR;\n\n    /* update receive key */\n    if ((ret = update_traffic_key(tls, 0)) != 0)\n        return ret;\n\n    if (*src) {\n        if (tls->ctx->update_traffic_key != NULL)\n            return PTLS_ALERT_UNEXPECTED_MESSAGE;\n        tls->needs_key_update = 1;\n    }\n\n    return 0;\n}\n\n\n// Source: picotls.c\n// Lines 4225-4245\n",
+  "ANSWER": "MUST"
+}

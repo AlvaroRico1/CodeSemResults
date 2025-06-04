@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'workdir_cnt' at line 4\n2. Pointer 'index' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid validate_apply_workdir(\n\tgit_repository *repo,\n\tstruct merge_index_entry *workdir_entries,\n\tsize_t workdir_cnt)\n{\n\tgit_index *index;\n\tgit_iterator *iterator;\n\tgit_iterator_options opts = GIT_ITERATOR_OPTIONS_INIT;\n\tstruct iterator_compare_data data = { workdir_entries, workdir_cnt };\n\n\topts.flags |= GIT_ITERATOR_INCLUDE_HASH;\n\n\tcl_git_pass(git_repository_index(&index, repo));\n\tcl_git_pass(git_iterator_for_workdir(&iterator, repo, index, NULL, &opts));\n\n\tcl_git_pass(git_iterator_foreach(iterator, iterator_compare, &data));\n\tcl_assert_equal_i(data.idx, data.cnt);\n\n\tgit_iterator_free(iterator);\n\tgit_index_free(index);\n}\n\n\n// Source: apply_helpers.c\n// Lines 30-50\n",
+  "ANSWER": "MUST-NOT"
+}

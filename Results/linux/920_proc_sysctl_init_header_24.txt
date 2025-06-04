@@ -1,0 +1,1 @@
+entry,linux/fs/proc/proc_sysctl.c,17,table,linux/fs/proc/proc_sysctl.c,3,1

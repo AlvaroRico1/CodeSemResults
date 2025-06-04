@@ -1,0 +1,1 @@
+logical_addr_ptr,linux/drivers/acpi/acpica/exregion.c,8,value,linux/drivers/acpi/acpica/exregion.c,4,2

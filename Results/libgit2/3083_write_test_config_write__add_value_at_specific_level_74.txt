@@ -1,0 +1,1 @@
+expected,libgit2/tests/libgit2/config/write.c,5,i,libgit2/tests/libgit2/config/write.c,4,0

@@ -1,0 +1,1 @@
+curr_bind_ai,mysql/sql-common/client.cc,268,connect_done,mysql/sql-common/client.cc,10,0

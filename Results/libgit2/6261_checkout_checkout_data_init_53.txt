@@ -1,0 +1,1 @@
+conflict_style,libgit2/src/libgit2/checkout.c,131,cfg,libgit2/src/libgit2/checkout.c,41,2

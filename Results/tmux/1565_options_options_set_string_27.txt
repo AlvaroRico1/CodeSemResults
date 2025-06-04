@@ -1,0 +1,1 @@
+separator,tmux/options.c,6,o,tmux/options.c,4,1

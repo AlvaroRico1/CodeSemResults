@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ctx' at line 3\n2. Pointer 'out' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int md5_export(struct shash_desc *desc, void *out)\n{\n\tstruct md5_state *ctx = shash_desc_ctx(desc);\n\n\tmemcpy(out, ctx, sizeof(*ctx));\n\treturn 0;\n}\n\n\n// Source: md5.c\n// Lines 205-211\n",
+  "ANSWER": "MAY"
+}

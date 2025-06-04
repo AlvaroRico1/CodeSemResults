@@ -1,0 +1,30 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'quote_count' at line 2
+2. Pointer 'line' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int get_quote_count(const char *line) {
+  int quote_count = 0;
+  const char *quote = line;
+
+  while ((quote = strpbrk(quote, "'`\"")) != nullptr) {
+    quote_count++;
+    quote++;
+  }
+
+  return quote_count;
+}
+
+
+// Source: mysql.cc
+// Lines 4481-4491
+
+
+[ANSWER]
+MUST-NOT

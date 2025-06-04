@@ -1,0 +1,153 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'final_ord_map' at line 113
+2. Pointer 'start_ord_map' at line 110
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+get_substring_ranges_for_loc (cpp_reader *pfile,
+			      string_concat_db *concats,
+			      location_t strloc,
+			      enum cpp_ttype type,
+			      cpp_substring_ranges &ranges)
+{
+  gcc_assert (pfile);
+
+  if (strloc == UNKNOWN_LOCATION)
+    return "unknown location";
+
+  /* Reparsing the strings requires accurate location information.
+     If -ftrack-macro-expansion has been overridden from its default
+     of 2, then we might have a location of a macro expansion point,
+     rather than the location of the literal itself.
+     Avoid this by requiring that we have full macro expansion tracking
+     for substring locations to be available.  */
+  if (cpp_get_options (pfile)->track_macro_expansion != 2)
+    return "track_macro_expansion != 2";
+
+  /* If #line or # 44 "file"-style directives are present, then there's
+     no guarantee that the line numbers we have can be used to locate
+     the strings.  For example, we might have a .i file with # directives
+     pointing back to lines within a .c file, but the .c file might
+     have been edited since the .i file was created.
+     In such a case, the safest course is to disable on-demand substring
+     locations.  */
+  if (line_table->seen_line_directive)
+    return "seen line directive";
+
+  /* If string concatenation has occurred at STRLOC, get the locations
+     of all of the literal tokens making up the compound string.
+     Otherwise, just use STRLOC.  */
+  int num_locs = 1;
+  location_t *strlocs = &strloc;
+  if (concats)
+    concats->get_string_concatenation (strloc, &num_locs, &strlocs);
+
+  auto_cpp_string_vec strs (num_locs);
+  auto_vec <cpp_string_location_reader> loc_readers (num_locs);
+  for (int i = 0; i < num_locs; i++)
+    {
+      /* Get range of strloc.  We will use it to locate the start and finish
+	 of the literal token within the line.  */
+      source_range src_range = get_range_from_loc (line_table, strlocs[i]);
+
+      if (src_range.m_start >= LINEMAPS_MACRO_LOWEST_LOCATION (line_table))
+	{
+	  /* If the string token was within a macro expansion, then we can
+	     cope with it for the simple case where we have a single token.
+	     Otherwise, bail out.  */
+	  if (src_range.m_start != src_range.m_finish)
+	    return "macro expansion";
+	}
+      else
+	{
+	  if (src_range.m_start >= LINE_MAP_MAX_LOCATION_WITH_COLS)
+	    /* If so, we can't reliably determine where the token started within
+	       its line.  */
+	    return "range starts after LINE_MAP_MAX_LOCATION_WITH_COLS";
+
+	  if (src_range.m_finish >= LINE_MAP_MAX_LOCATION_WITH_COLS)
+	    /* If so, we can't reliably determine where the token finished
+	       within its line.  */
+	    return "range ends after LINE_MAP_MAX_LOCATION_WITH_COLS";
+	}
+
+      expanded_location start
+	= expand_location_to_spelling_point (src_range.m_start,
+					     LOCATION_ASPECT_START);
+      expanded_location finish
+	= expand_location_to_spelling_point (src_range.m_finish,
+					     LOCATION_ASPECT_FINISH);
+      if (start.file != finish.file)
+	return "range endpoints are in different files";
+      if (start.line != finish.line)
+	return "range endpoints are on different lines";
+      if (start.column > finish.column)
+	return "range endpoints are reversed";
+
+      char_span line = location_get_source_line (start.file, start.line);
+      if (!line)
+	return "unable to read source line";
+
+      /* Determine the location of the literal (including quotes
+	 and leading prefix chars, such as the 'u' in a u""
+	 token).  */
+      size_t literal_length = finish.column - start.column + 1;
+
+      /* Ensure that we don't crash if we got the wrong location.  */
+      if (start.column < 1)
+	return "zero start column";
+      if (line.length () < (start.column - 1 + literal_length))
+	return "line is not wide enough";
+
+      char_span literal = line.subspan (start.column - 1, literal_length);
+
+      cpp_string from;
+      from.len = literal_length;
+      /* Make a copy of the literal, to avoid having to rely on
+	 the lifetime of the copy of the line within the cache.
+	 This will be released by the auto_cpp_string_vec dtor.  */
+      from.text = (unsigned char *)literal.xstrdup ();
+      strs.safe_push (from);
+
+      /* For very long lines, a new linemap could have started
+	 halfway through the token.
+	 Ensure that the loc_reader uses the linemap of the
+	 *end* of the token for its start location.  */
+      const line_map_ordinary *start_ord_map;
+      linemap_resolve_location (line_table, src_range.m_start,
+				LRK_SPELLING_LOCATION, &start_ord_map);
+      const line_map_ordinary *final_ord_map;
+      linemap_resolve_location (line_table, src_range.m_finish,
+				LRK_SPELLING_LOCATION, &final_ord_map);
+      if (start_ord_map == NULL || final_ord_map == NULL)
+	return "failed to get ordinary maps";
+      /* Bulletproofing.  We ought to only have different ordinary maps
+	 for start vs finish due to line-length jumps.  */
+      if (start_ord_map != final_ord_map
+	  && start_ord_map->to_file != final_ord_map->to_file)
+	return "start and finish are spelled in different ordinary maps";
+      /* The file from linemap_resolve_location ought to match that from
+	 expand_location_to_spelling_point.  */
+      if (start_ord_map->to_file != start.file)
+	return "mismatching file after resolving linemap";
+
+      location_t start_loc
+	= linemap_position_for_line_and_column (line_table, final_ord_map,
+						start.line, start.column);
+
+      cpp_string_location_reader loc_reader (start_loc, line_table);
+      loc_readers.safe_push (loc_reader);
+    }
+
+
+// Source: input.c
+// Lines 1374-1507
+
+
+[ANSWER]
+MAY

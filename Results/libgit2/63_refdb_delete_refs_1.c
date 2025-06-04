@@ -1,0 +1,45 @@
+static void *delete_refs(void *arg)
+{
+	int i, error;
+	struct th_data *data = (struct th_data *) arg;
+	git_reference *ref;
+	char name[128];
+	git_repository *repo;
+
+	cl_git_thread_pass(data, git_repository_open(&repo, data->path));
+
+	for (i = 0; i < NREFS; ++i) {
+		p_snprintf(
+			name, sizeof(name), "refs/heads/thread-%03d-%02d", (data->id) & ~0x3, i);
+
+		if (!git_reference_lookup(&ref, repo, name)) {
+			do {
+				error = git_reference_delete(ref);
+			} while (error == GIT_ELOCKED);
+			/* Sometimes we race with other deleter threads */
+			if (error == GIT_ENOTFOUND)
+				error = 0;
+
+			cl_git_thread_pass(data, error);
+			git_reference_free(ref);
+		}
+
+		if (concurrent_compress && i == NREFS/2) {
+			git_refdb *refdb;
+			cl_git_thread_pass(data, git_repository_refdb(&refdb, repo));
+			do {
+				error = git_refdb_compress(refdb);
+			} while (error == GIT_ELOCKED);
+			cl_git_thread_pass(data, error);
+			git_refdb_free(refdb);
+		}
+	}
+
+	git_repository_free(repo);
+	git_error_clear();
+	return arg;
+}
+
+
+// Source: refdb.c
+// Lines 108-148

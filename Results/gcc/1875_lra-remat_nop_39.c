@@ -1,0 +1,63 @@
+    int nop;
+  };
+  struct potential_cand *regno_potential_cand;
+
+  /* Create candidates.  */
+  regno_potential_cand = XCNEWVEC (struct potential_cand, max_reg_num ());
+  for (insn = get_insns (); insn; insn = NEXT_INSN (insn))
+    if (NONDEBUG_INSN_P (insn))
+      {
+	lra_insn_recog_data_t id = lra_get_insn_recog_data (insn);
+	int keep_regno = -1;
+	rtx set = single_set (insn);
+	int nop;
+
+	/* See if this is an output reload for a previous insn.  */
+	if (set != NULL
+	    && REG_P (SET_SRC (set)) && REG_P (SET_DEST (set)))
+	  {
+	    rtx dstreg = SET_DEST (set);
+	    int src_regno = REGNO (SET_SRC (set));
+	    int dst_regno = REGNO (dstreg);
+	    rtx_insn *insn2 = regno_potential_cand[src_regno].insn;
+
+	    if (insn2 != NULL 
+		&& dst_regno >= FIRST_PSEUDO_REGISTER
+		&& reg_renumber[dst_regno] < 0
+		&& BLOCK_FOR_INSN (insn2) == BLOCK_FOR_INSN (insn))
+	      {
+		create_cand (insn2, regno_potential_cand[src_regno].nop,
+			     dst_regno, insn);
+		goto done;
+	      }
+	  }
+
+	nop = operand_to_remat (insn);
+	if (nop >= 0)
+	  {
+	    gcc_assert (REG_P (*id->operand_loc[nop]));
+	    int regno = REGNO (*id->operand_loc[nop]);
+	    gcc_assert (regno >= FIRST_PSEUDO_REGISTER);
+	    /* If we're setting an unrenumbered pseudo, make a candidate immediately.
+	       If it's an output reload register, save it for later; the code above
+	       looks for output reload insns later on.  */
+	    if (reg_renumber[regno] < 0)
+	      create_cand (insn, nop, regno);
+	    else if (regno >= lra_constraint_new_regno_start)
+	      {
+		regno_potential_cand[regno].insn = insn;
+		regno_potential_cand[regno].nop = nop;
+		keep_regno = regno;
+	      }
+	  }
+
+      done:
+	for (struct lra_insn_reg *reg = id->regs; reg != NULL; reg = reg->next)
+	  if (reg->type != OP_IN && reg->regno != keep_regno
+	      && reg->regno >= FIRST_PSEUDO_REGISTER)
+	    regno_potential_cand[reg->regno].insn = NULL;
+      }
+
+
+// Source: lra-remat.c
+// Lines 436-494

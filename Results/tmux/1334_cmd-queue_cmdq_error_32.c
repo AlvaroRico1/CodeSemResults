@@ -1,0 +1,41 @@
+cmdq_error(struct cmdq_item *item, const char *fmt, ...)
+{
+	struct client	*c = item->client;
+	struct cmd	*cmd = item->cmd;
+	va_list		 ap;
+	char		*msg, *tmp;
+	const char	*file;
+	u_int		 line;
+
+	va_start(ap, fmt);
+	xvasprintf(&msg, fmt, ap);
+	va_end(ap);
+
+	log_debug("%s: %s", __func__, msg);
+
+	if (c == NULL) {
+		cmd_get_source(cmd, &file, &line);
+		cfg_add_cause("%s:%u: %s", file, line, msg);
+	} else if (c->session == NULL || (c->flags & CLIENT_CONTROL)) {
+		server_add_message("%s message: %s", c->name, msg);
+		if (~c->flags & CLIENT_UTF8) {
+			tmp = msg;
+			msg = utf8_sanitize(tmp);
+			free(tmp);
+		}
+		if (c->flags & CLIENT_CONTROL)
+			control_write(c, "%s", msg);
+		else
+			file_error(c, "%s\n", msg);
+		c->retval = 1;
+	} else {
+		*msg = toupper((u_char) *msg);
+		status_message_set(c, -1, 1, 0, "%s", msg);
+	}
+
+	free(msg);
+}
+
+
+// Source: cmd-queue.c
+// Lines 851-887

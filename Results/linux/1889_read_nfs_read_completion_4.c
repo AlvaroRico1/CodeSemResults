@@ -1,0 +1,48 @@
+static void nfs_read_completion(struct nfs_pgio_header *hdr)
+{
+	unsigned long bytes = 0;
+	int error;
+
+	if (test_bit(NFS_IOHDR_REDO, &hdr->flags))
+		goto out;
+	while (!list_empty(&hdr->pages)) {
+		struct nfs_page *req = nfs_list_entry(hdr->pages.next);
+		struct page *page = req->wb_page;
+		unsigned long start = req->wb_pgbase;
+		unsigned long end = req->wb_pgbase + req->wb_bytes;
+
+		if (test_bit(NFS_IOHDR_EOF, &hdr->flags)) {
+			/* note: regions of the page not covered by a
+			 * request are zeroed in nfs_readpage_async /
+			 * readpage_async_filler */
+			if (bytes > hdr->good_bytes) {
+				/* nothing in this request was good, so zero
+				 * the full extent of the request */
+				zero_user_segment(page, start, end);
+
+			} else if (hdr->good_bytes - bytes < req->wb_bytes) {
+				/* part of this request has good bytes, but
+				 * not all. zero the bad bytes */
+				start += hdr->good_bytes - bytes;
+				WARN_ON(start < req->wb_pgbase);
+				zero_user_segment(page, start, end);
+			}
+		}
+		error = 0;
+		bytes += req->wb_bytes;
+		if (test_bit(NFS_IOHDR_ERROR, &hdr->flags)) {
+			if (bytes <= hdr->good_bytes)
+				nfs_page_group_set_uptodate(req);
+			else {
+				error = hdr->error;
+				xchg(&nfs_req_openctx(req)->error, error);
+			}
+		} else
+			nfs_page_group_set_uptodate(req);
+		nfs_list_remove_request(req);
+		nfs_readpage_release(req, error);
+	}
+
+
+// Source: read.c
+// Lines 159-202

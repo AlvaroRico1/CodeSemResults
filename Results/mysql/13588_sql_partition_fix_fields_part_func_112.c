@@ -1,0 +1,66 @@
+static bool fix_fields_part_func(THD *thd, Item *func_expr, TABLE *table,
+                                 bool is_sub_part, bool is_create_table_ind) {
+  partition_info *part_info = table->part_info;
+  bool result = true;
+  int error;
+  LEX *old_lex = thd->lex;
+  LEX lex;
+  Query_expression unit(CTX_NONE);
+  Query_block select(thd->mem_root, nullptr, nullptr);
+  lex.new_static_query(&unit, &select);
+
+  DBUG_TRACE;
+
+  if (init_lex_with_single_table(thd, table, &lex)) goto end;
+
+  {
+    Item_ident::Change_context ctx(&lex.query_block->context);
+    func_expr->walk(&Item::change_context_processor, enum_walk::POSTFIX,
+                    (uchar *)&ctx);
+  }
+  thd->where = "partition function";
+
+  if (unlikely(func_expr->fix_fields(thd, &func_expr))) {
+    DBUG_PRINT("info", ("Field in partition function not part of table"));
+    clear_field_flag(table);
+    goto end;
+  }
+  if (unlikely(func_expr->const_item())) {
+    my_error(ER_WRONG_EXPR_IN_PARTITION_FUNC_ERROR, MYF(0));
+    clear_field_flag(table);
+    goto end;
+  }
+
+  /*
+    We don't allow creating partitions with expressions with non matching
+    arguments as a (sub)partitioning function,
+    but we want to allow such expressions when opening existing tables for
+    easier maintenance. This exception should be deprecated at some point
+    in future so that we always throw an error.
+  */
+  if (func_expr->walk(&Item::check_valid_arguments_processor,
+                      enum_walk::POSTFIX, nullptr)) {
+    if (is_create_table_ind) {
+      my_error(ER_WRONG_EXPR_IN_PARTITION_FUNC_ERROR, MYF(0));
+      goto end;
+    } else
+      push_warning(thd, Sql_condition::SL_WARNING,
+                   ER_WRONG_EXPR_IN_PARTITION_FUNC_ERROR,
+                   ER_THD(thd, ER_WRONG_EXPR_IN_PARTITION_FUNC_ERROR));
+  }
+
+  if ((!is_sub_part) && (error = check_signed_flag(part_info))) goto end;
+  result = set_up_field_array(table, is_sub_part);
+end:
+  end_lex_with_single_table(thd, table, old_lex);
+#if !defined(NDEBUG)
+  Item_ident::Change_context nul_ctx(nullptr);
+  func_expr->walk(&Item::change_context_processor, enum_walk::POSTFIX,
+                  (uchar *)&nul_ctx);
+#endif
+  return result;
+}
+
+
+// Source: sql_partition.cc
+// Lines 928-989

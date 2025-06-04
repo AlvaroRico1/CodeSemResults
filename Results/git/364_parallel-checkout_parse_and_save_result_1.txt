@@ -1,0 +1,1 @@
+res,git/parallel-checkout.c,4,buffer,git/parallel-checkout.c,1,1

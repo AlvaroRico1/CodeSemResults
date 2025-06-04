@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'hostconf' at line 9\n2. Pointer 'config' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid h2o_context_dispose(h2o_context_t *ctx)\n{\n    h2o_globalconf_t *config = ctx->globalconf;\n    size_t i, j;\n\n    h2o_socketpool_unregister_loop(&ctx->globalconf->proxy.global_socketpool, ctx->loop);\n\n    for (i = 0; config->hosts[i] != NULL; ++i) {\n        h2o_hostconf_t *hostconf = config->hosts[i];\n        for (j = 0; j != hostconf->paths.size; ++j) {\n            h2o_pathconf_t *pathconf = hostconf->paths.entries[j];\n            h2o_context_dispose_pathconf_context(ctx, pathconf);\n        }\n        h2o_context_dispose_pathconf_context(ctx, &hostconf->fallback_path);\n    }\n\n\n// Source: context.c\n// Lines 133-147\n",
+  "ANSWER": "MUST"
+}

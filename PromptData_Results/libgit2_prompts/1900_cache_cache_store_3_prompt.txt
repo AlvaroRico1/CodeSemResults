@@ -1,0 +1,72 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'entry' at line 1
+2. Pointer 'stored_entry' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void *cache_store(git_cache *cache, git_cached_obj *entry)
+{
+	git_cached_obj *stored_entry;
+
+	git_cached_obj_incref(entry);
+
+	if (!git_cache__enabled && cache->used_memory > 0) {
+		git_cache_clear(cache);
+		return entry;
+	}
+
+	if (!cache_should_store(entry->type, entry->size))
+		return entry;
+
+	if (git_rwlock_wrlock(&cache->lock) < 0)
+		return entry;
+
+	/* soften the load on the cache */
+	if (git_atomic_ssize_get(&git_cache__current_storage) > git_cache__max_storage)
+		cache_evict_entries(cache);
+
+	/* not found */
+	if ((stored_entry = git_oidmap_get(cache->map, &entry->oid)) == NULL) {
+		if (git_oidmap_set(cache->map, &entry->oid, entry) == 0) {
+			git_cached_obj_incref(entry);
+			cache->used_memory += entry->size;
+			git_atomic_ssize_add(&git_cache__current_storage, (ssize_t)entry->size);
+		}
+	}
+	/* found */
+	else {
+		if (stored_entry->flags == entry->flags) {
+			git_cached_obj_decref(entry);
+			git_cached_obj_incref(stored_entry);
+			entry = stored_entry;
+		} else if (stored_entry->flags == GIT_CACHE_STORE_RAW &&
+			   entry->flags == GIT_CACHE_STORE_PARSED) {
+			if (git_oidmap_set(cache->map, &entry->oid, entry) == 0) {
+				git_cached_obj_decref(stored_entry);
+				git_cached_obj_incref(entry);
+			} else {
+				git_cached_obj_decref(entry);
+				git_cached_obj_incref(stored_entry);
+				entry = stored_entry;
+			}
+		} else {
+			/* NO OP */
+		}
+	}
+
+	git_rwlock_wrunlock(&cache->lock);
+	return entry;
+}
+
+
+// Source: cache.c
+// Lines 153-205
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,38 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'why' at line 2
+2. Pointer 'ca' at line 9
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int checkout_cancel_cb(
+	git_checkout_notify_t why,
+	const char *path,
+	const git_diff_file *b,
+	const git_diff_file *t,
+	const git_diff_file *w,
+	void *payload)
+{
+	struct checkout_cancel_at *ca = payload;
+
+	GIT_UNUSED(why); GIT_UNUSED(b); GIT_UNUSED(t); GIT_UNUSED(w);
+
+	ca->count++;
+
+	if (!strcmp(path, ca->filename))
+		return ca->error;
+
+	return 0;
+}
+
+
+// Source: tree.c
+// Lines 648-666
+
+
+[ANSWER]
+MUST-NOT

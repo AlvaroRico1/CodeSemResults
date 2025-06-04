@@ -1,0 +1,59 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'gi' at line 4
+2. Pointer 'slot' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+get_group_info (rtx base)
+{
+  struct group_info tmp_gi;
+  group_info *gi;
+  group_info **slot;
+
+  gcc_assert (base != NULL_RTX);
+
+  /* Find the store_base_info structure for BASE, creating a new one
+     if necessary.  */
+  tmp_gi.rtx_base = base;
+  slot = rtx_group_table->find_slot (&tmp_gi, INSERT);
+  gi = *slot;
+
+  if (gi == NULL)
+    {
+      *slot = gi = group_info_pool.allocate ();
+      gi->rtx_base = base;
+      gi->id = rtx_group_next_id++;
+      gi->base_mem = gen_rtx_MEM (BLKmode, base);
+      gi->canon_base_addr = canon_rtx (base);
+      gi->store1_n = BITMAP_ALLOC (&dse_bitmap_obstack);
+      gi->store1_p = BITMAP_ALLOC (&dse_bitmap_obstack);
+      gi->store2_n = BITMAP_ALLOC (&dse_bitmap_obstack);
+      gi->store2_p = BITMAP_ALLOC (&dse_bitmap_obstack);
+      gi->escaped_p = BITMAP_ALLOC (&dse_bitmap_obstack);
+      gi->escaped_n = BITMAP_ALLOC (&dse_bitmap_obstack);
+      gi->group_kill = BITMAP_ALLOC (&dse_bitmap_obstack);
+      gi->process_globally = false;
+      gi->frame_related =
+	(base == frame_pointer_rtx) || (base == hard_frame_pointer_rtx);
+      gi->offset_map_size_n = 0;
+      gi->offset_map_size_p = 0;
+      gi->offset_map_n = NULL;
+      gi->offset_map_p = NULL;
+      rtx_group_vec.safe_push (gi);
+    }
+
+  return gi;
+}
+
+
+// Source: dse.c
+// Lines 652-691
+
+
+[ANSWER]
+MUST

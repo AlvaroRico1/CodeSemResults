@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'last_c' at line 14\n2. Pointer 'last' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int write_disk_entry(git_filebuf *file, git_index_entry *entry, const char *last)\n{\n\tvoid *mem = NULL;\n\tstruct entry_short ondisk;\n\tsize_t path_len, disk_size;\n\tint varint_len = 0;\n\tchar *path;\n\tconst char *path_start = entry->path;\n\tsize_t same_len = 0;\n\n\tpath_len = ((struct entry_internal *)entry)->pathlen;\n\n\tif (last) {\n\t\tconst char *last_c = last;\n\n\t\twhile (*path_start == *last_c) {\n\t\t\tif (!*path_start || !*last_c)\n\t\t\t\tbreak;\n\t\t\t++path_start;\n\t\t\t++last_c;\n\t\t\t++same_len;\n\t\t}\n\t\tpath_len -= same_len;\n\t\tvarint_len = git_encode_varint(NULL, 0, strlen(last) - same_len);\n\t}\n\n\n// Source: index.c\n// Lines 2753-2777\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,84 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'item_equal' at line 48
+2. Pointer 'item_field' at line 47
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static ulonglong get_bound_sj_equalities(const JOIN_TAB *tab,
+                                         table_map not_available_tables) {
+  ulonglong bound_sj_equalities = 0;
+  auto it_o = tab->emb_sj_nest->nested_join->sj_outer_exprs.begin();
+  auto it_i = tab->emb_sj_nest->nested_join->sj_inner_exprs.begin();
+  for (uint i = 0; it_o != tab->emb_sj_nest->nested_join->sj_outer_exprs.end();
+       ++i, ++it_o, ++it_i) {
+    Item *outer = *it_o, *inner = *it_i;
+    if (!((not_available_tables)&outer->used_tables())) {
+      bound_sj_equalities |= 1ULL << i;
+      continue;
+    }
+    /*
+      Now we look at equality propagation, to discover that a semi-join
+      equality is bound, when the outer or inner expression is a field
+      involved in some other non-semi-join equality.
+      For example (propagation with inner field):
+      select * from t2 where (b+0,a+0) in (select a,b from t1 where a=3);
+      if the plan is t1-t2, 1st sj equality is bound, even though the
+      corresponding outer expression t2.b+0 refers to 't2' which is not yet
+      available.
+      Other example (propagation with outer field):
+      select * from t2 as t3, t2
+      where t2.filler=t3.filler and
+      (t2.b,t2.a,t2.filler) in (select a,b,a*3 from t1);
+      if the plan is t3-t1-t2, 3rd sj equality is bound.
+
+      We locate the relevant multiple equalities for the field. They are in
+      the COND_EQUAL of the join nest which embeds the field's table. For
+      example:
+      select * from t1 left join t1 as t2
+      on (t2.a= t1.a and (t2.a,t2.b) in (select a,b from t1 as t3))
+      here we have:
+      - a join nest (t2,t3) (called "wrap-nest"), which has a COND_EQUAL
+      containing, among others: t2.a=t1.a
+      - no COND_EQUAL for the WHERE clause.
+      If the plan is t1-t3-t2, by looking at t2.a=t1.a we can deduce that
+      the first semi join equality is bound.
+    */
+    Item *item;
+    if (outer->type() == Item::FIELD_ITEM)
+      item = outer;
+    else if (inner->type() == Item::FIELD_ITEM)
+      item = inner;
+    else
+      continue;
+    Item_field *const item_field = static_cast<Item_field *>(item);
+    Item_equal *item_equal = item_field->item_equal;
+    if (!item_equal) {
+      TABLE_LIST *const nest = item_field->table_ref->outer_join_nest();
+      item_equal = item_field->find_item_equal(nest ? nest->cond_equal
+                                                    : tab->join()->cond_equal);
+    }
+    if (item_equal) {
+      /*
+        If the multiple equality {[optional_constant,] col1, col2...} contains
+        (1) a constant
+        (2) or a column from an available table
+        then the semi-join equality is bound.
+      */
+      if (item_equal->get_const() ||                            // (1)
+          (item_equal->used_tables() & ~not_available_tables))  // (2)
+        bound_sj_equalities |= 1ULL << i;
+    }
+  }
+
+
+// Source: sql_planner.cc
+// Lines 1476-1540
+
+
+[ANSWER]
+MUST

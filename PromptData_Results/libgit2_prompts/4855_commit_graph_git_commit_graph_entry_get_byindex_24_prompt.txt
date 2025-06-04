@@ -1,0 +1,71 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'commit_data' at line 6
+2. Pointer 'file' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int git_commit_graph_entry_get_byindex(
+		git_commit_graph_entry *e,
+		const git_commit_graph_file *file,
+		size_t pos)
+{
+	const unsigned char *commit_data;
+
+	GIT_ASSERT_ARG(e);
+	GIT_ASSERT_ARG(file);
+
+	if (pos >= file->num_commits) {
+		git_error_set(GIT_ERROR_INVALID, "commit index %zu does not exist", pos);
+		return GIT_ENOTFOUND;
+	}
+
+	commit_data = file->commit_data + pos * (GIT_OID_RAWSZ + 4 * sizeof(uint32_t));
+	git_oid_cpy(&e->tree_oid, (const git_oid *)commit_data);
+	e->parent_indices[0] = ntohl(*((uint32_t *)(commit_data + GIT_OID_RAWSZ)));
+	e->parent_indices[1] = ntohl(
+			*((uint32_t *)(commit_data + GIT_OID_RAWSZ + sizeof(uint32_t))));
+	e->parent_count = (e->parent_indices[0] != GIT_COMMIT_GRAPH_MISSING_PARENT)
+			+ (e->parent_indices[1] != GIT_COMMIT_GRAPH_MISSING_PARENT);
+	e->generation = ntohl(*((uint32_t *)(commit_data + GIT_OID_RAWSZ + 2 * sizeof(uint32_t))));
+	e->commit_time = ntohl(*((uint32_t *)(commit_data + GIT_OID_RAWSZ + 3 * sizeof(uint32_t))));
+
+	e->commit_time |= (e->generation & UINT64_C(0x3)) << UINT64_C(32);
+	e->generation >>= 2u;
+	if (e->parent_indices[1] & 0x80000000u) {
+		uint32_t extra_edge_list_pos = e->parent_indices[1] & 0x7fffffff;
+
+		/* Make sure we're not being sent out of bounds */
+		if (extra_edge_list_pos >= file->num_extra_edge_list) {
+			git_error_set(GIT_ERROR_INVALID,
+				      "commit %u does not exist",
+				      extra_edge_list_pos);
+			return GIT_ENOTFOUND;
+		}
+
+		e->extra_parents_index = extra_edge_list_pos;
+		while (extra_edge_list_pos < file->num_extra_edge_list
+		       && (ntohl(*(
+					   (uint32_t *)(file->extra_edge_list
+							+ extra_edge_list_pos * sizeof(uint32_t))))
+			   & 0x80000000u)
+				       == 0) {
+			extra_edge_list_pos++;
+			e->parent_count++;
+		}
+	}
+	git_oid_cpy(&e->sha1, &file->oid_lookup[pos]);
+	return 0;
+}
+
+
+// Source: commit_graph.c
+// Lines 424-475
+
+
+[ANSWER]
+MUST

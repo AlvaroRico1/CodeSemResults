@@ -1,0 +1,37 @@
+static void on_send_complete(h2o_socket_t *sock, const char *err)
+{
+    struct st_h2o_http1_conn_t *conn = sock->data;
+
+    assert(conn->req._ostr_top == &conn->_ostr_final.super);
+
+    conn->req.timestamps.response_end_at = h2o_gettimeofday(conn->super.ctx->loop);
+
+    if (err != NULL)
+        conn->req.http1_is_persistent = 0;
+
+    if (err == NULL && conn->req.send_server_timing && conn->_ostr_final.chunked_buf != NULL) {
+        h2o_iovec_t trailer;
+        if ((trailer = h2o_build_server_timing_trailer(&conn->req, H2O_STRLIT("server-timing: "), H2O_STRLIT("\r\n\r\n"))).len !=
+            0) {
+            h2o_socket_write(conn->sock, &trailer, 1, on_send_complete_post_trailers);
+            return;
+        }
+    }
+
+    conn->_ostr_final.state = OSTREAM_STATE_DONE;
+
+    if (conn->req.is_tunnel_req) {
+        /* We have received a complete request (the end of the request is the request headers, see `fixup_request`), and the
+         * connection is not going to handle any more requests. Therefore, we can close the connection immediately, regardless of if
+         * the connection had been turned into a tunnel. */
+        assert(!conn->req.http1_is_persistent);
+        cleanup_connection(conn);
+    } else if (conn->req.proceed_req == NULL) {
+        /* Upstream has sent an early response. Continue forwarding the request body. */
+        cleanup_connection(conn);
+    }
+}
+
+
+// Source: http1.c
+// Lines 822-854

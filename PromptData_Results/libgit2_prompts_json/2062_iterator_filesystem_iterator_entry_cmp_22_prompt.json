@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'a' at line 3\n2. Pointer '_a' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int filesystem_iterator_entry_cmp(const void *_a, const void *_b)\n{\n\tconst filesystem_iterator_entry *a = (const filesystem_iterator_entry *)_a;\n\tconst filesystem_iterator_entry *b = (const filesystem_iterator_entry *)_b;\n\n\treturn git__strcmp(a->path, b->path);\n}\n\n\n// Source: iterator.c\n// Lines 1072-1078\n",
+  "ANSWER": "MUST"
+}

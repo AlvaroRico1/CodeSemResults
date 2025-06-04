@@ -1,0 +1,302 @@
+expand_omp_taskreg (struct omp_region *region)
+{
+  basic_block entry_bb, exit_bb, new_bb;
+  struct function *child_cfun;
+  tree child_fn, block, t;
+  gimple_stmt_iterator gsi;
+  gimple *entry_stmt, *stmt;
+  edge e;
+  vec<tree, va_gc> *ws_args;
+
+  entry_stmt = last_stmt (region->entry);
+  if (gimple_code (entry_stmt) == GIMPLE_OMP_TASK
+      && gimple_omp_task_taskwait_p (entry_stmt))
+    {
+      new_bb = region->entry;
+      gsi = gsi_last_nondebug_bb (region->entry);
+      gcc_assert (gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_TASK);
+      gsi_remove (&gsi, true);
+      expand_taskwait_call (new_bb, as_a <gomp_task *> (entry_stmt));
+      return;
+    }
+
+  child_fn = gimple_omp_taskreg_child_fn (entry_stmt);
+  child_cfun = DECL_STRUCT_FUNCTION (child_fn);
+
+  entry_bb = region->entry;
+  if (gimple_code (entry_stmt) == GIMPLE_OMP_TASK)
+    exit_bb = region->cont;
+  else
+    exit_bb = region->exit;
+
+  if (is_combined_parallel (region))
+    ws_args = region->ws_args;
+  else
+    ws_args = NULL;
+
+  if (child_cfun->cfg)
+    {
+      /* Due to inlining, it may happen that we have already outlined
+	 the region, in which case all we need to do is make the
+	 sub-graph unreachable and emit the parallel call.  */
+      edge entry_succ_e, exit_succ_e;
+
+      entry_succ_e = single_succ_edge (entry_bb);
+
+      gsi = gsi_last_nondebug_bb (entry_bb);
+      gcc_assert (gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_PARALLEL
+		  || gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_TASK
+		  || gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_TEAMS);
+      gsi_remove (&gsi, true);
+
+      new_bb = entry_bb;
+      if (exit_bb)
+	{
+	  exit_succ_e = single_succ_edge (exit_bb);
+	  make_edge (new_bb, exit_succ_e->dest, EDGE_FALLTHRU);
+	}
+      remove_edge_and_dominated_blocks (entry_succ_e);
+    }
+  else
+    {
+      unsigned srcidx, dstidx, num;
+
+      /* If the parallel region needs data sent from the parent
+	 function, then the very first statement (except possible
+	 tree profile counter updates) of the parallel body
+	 is a copy assignment .OMP_DATA_I = &.OMP_DATA_O.  Since
+	 &.OMP_DATA_O is passed as an argument to the child function,
+	 we need to replace it with the argument as seen by the child
+	 function.
+
+	 In most cases, this will end up being the identity assignment
+	 .OMP_DATA_I = .OMP_DATA_I.  However, if the parallel body had
+	 a function call that has been inlined, the original PARM_DECL
+	 .OMP_DATA_I may have been converted into a different local
+	 variable.  In which case, we need to keep the assignment.  */
+      if (gimple_omp_taskreg_data_arg (entry_stmt))
+	{
+	  basic_block entry_succ_bb
+	    = single_succ_p (entry_bb) ? single_succ (entry_bb)
+				       : FALLTHRU_EDGE (entry_bb)->dest;
+	  tree arg;
+	  gimple *parcopy_stmt = NULL;
+
+	  for (gsi = gsi_start_bb (entry_succ_bb); ; gsi_next (&gsi))
+	    {
+	      gimple *stmt;
+
+	      gcc_assert (!gsi_end_p (gsi));
+	      stmt = gsi_stmt (gsi);
+	      if (gimple_code (stmt) != GIMPLE_ASSIGN)
+		continue;
+
+	      if (gimple_num_ops (stmt) == 2)
+		{
+		  tree arg = gimple_assign_rhs1 (stmt);
+
+		  /* We're ignore the subcode because we're
+		     effectively doing a STRIP_NOPS.  */
+
+		  if (TREE_CODE (arg) == ADDR_EXPR
+		      && (TREE_OPERAND (arg, 0)
+			  == gimple_omp_taskreg_data_arg (entry_stmt)))
+		    {
+		      parcopy_stmt = stmt;
+		      break;
+		    }
+		}
+	    }
+
+	  gcc_assert (parcopy_stmt != NULL);
+	  arg = DECL_ARGUMENTS (child_fn);
+
+	  if (!gimple_in_ssa_p (cfun))
+	    {
+	      if (gimple_assign_lhs (parcopy_stmt) == arg)
+		gsi_remove (&gsi, true);
+	      else
+		{
+		  /* ?? Is setting the subcode really necessary ??  */
+		  gimple_omp_set_subcode (parcopy_stmt, TREE_CODE (arg));
+		  gimple_assign_set_rhs1 (parcopy_stmt, arg);
+		}
+	    }
+	  else
+	    {
+	      tree lhs = gimple_assign_lhs (parcopy_stmt);
+	      gcc_assert (SSA_NAME_VAR (lhs) == arg);
+	      /* We'd like to set the rhs to the default def in the child_fn,
+		 but it's too early to create ssa names in the child_fn.
+		 Instead, we set the rhs to the parm.  In
+		 move_sese_region_to_fn, we introduce a default def for the
+		 parm, map the parm to it's default def, and once we encounter
+		 this stmt, replace the parm with the default def.  */
+	      gimple_assign_set_rhs1 (parcopy_stmt, arg);
+	      update_stmt (parcopy_stmt);
+	    }
+	}
+
+      /* Declare local variables needed in CHILD_CFUN.  */
+      block = DECL_INITIAL (child_fn);
+      BLOCK_VARS (block) = vec2chain (child_cfun->local_decls);
+      /* The gimplifier could record temporaries in parallel/task block
+	 rather than in containing function's local_decls chain,
+	 which would mean cgraph missed finalizing them.  Do it now.  */
+      for (t = BLOCK_VARS (block); t; t = DECL_CHAIN (t))
+	if (VAR_P (t) && TREE_STATIC (t) && !DECL_EXTERNAL (t))
+	  varpool_node::finalize_decl (t);
+      DECL_SAVED_TREE (child_fn) = NULL;
+      /* We'll create a CFG for child_fn, so no gimple body is needed.  */
+      gimple_set_body (child_fn, NULL);
+      TREE_USED (block) = 1;
+
+      /* Reset DECL_CONTEXT on function arguments.  */
+      for (t = DECL_ARGUMENTS (child_fn); t; t = DECL_CHAIN (t))
+	DECL_CONTEXT (t) = child_fn;
+
+      /* Split ENTRY_BB at GIMPLE_OMP_PARALLEL or GIMPLE_OMP_TASK,
+	 so that it can be moved to the child function.  */
+      gsi = gsi_last_nondebug_bb (entry_bb);
+      stmt = gsi_stmt (gsi);
+      gcc_assert (stmt && (gimple_code (stmt) == GIMPLE_OMP_PARALLEL
+			   || gimple_code (stmt) == GIMPLE_OMP_TASK
+			   || gimple_code (stmt) == GIMPLE_OMP_TEAMS));
+      e = split_block (entry_bb, stmt);
+      gsi_remove (&gsi, true);
+      entry_bb = e->dest;
+      edge e2 = NULL;
+      if (gimple_code (entry_stmt) != GIMPLE_OMP_TASK)
+	single_succ_edge (entry_bb)->flags = EDGE_FALLTHRU;
+      else
+	{
+	  e2 = make_edge (e->src, BRANCH_EDGE (entry_bb)->dest, EDGE_ABNORMAL);
+	  gcc_assert (e2->dest == region->exit);
+	  remove_edge (BRANCH_EDGE (entry_bb));
+	  set_immediate_dominator (CDI_DOMINATORS, e2->dest, e->src);
+	  gsi = gsi_last_nondebug_bb (region->exit);
+	  gcc_assert (!gsi_end_p (gsi)
+		      && gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_RETURN);
+	  gsi_remove (&gsi, true);
+	}
+
+      /* Convert GIMPLE_OMP_{RETURN,CONTINUE} into a RETURN_EXPR.  */
+      if (exit_bb)
+	{
+	  gsi = gsi_last_nondebug_bb (exit_bb);
+	  gcc_assert (!gsi_end_p (gsi)
+		      && (gimple_code (gsi_stmt (gsi))
+			  == (e2 ? GIMPLE_OMP_CONTINUE : GIMPLE_OMP_RETURN)));
+	  stmt = gimple_build_return (NULL);
+	  gsi_insert_after (&gsi, stmt, GSI_SAME_STMT);
+	  gsi_remove (&gsi, true);
+	}
+
+      /* Move the parallel region into CHILD_CFUN.  */
+
+      if (gimple_in_ssa_p (cfun))
+	{
+	  init_tree_ssa (child_cfun);
+	  init_ssa_operands (child_cfun);
+	  child_cfun->gimple_df->in_ssa_p = true;
+	  block = NULL_TREE;
+	}
+      else
+	block = gimple_block (entry_stmt);
+
+      new_bb = move_sese_region_to_fn (child_cfun, entry_bb, exit_bb, block);
+      if (exit_bb)
+	single_succ_edge (new_bb)->flags = EDGE_FALLTHRU;
+      if (e2)
+	{
+	  basic_block dest_bb = e2->dest;
+	  if (!exit_bb)
+	    make_edge (new_bb, dest_bb, EDGE_FALLTHRU);
+	  remove_edge (e2);
+	  set_immediate_dominator (CDI_DOMINATORS, dest_bb, new_bb);
+	}
+      /* When the OMP expansion process cannot guarantee an up-to-date
+	 loop tree arrange for the child function to fixup loops.  */
+      if (loops_state_satisfies_p (LOOPS_NEED_FIXUP))
+	child_cfun->x_current_loops->state |= LOOPS_NEED_FIXUP;
+
+      /* Remove non-local VAR_DECLs from child_cfun->local_decls list.  */
+      num = vec_safe_length (child_cfun->local_decls);
+      for (srcidx = 0, dstidx = 0; srcidx < num; srcidx++)
+	{
+	  t = (*child_cfun->local_decls)[srcidx];
+	  if (DECL_CONTEXT (t) == cfun->decl)
+	    continue;
+	  if (srcidx != dstidx)
+	    (*child_cfun->local_decls)[dstidx] = t;
+	  dstidx++;
+	}
+      if (dstidx != num)
+	vec_safe_truncate (child_cfun->local_decls, dstidx);
+
+      /* Inform the callgraph about the new function.  */
+      child_cfun->curr_properties = cfun->curr_properties;
+      child_cfun->has_simduid_loops |= cfun->has_simduid_loops;
+      child_cfun->has_force_vectorize_loops |= cfun->has_force_vectorize_loops;
+      cgraph_node *node = cgraph_node::get_create (child_fn);
+      node->parallelized_function = 1;
+      cgraph_node::add_new_function (child_fn, true);
+
+      bool need_asm = DECL_ASSEMBLER_NAME_SET_P (current_function_decl)
+		      && !DECL_ASSEMBLER_NAME_SET_P (child_fn);
+
+      /* Fix the callgraph edges for child_cfun.  Those for cfun will be
+	 fixed in a following pass.  */
+      push_cfun (child_cfun);
+      if (need_asm)
+	assign_assembler_name_if_needed (child_fn);
+
+      if (optimize)
+	optimize_omp_library_calls (entry_stmt);
+      update_max_bb_count ();
+      cgraph_edge::rebuild_edges ();
+
+      /* Some EH regions might become dead, see PR34608.  If
+	 pass_cleanup_cfg isn't the first pass to happen with the
+	 new child, these dead EH edges might cause problems.
+	 Clean them up now.  */
+      if (flag_exceptions)
+	{
+	  basic_block bb;
+	  bool changed = false;
+
+	  FOR_EACH_BB_FN (bb, cfun)
+	    changed |= gimple_purge_dead_eh_edges (bb);
+	  if (changed)
+	    cleanup_tree_cfg ();
+	}
+      if (gimple_in_ssa_p (cfun))
+	update_ssa (TODO_update_ssa);
+      if (flag_checking && !loops_state_satisfies_p (LOOPS_NEED_FIXUP))
+	verify_loop_structure ();
+      pop_cfun ();
+
+      if (dump_file && !gimple_in_ssa_p (cfun))
+	{
+	  omp_any_child_fn_dumped = true;
+	  dump_function_header (dump_file, child_fn, dump_flags);
+	  dump_function_to_file (child_fn, dump_file, dump_flags);
+	}
+    }
+
+  adjust_context_and_scope (region, gimple_block (entry_stmt), child_fn);
+
+  if (gimple_code (entry_stmt) == GIMPLE_OMP_PARALLEL)
+    expand_parallel_call (region, new_bb,
+			  as_a <gomp_parallel *> (entry_stmt), ws_args);
+  else if (gimple_code (entry_stmt) == GIMPLE_OMP_TEAMS)
+    expand_teams_call (new_bb, as_a <gomp_teams *> (entry_stmt));
+  else
+    expand_task_call (region, new_bb, as_a <gomp_task *> (entry_stmt));
+  if (gimple_in_ssa_p (cfun))
+    update_ssa (TODO_update_ssa_only_virtuals);
+}
+
+
+// Source: omp-expand.c
+// Lines 1234-1531

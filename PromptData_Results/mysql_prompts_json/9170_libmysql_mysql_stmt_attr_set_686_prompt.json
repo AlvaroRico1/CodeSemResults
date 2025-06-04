@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'cursor_type' at line 9\n2. Pointer 'attr_type' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nbool STDCALL mysql_stmt_attr_set(MYSQL_STMT *stmt,\n                                 enum enum_stmt_attr_type attr_type,\n                                 const void *value) {\n  switch (attr_type) {\n    case STMT_ATTR_UPDATE_MAX_LENGTH:\n      stmt->update_max_length = value ? *(const bool *)value : false;\n      break;\n    case STMT_ATTR_CURSOR_TYPE: {\n      ulong cursor_type;\n      cursor_type = value ? *static_cast<const ulong *>(value) : 0UL;\n      if (cursor_type > (ulong)CURSOR_TYPE_READ_ONLY) goto err_not_implemented;\n      stmt->flags = cursor_type;\n      break;\n    }\n\n\n// Source: libmysql.cc\n// Lines 2029-2042\n",
+  "ANSWER": "MUST-NOT"
+}

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'src_end' at line 3\n2. Pointer 'src' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic char *append_unsafe_string_json(char *pos, const char *src, size_t len)\n{\n    const char *src_end = src + len;\n\n    for (; src != src_end; ++src) {\n        if (' ' <= *src && *src < 0x7e) {\n            if (*src == '\"' || *src == '\\\\')\n                *pos++ = '\\\\';\n            *pos++ = *src;\n        } else {\n            *pos++ = '\\\\';\n            *pos++ = 'u';\n            *pos++ = '0';\n            *pos++ = '0';\n            *pos++ = (\"0123456789abcdef\")[(*src >> 4) & 0xf];\n            *pos++ = (\"0123456789abcdef\")[*src & 0xf];\n        }\n    }\n\n    return pos;\n}\n\n\n// Source: logconf.c\n// Lines 423-443\n",
+  "ANSWER": "MUST"
+}

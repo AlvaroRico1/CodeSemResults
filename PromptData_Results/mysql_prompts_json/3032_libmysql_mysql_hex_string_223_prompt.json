@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'end' at line 3\n2. Pointer 'length' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nulong STDCALL mysql_hex_string(char *to, const char *from, ulong length) {\n  char *to0 = to;\n  const char *end;\n\n  for (end = from + length; from < end; from++) {\n    *to++ = _dig_vec_upper[((unsigned char)*from) >> 4];\n    *to++ = _dig_vec_upper[((unsigned char)*from) & 0x0F];\n  }\n  *to = '\\0';\n  return (ulong)(to - to0);\n}\n\n\n// Source: libmysql.cc\n// Lines 1032-1042\n",
+  "ANSWER": "MUST-NOT"
+}

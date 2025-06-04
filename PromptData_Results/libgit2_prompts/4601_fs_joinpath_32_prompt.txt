@@ -1,0 +1,30 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'base_len' at line 1
+2. Pointer 'bl' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static char *joinpath(const char *dir, const char *base, int base_len)
+{
+	char *out;
+	int len;
+
+	if (base_len == -1) {
+		size_t bl = strlen(base);
+
+		cl_assert(bl < INT_MAX);
+		base_len = (int)bl;
+	}
+
+
+// Source: fs.h
+// Lines 345-355
+
+
+[ANSWER]
+MUST-NOT

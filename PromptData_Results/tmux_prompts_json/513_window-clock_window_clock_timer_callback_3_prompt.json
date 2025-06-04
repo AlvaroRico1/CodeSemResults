@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'data' at line 5\n2. Pointer 'wme' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nwindow_clock_timer_callback(__unused int fd, __unused short events, void *arg)\n{\n\tstruct window_mode_entry\t*wme = arg;\n\tstruct window_pane\t\t*wp = wme->wp;\n\tstruct window_clock_mode_data\t*data = wme->data;\n\tstruct tm\t\t\t now, then;\n\ttime_t\t\t\t\t t;\n\tstruct timeval\t\t\t tv = { .tv_sec = 1 };\n\n\tevtimer_del(&data->timer);\n\tevtimer_add(&data->timer, &tv);\n\n\tif (TAILQ_FIRST(&wp->modes) != wme)\n\t\treturn;\n\n\tt = time(NULL);\n\tgmtime_r(&t, &now);\n\tgmtime_r(&data->tim, &then);\n\tif (now.tm_min == then.tm_min)\n\t\treturn;\n\tdata->tim = t;\n\n\twindow_clock_draw_screen(wme);\n\twp->flags |= PANE_REDRAW;\n}\n\n\n// Source: window-clock.c\n// Lines 127-151\n",
+  "ANSWER": "MUST"
+}

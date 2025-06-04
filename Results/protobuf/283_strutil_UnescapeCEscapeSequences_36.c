@@ -1,0 +1,123 @@
+int UnescapeCEscapeSequences(const char *source, char *dest,
+                             std::vector<std::string> *errors) {
+  GOOGLE_DCHECK(errors == nullptr) << "Error reporting not implemented.";
+
+  char* d = dest;
+  const char* p = source;
+
+  // Small optimization for case where source = dest and there's no escaping
+  while ( p == d && *p != '\0' && *p != '\\' )
+    p++, d++;
+
+  while (*p != '\0') {
+    if (*p != '\\') {
+      *d++ = *p++;
+    } else {
+      switch ( *++p ) {                    // skip past the '\\'
+        case '\0':
+          LOG_STRING(ERROR, errors) << "String cannot end with \\";
+          *d = '\0';
+          return d - dest;   // we're done with p
+        case 'a':  *d++ = '\a';  break;
+        case 'b':  *d++ = '\b';  break;
+        case 'f':  *d++ = '\f';  break;
+        case 'n':  *d++ = '\n';  break;
+        case 'r':  *d++ = '\r';  break;
+        case 't':  *d++ = '\t';  break;
+        case 'v':  *d++ = '\v';  break;
+        case '\\': *d++ = '\\';  break;
+        case '?':  *d++ = '\?';  break;    // \?  Who knew?
+        case '\'': *d++ = '\'';  break;
+        case '"':  *d++ = '\"';  break;
+        case '0': case '1': case '2': case '3':  // octal digit: 1 to 3 digits
+        case '4': case '5': case '6': case '7': {
+          char ch = *p - '0';
+          if ( IS_OCTAL_DIGIT(p[1]) )
+            ch = ch * 8 + *++p - '0';
+          if ( IS_OCTAL_DIGIT(p[1]) )      // safe (and easy) to do this twice
+            ch = ch * 8 + *++p - '0';      // now points at last digit
+          *d++ = ch;
+          break;
+        }
+        case 'x': case 'X': {
+          if (!isxdigit(p[1])) {
+            if (p[1] == '\0') {
+              LOG_STRING(ERROR, errors) << "String cannot end with \\x";
+            } else {
+              LOG_STRING(ERROR, errors) <<
+                "\\x cannot be followed by non-hex digit: \\" << *p << p[1];
+            }
+            break;
+          }
+          unsigned int ch = 0;
+          const char *hex_start = p;
+          while (isxdigit(p[1]))  // arbitrarily many hex digits
+            ch = (ch << 4) + hex_digit_to_int(*++p);
+          if (ch > 0xFF)
+            LOG_STRING(ERROR, errors)
+                << "Value of "
+                << "\\" << std::string(hex_start, p + 1 - hex_start)
+                << " exceeds 8 bits";
+          *d++ = ch;
+          break;
+        }
+#if 0  // TODO(kenton):  Support \u and \U?  Requires runetochar().
+        case 'u': {
+          // \uhhhh => convert 4 hex digits to UTF-8
+          char32 rune = 0;
+          const char *hex_start = p;
+          for (int i = 0; i < 4; ++i) {
+            if (isxdigit(p[1])) {  // Look one char ahead.
+              rune = (rune << 4) + hex_digit_to_int(*++p);  // Advance p.
+            } else {
+              LOG_STRING(ERROR, errors)
+                << "\\u must be followed by 4 hex digits: \\"
+                <<  std::string(hex_start, p+1-hex_start);
+              break;
+            }
+          }
+          d += runetochar(d, &rune);
+          break;
+        }
+        case 'U': {
+          // \Uhhhhhhhh => convert 8 hex digits to UTF-8
+          char32 rune = 0;
+          const char *hex_start = p;
+          for (int i = 0; i < 8; ++i) {
+            if (isxdigit(p[1])) {  // Look one char ahead.
+              // Don't change rune until we're sure this
+              // is within the Unicode limit, but do advance p.
+              char32 newrune = (rune << 4) + hex_digit_to_int(*++p);
+              if (newrune > 0x10FFFF) {
+                LOG_STRING(ERROR, errors)
+                  << "Value of \\"
+                  << std::string(hex_start, p + 1 - hex_start)
+                  << " exceeds Unicode limit (0x10FFFF)";
+                break;
+              } else {
+                rune = newrune;
+              }
+            } else {
+              LOG_STRING(ERROR, errors)
+                << "\\U must be followed by 8 hex digits: \\"
+                <<  std::string(hex_start, p+1-hex_start);
+              break;
+            }
+          }
+          d += runetochar(d, &rune);
+          break;
+        }
+#endif
+        default:
+          LOG_STRING(ERROR, errors) << "Unknown escape sequence: \\" << *p;
+      }
+      p++;                                 // read past letter we escaped
+    }
+  }
+  *d = '\0';
+  return d - dest;
+}
+
+
+// Source: strutil.cc
+// Lines 314-432

@@ -1,0 +1,166 @@
+grid_expand_target_grid_body (struct omp_region *target)
+{
+  if (!hsa_gen_requested_p ())
+    return;
+
+  gomp_target *tgt_stmt = as_a <gomp_target *> (last_stmt (target->entry));
+  struct omp_region **pp;
+
+  for (pp = &target->inner; *pp; pp = &(*pp)->next)
+    if ((*pp)->type == GIMPLE_OMP_GRID_BODY)
+      break;
+
+  struct omp_region *gpukernel = *pp;
+
+  tree orig_child_fndecl = gimple_omp_target_child_fn (tgt_stmt);
+  if (!gpukernel)
+    {
+      /* HSA cannot handle OACC stuff.  */
+      if (gimple_omp_target_kind (tgt_stmt) != GF_OMP_TARGET_KIND_REGION)
+	return;
+      gcc_checking_assert (orig_child_fndecl);
+      gcc_assert (!omp_find_clause (gimple_omp_target_clauses (tgt_stmt),
+				    OMP_CLAUSE__GRIDDIM_));
+      cgraph_node *n = cgraph_node::get (orig_child_fndecl);
+
+      hsa_register_kernel (n);
+      return;
+    }
+
+  gcc_assert (omp_find_clause (gimple_omp_target_clauses (tgt_stmt),
+			       OMP_CLAUSE__GRIDDIM_));
+  tree inside_block
+    = gimple_block (first_stmt (single_succ (gpukernel->entry)));
+  *pp = gpukernel->next;
+  for (pp = &gpukernel->inner; *pp; pp = &(*pp)->next)
+    if ((*pp)->type == GIMPLE_OMP_FOR)
+      break;
+
+  struct omp_region *kfor = *pp;
+  gcc_assert (kfor);
+  gomp_for *for_stmt = as_a <gomp_for *> (last_stmt (kfor->entry));
+  gcc_assert (gimple_omp_for_kind (for_stmt) == GF_OMP_FOR_KIND_GRID_LOOP);
+  *pp = kfor->next;
+  if (kfor->inner)
+    {
+      if (gimple_omp_for_grid_group_iter (for_stmt))
+	{
+	  struct omp_region **next_pp;
+	  for (pp = &kfor->inner; *pp; pp = next_pp)
+	    {
+	      next_pp = &(*pp)->next;
+	      if ((*pp)->type != GIMPLE_OMP_FOR)
+		continue;
+	      gomp_for *inner = as_a <gomp_for *> (last_stmt ((*pp)->entry));
+	      gcc_assert (gimple_omp_for_kind (inner)
+			  == GF_OMP_FOR_KIND_GRID_LOOP);
+	      grid_expand_omp_for_loop (*pp, true);
+	      *pp = (*pp)->next;
+	      next_pp = pp;
+	    }
+	}
+      expand_omp (kfor->inner);
+    }
+  if (gpukernel->inner)
+    expand_omp (gpukernel->inner);
+
+  tree kern_fndecl = copy_node (orig_child_fndecl);
+  DECL_NAME (kern_fndecl) = clone_function_name_numbered (kern_fndecl,
+							  "kernel");
+  SET_DECL_ASSEMBLER_NAME (kern_fndecl, DECL_NAME (kern_fndecl));
+  tree tgtblock = gimple_block (tgt_stmt);
+  tree fniniblock = make_node (BLOCK);
+  BLOCK_ABSTRACT_ORIGIN (fniniblock) = BLOCK_ORIGIN (tgtblock);
+  BLOCK_SOURCE_LOCATION (fniniblock) = BLOCK_SOURCE_LOCATION (tgtblock);
+  BLOCK_SOURCE_END_LOCATION (fniniblock) = BLOCK_SOURCE_END_LOCATION (tgtblock);
+  BLOCK_SUPERCONTEXT (fniniblock) = kern_fndecl;
+  DECL_INITIAL (kern_fndecl) = fniniblock;
+  push_struct_function (kern_fndecl);
+  cfun->function_end_locus = gimple_location (tgt_stmt);
+  init_tree_ssa (cfun);
+  pop_cfun ();
+
+  tree old_parm_decl = DECL_ARGUMENTS (kern_fndecl);
+  gcc_assert (!DECL_CHAIN (old_parm_decl));
+  tree new_parm_decl = copy_node (DECL_ARGUMENTS (kern_fndecl));
+  DECL_CONTEXT (new_parm_decl) = kern_fndecl;
+  DECL_ARGUMENTS (kern_fndecl) = new_parm_decl;
+  gcc_assert (VOID_TYPE_P (TREE_TYPE (DECL_RESULT (kern_fndecl))));
+  DECL_RESULT (kern_fndecl) = copy_node (DECL_RESULT (kern_fndecl));
+  DECL_CONTEXT (DECL_RESULT (kern_fndecl)) = kern_fndecl;
+  struct function *kern_cfun = DECL_STRUCT_FUNCTION (kern_fndecl);
+  kern_cfun->curr_properties = cfun->curr_properties;
+
+  grid_expand_omp_for_loop (kfor, false);
+
+  /* Remove the omp for statement.  */
+  gimple_stmt_iterator gsi = gsi_last_nondebug_bb (gpukernel->entry);
+  gsi_remove (&gsi, true);
+  /* Replace the GIMPLE_OMP_RETURN at the end of the kernel region with a real
+     return.  */
+  gsi = gsi_last_nondebug_bb (gpukernel->exit);
+  gcc_assert (!gsi_end_p (gsi)
+	      && gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_RETURN);
+  gimple *ret_stmt = gimple_build_return (NULL);
+  gsi_insert_after (&gsi, ret_stmt, GSI_SAME_STMT);
+  gsi_remove (&gsi, true);
+
+  /* Statements in the first BB in the target construct have been produced by
+     target lowering and must be copied inside the GPUKERNEL, with the two
+     exceptions of the first OMP statement and the OMP_DATA assignment
+     statement.  */
+  gsi = gsi_start_bb (single_succ (gpukernel->entry));
+  tree data_arg = gimple_omp_target_data_arg (tgt_stmt);
+  tree sender = data_arg ? TREE_VEC_ELT (data_arg, 0) : NULL;
+  for (gimple_stmt_iterator tsi = gsi_start_bb (single_succ (target->entry));
+       !gsi_end_p (tsi); gsi_next (&tsi))
+    {
+      gimple *stmt = gsi_stmt (tsi);
+      if (is_gimple_omp (stmt))
+	break;
+      if (sender
+	  && is_gimple_assign (stmt)
+	  && TREE_CODE (gimple_assign_rhs1 (stmt)) == ADDR_EXPR
+	  && TREE_OPERAND (gimple_assign_rhs1 (stmt), 0) == sender)
+	continue;
+      gimple *copy = gimple_copy (stmt);
+      gsi_insert_before (&gsi, copy, GSI_SAME_STMT);
+      gimple_set_block (copy, fniniblock);
+    }
+
+  move_sese_region_to_fn (kern_cfun, single_succ (gpukernel->entry),
+			  gpukernel->exit, inside_block);
+
+  cgraph_node *kcn = cgraph_node::get_create (kern_fndecl);
+  kcn->mark_force_output ();
+  cgraph_node *orig_child = cgraph_node::get (orig_child_fndecl);
+
+  hsa_register_kernel (kcn, orig_child);
+
+  cgraph_node::add_new_function (kern_fndecl, true);
+  push_cfun (kern_cfun);
+  cgraph_edge::rebuild_edges ();
+
+  /* Re-map any mention of the PARM_DECL of the original function to the
+     PARM_DECL of the new one.
+
+     TODO: It would be great if lowering produced references into the GPU
+     kernel decl straight away and we did not have to do this.  */
+  struct grid_arg_decl_map adm;
+  adm.old_arg = old_parm_decl;
+  adm.new_arg = new_parm_decl;
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, kern_cfun)
+    {
+      for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
+	{
+	  gimple *stmt = gsi_stmt (gsi);
+	  struct walk_stmt_info wi;
+	  memset (&wi, 0, sizeof (wi));
+	  wi.info = &adm;
+	  walk_gimple_op (stmt, grid_remap_kernel_arg_accesses, &wi);
+	}
+
+
+// Source: omp-expand.c
+// Lines 8629-8790

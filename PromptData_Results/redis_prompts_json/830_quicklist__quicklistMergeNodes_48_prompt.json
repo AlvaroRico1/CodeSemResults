@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'next_next' at line 4\n2. Pointer 'center' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nREDIS_STATIC void _quicklistMergeNodes(quicklist *quicklist,\n                                       quicklistNode *center) {\n    int fill = quicklist->fill;\n    quicklistNode *prev, *prev_prev, *next, *next_next, *target;\n    prev = prev_prev = next = next_next = target = NULL;\n\n    if (center->prev) {\n        prev = center->prev;\n        if (center->prev->prev)\n            prev_prev = center->prev->prev;\n    }\n\n\n// Source: quicklist.c\n// Lines 756-766\n",
+  "ANSWER": "MUST"
+}

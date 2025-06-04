@@ -1,0 +1,47 @@
+window_buffer_key(struct window_mode_entry *wme, struct client *c,
+    __unused struct session *s, __unused struct winlink *wl, key_code key,
+    struct mouse_event *m)
+{
+	struct window_pane		*wp = wme->wp;
+	struct window_buffer_modedata	*data = wme->data;
+	struct mode_tree_data		*mtd = data->data;
+	struct window_buffer_itemdata	*item;
+	int				 finished;
+
+	finished = mode_tree_key(mtd, c, &key, m, NULL, NULL);
+	switch (key) {
+	case 'e':
+		item = mode_tree_get_current(mtd);
+		window_buffer_start_edit(data, item, c);
+		break;
+	case 'd':
+		item = mode_tree_get_current(mtd);
+		window_buffer_do_delete(data, item, c, key);
+		mode_tree_build(mtd);
+		break;
+	case 'D':
+		mode_tree_each_tagged(mtd, window_buffer_do_delete, c, key, 0);
+		mode_tree_build(mtd);
+		break;
+	case 'P':
+		mode_tree_each_tagged(mtd, window_buffer_do_paste, c, key, 0);
+		finished = 1;
+		break;
+	case 'p':
+	case '\r':
+		item = mode_tree_get_current(mtd);
+		window_buffer_do_paste(data, item, c, key);
+		finished = 1;
+		break;
+	}
+	if (finished || paste_get_top(NULL) == NULL)
+		window_pane_reset_mode(wp);
+	else {
+		mode_tree_draw(mtd);
+		wp->flags |= PANE_REDRAW;
+	}
+}
+
+
+// Source: window-buffer.c
+// Lines 501-543

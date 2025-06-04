@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'field' at line 1\n2. Pointer 'array' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ninitField(UnicodeString **field, int32_t& length, CalendarDataSink &sink, CharString &key, UErrorCode &status) {\n    if (U_SUCCESS(status)) {\n        UnicodeString keyUString(key.data(), -1, US_INV);\n        UnicodeString* array = static_cast<UnicodeString*>(sink.arrays.get(keyUString));\n\n        if (array != NULL) {\n            length = sink.arraySizes.geti(keyUString);\n            *field = array;\n            // DateFormatSymbols takes ownership of the array:\n            sink.arrays.remove(keyUString);\n        } else {\n            length = 0;\n            status = U_MISSING_RESOURCE_ERROR;\n        }\n    }\n\n\n// Source: dtfmtsym.cpp\n// Lines 1873-1887\n",
+  "ANSWER": "MUST"
+}

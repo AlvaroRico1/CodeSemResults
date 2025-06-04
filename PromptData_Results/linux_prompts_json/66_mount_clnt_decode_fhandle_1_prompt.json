@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'fh' at line 3\n2. Pointer 'res' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int decode_fhandle(struct xdr_stream *xdr, struct mountres *res)\n{\n\tstruct nfs_fh *fh = res->fh;\n\t__be32 *p;\n\n\tp = xdr_inline_decode(xdr, NFS2_FHSIZE);\n\tif (unlikely(p == NULL))\n\t\treturn -EIO;\n\n\tfh->size = NFS2_FHSIZE;\n\tmemcpy(fh->data, p, NFS2_FHSIZE);\n\treturn 0;\n}\n\n\n// Source: mount_clnt.c\n// Lines 347-359\n",
+  "ANSWER": "MUST"
+}

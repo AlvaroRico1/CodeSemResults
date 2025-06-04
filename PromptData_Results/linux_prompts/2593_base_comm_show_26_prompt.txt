@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'inode' at line 3
+2. Pointer 'm' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int comm_show(struct seq_file *m, void *v)
+{
+	struct inode *inode = m->private;
+	struct task_struct *p;
+
+	p = get_proc_task(inode);
+	if (!p)
+		return -ESRCH;
+
+	proc_task_name(m, p, false);
+	seq_putc(m, '\n');
+
+	put_task_struct(p);
+
+	return 0;
+}
+
+
+// Source: base.c
+// Lines 1562-1577
+
+
+[ANSWER]
+MUST

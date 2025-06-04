@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'data' at line 3\n2. Pointer 'wme' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nwindow_copy_next_paragraph(struct window_mode_entry *wme)\n{\n\tstruct window_copy_mode_data\t*data = wme->data;\n\tstruct screen\t\t\t*s = &data->screen;\n\tu_int\t\t\t\t maxy, ox, oy;\n\n\toy = screen_hsize(data->backing) + data->cy - data->oy;\n\tmaxy = screen_hsize(data->backing) + screen_size_y(s) - 1;\n\n\twhile (oy < maxy && window_copy_find_length(wme, oy) == 0)\n\t\toy++;\n\n\twhile (oy < maxy && window_copy_find_length(wme, oy) > 0)\n\t\toy++;\n\n\tox = window_copy_find_length(wme, oy);\n\twindow_copy_scroll_to(wme, ox, oy, 0);\n}\n\n\n// Source: window-copy.c\n// Lines 678-695\n",
+  "ANSWER": "MUST"
+}

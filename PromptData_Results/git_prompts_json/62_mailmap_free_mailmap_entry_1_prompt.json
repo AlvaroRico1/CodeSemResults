@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'me' at line 3\n2. Pointer 'p' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void free_mailmap_entry(void *p, const char *s)\n{\n\tstruct mailmap_entry *me = (struct mailmap_entry *)p;\n\tdebug_mm(\"mailmap: removing entries for <%s>, with %d sub-entries\\n\",\n\t\t s, me->namemap.nr);\n\tdebug_mm(\"mailmap: - simple: '%s' <%s>\\n\",\n\t\t debug_str(me->name), debug_str(me->email));\n\n\tfree(me->name);\n\tfree(me->email);\n\n\tme->namemap.strdup_strings = 1;\n\tstring_list_clear_func(&me->namemap, free_mailmap_info);\n\tfree(me);\n}\n\n\n// Source: mailmap.c\n// Lines 43-57\n",
+  "ANSWER": "MUST"
+}

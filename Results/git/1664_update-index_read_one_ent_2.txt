@@ -1,0 +1,1 @@
+path,git/builtin/update-index.c,2,mode,git/builtin/update-index.c,5,2

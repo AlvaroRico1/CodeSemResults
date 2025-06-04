@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'count' at line 5
+2. Pointer 'total' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void __delayacct_blkio_end(struct task_struct *p)
+{
+	struct task_delay_info *delays = p->delays;
+	u64 *total;
+	u32 *count;
+
+	if (p->delays->flags & DELAYACCT_PF_SWAPIN) {
+		total = &delays->swapin_delay;
+		count = &delays->swapin_count;
+	} else {
+		total = &delays->blkio_delay;
+		count = &delays->blkio_count;
+	}
+
+	delayacct_end(&delays->lock, &delays->blkio_start, total, count);
+}
+
+
+// Source: delayacct.c
+// Lines 68-83
+
+
+[ANSWER]
+MAY

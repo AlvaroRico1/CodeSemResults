@@ -1,0 +1,35 @@
+static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http3_server_stream_state state, int in_generator)
+{
+    struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
+    enum h2o_http3_server_stream_state old_state = stream->state;
+
+    H2O_PROBE_CONN(H3S_STREAM_SET_STATE, &conn->super, stream->quic->stream_id, (unsigned)state);
+
+    --*get_state_counter(conn, old_state);
+    stream->state = state;
+    ++*get_state_counter(conn, stream->state);
+
+    switch (state) {
+    case H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BLOCKED:
+        assert(conn->delayed_streams.recv_body_blocked.prev == &stream->link || !"stream is not registered to the recv_body list?");
+        break;
+    case H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT: {
+        if (h2o_linklist_is_linked(&stream->link))
+            h2o_linklist_unlink(&stream->link);
+        pre_dispose_request(stream);
+        if (!in_generator) {
+            h2o_dispose_request(&stream->req);
+            stream->req_disposed = 1;
+        }
+        static const quicly_stream_callbacks_t close_wait_callbacks = {on_stream_destroy,
+                                                                       quicly_stream_noop_on_send_shift,
+                                                                       quicly_stream_noop_on_send_emit,
+                                                                       quicly_stream_noop_on_send_stop,
+                                                                       quicly_stream_noop_on_receive,
+                                                                       quicly_stream_noop_on_receive_reset};
+        stream->quic->callbacks = &close_wait_callbacks;
+    } break;
+
+
+// Source: server.c
+// Lines 422-452

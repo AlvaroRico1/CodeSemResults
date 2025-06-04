@@ -1,0 +1,212 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'found_days' at line 7
+2. Pointer 'str' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool str_to_time(const char *str, std::size_t length, MYSQL_TIME *l_time,
+                 MYSQL_TIME_STATUS *status, my_time_flags_t flags) {
+  ulong date[5];
+  ulonglong value;
+  const char *end = str + length;
+  const char *end_of_days;
+  bool found_days;
+  bool found_hours;
+  uint state;
+  const char *start;
+  bool seen_colon = false;
+
+  assert(status->warnings == 0 && status->fractional_digits == 0 &&
+         status->nanoseconds == 0);
+
+  l_time->neg = false;
+  for (; str != end && isspace_char(*str); str++) length--;
+  if (str != end && *str == '-') {
+    l_time->neg = true;
+    str++;
+    length--;
+  }
+  if (str == end) return true;
+
+  // Remember beginning of first non-space/- char.
+  start = str;
+
+  /* Check first if this is a full TIMESTAMP */
+  if (length >= 12) { /* Probably full timestamp */
+    MYSQL_TIME_STATUS tmpstatus;
+    (void)str_to_datetime(str, length, l_time,
+                          (TIME_FUZZY_DATE | TIME_DATETIME_ONLY), &tmpstatus);
+    if (l_time->time_type >= MYSQL_TIMESTAMP_ERROR) {
+      *status = tmpstatus;
+      return l_time->time_type == MYSQL_TIMESTAMP_ERROR;
+    }
+    assert(status->warnings == 0 && status->fractional_digits == 0 &&
+           status->nanoseconds == 0);
+  }
+
+  /* Not a timestamp. Try to get this as a DAYS_TO_SECOND string */
+  for (value = 0; str != end && isdigit_char(*str); str++)
+    value = value * 10L + static_cast<long>(*str - '0');
+
+  if (value > UINT_MAX) return true;
+
+  /* Skip all space after 'days' */
+  end_of_days = str;
+  for (; str != end && isspace_char(str[0]); str++)
+    ;
+
+  state = 0;
+  found_days = found_hours = false;
+  if (static_cast<uint>(end - str) > 1 && str != end_of_days &&
+      isdigit_char(*str)) { /* Found days part */
+    date[0] = static_cast<ulong>(value);
+    state = 1; /* Assume next is hours */
+    found_days = true;
+  } else if ((end - str) > 1 && *str == time_separator &&
+             isdigit_char(str[1])) {
+    date[0] = 0; /* Assume we found hours */
+    date[1] = static_cast<ulong>(value);
+    state = 2;
+    found_hours = true;
+    str++; /* skip ':' */
+    seen_colon = true;
+  } else {
+    /* String given as one number; assume HHMMSS format */
+    date[0] = 0;
+    date[1] = static_cast<ulong>(value / 10000);
+    date[2] = static_cast<ulong>(value / 100 % 100);
+    date[3] = static_cast<ulong>(value % 100);
+    state = 4;
+    goto fractional;
+  }
+
+  /* Read hours, minutes and seconds */
+  for (;;) {
+    for (value = 0; str != end && isdigit_char(*str); str++)
+      value = value * 10L + static_cast<long>(*str - '0');
+    date[state++] = static_cast<ulong>(value);
+    if (state == 4 || (end - str) < 2 || *str != time_separator ||
+        !isdigit_char(str[1]))
+      break;
+    str++; /* Skip time_separator (':') */
+    seen_colon = true;
+  }
+
+  if (state != 4) { /* Not HH:MM:SS */
+    /* Fix the date to assume that seconds was given */
+    if (!found_hours && !found_days) {
+      std::size_t len = sizeof(long) * (state - 1);
+      memmove(pointer_cast<uchar *>(date + 4) - len,
+              pointer_cast<uchar *>(date + state) - len, len);
+      memset(date, 0, sizeof(long) * (4 - state));
+    } else
+      memset((date + state), 0, sizeof(long) * (4 - state));
+  }
+
+fractional:
+  /* Get fractional second part */
+  if ((end - str) >= 2 && *str == '.' && isdigit_char(str[1])) {
+    int field_length = 5;
+    str++;
+    value = static_cast<uint>(static_cast<uchar>(*str - '0'));
+    while (++str != end && isdigit_char(*str)) {
+      if (field_length-- > 0)
+        value = value * 10 + static_cast<uint>(static_cast<uchar>(*str - '0'));
+    }
+    if (field_length >= 0) {
+      status->fractional_digits = DATETIME_MAX_DECIMALS - field_length;
+      if (field_length > 0)
+        value *= static_cast<long>(log_10_int[field_length]);
+    } else {
+      /* Scan digits left after microseconds */
+      status->fractional_digits = 6;
+      status->nanoseconds = 100 * (str[-1] - '0');
+      for (; str != end && isdigit_char(*str); str++) {
+      }
+    }
+    date[4] = static_cast<ulong>(value);
+  } else if ((end - str) == 1 && *str == '.') {
+    str++;
+    date[4] = 0;
+  } else
+    date[4] = 0;
+
+  /* Check for exponent part: E<gigit> | E<sign><digit> */
+  /* (may occur as result of %g formatting of time value) */
+  if ((end - str) > 1 && (*str == 'e' || *str == 'E') &&
+      (isdigit_char(str[1]) || ((str[1] == '-' || str[1] == '+') &&
+                                (end - str) > 2 && isdigit_char(str[2]))))
+    return true;
+
+  if (internal_format_positions[7] != 255) {
+    /* Read a possible AM/PM */
+    while (str != end && isspace_char(*str)) str++;
+    if (str + 2 <= end && (str[1] == 'M' || str[1] == 'm')) {
+      if (str[0] == 'p' || str[0] == 'P') {
+        str += 2;
+        date[1] = date[1] % 12 + 12;
+      } else if (str[0] == 'a' || str[0] == 'A')
+        str += 2;
+    }
+  }
+
+  /* Integer overflow checks */
+  if (date[0] > UINT_MAX || date[1] > UINT_MAX || date[2] > UINT_MAX ||
+      date[3] > UINT_MAX || date[4] > UINT_MAX)
+    return true;
+
+  if (!seen_colon && (flags & TIME_STRICT_COLON)) {
+    memset(l_time, 0, sizeof(*l_time));
+    status->warnings |= MYSQL_TIME_WARN_OUT_OF_RANGE;
+    return true;
+  }
+
+  l_time->year = 0; /* For protocol::store_time */
+  l_time->month = 0;
+
+  l_time->day = 0;
+  l_time->hour = date[1] + date[0] * 24; /* Mix days and hours */
+
+  l_time->minute = date[2];
+  l_time->second = date[3];
+  l_time->second_part = date[4];
+  l_time->time_type = MYSQL_TIMESTAMP_TIME;
+  l_time->time_zone_displacement = 0;
+
+  if (check_time_mmssff_range(*l_time)) {
+    status->warnings |= MYSQL_TIME_WARN_OUT_OF_RANGE;
+    return true;
+  }
+
+  /* Adjust the value into supported MYSQL_TIME range */
+  adjust_time_range(l_time, &status->warnings);
+
+  /* Check if there is garbage at end of the MYSQL_TIME specification */
+  if (str != end) {
+    do {
+      if (!isspace_char(*str)) {
+        status->warnings |= MYSQL_TIME_WARN_TRUNCATED;
+        // No char was actually used in conversion - bad value
+        if (str == start) {
+          l_time->time_type = MYSQL_TIMESTAMP_NONE;
+          return true;
+        }
+        break;
+      }
+    } while (++str != end);
+  }
+  return false;
+}
+
+
+// Source: my_time.cc
+// Lines 744-936
+
+
+[ANSWER]
+MUST-NOT

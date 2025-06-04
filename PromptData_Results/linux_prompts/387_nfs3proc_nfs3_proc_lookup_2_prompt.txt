@@ -1,0 +1,57 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'msg' at line 14
+2. Pointer 'fattr' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+nfs3_proc_lookup(struct inode *dir, const struct qstr *name,
+		 struct nfs_fh *fhandle, struct nfs_fattr *fattr,
+		 struct nfs4_label *label)
+{
+	struct nfs3_diropargs	arg = {
+		.fh		= NFS_FH(dir),
+		.name		= name->name,
+		.len		= name->len
+	};
+	struct nfs3_diropres	res = {
+		.fh		= fhandle,
+		.fattr		= fattr
+	};
+	struct rpc_message msg = {
+		.rpc_proc	= &nfs3_procedures[NFS3PROC_LOOKUP],
+		.rpc_argp	= &arg,
+		.rpc_resp	= &res,
+	};
+	int			status;
+
+	dprintk("NFS call  lookup %s\n", name->name);
+	res.dir_attr = nfs_alloc_fattr();
+	if (res.dir_attr == NULL)
+		return -ENOMEM;
+
+	nfs_fattr_init(fattr);
+	status = rpc_call_sync(NFS_CLIENT(dir), &msg, 0);
+	nfs_refresh_inode(dir, res.dir_attr);
+	if (status >= 0 && !(fattr->valid & NFS_ATTR_FATTR)) {
+		msg.rpc_proc = &nfs3_procedures[NFS3PROC_GETATTR];
+		msg.rpc_argp = fhandle;
+		msg.rpc_resp = fattr;
+		status = rpc_call_sync(NFS_CLIENT(dir), &msg, 0);
+	}
+	nfs_free_fattr(res.dir_attr);
+	dprintk("NFS reply lookup: %d\n", status);
+	return status;
+}
+
+
+// Source: nfs3proc.c
+// Lines 152-189
+
+
+[ANSWER]
+MUST

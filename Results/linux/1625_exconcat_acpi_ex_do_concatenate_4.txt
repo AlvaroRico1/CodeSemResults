@@ -1,0 +1,1 @@
+buffer,linux/drivers/acpi/acpica/exconcat.c,10,local_operand0,linux/drivers/acpi/acpica/exconcat.c,6,2

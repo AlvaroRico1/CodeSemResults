@@ -1,0 +1,101 @@
+void clusterCron(void) {
+    dictIterator *di;
+    dictEntry *de;
+    int update_state = 0;
+    int orphaned_masters; /* How many masters there are without ok slaves. */
+    int max_slaves; /* Max number of ok slaves for a single master. */
+    int this_slaves; /* Number of ok slaves for our master (if we are slave). */
+    mstime_t min_pong = 0, now = mstime();
+    clusterNode *min_pong_node = NULL;
+    static unsigned long long iteration = 0;
+    mstime_t handshake_timeout;
+
+    iteration++; /* Number of times this function was called so far. */
+
+    /* We want to take myself->ip in sync with the cluster-announce-ip option.
+     * The option can be set at runtime via CONFIG SET, so we periodically check
+     * if the option changed to reflect this into myself->ip. */
+    {
+        static char *prev_ip = NULL;
+        char *curr_ip = server.cluster_announce_ip;
+        int changed = 0;
+
+        if (prev_ip == NULL && curr_ip != NULL) changed = 1;
+        else if (prev_ip != NULL && curr_ip == NULL) changed = 1;
+        else if (prev_ip && curr_ip && strcmp(prev_ip,curr_ip)) changed = 1;
+
+        if (changed) {
+            if (prev_ip) zfree(prev_ip);
+            prev_ip = curr_ip;
+
+            if (curr_ip) {
+                /* We always take a copy of the previous IP address, by
+                 * duplicating the string. This way later we can check if
+                 * the address really changed. */
+                prev_ip = zstrdup(prev_ip);
+                strncpy(myself->ip,server.cluster_announce_ip,NET_IP_STR_LEN);
+                myself->ip[NET_IP_STR_LEN-1] = '\0';
+            } else {
+                myself->ip[0] = '\0'; /* Force autodetection. */
+            }
+        }
+    }
+
+    /* The handshake timeout is the time after which a handshake node that was
+     * not turned into a normal node is removed from the nodes. Usually it is
+     * just the NODE_TIMEOUT value, but when NODE_TIMEOUT is too small we use
+     * the value of 1 second. */
+    handshake_timeout = server.cluster_node_timeout;
+    if (handshake_timeout < 1000) handshake_timeout = 1000;
+
+    /* Update myself flags. */
+    clusterUpdateMyselfFlags();
+
+    /* Check if we have disconnected nodes and re-establish the connection.
+     * Also update a few stats while we are here, that can be used to make
+     * better decisions in other part of the code. */
+    di = dictGetSafeIterator(server.cluster->nodes);
+    server.cluster->stats_pfail_nodes = 0;
+    while((de = dictNext(di)) != NULL) {
+        clusterNode *node = dictGetVal(de);
+
+        /* Not interested in reconnecting the link with myself or nodes
+         * for which we have no address. */
+        if (node->flags & (CLUSTER_NODE_MYSELF|CLUSTER_NODE_NOADDR)) continue;
+
+        if (node->flags & CLUSTER_NODE_PFAIL)
+            server.cluster->stats_pfail_nodes++;
+
+        /* A Node in HANDSHAKE state has a limited lifespan equal to the
+         * configured node timeout. */
+        if (nodeInHandshake(node) && now - node->ctime > handshake_timeout) {
+            clusterDelNode(node);
+            continue;
+        }
+
+        if (node->link == NULL) {
+            clusterLink *link = createClusterLink(node);
+            link->conn = server.tls_cluster ? connCreateTLS() : connCreateSocket();
+            connSetPrivateData(link->conn, link);
+            if (connConnect(link->conn, node->ip, node->cport, NET_FIRST_BIND_ADDR,
+                        clusterLinkConnectHandler) == -1) {
+                /* We got a synchronous error from connect before
+                 * clusterSendPing() had a chance to be called.
+                 * If node->ping_sent is zero, failure detection can't work,
+                 * so we claim we actually sent a ping now (that will
+                 * be really sent as soon as the link is obtained). */
+                if (node->ping_sent == 0) node->ping_sent = mstime();
+                serverLog(LL_DEBUG, "Unable to connect to "
+                    "Cluster Node [%s]:%d -> %s", node->ip,
+                    node->cport, server.neterr);
+
+                freeClusterLink(link);
+                continue;
+            }
+            node->link = link;
+        }
+    }
+
+
+// Source: cluster.c
+// Lines 3499-3595

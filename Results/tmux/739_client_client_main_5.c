@@ -1,0 +1,215 @@
+client_main(struct event_base *base, int argc, char **argv, uint64_t flags,
+    int feat)
+{
+	struct cmd_parse_result	*pr;
+	struct msg_command	*data;
+	int			 fd, i;
+	const char		*ttynam, *termname, *cwd;
+	pid_t			 ppid;
+	enum msgtype		 msg;
+	struct termios		 tio, saved_tio;
+	size_t			 size, linesize = 0;
+	ssize_t			 linelen;
+	char			*line = NULL, **caps = NULL, *cause;
+	u_int			 ncaps = 0;
+	struct args_value	*values;
+
+	/* Ignore SIGCHLD now or daemon() in the server will leave a zombie. */
+	signal(SIGCHLD, SIG_IGN);
+
+	/* Set up the initial command. */
+	if (shell_command != NULL) {
+		msg = MSG_SHELL;
+		flags |= CLIENT_STARTSERVER;
+	} else if (argc == 0) {
+		msg = MSG_COMMAND;
+		flags |= CLIENT_STARTSERVER;
+	} else {
+		msg = MSG_COMMAND;
+
+		/*
+		 * It's annoying parsing the command string twice (in client
+		 * and later in server) but it is necessary to get the start
+		 * server flag.
+		 */
+		values = args_from_vector(argc, argv);
+		pr = cmd_parse_from_arguments(values, argc, NULL);
+		if (pr->status == CMD_PARSE_SUCCESS) {
+			if (cmd_list_any_have(pr->cmdlist, CMD_STARTSERVER))
+				flags |= CLIENT_STARTSERVER;
+			cmd_list_free(pr->cmdlist);
+		} else
+			free(pr->error);
+		args_free_values(values, argc);
+		free(values);
+	}
+
+	/* Create client process structure (starts logging). */
+	client_proc = proc_start("client");
+	proc_set_signals(client_proc, client_signal);
+
+	/* Save the flags. */
+	client_flags = flags;
+	log_debug("flags are %#llx", (unsigned long long)client_flags);
+
+	/* Initialize the client socket and start the server. */
+	fd = client_connect(base, socket_path, client_flags);
+	if (fd == -1) {
+		if (errno == ECONNREFUSED) {
+			fprintf(stderr, "no server running on %s\n",
+			    socket_path);
+		} else {
+			fprintf(stderr, "error connecting to %s (%s)\n",
+			    socket_path, strerror(errno));
+		}
+		return (1);
+	}
+	client_peer = proc_add_peer(client_proc, fd, client_dispatch, NULL);
+
+	/* Save these before pledge(). */
+	if ((cwd = find_cwd()) == NULL && (cwd = find_home()) == NULL)
+		cwd = "/";
+	if ((ttynam = ttyname(STDIN_FILENO)) == NULL)
+		ttynam = "";
+	if ((termname = getenv("TERM")) == NULL)
+		termname = "";
+
+	/*
+	 * Drop privileges for client. "proc exec" is needed for -c and for
+	 * locking (which uses system(3)).
+	 *
+	 * "tty" is needed to restore termios(4) and also for some reason -CC
+	 * does not work properly without it (input is not recognised).
+	 *
+	 * "sendfd" is dropped later in client_dispatch_wait().
+	 */
+	if (pledge(
+	    "stdio rpath wpath cpath unix sendfd proc exec tty",
+	    NULL) != 0)
+		fatal("pledge failed");
+
+	/* Load terminfo entry if any. */
+	if (isatty(STDIN_FILENO) &&
+	    *termname != '\0' &&
+	    tty_term_read_list(termname, STDIN_FILENO, &caps, &ncaps,
+	    &cause) != 0) {
+		fprintf(stderr, "%s\n", cause);
+		free(cause);
+		return (1);
+	}
+
+	/* Free stuff that is not used in the client. */
+	if (ptm_fd != -1)
+		close(ptm_fd);
+	options_free(global_options);
+	options_free(global_s_options);
+	options_free(global_w_options);
+	environ_free(global_environ);
+
+	/* Set up control mode. */
+	if (client_flags & CLIENT_CONTROLCONTROL) {
+		if (tcgetattr(STDIN_FILENO, &saved_tio) != 0) {
+			fprintf(stderr, "tcgetattr failed: %s\n",
+			    strerror(errno));
+			return (1);
+		}
+		cfmakeraw(&tio);
+		tio.c_iflag = ICRNL|IXANY;
+		tio.c_oflag = OPOST|ONLCR;
+#ifdef NOKERNINFO
+		tio.c_lflag = NOKERNINFO;
+#endif
+		tio.c_cflag = CREAD|CS8|HUPCL;
+		tio.c_cc[VMIN] = 1;
+		tio.c_cc[VTIME] = 0;
+		cfsetispeed(&tio, cfgetispeed(&saved_tio));
+		cfsetospeed(&tio, cfgetospeed(&saved_tio));
+		tcsetattr(STDIN_FILENO, TCSANOW, &tio);
+	}
+
+	/* Send identify messages. */
+	client_send_identify(ttynam, termname, caps, ncaps, cwd, feat);
+	tty_term_free_list(caps, ncaps);
+
+	/* Send first command. */
+	if (msg == MSG_COMMAND) {
+		/* How big is the command? */
+		size = 0;
+		for (i = 0; i < argc; i++)
+			size += strlen(argv[i]) + 1;
+		if (size > MAX_IMSGSIZE - (sizeof *data)) {
+			fprintf(stderr, "command too long\n");
+			return (1);
+		}
+		data = xmalloc((sizeof *data) + size);
+
+		/* Prepare command for server. */
+		data->argc = argc;
+		if (cmd_pack_argv(argc, argv, (char *)(data + 1), size) != 0) {
+			fprintf(stderr, "command too long\n");
+			free(data);
+			return (1);
+		}
+		size += sizeof *data;
+
+		/* Send the command. */
+		if (proc_send(client_peer, msg, -1, data, size) != 0) {
+			fprintf(stderr, "failed to send command\n");
+			free(data);
+			return (1);
+		}
+		free(data);
+	} else if (msg == MSG_SHELL)
+		proc_send(client_peer, msg, -1, NULL, 0);
+
+	/* Start main loop. */
+	proc_loop(client_proc, NULL);
+
+	/* Run command if user requested exec, instead of exiting. */
+	if (client_exittype == MSG_EXEC) {
+		if (client_flags & CLIENT_CONTROLCONTROL)
+			tcsetattr(STDOUT_FILENO, TCSAFLUSH, &saved_tio);
+		client_exec(client_execshell, client_execcmd);
+	}
+
+	/* Restore streams to blocking. */
+	setblocking(STDIN_FILENO, 1);
+	setblocking(STDOUT_FILENO, 1);
+	setblocking(STDERR_FILENO, 1);
+
+	/* Print the exit message, if any, and exit. */
+	if (client_attached) {
+		if (client_exitreason != CLIENT_EXIT_NONE)
+			printf("[%s]\n", client_exit_message());
+
+		ppid = getppid();
+		if (client_exittype == MSG_DETACHKILL && ppid > 1)
+			kill(ppid, SIGHUP);
+	} else if (client_flags & CLIENT_CONTROL) {
+		if (client_exitreason != CLIENT_EXIT_NONE)
+			printf("%%exit %s\n", client_exit_message());
+		else
+			printf("%%exit\n");
+		fflush(stdout);
+		if (client_flags & CLIENT_CONTROL_WAITEXIT) {
+			setvbuf(stdin, NULL, _IOLBF, 0);
+			for (;;) {
+				linelen = getline(&line, &linesize, stdin);
+				if (linelen <= 1)
+					break;
+			}
+			free(line);
+		}
+		if (client_flags & CLIENT_CONTROLCONTROL) {
+			printf("\033\\");
+			fflush(stdout);
+			tcsetattr(STDOUT_FILENO, TCSAFLUSH, &saved_tio);
+		}
+	} else if (client_exitreason != CLIENT_EXIT_NONE)
+		fprintf(stderr, "%s\n", client_exit_message());
+	return (client_exitval);
+}
+
+
+// Source: client.c
+// Lines 232-442

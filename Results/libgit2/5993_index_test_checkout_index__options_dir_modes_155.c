@@ -1,0 +1,38 @@
+void test_checkout_index__options_dir_modes(void)
+{
+	git_checkout_options opts = GIT_CHECKOUT_OPTIONS_INIT;
+	struct stat st;
+	git_oid oid;
+	git_commit *commit;
+	mode_t um;
+
+	if (!cl_is_chmod_supported())
+		return;
+
+	cl_git_pass(git_reference_name_to_id(&oid, g_repo, "refs/heads/dir"));
+	cl_git_pass(git_commit_lookup(&commit, g_repo, &oid));
+
+	reset_index_to_treeish((git_object *)commit);
+
+	opts.checkout_strategy = GIT_CHECKOUT_SAFE | GIT_CHECKOUT_RECREATE_MISSING;
+	opts.dir_mode = 0701;
+
+	cl_git_pass(git_checkout_index(g_repo, NULL, &opts));
+
+	/* umask will influence actual directory creation mode */
+	(void)p_umask(um = p_umask(022));
+
+	cl_git_pass(p_stat("./testrepo/a", &st));
+	/* Haiku & Hurd use other mode bits, so we must mask them out */
+	cl_assert_equal_i_fmt(st.st_mode & (S_IFMT | 07777), (GIT_FILEMODE_TREE | 0701) & ~um, "%07o");
+
+	/* File-mode test, since we're on the 'dir' branch */
+	cl_git_pass(p_stat("./testrepo/a/b.txt", &st));
+	cl_assert_equal_i_fmt(st.st_mode & (S_IFMT | 07777), GIT_FILEMODE_BLOB_EXECUTABLE & ~um, "%07o");
+
+	git_commit_free(commit);
+}
+
+
+// Source: index.c
+// Lines 380-413

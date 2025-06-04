@@ -1,0 +1,1 @@
+string,gcc/gcc/coverage.c,1,dup,gcc/gcc/coverage.c,4,1

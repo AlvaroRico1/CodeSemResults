@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'val' at line 7\n2. Pointer 'tr_index' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ntrace_options_core_write(struct file *filp, const char __user *ubuf, size_t cnt,\n\t\t\t loff_t *ppos)\n{\n\tvoid *tr_index = filp->private_data;\n\tstruct trace_array *tr;\n\tunsigned int index;\n\tunsigned long val;\n\tint ret;\n\n\tget_tr_index(tr_index, &tr, &index);\n\n\tret = kstrtoul_from_user(ubuf, cnt, 10, &val);\n\tif (ret)\n\t\treturn ret;\n\n\tif (val != 0 && val != 1)\n\t\treturn -EINVAL;\n\n\tmutex_lock(&trace_types_lock);\n\tret = set_tracer_flag(tr, 1 << index, val);\n\tmutex_unlock(&trace_types_lock);\n\n\tif (ret < 0)\n\t\treturn ret;\n\n\t*ppos += cnt;\n\n\treturn cnt;\n}\n\n\n// Source: trace.c\n// Lines 7922-7950\n",
+  "ANSWER": "MAY"
+}

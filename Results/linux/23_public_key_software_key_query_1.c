@@ -1,0 +1,60 @@
+static int software_key_query(const struct kernel_pkey_params *params,
+			      struct kernel_pkey_query *info)
+{
+	struct crypto_akcipher *tfm;
+	struct public_key *pkey = params->key->payload.data[asym_crypto];
+	char alg_name[CRYPTO_MAX_ALG_NAME];
+	u8 *key, *ptr;
+	int ret, len;
+
+	ret = software_key_determine_akcipher(params->encoding,
+					      params->hash_algo,
+					      pkey, alg_name);
+	if (ret < 0)
+		return ret;
+
+	tfm = crypto_alloc_akcipher(alg_name, 0, 0);
+	if (IS_ERR(tfm))
+		return PTR_ERR(tfm);
+
+	key = kmalloc(pkey->keylen + sizeof(u32) * 2 + pkey->paramlen,
+		      GFP_KERNEL);
+	if (!key)
+		goto error_free_tfm;
+	memcpy(key, pkey->key, pkey->keylen);
+	ptr = key + pkey->keylen;
+	ptr = pkey_pack_u32(ptr, pkey->algo);
+	ptr = pkey_pack_u32(ptr, pkey->paramlen);
+	memcpy(ptr, pkey->params, pkey->paramlen);
+
+	if (pkey->key_is_private)
+		ret = crypto_akcipher_set_priv_key(tfm, key, pkey->keylen);
+	else
+		ret = crypto_akcipher_set_pub_key(tfm, key, pkey->keylen);
+	if (ret < 0)
+		goto error_free_key;
+
+	len = crypto_akcipher_maxsize(tfm);
+	info->key_size = len * 8;
+	info->max_data_size = len;
+	info->max_sig_size = len;
+	info->max_enc_size = len;
+	info->max_dec_size = len;
+	info->supported_ops = (KEYCTL_SUPPORTS_ENCRYPT |
+			       KEYCTL_SUPPORTS_VERIFY);
+	if (pkey->key_is_private)
+		info->supported_ops |= (KEYCTL_SUPPORTS_DECRYPT |
+					KEYCTL_SUPPORTS_SIGN);
+	ret = 0;
+
+error_free_key:
+	kfree(key);
+error_free_tfm:
+	crypto_free_akcipher(tfm);
+	pr_devel("<==%s() = %d\n", __func__, ret);
+	return ret;
+}
+
+
+// Source: public_key.c
+// Lines 103-158

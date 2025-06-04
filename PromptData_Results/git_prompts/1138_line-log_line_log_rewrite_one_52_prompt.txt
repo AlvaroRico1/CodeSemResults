@@ -1,0 +1,33 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'p' at line 4
+2. Pointer 'pp' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static enum rewrite_result line_log_rewrite_one(struct rev_info *rev, struct commit **pp)
+{
+	for (;;) {
+		struct commit *p = *pp;
+		if (p->parents && p->parents->next)
+			return rewrite_one_ok;
+		if (p->object.flags & UNINTERESTING)
+			return rewrite_one_ok;
+		if (!(p->object.flags & TREESAME))
+			return rewrite_one_ok;
+		if (!p->parents)
+			return rewrite_one_noparents;
+		*pp = p->parents->item;
+	}
+
+
+// Source: line-log.c
+// Lines 1285-1298
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,32 @@
+static int __init acpi_irq_penalty_update(char *str, int used)
+{
+	int i;
+
+	for (i = 0; i < 16; i++) {
+		int retval;
+		int irq;
+		int new_penalty;
+
+		retval = get_option(&str, &irq);
+
+		if (!retval)
+			break;	/* no number found */
+
+		/* see if this is a ISA IRQ */
+		if ((irq < 0) || (irq >= ACPI_MAX_ISA_IRQS))
+			continue;
+
+		if (used)
+			new_penalty = acpi_isa_irq_penalty[irq] +
+					PIRQ_PENALTY_ISA_USED;
+		else
+			new_penalty = 0;
+
+		acpi_isa_irq_penalty[irq] = new_penalty;
+		if (retval != 2)	/* no next number */
+			break;
+	}
+
+
+// Source: pci_link.c
+// Lines 813-840

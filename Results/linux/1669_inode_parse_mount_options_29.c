@@ -1,0 +1,76 @@
+static int parse_mount_options(char *data, int op, struct pts_mount_opts *opts)
+{
+	char *p;
+	kuid_t uid;
+	kgid_t gid;
+
+	opts->setuid  = 0;
+	opts->setgid  = 0;
+	opts->uid     = GLOBAL_ROOT_UID;
+	opts->gid     = GLOBAL_ROOT_GID;
+	opts->mode    = DEVPTS_DEFAULT_MODE;
+	opts->ptmxmode = DEVPTS_DEFAULT_PTMX_MODE;
+	opts->max     = NR_UNIX98_PTY_MAX;
+
+	/* Only allow instances mounted from the initial mount
+	 * namespace to tap the reserve pool of ptys.
+	 */
+	if (op == PARSE_MOUNT)
+		opts->reserve =
+			(current->nsproxy->mnt_ns == init_task.nsproxy->mnt_ns);
+
+	while ((p = strsep(&data, ",")) != NULL) {
+		substring_t args[MAX_OPT_ARGS];
+		int token;
+		int option;
+
+		if (!*p)
+			continue;
+
+		token = match_token(p, tokens, args);
+		switch (token) {
+		case Opt_uid:
+			if (match_int(&args[0], &option))
+				return -EINVAL;
+			uid = make_kuid(current_user_ns(), option);
+			if (!uid_valid(uid))
+				return -EINVAL;
+			opts->uid = uid;
+			opts->setuid = 1;
+			break;
+		case Opt_gid:
+			if (match_int(&args[0], &option))
+				return -EINVAL;
+			gid = make_kgid(current_user_ns(), option);
+			if (!gid_valid(gid))
+				return -EINVAL;
+			opts->gid = gid;
+			opts->setgid = 1;
+			break;
+		case Opt_mode:
+			if (match_octal(&args[0], &option))
+				return -EINVAL;
+			opts->mode = option & S_IALLUGO;
+			break;
+		case Opt_ptmxmode:
+			if (match_octal(&args[0], &option))
+				return -EINVAL;
+			opts->ptmxmode = option & S_IALLUGO;
+			break;
+		case Opt_newinstance:
+			break;
+		case Opt_max:
+			if (match_int(&args[0], &option) ||
+			    option < 0 || option > NR_UNIX98_PTY_MAX)
+				return -EINVAL;
+			opts->max = option;
+			break;
+		default:
+			pr_err("called with bogus options\n");
+			return -EINVAL;
+		}
+	}
+
+
+// Source: inode.c
+// Lines 246-317

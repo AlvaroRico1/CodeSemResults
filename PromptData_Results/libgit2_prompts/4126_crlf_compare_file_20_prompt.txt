@@ -1,0 +1,73 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'failed' at line 7
+2. Pointer 'basename' at line 9
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int compare_file(void *payload, git_str *actual_path)
+{
+	git_str expected_path = GIT_STR_INIT;
+	git_str actual_contents = GIT_STR_INIT;
+	git_str expected_contents = GIT_STR_INIT;
+	struct compare_data *cd = payload;
+	bool failed = true;
+	int cmp_git, cmp_gitattributes;
+	char *basename;
+
+	basename = git_fs_path_basename(actual_path->ptr);
+	cmp_git = strcmp(basename, ".git");
+	cmp_gitattributes = strcmp(basename, ".gitattributes");
+
+	if (cmp_git == 0 || cmp_gitattributes == 0) {
+		failed = false;
+		goto done;
+	}
+
+	cl_git_pass(git_str_joinpath(&expected_path, cd->dirname, basename));
+
+	if (!git_fs_path_isfile(expected_path.ptr) ||
+		!git_fs_path_isfile(actual_path->ptr))
+		goto done;
+
+	if (git_futils_readbuffer(&actual_contents, actual_path->ptr) < 0 ||
+		git_futils_readbuffer(&expected_contents, expected_path.ptr) < 0)
+		goto done;
+
+	if (actual_contents.size != expected_contents.size)
+		goto done;
+
+	if (memcmp(actual_contents.ptr, expected_contents.ptr, expected_contents.size) != 0)
+		goto done;
+
+	failed = false;
+
+done:
+	if (failed) {
+		git_str details = GIT_STR_INIT;
+		git_str_printf(&details, "filename=%s, system=%s, autocrlf=%s, attrs={%s}",
+			git_fs_path_basename(actual_path->ptr), systype, cd->autocrlf, cd->attrs);
+		clar__fail(__FILE__, __func__, __LINE__,
+			"checked out contents did not match expected", details.ptr, 0);
+		git_str_dispose(&details);
+	}
+
+	git__free(basename);
+	git_str_dispose(&expected_contents);
+	git_str_dispose(&actual_contents);
+	git_str_dispose(&expected_path);
+
+	return 0;
+}
+
+
+// Source: crlf.c
+// Lines 69-122
+
+
+[ANSWER]
+MUST-NOT

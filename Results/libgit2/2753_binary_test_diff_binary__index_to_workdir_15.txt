@@ -1,0 +1,1 @@
+patch,libgit2/tests/libgit2/diff/binary.c,5,expected,libgit2/tests/libgit2/diff/binary.c,8,0

@@ -1,0 +1,124 @@
+format_find(struct format_tree *ft, const char *key, int modifiers,
+    const char *time_format)
+{
+	struct format_table_entry	*fte;
+	void				*value;
+	struct format_entry		*fe, fe_find;
+	struct environ_entry		*envent;
+	struct options_entry		*o;
+	int				 idx;
+	char				*found = NULL, *saved, s[512];
+	const char			*errstr;
+	time_t				 t = 0;
+	struct tm			 tm;
+
+	o = options_parse_get(global_options, key, &idx, 0);
+	if (o == NULL && ft->wp != NULL)
+		o = options_parse_get(ft->wp->options, key, &idx, 0);
+	if (o == NULL && ft->w != NULL)
+		o = options_parse_get(ft->w->options, key, &idx, 0);
+	if (o == NULL)
+		o = options_parse_get(global_w_options, key, &idx, 0);
+	if (o == NULL && ft->s != NULL)
+		o = options_parse_get(ft->s->options, key, &idx, 0);
+	if (o == NULL)
+		o = options_parse_get(global_s_options, key, &idx, 0);
+	if (o != NULL) {
+		found = options_to_string(o, idx, 1);
+		goto found;
+	}
+
+	fte = format_table_get(key);
+	if (fte != NULL) {
+		value = fte->cb(ft);
+		if (fte->type == FORMAT_TABLE_TIME && value != NULL)
+			t = ((struct timeval *)value)->tv_sec;
+		else
+			found = value;
+		goto found;
+	}
+	fe_find.key = (char *)key;
+	fe = RB_FIND(format_entry_tree, &ft->tree, &fe_find);
+	if (fe != NULL) {
+		if (fe->time != 0) {
+			t = fe->time;
+			goto found;
+		}
+		if (fe->value == NULL && fe->cb != NULL) {
+			fe->value = fe->cb(ft);
+			if (fe->value == NULL)
+				fe->value = xstrdup("");
+		}
+		found = xstrdup(fe->value);
+		goto found;
+	}
+
+	if (~modifiers & FORMAT_TIMESTRING) {
+		envent = NULL;
+		if (ft->s != NULL)
+			envent = environ_find(ft->s->environ, key);
+		if (envent == NULL)
+			envent = environ_find(global_environ, key);
+		if (envent != NULL && envent->value != NULL) {
+			found = xstrdup(envent->value);
+			goto found;
+		}
+	}
+
+	return (NULL);
+
+found:
+	if (modifiers & FORMAT_TIMESTRING) {
+		if (t == 0 && found != NULL) {
+			t = strtonum(found, 0, INT64_MAX, &errstr);
+			if (errstr != NULL)
+				t = 0;
+			free(found);
+		}
+		if (t == 0)
+			return (NULL);
+		if (modifiers & FORMAT_PRETTY)
+			found = format_pretty_time(t);
+		else {
+			if (time_format != NULL) {
+				localtime_r(&t, &tm);
+				strftime(s, sizeof s, time_format, &tm);
+			} else {
+				ctime_r(&t, s);
+				s[strcspn(s, "\n")] = '\0';
+			}
+			found = xstrdup(s);
+		}
+		return (found);
+	}
+
+	if (t != 0)
+		xasprintf(&found, "%lld", (long long)t);
+	else if (found == NULL)
+		return (NULL);
+	if (modifiers & FORMAT_BASENAME) {
+		saved = found;
+		found = xstrdup(basename(saved));
+		free(saved);
+	}
+	if (modifiers & FORMAT_DIRNAME) {
+		saved = found;
+		found = xstrdup(dirname(saved));
+		free(saved);
+	}
+	if (modifiers & FORMAT_QUOTE_SHELL) {
+		saved = found;
+		found = xstrdup(format_quote_shell(saved));
+		free(saved);
+	}
+	if (modifiers & FORMAT_QUOTE_STYLE) {
+		saved = found;
+		found = xstrdup(format_quote_style(saved));
+		free(saved);
+	}
+	return (found);
+}
+
+
+// Source: format.c
+// Lines 3307-3426

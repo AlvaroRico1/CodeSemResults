@@ -1,0 +1,65 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'pkt_nr' at line 4
+2. Pointer 'net' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static net_async_status net_read_packet_header_nonblocking(NET *net,
+                                                           bool *err_ptr) {
+  DBUG_TRACE;
+  uchar pkt_nr;
+  size_t bytes_wanted = NET_HEADER_SIZE;
+  if (net->compress) bytes_wanted += COMP_HEADER_SIZE;
+  if (net_read_data_nonblocking(net, bytes_wanted, err_ptr) ==
+      NET_ASYNC_NOT_READY) {
+    return NET_ASYNC_NOT_READY;
+  }
+  if (*err_ptr) {
+    return NET_ASYNC_COMPLETE;
+  }
+
+  DBUG_DUMP("packet_header", net->buff + net->where_b, bytes_wanted);
+
+  pkt_nr = net->buff[net->where_b + 3];
+
+  /*
+    Verify packet serial number against the truncated packet counter.
+    The local packet counter must be truncated since its not reset.
+  */
+  if (pkt_nr != (uchar)net->pkt_nr) {
+    /* Not a NET error on the client. XXX: why? */
+#if defined(MYSQL_SERVER)
+    my_error(ER_NET_PACKETS_OUT_OF_ORDER, MYF(0));
+#elif defined(EXTRA_DEBUG)
+    /*
+      We don't make noise server side, since the client is expected
+      to break the protocol for e.g. --send LOAD DATA .. LOCAL where
+      the server expects the client to send a file, but the client
+      may reply with a new command instead.
+    */
+    fprintf(stderr, "Error: packets out of order (found %u, expected %u)\n",
+            (uint)pkt_nr, net->pkt_nr);
+    assert(pkt_nr == net->pkt_nr);
+#endif
+    *err_ptr = true;
+    return NET_ASYNC_COMPLETE;
+  }
+
+  net->pkt_nr++;
+
+  *err_ptr = false;
+  return NET_ASYNC_COMPLETE;
+}
+
+
+// Source: net_serv.cc
+// Lines 1606-1651
+
+
+[ANSWER]
+MUST-NOT

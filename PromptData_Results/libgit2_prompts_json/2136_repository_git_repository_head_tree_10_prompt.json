@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'head' at line 3\n2. Pointer 'obj' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint git_repository_head_tree(git_tree **tree, git_repository *repo)\n{\n\tgit_reference *head;\n\tgit_object *obj;\n\tint error;\n\n\tif ((error = git_repository_head(&head, repo)) < 0)\n\t\treturn error;\n\n\tif ((error = git_reference_peel(&obj, head, GIT_OBJECT_TREE)) < 0)\n\t\tgoto cleanup;\n\n\t*tree = (git_tree *)obj;\n\ncleanup:\n\tgit_reference_free(head);\n\treturn error;\n}\n\n\n// Source: repository.c\n// Lines 2765-2782\n",
+  "ANSWER": "MAY"
+}

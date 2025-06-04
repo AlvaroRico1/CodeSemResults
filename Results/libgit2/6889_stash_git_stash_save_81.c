@@ -1,0 +1,67 @@
+int git_stash_save(
+	git_oid *out,
+	git_repository *repo,
+	const git_signature *stasher,
+	const char *message,
+	uint32_t flags)
+{
+	git_index *index = NULL;
+	git_commit *b_commit = NULL, *i_commit = NULL, *u_commit = NULL;
+	git_str msg = GIT_STR_INIT;
+	int error;
+
+	GIT_ASSERT_ARG(out);
+	GIT_ASSERT_ARG(repo);
+	GIT_ASSERT_ARG(stasher);
+
+	if ((error = git_repository__ensure_not_bare(repo, "stash save")) < 0)
+		return error;
+
+	if ((error = retrieve_base_commit_and_message(&b_commit, &msg, repo)) < 0)
+		goto cleanup;
+
+	if ((error = ensure_there_are_changes_to_stash(repo, flags)) < 0)
+		goto cleanup;
+
+	if ((error = git_repository_index(&index, repo)) < 0)
+		goto cleanup;
+
+	if ((error = commit_index(&i_commit, repo, index, stasher,
+				  git_str_cstr(&msg), b_commit)) < 0)
+		goto cleanup;
+
+	if ((flags & (GIT_STASH_INCLUDE_UNTRACKED | GIT_STASH_INCLUDE_IGNORED)) &&
+	    (error = commit_untracked(&u_commit, repo, stasher,
+				      git_str_cstr(&msg), i_commit, flags)) < 0)
+		goto cleanup;
+
+	if ((error = prepare_worktree_commit_message(&msg, message)) < 0)
+		goto cleanup;
+
+	if ((error = commit_worktree(out, repo, stasher, git_str_cstr(&msg),
+				     i_commit, b_commit, u_commit)) < 0)
+		goto cleanup;
+
+	git_str_rtrim(&msg);
+
+	if ((error = update_reflog(out, repo, git_str_cstr(&msg))) < 0)
+		goto cleanup;
+
+	if ((error = reset_index_and_workdir(repo, (flags & GIT_STASH_KEEP_INDEX) ? i_commit : b_commit,
+					     flags)) < 0)
+		goto cleanup;
+
+cleanup:
+
+	git_str_dispose(&msg);
+	git_commit_free(i_commit);
+	git_commit_free(b_commit);
+	git_commit_free(u_commit);
+	git_index_free(index);
+
+	return error;
+}
+
+
+// Source: stash.c
+// Lines 536-598

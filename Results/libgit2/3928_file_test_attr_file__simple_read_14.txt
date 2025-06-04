@@ -1,0 +1,1 @@
+file,libgit2/tests/libgit2/attr/file.c,3,rule,libgit2/tests/libgit2/attr/file.c,5,0

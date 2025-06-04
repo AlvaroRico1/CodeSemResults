@@ -1,0 +1,33 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ep' at line 2
+2. Pointer 'end' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+sds sdstrim(sds s, const char *cset) {
+    char *start, *end, *sp, *ep;
+    size_t len;
+
+    sp = start = s;
+    ep = end = s+sdslen(s)-1;
+    while(sp <= end && strchr(cset, *sp)) sp++;
+    while(ep > sp && strchr(cset, *ep)) ep--;
+    len = (sp > ep) ? 0 : ((ep-sp)+1);
+    if (s != sp) memmove(s, sp, len);
+    s[len] = '\0';
+    sdssetlen(s,len);
+    return s;
+}
+
+
+// Source: sds.c
+// Lines 681-694
+
+
+[ANSWER]
+MUST

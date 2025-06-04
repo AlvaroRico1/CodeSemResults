@@ -1,0 +1,47 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ret' at line 21
+2. Pointer 'mysql' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+mysql_state_machine_status run_plugin_auth_nonblocking(MYSQL *mysql, char *data,
+                                                       uint data_len,
+                                                       const char *data_plugin,
+                                                       const char *db) {
+  DBUG_TRACE;
+  mysql_async_auth *ctx = ASYNC_DATA(mysql)->connect_context->auth_context;
+  if (!ctx) {
+    ctx = static_cast<mysql_async_auth *>(
+        my_malloc(key_memory_MYSQL, sizeof(*ctx), MYF(MY_WME | MY_ZEROFILL)));
+
+    ctx->mysql = mysql;
+    ctx->data = data;
+    ctx->data_len = data_len;
+    ctx->data_plugin = data_plugin;
+    ctx->db = db;
+    ctx->non_blocking = true;
+    ctx->state_function = authsm_begin_plugin_auth;
+    ASYNC_DATA(mysql)->connect_context->auth_context = ctx;
+  }
+
+  mysql_state_machine_status ret = ctx->state_function(ctx);
+  if (ret == STATE_MACHINE_FAILED || ret == STATE_MACHINE_DONE) {
+    my_free(ctx);
+    ASYNC_DATA(mysql)->connect_context->auth_context = nullptr;
+  }
+
+  return ret;
+}
+
+
+// Source: client.cc
+// Lines 5288-5315
+
+
+[ANSWER]
+MUST-NOT

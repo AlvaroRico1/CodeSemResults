@@ -1,0 +1,1 @@
+ictx,tmux/input.c,4,palette,tmux/input.c,2,1

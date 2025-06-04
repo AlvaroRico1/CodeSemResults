@@ -1,0 +1,1 @@
+gai_errno,mysql/sql-common/client.cc,187,user,mysql/sql-common/client.cc,4,0

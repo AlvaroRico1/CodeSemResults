@@ -1,0 +1,93 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'trampoline_pgd' at line 11
+2. Pointer 'rel' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void __init setup_real_mode(void)
+{
+	u16 real_mode_seg;
+	const u32 *rel;
+	u32 count;
+	unsigned char *base;
+	unsigned long phys_base;
+	struct trampoline_header *trampoline_header;
+	size_t size = PAGE_ALIGN(real_mode_blob_end - real_mode_blob);
+#ifdef CONFIG_X86_64
+	u64 *trampoline_pgd;
+	u64 efer;
+#endif
+
+	base = (unsigned char *)real_mode_header;
+
+	/*
+	 * If SME is active, the trampoline area will need to be in
+	 * decrypted memory in order to bring up other processors
+	 * successfully. This is not needed for SEV.
+	 */
+	if (sme_active())
+		set_memory_decrypted((unsigned long)base, size >> PAGE_SHIFT);
+
+	memcpy(base, real_mode_blob, size);
+
+	phys_base = __pa(base);
+	real_mode_seg = phys_base >> 4;
+
+	rel = (u32 *) real_mode_relocs;
+
+	/* 16-bit segment relocations. */
+	count = *rel++;
+	while (count--) {
+		u16 *seg = (u16 *) (base + *rel++);
+		*seg = real_mode_seg;
+	}
+
+	/* 32-bit linear relocations. */
+	count = *rel++;
+	while (count--) {
+		u32 *ptr = (u32 *) (base + *rel++);
+		*ptr += phys_base;
+	}
+
+	/* Must be perfomed *after* relocation. */
+	trampoline_header = (struct trampoline_header *)
+		__va(real_mode_header->trampoline_header);
+
+#ifdef CONFIG_X86_32
+	trampoline_header->start = __pa_symbol(startup_32_smp);
+	trampoline_header->gdt_limit = __BOOT_DS + 7;
+	trampoline_header->gdt_base = __pa_symbol(boot_gdt);
+#else
+	/*
+	 * Some AMD processors will #GP(0) if EFER.LMA is set in WRMSR
+	 * so we need to mask it out.
+	 */
+	rdmsrl(MSR_EFER, efer);
+	trampoline_header->efer = efer & ~EFER_LMA;
+
+	trampoline_header->start = (u64) secondary_startup_64;
+	trampoline_cr4_features = &trampoline_header->cr4;
+	*trampoline_cr4_features = mmu_cr4_features;
+
+	trampoline_header->flags = 0;
+	if (sme_active())
+		trampoline_header->flags |= TH_FLAGS_SME_ACTIVE;
+
+	trampoline_pgd = (u64 *) __va(real_mode_header->trampoline_pgd);
+	trampoline_pgd[0] = trampoline_pgd_entry.pgd;
+	trampoline_pgd[511] = init_top_pgt[511].pgd;
+#endif
+}
+
+
+// Source: init.c
+// Lines 39-112
+
+
+[ANSWER]
+MAY

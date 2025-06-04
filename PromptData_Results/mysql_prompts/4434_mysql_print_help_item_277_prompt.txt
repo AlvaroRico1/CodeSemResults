@@ -1,0 +1,28 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ccat' at line 3
+2. Pointer 'num_cat' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void print_help_item(MYSQL_ROW *cur, int num_name, int num_cat,
+                            char *last_char) {
+  char ccat = (*cur)[num_cat][0];
+  if (*last_char != ccat) {
+    put_info(ccat == 'Y' ? "categories:" : "topics:", INFO_INFO);
+    *last_char = ccat;
+  }
+  tee_fprintf(PAGER, "   %s\n", (*cur)[num_name]);
+}
+
+
+// Source: mysql.cc
+// Lines 3108-3116
+
+
+[ANSWER]
+MUST-NOT

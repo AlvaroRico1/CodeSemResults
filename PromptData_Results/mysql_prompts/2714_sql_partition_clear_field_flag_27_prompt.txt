@@ -1,0 +1,26 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ptr' at line 2
+2. Pointer 'table' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void clear_field_flag(TABLE *table) {
+  Field **ptr;
+  DBUG_TRACE;
+
+  for (ptr = table->field; *ptr; ptr++)
+    (*ptr)->clear_flag(GET_FIXED_FIELDS_FLAG);
+}
+
+
+// Source: sql_partition.cc
+// Lines 704-710
+
+
+[ANSWER]
+MUST

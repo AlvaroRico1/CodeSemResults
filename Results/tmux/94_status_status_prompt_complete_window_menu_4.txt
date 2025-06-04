@@ -1,0 +1,1 @@
+tmp,tmux/status.c,8,list,tmux/status.c,8,1

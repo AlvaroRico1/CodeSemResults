@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'str_out' at line 1\n2. Pointer 'm' at line 7\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint git_config_lookup_map_enum(git_configmap_t *type_out, const char **str_out,\n\t\t\t       const git_configmap *maps, size_t map_n, int enum_val)\n{\n\tsize_t i;\n\n\tfor (i = 0; i < map_n; i++) {\n\t\tconst git_configmap *m = &maps[i];\n\n\t\tif (m->map_value != enum_val)\n\t\t\tcontinue;\n\n\t\t*type_out = m->type;\n\t\t*str_out = m->str_match;\n\t\treturn 0;\n\t}\n\n\n// Source: config.c\n// Lines 1332-1346\n",
+  "ANSWER": "MUST"
+}

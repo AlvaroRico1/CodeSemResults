@@ -1,0 +1,1 @@
+tree1,libgit2/tests/libgit2/diff/rename.c,6,tree2,libgit2/tests/libgit2/diff/rename.c,6,0

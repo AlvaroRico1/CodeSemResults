@@ -1,0 +1,29 @@
+h2o_hostinfo_getaddr_req_t *h2o_hostinfo_getaddr(h2o_multithread_receiver_t *receiver, h2o_iovec_t name, h2o_iovec_t serv,
+                                                 int family, int socktype, int protocol, int flags, h2o_hostinfo_getaddr_cb cb,
+                                                 void *cbdata)
+{
+    h2o_hostinfo_getaddr_req_t *req = h2o_mem_alloc(sizeof(*req) + name.len + 1 + serv.len + 1);
+    req->_receiver = receiver;
+    req->_cb = cb;
+    req->cbdata = cbdata;
+    req->_pending = (h2o_linklist_t){NULL};
+    req->_in.name = (char *)req + sizeof(*req);
+    memcpy(req->_in.name, name.base, name.len);
+    req->_in.name[name.len] = '\0';
+    req->_in.serv = req->_in.name + name.len + 1;
+    memcpy(req->_in.serv, serv.base, serv.len);
+    req->_in.serv[serv.len] = '\0';
+    memset(&req->_in.hints, 0, sizeof(req->_in.hints));
+    req->_in.hints.ai_family = family;
+    req->_in.hints.ai_socktype = socktype;
+    req->_in.hints.ai_protocol = protocol;
+    req->_in.hints.ai_flags = flags;
+
+    dispatch_hostinfo_getaddr(req);
+
+    return req;
+}
+
+
+// Source: hostinfo.c
+// Lines 184-208

@@ -1,0 +1,1 @@
+embedding,mysql/sql/sql_optimizer.cc,48,tbl,mysql/sql/sql_optimizer.cc,14,1

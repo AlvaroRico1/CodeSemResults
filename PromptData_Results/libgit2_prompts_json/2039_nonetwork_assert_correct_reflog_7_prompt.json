@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'log' at line 3\n2. Pointer 'entry' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void assert_correct_reflog(const char *name)\n{\n\tgit_reflog *log;\n\tconst git_reflog_entry *entry;\n\tgit_str expected_message = GIT_STR_INIT;\n\n\tgit_str_printf(&expected_message,\n\t\t\"clone: from %s\", cl_git_fixture_url(\"testrepo.git\"));\n\n\tcl_git_pass(git_reflog_read(&log, g_repo, name));\n\tcl_assert_equal_i(1, git_reflog_entrycount(log));\n\tentry = git_reflog_entry_byindex(log, 0);\n\tcl_assert_equal_s(expected_message.ptr, git_reflog_entry_message(entry));\n\n\tgit_reflog_free(log);\n\n\tgit_str_dispose(&expected_message);\n}\n\n\n// Source: nonetwork.c\n// Lines 303-320\n",
+  "ANSWER": "MUST-NOT"
+}

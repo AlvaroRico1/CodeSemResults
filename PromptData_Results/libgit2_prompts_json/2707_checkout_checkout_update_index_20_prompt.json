@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'entry' at line 6\n2. Pointer 'file' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int checkout_update_index(\n\tcheckout_data *data,\n\tconst git_diff_file *file,\n\tstruct stat *st)\n{\n\tgit_index_entry entry;\n\n\tif (!data->index)\n\t\treturn 0;\n\n\tmemset(&entry, 0, sizeof(entry));\n\tentry.path = (char *)file->path; /* cast to prevent warning */\n\tgit_index_entry__init_from_stat(&entry, st, true);\n\tgit_oid_cpy(&entry.id, &file->id);\n\n\treturn git_index_add(data->index, &entry);\n}\n\n\n// Source: checkout.c\n// Lines 1618-1634\n",
+  "ANSWER": "MUST"
+}

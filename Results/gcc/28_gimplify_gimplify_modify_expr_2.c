@@ -1,0 +1,251 @@
+gimplify_modify_expr (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p,
+		      bool want_value)
+{
+  tree *from_p = &TREE_OPERAND (*expr_p, 1);
+  tree *to_p = &TREE_OPERAND (*expr_p, 0);
+  enum gimplify_status ret = GS_UNHANDLED;
+  gimple *assign;
+  location_t loc = EXPR_LOCATION (*expr_p);
+  gimple_stmt_iterator gsi;
+
+  gcc_assert (TREE_CODE (*expr_p) == MODIFY_EXPR
+	      || TREE_CODE (*expr_p) == INIT_EXPR);
+
+  /* Trying to simplify a clobber using normal logic doesn't work,
+     so handle it here.  */
+  if (TREE_CLOBBER_P (*from_p))
+    {
+      ret = gimplify_expr (to_p, pre_p, post_p, is_gimple_lvalue, fb_lvalue);
+      if (ret == GS_ERROR)
+	return ret;
+      gcc_assert (!want_value);
+      if (!VAR_P (*to_p) && TREE_CODE (*to_p) != MEM_REF)
+	{
+	  tree addr = get_initialized_tmp_var (build_fold_addr_expr (*to_p),
+					       pre_p, post_p);
+	  *to_p = build_simple_mem_ref_loc (EXPR_LOCATION (*to_p), addr);
+	}
+      gimplify_seq_add_stmt (pre_p, gimple_build_assign (*to_p, *from_p));
+      *expr_p = NULL;
+      return GS_ALL_DONE;
+    }
+
+  /* Insert pointer conversions required by the middle-end that are not
+     required by the frontend.  This fixes middle-end type checking for
+     for example gcc.dg/redecl-6.c.  */
+  if (POINTER_TYPE_P (TREE_TYPE (*to_p)))
+    {
+      STRIP_USELESS_TYPE_CONVERSION (*from_p);
+      if (!useless_type_conversion_p (TREE_TYPE (*to_p), TREE_TYPE (*from_p)))
+	*from_p = fold_convert_loc (loc, TREE_TYPE (*to_p), *from_p);
+    }
+
+  /* See if any simplifications can be done based on what the RHS is.  */
+  ret = gimplify_modify_expr_rhs (expr_p, from_p, to_p, pre_p, post_p,
+				  want_value);
+  if (ret != GS_UNHANDLED)
+    return ret;
+
+  /* For zero sized types only gimplify the left hand side and right hand
+     side as statements and throw away the assignment.  Do this after
+     gimplify_modify_expr_rhs so we handle TARGET_EXPRs of addressable
+     types properly.  */
+  if (zero_sized_type (TREE_TYPE (*from_p))
+      && !want_value
+      /* Don't do this for calls that return addressable types, expand_call
+	 relies on those having a lhs.  */
+      && !(TREE_ADDRESSABLE (TREE_TYPE (*from_p))
+	   && TREE_CODE (*from_p) == CALL_EXPR))
+    {
+      gimplify_stmt (from_p, pre_p);
+      gimplify_stmt (to_p, pre_p);
+      *expr_p = NULL_TREE;
+      return GS_ALL_DONE;
+    }
+
+  /* If the value being copied is of variable width, compute the length
+     of the copy into a WITH_SIZE_EXPR.   Note that we need to do this
+     before gimplifying any of the operands so that we can resolve any
+     PLACEHOLDER_EXPRs in the size.  Also note that the RTL expander uses
+     the size of the expression to be copied, not of the destination, so
+     that is what we must do here.  */
+  maybe_with_size_expr (from_p);
+
+  /* As a special case, we have to temporarily allow for assignments
+     with a CALL_EXPR on the RHS.  Since in GIMPLE a function call is
+     a toplevel statement, when gimplifying the GENERIC expression
+     MODIFY_EXPR <a, CALL_EXPR <foo>>, we cannot create the tuple
+     GIMPLE_ASSIGN <a, GIMPLE_CALL <foo>>.
+
+     Instead, we need to create the tuple GIMPLE_CALL <a, foo>.  To
+     prevent gimplify_expr from trying to create a new temporary for
+     foo's LHS, we tell it that it should only gimplify until it
+     reaches the CALL_EXPR.  On return from gimplify_expr, the newly
+     created GIMPLE_CALL <foo> will be the last statement in *PRE_P
+     and all we need to do here is set 'a' to be its LHS.  */
+
+  /* Gimplify the RHS first for C++17 and bug 71104.  */
+  gimple_predicate initial_pred = initial_rhs_predicate_for (*to_p);
+  ret = gimplify_expr (from_p, pre_p, post_p, initial_pred, fb_rvalue);
+  if (ret == GS_ERROR)
+    return ret;
+
+  /* Then gimplify the LHS.  */
+  /* If we gimplified the RHS to a CALL_EXPR and that call may return
+     twice we have to make sure to gimplify into non-SSA as otherwise
+     the abnormal edge added later will make those defs not dominate
+     their uses.
+     ???  Technically this applies only to the registers used in the
+     resulting non-register *TO_P.  */
+  bool saved_into_ssa = gimplify_ctxp->into_ssa;
+  if (saved_into_ssa
+      && TREE_CODE (*from_p) == CALL_EXPR
+      && call_expr_flags (*from_p) & ECF_RETURNS_TWICE)
+    gimplify_ctxp->into_ssa = false;
+  ret = gimplify_expr (to_p, pre_p, post_p, is_gimple_lvalue, fb_lvalue);
+  gimplify_ctxp->into_ssa = saved_into_ssa;
+  if (ret == GS_ERROR)
+    return ret;
+
+  /* Now that the LHS is gimplified, re-gimplify the RHS if our initial
+     guess for the predicate was wrong.  */
+  gimple_predicate final_pred = rhs_predicate_for (*to_p);
+  if (final_pred != initial_pred)
+    {
+      ret = gimplify_expr (from_p, pre_p, post_p, final_pred, fb_rvalue);
+      if (ret == GS_ERROR)
+	return ret;
+    }
+
+  /* In case of va_arg internal fn wrappped in a WITH_SIZE_EXPR, add the type
+     size as argument to the call.  */
+  if (TREE_CODE (*from_p) == WITH_SIZE_EXPR)
+    {
+      tree call = TREE_OPERAND (*from_p, 0);
+      tree vlasize = TREE_OPERAND (*from_p, 1);
+
+      if (TREE_CODE (call) == CALL_EXPR
+	  && CALL_EXPR_IFN (call) == IFN_VA_ARG)
+	{
+	  int nargs = call_expr_nargs (call);
+	  tree type = TREE_TYPE (call);
+	  tree ap = CALL_EXPR_ARG (call, 0);
+	  tree tag = CALL_EXPR_ARG (call, 1);
+	  tree aptag = CALL_EXPR_ARG (call, 2);
+	  tree newcall = build_call_expr_internal_loc (EXPR_LOCATION (call),
+						       IFN_VA_ARG, type,
+						       nargs + 1, ap, tag,
+						       aptag, vlasize);
+	  TREE_OPERAND (*from_p, 0) = newcall;
+	}
+    }
+
+  /* Now see if the above changed *from_p to something we handle specially.  */
+  ret = gimplify_modify_expr_rhs (expr_p, from_p, to_p, pre_p, post_p,
+				  want_value);
+  if (ret != GS_UNHANDLED)
+    return ret;
+
+  /* If we've got a variable sized assignment between two lvalues (i.e. does
+     not involve a call), then we can make things a bit more straightforward
+     by converting the assignment to memcpy or memset.  */
+  if (TREE_CODE (*from_p) == WITH_SIZE_EXPR)
+    {
+      tree from = TREE_OPERAND (*from_p, 0);
+      tree size = TREE_OPERAND (*from_p, 1);
+
+      if (TREE_CODE (from) == CONSTRUCTOR)
+	return gimplify_modify_expr_to_memset (expr_p, size, want_value, pre_p);
+
+      if (is_gimple_addressable (from))
+	{
+	  *from_p = from;
+	  return gimplify_modify_expr_to_memcpy (expr_p, size, want_value,
+	      					 pre_p);
+	}
+    }
+
+  /* Transform partial stores to non-addressable complex variables into
+     total stores.  This allows us to use real instead of virtual operands
+     for these variables, which improves optimization.  */
+  if ((TREE_CODE (*to_p) == REALPART_EXPR
+       || TREE_CODE (*to_p) == IMAGPART_EXPR)
+      && is_gimple_reg (TREE_OPERAND (*to_p, 0)))
+    return gimplify_modify_expr_complex_part (expr_p, pre_p, want_value);
+
+  /* Try to alleviate the effects of the gimplification creating artificial
+     temporaries (see for example is_gimple_reg_rhs) on the debug info, but
+     make sure not to create DECL_DEBUG_EXPR links across functions.  */
+  if (!gimplify_ctxp->into_ssa
+      && VAR_P (*from_p)
+      && DECL_IGNORED_P (*from_p)
+      && DECL_P (*to_p)
+      && !DECL_IGNORED_P (*to_p)
+      && decl_function_context (*to_p) == current_function_decl
+      && decl_function_context (*from_p) == current_function_decl)
+    {
+      if (!DECL_NAME (*from_p) && DECL_NAME (*to_p))
+	DECL_NAME (*from_p)
+	  = create_tmp_var_name (IDENTIFIER_POINTER (DECL_NAME (*to_p)));
+      DECL_HAS_DEBUG_EXPR_P (*from_p) = 1;
+      SET_DECL_DEBUG_EXPR (*from_p, *to_p);
+   }
+
+  if (want_value && TREE_THIS_VOLATILE (*to_p))
+    *from_p = get_initialized_tmp_var (*from_p, pre_p, post_p);
+
+  if (TREE_CODE (*from_p) == CALL_EXPR)
+    {
+      /* Since the RHS is a CALL_EXPR, we need to create a GIMPLE_CALL
+	 instead of a GIMPLE_ASSIGN.  */
+      gcall *call_stmt;
+      if (CALL_EXPR_FN (*from_p) == NULL_TREE)
+	{
+	  /* Gimplify internal functions created in the FEs.  */
+	  int nargs = call_expr_nargs (*from_p), i;
+	  enum internal_fn ifn = CALL_EXPR_IFN (*from_p);
+	  auto_vec<tree> vargs (nargs);
+
+	  for (i = 0; i < nargs; i++)
+	    {
+	      gimplify_arg (&CALL_EXPR_ARG (*from_p, i), pre_p,
+			    EXPR_LOCATION (*from_p));
+	      vargs.quick_push (CALL_EXPR_ARG (*from_p, i));
+	    }
+	  call_stmt = gimple_build_call_internal_vec (ifn, vargs);
+	  gimple_call_set_nothrow (call_stmt, TREE_NOTHROW (*from_p));
+	  gimple_set_location (call_stmt, EXPR_LOCATION (*expr_p));
+	}
+      else
+	{
+	  tree fnptrtype = TREE_TYPE (CALL_EXPR_FN (*from_p));
+	  CALL_EXPR_FN (*from_p) = TREE_OPERAND (CALL_EXPR_FN (*from_p), 0);
+	  STRIP_USELESS_TYPE_CONVERSION (CALL_EXPR_FN (*from_p));
+	  tree fndecl = get_callee_fndecl (*from_p);
+	  if (fndecl
+	      && fndecl_built_in_p (fndecl, BUILT_IN_EXPECT)
+	      && call_expr_nargs (*from_p) == 3)
+	    call_stmt = gimple_build_call_internal (IFN_BUILTIN_EXPECT, 3,
+						    CALL_EXPR_ARG (*from_p, 0),
+						    CALL_EXPR_ARG (*from_p, 1),
+						    CALL_EXPR_ARG (*from_p, 2));
+	  else
+	    {
+	      call_stmt = gimple_build_call_from_tree (*from_p, fnptrtype);
+	    }
+	}
+      notice_special_calls (call_stmt);
+      if (!gimple_call_noreturn_p (call_stmt) || !should_remove_lhs_p (*to_p))
+	gimple_call_set_lhs (call_stmt, *to_p);
+      else if (TREE_CODE (*to_p) == SSA_NAME)
+	/* The above is somewhat premature, avoid ICEing later for a
+	   SSA name w/o a definition.  We may have uses in the GIMPLE IL.
+	   ???  This doesn't make it a default-def.  */
+	SSA_NAME_DEF_STMT (*to_p) = gimple_build_nop ();
+
+      assign = call_stmt;
+    }
+
+
+// Source: gimplify.c
+// Lines 5686-5932

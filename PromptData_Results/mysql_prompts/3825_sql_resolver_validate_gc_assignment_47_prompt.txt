@@ -1,0 +1,74 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'fld' at line 4
+2. Pointer 'table' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool validate_gc_assignment(const mem_root_deque<Item *> &fields,
+                            const mem_root_deque<Item *> &values,
+                            TABLE *table) {
+  Field **fld = nullptr;
+  MY_BITMAP *bitmap = table->write_set;
+  bool use_table_field = false;
+  DBUG_TRACE;
+
+  if (values.empty()) return false;
+
+  // If fields has no elements, we use all table fields
+  if (fields.empty()) {
+    use_table_field = true;
+    fld = table->field;
+  }
+
+  auto field_it = VisibleFields(fields).begin();
+  auto value_it = VisibleFields(values).begin();
+  while (value_it != VisibleFields(values).end()) {
+    Item *value = *value_it++;
+    const Field *rfield;
+
+    if (!use_table_field)
+      rfield = (down_cast<Item_field *>((*field_it++)->real_item()))->field;
+    else
+      rfield = *(fld++);
+    if (rfield->table != table) continue;
+
+    // Skip hidden system fields.
+    if (rfield->is_hidden_by_system()) continue;
+
+    // If any of the explicit values is DEFAULT
+    if (rfield->m_default_val_expr &&
+        value->type() == Item::DEFAULT_VALUE_ITEM) {
+      // Restore the statement safety flag to current lex
+      current_thd->lex->set_stmt_unsafe_flags(
+          rfield->m_default_val_expr->get_stmt_unsafe_flags());
+      // Mark the columns that this expression reads to rthe ead_set
+      for (uint j = 0; j < table->s->fields; j++) {
+        if (bitmap_is_set(&rfield->m_default_val_expr->base_columns_map, j)) {
+          bitmap_set_bit(table->read_set, j);
+        }
+      }
+    }
+
+    /* skip non marked fields */
+    if (!bitmap_is_set(bitmap, rfield->field_index())) continue;
+    if (rfield->gcol_info && value->type() != Item::DEFAULT_VALUE_ITEM) {
+      my_error(ER_NON_DEFAULT_VALUE_FOR_GENERATED_COLUMN, MYF(0),
+               rfield->field_name, rfield->table->s->table_name.str);
+      return true;
+    }
+  }
+  return false;
+}
+
+
+// Source: sql_resolver.cc
+// Lines 4964-5018
+
+
+[ANSWER]
+MUST

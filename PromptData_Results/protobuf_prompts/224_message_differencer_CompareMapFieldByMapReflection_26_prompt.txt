@@ -1,0 +1,104 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'specific_value_field' at line 76
+2. Pointer 'val_des' at line 34
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool MessageDifferencer::CompareMapFieldByMapReflection(
+    const Message& message1, const Message& message2,
+    const FieldDescriptor* map_field, std::vector<SpecificField>* parent_fields,
+    DefaultFieldComparator* comparator) {
+  GOOGLE_DCHECK_EQ(nullptr, reporter_);
+  GOOGLE_DCHECK(map_field->is_map());
+  GOOGLE_DCHECK(map_field_key_comparator_.find(map_field) ==
+         map_field_key_comparator_.end());
+  GOOGLE_DCHECK_EQ(repeated_field_comparison_, AS_LIST);
+  const Reflection* reflection1 = message1.GetReflection();
+  const Reflection* reflection2 = message2.GetReflection();
+  const int count1 = reflection1->MapSize(message1, map_field);
+  const int count2 = reflection2->MapSize(message2, map_field);
+  const bool treated_as_subset = IsTreatedAsSubset(map_field);
+  if (count1 != count2 && !treated_as_subset) {
+    return false;
+  }
+  if (count1 > count2) {
+    return false;
+  }
+
+  // First pass: check whether the same keys are present.
+  for (MapIterator it = reflection1->MapBegin(const_cast<Message*>(&message1),
+                                              map_field),
+                   it_end = reflection1->MapEnd(const_cast<Message*>(&message1),
+                                                map_field);
+       it != it_end; ++it) {
+    if (!reflection2->ContainsMapKey(message2, map_field, it.GetKey())) {
+      return false;
+    }
+  }
+
+  // Second pass: compare values for matching keys.
+  const FieldDescriptor* val_des = map_field->message_type()->map_value();
+  switch (val_des->cpp_type()) {
+#define HANDLE_TYPE(CPPTYPE, METHOD, COMPAREMETHOD)                           \
+  case FieldDescriptor::CPPTYPE_##CPPTYPE: {                                  \
+    for (MapIterator it = reflection1->MapBegin(                              \
+                         const_cast<Message*>(&message1), map_field),         \
+                     it_end = reflection1->MapEnd(                            \
+                         const_cast<Message*>(&message1), map_field);         \
+         it != it_end; ++it) {                                                \
+      MapValueConstRef value2;                                                \
+      reflection2->LookupMapValue(message2, map_field, it.GetKey(), &value2); \
+      if (!comparator->Compare##COMPAREMETHOD(*val_des,                       \
+                                              it.GetValueRef().Get##METHOD(), \
+                                              value2.Get##METHOD())) {        \
+        return false;                                                         \
+      }                                                                       \
+    }                                                                         \
+    break;                                                                    \
+  }
+    HANDLE_TYPE(INT32, Int32Value, Int32);
+    HANDLE_TYPE(INT64, Int64Value, Int64);
+    HANDLE_TYPE(UINT32, UInt32Value, UInt32);
+    HANDLE_TYPE(UINT64, UInt64Value, UInt64);
+    HANDLE_TYPE(DOUBLE, DoubleValue, Double);
+    HANDLE_TYPE(FLOAT, FloatValue, Float);
+    HANDLE_TYPE(BOOL, BoolValue, Bool);
+    HANDLE_TYPE(STRING, StringValue, String);
+    HANDLE_TYPE(ENUM, EnumValue, Int32);
+#undef HANDLE_TYPE
+    case FieldDescriptor::CPPTYPE_MESSAGE: {
+      for (MapIterator it = reflection1->MapBegin(
+               const_cast<Message*>(&message1), map_field);
+           it !=
+           reflection1->MapEnd(const_cast<Message*>(&message1), map_field);
+           ++it) {
+        if (!reflection2->ContainsMapKey(message2, map_field, it.GetKey())) {
+          return false;
+        }
+        bool compare_result;
+        MapValueConstRef value2;
+        reflection2->LookupMapValue(message2, map_field, it.GetKey(), &value2);
+        // Append currently compared field to the end of parent_fields.
+        SpecificField specific_value_field;
+        specific_value_field.field = val_des;
+        parent_fields->push_back(specific_value_field);
+        compare_result = Compare(it.GetValueRef().GetMessageValue(),
+                                 value2.GetMessageValue(), parent_fields);
+        parent_fields->pop_back();
+        if (!compare_result) {
+          return false;
+        }
+      }
+
+
+// Source: message_differencer.cc
+// Lines 981-1065
+
+
+[ANSWER]
+MUST

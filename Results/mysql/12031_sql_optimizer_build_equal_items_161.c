@@ -1,0 +1,53 @@
+bool build_equal_items(THD *thd, Item *cond, Item **retcond,
+                       COND_EQUAL *inherited, bool do_inherit,
+                       mem_root_deque<TABLE_LIST *> *join_list,
+                       COND_EQUAL **cond_equal_ref) {
+  COND_EQUAL *cond_equal = nullptr;
+
+  if (cond) {
+    if (build_equal_items_for_cond(thd, cond, &cond, inherited, do_inherit))
+      return true;
+    cond->update_used_tables();
+    // update_used_tables() returns void but can stil fail.
+    if (thd->is_error()) return true;
+
+    const enum Item::Type cond_type = cond->type();
+    if (cond_type == Item::COND_ITEM &&
+        down_cast<Item_cond *>(cond)->functype() == Item_func::COND_AND_FUNC)
+      cond_equal = &down_cast<Item_cond_and *>(cond)->cond_equal;
+    else if (cond_type == Item::FUNC_ITEM &&
+             down_cast<Item_func *>(cond)->functype() ==
+                 Item_func::MULT_EQUAL_FUNC) {
+      cond_equal = new (thd->mem_root) COND_EQUAL;
+      if (cond_equal == nullptr) return true;
+      cond_equal->current_level.push_back(down_cast<Item_equal *>(cond));
+    }
+  }
+  if (cond_equal) {
+    cond_equal->upper_levels = inherited;
+    inherited = cond_equal;
+  }
+  *cond_equal_ref = cond_equal;
+
+  if (join_list) {
+    for (TABLE_LIST *table : *join_list) {
+      if (table->join_cond_optim()) {
+        mem_root_deque<TABLE_LIST *> *nested_join_list =
+            table->nested_join ? &table->nested_join->join_list : nullptr;
+        Item *join_cond;
+        if (build_equal_items(thd, table->join_cond_optim(), &join_cond,
+                              inherited, do_inherit, nested_join_list,
+                              &table->cond_equal))
+          return true;
+        table->set_join_cond_optim(join_cond);
+      }
+    }
+  }
+
+  *retcond = cond;
+  return false;
+}
+
+
+// Source: sql_optimizer.cc
+// Lines 4137-4185

@@ -1,0 +1,1 @@
+caps,libgit2/src/libgit2/transports/smart_protocol.c,1,ptr,libgit2/src/libgit2/transports/smart_protocol.c,3,2

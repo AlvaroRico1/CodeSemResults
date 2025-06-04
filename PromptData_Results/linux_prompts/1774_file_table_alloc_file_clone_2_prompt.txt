@@ -1,0 +1,29 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'f' at line 4
+2. Pointer 'base' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+struct file *alloc_file_clone(struct file *base, int flags,
+				const struct file_operations *fops)
+{
+	struct file *f = alloc_file(&base->f_path, flags, fops);
+	if (!IS_ERR(f)) {
+		path_get(&f->f_path);
+		f->f_mapping = base->f_mapping;
+	}
+	return f;
+}
+
+
+// Source: file_table.c
+// Lines 241-250
+
+
+[ANSWER]
+MUST

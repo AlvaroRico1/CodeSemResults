@@ -1,0 +1,1 @@
+sock,mysql/sql-common/client.cc,111,connect_done,mysql/sql-common/client.cc,10,0

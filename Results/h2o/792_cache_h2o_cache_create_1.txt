@@ -1,0 +1,1 @@
+cache,h2o/lib/common/cache.c,3,destroy_cb,h2o/lib/common/cache.c,1,1

@@ -1,0 +1,1 @@
+msg,libgit2/tests/clar/main.c,14,at_exit_cmd,libgit2/tests/clar/main.c,7,0

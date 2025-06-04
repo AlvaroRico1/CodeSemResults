@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'head' at line 3\n2. Pointer 'commit' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid test_revert_workdir__nonmerge_fails_mainline_specified(void)\n{\n\tgit_reference *head;\n\tgit_commit *commit;\n\tgit_revert_options opts = GIT_REVERT_OPTIONS_INIT;\n\n\tcl_git_pass(git_repository_head(&head, repo));\n\tcl_git_pass(git_reference_peel((git_object **)&commit, head, GIT_OBJECT_COMMIT));\n\n\topts.mainline = 1;\n\tcl_must_fail(git_revert(repo, commit, &opts));\n\tcl_assert(!git_fs_path_exists(TEST_REPO_PATH \"/.git/MERGE_MSG\"));\n\tcl_assert(!git_fs_path_exists(TEST_REPO_PATH \"/.git/REVERT_HEAD\"));\n\n\tgit_reference_free(head);\n\tgit_commit_free(commit);\n}\n\n\n// Source: workdir.c\n// Lines 490-506\n",
+  "ANSWER": "MAY"
+}

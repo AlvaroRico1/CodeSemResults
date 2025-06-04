@@ -1,0 +1,27 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'buf' at line 4
+2. Pointer 'str' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+_cpp_define_builtin (cpp_reader *pfile, const char *str)
+{
+  size_t len = strlen (str);
+  char *buf = (char *) alloca (len + 1);
+  memcpy (buf, str, len);
+  buf[len] = '\n';
+  run_directive (pfile, T_DEFINE, buf, len);
+}
+
+
+// Source: directives.c
+// Lines 2424-2431
+
+
+[ANSWER]
+MAY

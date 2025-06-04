@@ -1,0 +1,45 @@
+int git_diff_index_to_index(
+	git_diff **out,
+	git_repository *repo,
+	git_index *old_index,
+	git_index *new_index,
+	const git_diff_options *opts)
+{
+	git_iterator_options a_opts = GIT_ITERATOR_OPTIONS_INIT,
+		b_opts = GIT_ITERATOR_OPTIONS_INIT;
+	git_iterator *a = NULL, *b = NULL;
+	git_diff *diff = NULL;
+	char *prefix = NULL;
+	int error;
+
+	GIT_ASSERT_ARG(out);
+	GIT_ASSERT_ARG(old_index);
+	GIT_ASSERT_ARG(new_index);
+
+	*out = NULL;
+
+	if ((error = diff_prepare_iterator_opts(&prefix, &a_opts, GIT_ITERATOR_DONT_IGNORE_CASE,
+						&b_opts, GIT_ITERATOR_DONT_IGNORE_CASE, opts) < 0) ||
+	    (error = git_iterator_for_index(&a, repo, old_index, &a_opts)) < 0 ||
+	    (error = git_iterator_for_index(&b, repo, new_index, &b_opts)) < 0 ||
+	    (error = git_diff__from_iterators(&diff, repo, a, b, opts)) < 0)
+		goto out;
+
+	/* if index is in case-insensitive order, re-sort deltas to match */
+	if (old_index->ignore_case || new_index->ignore_case)
+		diff_set_ignore_case(diff, true);
+
+	*out = diff;
+	diff = NULL;
+out:
+	git_iterator_free(a);
+	git_iterator_free(b);
+	git_diff_free(diff);
+	git__free(prefix);
+
+	return error;
+}
+
+
+// Source: diff_generate.c
+// Lines 1553-1593

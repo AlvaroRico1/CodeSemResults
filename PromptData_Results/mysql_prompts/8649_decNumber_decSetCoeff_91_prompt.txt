@@ -1,0 +1,168 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'up' at line 5
+2. Pointer 'lsu' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void decSetCoeff(decNumber *dn, decContext *set, const Unit *lsu,
+                        Int len, Int *residue, uInt *status) {
+  Int   discard;              /* number of digits to discard  */
+  uInt  cut;                  /* cut point in Unit  */
+  const Unit *up;             /* work  */
+  Unit  *target;              /* ..  */
+  Int   count;                /* ..  */
+  #if DECDPUN<=4
+  uInt  temp;                 /* ..  */
+  #endif
+
+  discard=len-set->digits;    /* digits to discard  */
+  if (discard<=0) {           /* no digits are being discarded  */
+    if (dn->lsu!=lsu) {       /* copy needed  */
+      /* copy the coefficient array to the result number; no shift needed  */
+      count=len;              /* avoids D2U  */
+      up=lsu;
+      for (target=dn->lsu; count>0; target++, up++, count-=DECDPUN)
+        *target=*up;
+      dn->digits=len;         /* set the new length  */
+      }
+    /* dn->exponent and residue are unchanged, record any inexactitude  */
+    if (*residue!=0) *status|=(DEC_Inexact | DEC_Rounded);
+    return;
+    }
+
+  /* some digits must be discarded ...  */
+  dn->exponent+=discard;      /* maintain numerical value  */
+  *status|=DEC_Rounded;       /* accumulate Rounded status  */
+  if (*residue>1) *residue=1; /* previous residue now to right, so reduce  */
+
+  if (discard>len) {          /* everything, +1, is being discarded  */
+    /* guard digit is 0  */
+    /* residue is all the number [NB could be all 0s]  */
+    if (*residue<=0) {        /* not already positive  */
+      count=len;              /* avoids D2U  */
+      for (up=lsu; count>0; up++, count-=DECDPUN) if (*up!=0) { /* found non-0  */
+        *residue=1;
+        break;                /* no need to check any others  */
+        }
+      }
+    if (*residue!=0) *status|=DEC_Inexact; /* record inexactitude  */
+    *dn->lsu=0;               /* coefficient will now be 0  */
+    dn->digits=1;             /* ..  */
+    return;
+    } /* total discard  */
+
+  /* partial discard [most common case]  */
+  /* here, at least the first (most significant) discarded digit exists  */
+
+  /* spin up the number, noting residue during the spin, until get to  */
+  /* the Unit with the first discarded digit.  When reach it, extract  */
+  /* it and remember its position  */
+  count=0;
+  for (up=lsu;; up++) {
+    count+=DECDPUN;
+    if (count>=discard) break; /* full ones all checked  */
+    if (*up!=0) *residue=1;
+    } /* up  */
+
+  /* here up -> Unit with first discarded digit  */
+  cut=discard-(count-DECDPUN)-1;
+  if (cut==DECDPUN-1) {       /* unit-boundary case (fast)  */
+    Unit half=(Unit)powers[DECDPUN]>>1;
+    /* set residue directly  */
+    if (*up>=half) {
+      if (*up>half) *residue=7;
+      else *residue+=5;       /* add sticky bit  */
+      }
+     else { /* <half  */
+      if (*up!=0) *residue=3; /* [else is 0, leave as sticky bit]  */
+      }
+    if (set->digits<=0) {     /* special for Quantize/Subnormal :-(  */
+      *dn->lsu=0;             /* .. result is 0  */
+      dn->digits=1;           /* ..  */
+      }
+     else {                   /* shift to least  */
+      count=set->digits;      /* now digits to end up with  */
+      dn->digits=count;       /* set the new length  */
+      up++;                   /* move to next  */
+      /* on unit boundary, so shift-down copy loop is simple  */
+      for (target=dn->lsu; count>0; target++, up++, count-=DECDPUN)
+        *target=*up;
+      }
+    } /* unit-boundary case  */
+
+   else { /* discard digit is in low digit(s), and not top digit  */
+    uInt  discard1;                /* first discarded digit  */
+    uInt  quot, rem;               /* for divisions  */
+    if (cut==0) quot=*up;          /* is at bottom of unit  */
+     else /* cut>0 */ {            /* it's not at bottom of unit  */
+      #if DECDPUN<=4
+        U_ASSERT(/* cut >= 0 &&*/ cut <= 4);
+        quot=QUOT10(*up, cut);
+        rem=*up-quot*powers[cut];
+      #else
+        rem=*up%powers[cut];
+        quot=*up/powers[cut];
+      #endif
+      if (rem!=0) *residue=1;
+      }
+    /* discard digit is now at bottom of quot  */
+    #if DECDPUN<=4
+      temp=(quot*6554)>>16;        /* fast /10  */
+      /* Vowels algorithm here not a win (9 instructions)  */
+      discard1=quot-X10(temp);
+      quot=temp;
+    #else
+      discard1=quot%10;
+      quot=quot/10;
+    #endif
+    /* here, discard1 is the guard digit, and residue is everything  */
+    /* else [use mapping array to accumulate residue safely]  */
+    *residue+=resmap[discard1];
+    cut++;                         /* update cut  */
+    /* here: up -> Unit of the array with bottom digit  */
+    /*       cut is the division point for each Unit  */
+    /*       quot holds the uncut high-order digits for the current unit  */
+    if (set->digits<=0) {          /* special for Quantize/Subnormal :-(  */
+      *dn->lsu=0;                  /* .. result is 0  */
+      dn->digits=1;                /* ..  */
+      }
+     else {                        /* shift to least needed  */
+      count=set->digits;           /* now digits to end up with  */
+      dn->digits=count;            /* set the new length  */
+      /* shift-copy the coefficient array to the result number  */
+      for (target=dn->lsu; ; target++) {
+        *target=(Unit)quot;
+        count-=(DECDPUN-cut);
+        if (count<=0) break;
+        up++;
+        quot=*up;
+        #if DECDPUN<=4
+          quot=QUOT10(quot, cut);
+          rem=*up-quot*powers[cut];
+        #else
+          rem=quot%powers[cut];
+          quot=quot/powers[cut];
+        #endif
+        *target=(Unit)(*target+rem*powers[DECDPUN-cut]);
+        count-=cut;
+        if (count<=0) break;
+        } /* shift-copy loop  */
+      } /* shift to least  */
+    } /* not unit boundary  */
+
+  if (*residue!=0) *status|=DEC_Inexact; /* record inexactitude  */
+  return;
+  } /* decSetCoeff  */
+
+
+// Source: decNumber.cpp
+// Lines 6935-7083
+
+
+[ANSWER]
+MUST

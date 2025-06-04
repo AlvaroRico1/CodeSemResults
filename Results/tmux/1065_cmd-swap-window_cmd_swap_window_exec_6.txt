@@ -1,0 +1,1 @@
+src,tmux/cmd-swap-window.c,6,source,tmux/cmd-swap-window.c,4,1

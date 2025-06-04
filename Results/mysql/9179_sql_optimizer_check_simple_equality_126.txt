@@ -1,0 +1,1 @@
+right_field,mysql/sql/sql_optimizer.cc,32,right_item_field,mysql/sql/sql_optimizer.cc,22,1

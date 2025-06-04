@@ -1,0 +1,30 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'odb' at line 3
+2. Pointer 'odb' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int check_and_freshen_nonlocal(const struct object_id *oid, int freshen)
+{
+	struct object_directory *odb;
+
+	prepare_alt_odb(the_repository);
+	for (odb = the_repository->objects->odb->next; odb; odb = odb->next) {
+		if (check_and_freshen_odb(odb, oid, freshen))
+			return 1;
+	}
+	return 0;
+}
+
+
+// Source: object-file.c
+// Lines 936-946
+
+
+[ANSWER]
+MUST

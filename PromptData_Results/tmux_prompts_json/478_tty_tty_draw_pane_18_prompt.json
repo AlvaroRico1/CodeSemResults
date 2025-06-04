@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 's' at line 3\n2. Pointer 'ctx' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ntty_draw_pane(struct tty *tty, const struct tty_ctx *ctx, u_int py)\n{\n\tstruct screen\t*s = ctx->s;\n\tu_int\t\t nx = ctx->sx, i, x, rx, ry;\n\n\tlog_debug(\"%s: %s %u %d\", __func__, tty->client->name, py, ctx->bigger);\n\n\tif (!ctx->bigger) {\n\t\ttty_draw_line(tty, s, 0, py, nx, ctx->xoff, ctx->yoff + py,\n\t\t    &ctx->defaults, ctx->palette);\n\t\treturn;\n\t}\n\tif (tty_clamp_line(tty, ctx, 0, py, nx, &i, &x, &rx, &ry)) {\n\t\ttty_draw_line(tty, s, i, py, rx, x, ry, &ctx->defaults,\n\t\t    ctx->palette);\n\t}\n}\n\n\n// Source: tty.c\n// Lines 1258-1274\n",
+  "ANSWER": "MUST"
+}

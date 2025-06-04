@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'sbuf' at line 3\n2. Pointer 'stream' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint quicly_streambuf_egress_shutdown(quicly_stream_t *stream)\n{\n    quicly_streambuf_t *sbuf = stream->data;\n    quicly_sendstate_shutdown(&stream->sendstate, sbuf->egress.bytes_written);\n    return quicly_stream_sync_sendbuf(stream, 1);\n}\n\n\n// Source: streambuf.c\n// Lines 245-250\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,1 @@
+search,mysql/strings/ctype-bin.cc,4,str,mysql/strings/ctype-bin.cc,4,0

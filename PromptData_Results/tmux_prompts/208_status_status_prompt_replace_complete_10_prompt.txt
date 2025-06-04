@@ -1,0 +1,87 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 's' at line 1
+2. Pointer 'allocated' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+status_prompt_replace_complete(struct client *c, const char *s)
+{
+	char			 word[64], *allocated = NULL;
+	size_t			 size, n, off, idx, used;
+	struct utf8_data	*first, *last, *ud;
+
+	/* Work out where the cursor currently is. */
+	idx = c->prompt_index;
+	if (idx != 0)
+		idx--;
+	size = utf8_strlen(c->prompt_buffer);
+
+	/* Find the word we are in. */
+	first = &c->prompt_buffer[idx];
+	while (first > c->prompt_buffer && !status_prompt_space(first))
+		first--;
+	while (first->size != 0 && status_prompt_space(first))
+		first++;
+	last = &c->prompt_buffer[idx];
+	while (last->size != 0 && !status_prompt_space(last))
+		last++;
+	while (last > c->prompt_buffer && status_prompt_space(last))
+		last--;
+	if (last->size != 0)
+		last++;
+	if (last < first)
+		return (0);
+	if (s == NULL) {
+		used = 0;
+		for (ud = first; ud < last; ud++) {
+			if (used + ud->size >= sizeof word)
+				break;
+			memcpy(word + used, ud->data, ud->size);
+			used += ud->size;
+		}
+		if (ud != last)
+			return (0);
+		word[used] = '\0';
+	}
+
+	/* Try to complete it. */
+	if (s == NULL) {
+		allocated = status_prompt_complete(c, word,
+		    first - c->prompt_buffer);
+		if (allocated == NULL)
+			return (0);
+		s = allocated;
+	}
+
+	/* Trim out word. */
+	n = size - (last - c->prompt_buffer) + 1; /* with \0 */
+	memmove(first, last, n * sizeof *c->prompt_buffer);
+	size -= last - first;
+
+	/* Insert the new word. */
+	size += strlen(s);
+	off = first - c->prompt_buffer;
+	c->prompt_buffer = xreallocarray(c->prompt_buffer, size + 1,
+	    sizeof *c->prompt_buffer);
+	first = c->prompt_buffer + off;
+	memmove(first + strlen(s), first, n * sizeof *c->prompt_buffer);
+	for (idx = 0; idx < strlen(s); idx++)
+		utf8_set(&first[idx], s[idx]);
+	c->prompt_index = (first - c->prompt_buffer) + strlen(s);
+
+	free(allocated);
+	return (1);
+}
+
+
+// Source: status.c
+// Lines 1003-1070
+
+
+[ANSWER]
+MUST

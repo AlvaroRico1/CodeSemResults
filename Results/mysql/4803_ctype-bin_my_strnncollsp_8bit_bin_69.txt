@@ -1,0 +1,1 @@
+res,mysql/strings/ctype-bin.cc,6,a_length,mysql/strings/ctype-bin.cc,3,0

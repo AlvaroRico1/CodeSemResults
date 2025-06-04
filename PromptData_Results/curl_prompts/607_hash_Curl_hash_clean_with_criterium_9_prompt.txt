@@ -1,0 +1,45 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'le' at line 4
+2. Pointer 'le' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+Curl_hash_clean_with_criterium(struct Curl_hash *h, void *user,
+                               int (*comp)(void *, void *))
+{
+  struct Curl_llist_element *le;
+  struct Curl_llist_element *lnext;
+  struct Curl_llist *list;
+  int i;
+
+  if(!h)
+    return;
+
+  for(i = 0; i < h->slots; ++i) {
+    list = &h->table[i];
+    le = list->head; /* get first list entry */
+    while(le) {
+      struct Curl_hash_element *he = le->ptr;
+      lnext = le->next;
+      /* ask the callback function if we shall remove this entry or not */
+      if(!comp || comp(user, he->ptr)) {
+        Curl_llist_remove(list, le, (void *) h);
+        --h->size; /* one less entry in the hash now */
+      }
+      le = lnext;
+    }
+  }
+}
+
+
+// Source: hash.c
+// Lines 230-255
+
+
+[ANSWER]
+MUST

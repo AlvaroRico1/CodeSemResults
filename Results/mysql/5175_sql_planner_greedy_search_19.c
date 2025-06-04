@@ -1,0 +1,104 @@
+bool Optimize_table_order::greedy_search(table_map remaining_tables) {
+  uint idx = join->const_tables;  // index into 'join->best_ref'
+  uint best_idx;
+  POSITION best_pos;
+  JOIN_TAB *best_table;  // the next plan node to be added to the curr QEP
+  DBUG_TRACE;
+
+  /* Number of tables that we are optimizing */
+  const uint n_tables = my_count_bits(remaining_tables);
+
+  /* Number of tables remaining to be optimized */
+  uint size_remain = n_tables;
+  Deps_of_remaining_lateral_derived_tables deps_lateral(join, ~excluded_tables);
+  // We should start with the lateral dependencies of all non-const JOIN_TABs.
+  assert(!join->has_lateral ||
+         (join->deps_of_remaining_lateral_derived_tables ==
+          join->calculate_deps_of_remaining_lateral_derived_tables(
+              ~excluded_tables, join->const_tables)));
+
+  do {
+    /* Find the extension of the current QEP with the lowest cost */
+    join->best_read = DBL_MAX;
+    join->best_rowcount = HA_POS_ERROR;
+    found_plan_with_allowed_sj = false;
+    if (best_extension_by_limited_search(remaining_tables, idx, search_depth))
+      return true;
+    /*
+      'best_read < DBL_MAX' means that optimizer managed to find
+      some plan and updated 'best_positions' array accordingly.
+    */
+    assert(join->best_read < DBL_MAX);
+
+    if (size_remain <= search_depth || use_best_so_far) {
+      /*
+        'join->best_positions' contains a complete optimal extension of the
+        current partial QEP.
+      */
+      DBUG_EXECUTE(
+          "opt",
+          print_plan(join, n_tables,
+                     idx ? join->best_positions[idx - 1].prefix_rowcount : 1.0,
+                     idx ? join->best_positions[idx - 1].prefix_cost : 0.0,
+                     idx ? join->best_positions[idx - 1].prefix_cost : 0.0,
+                     "optimal"););
+      return false;
+    }
+
+    /* select the first table in the optimal extension as most promising */
+    best_pos = join->best_positions[idx];
+    best_table = best_pos.table;
+    /*
+      Each subsequent loop of 'best_extension_by_limited_search' uses
+      'join->positions' for cost estimates, therefore we have to update its
+      value.
+    */
+    join->positions[idx] = best_pos;
+
+    /*
+      Search depth is smaller than the number of remaining tables to join.
+      - Update the interleaving state after extending the current partial plan
+      with a new table. We are doing this here because
+      best_extension_by_limited_search reverts the interleaving state to the
+      one of the non-extended partial plan on exit.
+      - The semi join state is entirely in POSITION, so it is transferred fine
+      when we copy POSITION objects (no special handling needed).
+      - After we have chosen the final plan covering all tables, the nested
+      join state will not be reverted back to its initial state because we
+      don't "pop" tables already present in the partial plan.
+    */
+    bool is_interleave_error MY_ATTRIBUTE((unused)) =
+        check_interleaving_with_nj(best_table);
+    /* This has been already checked by best_extension_by_limited_search */
+    assert(!is_interleave_error);
+
+    /* find the position of 'best_table' in 'join->best_ref' */
+    best_idx = idx;
+    JOIN_TAB *pos = join->best_ref[best_idx];
+    while (pos && best_table != pos) pos = join->best_ref[++best_idx];
+    assert((pos != nullptr));  // should always find 'best_table'
+    /*
+      Maintain '#rows-sorted' order of 'best_ref[]':
+       - Shift 'best_ref[]' to make first position free.
+       - Insert 'best_table' at the first free position in the array of joins.
+    */
+    memmove(join->best_ref + idx + 1, join->best_ref + idx,
+            sizeof(JOIN_TAB *) * (best_idx - idx));
+    join->best_ref[idx] = best_table;
+
+    remaining_tables &= ~(best_table->table_ref->map());
+
+    DBUG_EXECUTE("opt",
+                 print_plan(join, idx, join->positions[idx].prefix_rowcount,
+                            join->positions[idx].prefix_cost,
+                            join->positions[idx].prefix_cost, "extended"););
+
+    deps_lateral.recalculate(join->best_ref[idx], idx + 1);
+    --size_remain;
+    ++idx;
+  } while (true);
+}
+
+
+// Source: sql_planner.cc
+// Lines 2286-2385

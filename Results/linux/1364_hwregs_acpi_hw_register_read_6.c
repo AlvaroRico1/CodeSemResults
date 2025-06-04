@@ -1,0 +1,80 @@
+acpi_status acpi_hw_register_read(u32 register_id, u32 *return_value)
+{
+	u32 value = 0;
+	u64 value64;
+	acpi_status status;
+
+	ACPI_FUNCTION_TRACE(hw_register_read);
+
+	switch (register_id) {
+	case ACPI_REGISTER_PM1_STATUS:	/* PM1 A/B: 16-bit access each */
+
+		status = acpi_hw_read_multiple(&value,
+					       &acpi_gbl_xpm1a_status,
+					       &acpi_gbl_xpm1b_status);
+		break;
+
+	case ACPI_REGISTER_PM1_ENABLE:	/* PM1 A/B: 16-bit access each */
+
+		status = acpi_hw_read_multiple(&value,
+					       &acpi_gbl_xpm1a_enable,
+					       &acpi_gbl_xpm1b_enable);
+		break;
+
+	case ACPI_REGISTER_PM1_CONTROL:	/* PM1 A/B: 16-bit access each */
+
+		status = acpi_hw_read_multiple(&value,
+					       &acpi_gbl_FADT.
+					       xpm1a_control_block,
+					       &acpi_gbl_FADT.
+					       xpm1b_control_block);
+
+		/*
+		 * Zero the write-only bits. From the ACPI specification, "Hardware
+		 * Write-Only Bits": "Upon reads to registers with write-only bits,
+		 * software masks out all write-only bits."
+		 */
+		value &= ~ACPI_PM1_CONTROL_WRITEONLY_BITS;
+		break;
+
+	case ACPI_REGISTER_PM2_CONTROL:	/* 8-bit access */
+
+		status =
+		    acpi_hw_read(&value64, &acpi_gbl_FADT.xpm2_control_block);
+		if (ACPI_SUCCESS(status)) {
+			value = (u32)value64;
+		}
+		break;
+
+	case ACPI_REGISTER_PM_TIMER:	/* 32-bit access */
+
+		status = acpi_hw_read(&value64, &acpi_gbl_FADT.xpm_timer_block);
+		if (ACPI_SUCCESS(status)) {
+			value = (u32)value64;
+		}
+
+		break;
+
+	case ACPI_REGISTER_SMI_COMMAND_BLOCK:	/* 8-bit access */
+
+		status =
+		    acpi_hw_read_port(acpi_gbl_FADT.smi_command, &value, 8);
+		break;
+
+	default:
+
+		ACPI_ERROR((AE_INFO, "Unknown Register ID: 0x%X", register_id));
+		status = AE_BAD_PARAMETER;
+		break;
+	}
+
+	if (ACPI_SUCCESS(status)) {
+		*return_value = (u32)value;
+	}
+
+	return_ACPI_STATUS(status);
+}
+
+
+// Source: hwregs.c
+// Lines 488-563

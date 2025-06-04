@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'hour' at line 2\n2. Pointer 'my_time' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nbool check_time_range_quick(const MYSQL_TIME &my_time) {\n  longlong hour = static_cast<longlong>(my_time.hour) + 24LL * my_time.day;\n  /* The input value should not be fatally bad */\n  assert(!check_time_mmssff_range(my_time));\n  if (hour <= TIME_MAX_HOUR &&\n      (hour != TIME_MAX_HOUR || my_time.minute != TIME_MAX_MINUTE ||\n       my_time.second != TIME_MAX_SECOND || !my_time.second_part))\n    return false;\n  return true;\n}\n\n\n// Source: my_time.cc\n// Lines 240-249\n",
+  "ANSWER": "MUST-NOT"
+}

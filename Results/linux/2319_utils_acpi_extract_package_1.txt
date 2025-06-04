@@ -1,0 +1,1 @@
+tail,linux/drivers/acpi/utils.c,10,pointer,linux/drivers/acpi/utils.c,19,2

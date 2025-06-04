@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'c' at line 3\n2. Pointer 'after' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ncmdq_insert_after(struct cmdq_item *after, struct cmdq_item *item)\n{\n\tstruct client\t\t*c = after->client;\n\tstruct cmdq_list\t*queue = after->queue;\n\tstruct cmdq_item\t*next;\n\n\tdo {\n\t\tnext = item->next;\n\t\titem->next = after->next;\n\t\tafter->next = item;\n\n\t\tif (c != NULL)\n\t\t\tc->references++;\n\t\titem->client = c;\n\n\t\titem->queue = queue;\n\t\tTAILQ_INSERT_AFTER(&queue->list, after, item, entry);\n\t\tlog_debug(\"%s %s: %s after %s\", __func__, cmdq_name(c),\n\t\t    item->name, after->name);\n\n\t\tafter = item;\n\t\titem = next;\n\t} while (item != NULL);\n\treturn (after);\n}\n\n\n// Source: cmd-queue.c\n// Lines 321-345\n",
+  "ANSWER": "MUST"
+}

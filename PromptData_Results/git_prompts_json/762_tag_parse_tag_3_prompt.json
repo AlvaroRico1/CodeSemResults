@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'size' at line 5\n2. Pointer 'type' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint parse_tag(struct tag *item)\n{\n\tenum object_type type;\n\tvoid *data;\n\tunsigned long size;\n\tint ret;\n\n\tif (item->object.parsed)\n\t\treturn 0;\n\tdata = read_object_file(&item->object.oid, &type, &size);\n\tif (!data)\n\t\treturn error(\"Could not read %s\",\n\t\t\t     oid_to_hex(&item->object.oid));\n\tif (type != OBJ_TAG) {\n\t\tfree(data);\n\t\treturn error(\"Object %s not a tag\",\n\t\t\t     oid_to_hex(&item->object.oid));\n\t}\n\tret = parse_tag_buffer(the_repository, item, data, size);\n\tfree(data);\n\treturn ret;\n}\n\n\n// Source: tag.c\n// Lines 209-230\n",
+  "ANSWER": "MAY"
+}

@@ -1,0 +1,49 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'config' at line 3
+2. Pointer 'do_rewrite' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int notes_ref_lookup(git_str *out, git_rebase *rebase)
+{
+	git_config *config = NULL;
+	int do_rewrite, error;
+
+	if (rebase->options.rewrite_notes_ref) {
+		git_str_attach_notowned(out,
+			rebase->options.rewrite_notes_ref,
+			strlen(rebase->options.rewrite_notes_ref));
+		return 0;
+	}
+
+	if ((error = git_repository_config(&config, rebase->repo)) < 0 ||
+		(error = git_config_get_bool(&do_rewrite, config, "notes.rewrite.rebase")) < 0) {
+
+		if (error != GIT_ENOTFOUND)
+			goto done;
+
+		git_error_clear();
+		do_rewrite = 1;
+	}
+
+	error = do_rewrite ?
+		git_config__get_string_buf(out, config, "notes.rewriteref") :
+		GIT_ENOTFOUND;
+
+done:
+	git_config_free(config);
+	return error;
+}
+
+
+// Source: rebase.c
+// Lines 1220-1249
+
+
+[ANSWER]
+MAY

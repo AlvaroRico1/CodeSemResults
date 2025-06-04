@@ -1,0 +1,1 @@
+null_pos,mysql/sql-common/bind_params.cc,11,names_ptr,mysql/sql-common/bind_params.cc,10,0

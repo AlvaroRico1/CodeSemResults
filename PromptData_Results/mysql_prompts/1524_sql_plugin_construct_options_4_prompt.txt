@@ -1,0 +1,257 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'plugin_option' at line 12
+2. Pointer 'tmp' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int construct_options(MEM_ROOT *mem_root, st_plugin_int *tmp,
+                             my_option *options) {
+  const char *plugin_name = tmp->plugin->name;
+  const LEX_CSTRING plugin_dash = {STRING_WITH_LEN("plugin-")};
+  size_t plugin_name_len = strlen(plugin_name);
+  size_t optnamelen;
+  const int max_comment_len = 180;
+  char *comment = (char *)mem_root->Alloc(max_comment_len + 1);
+  char *optname;
+
+  int index = 0, offset = 0;
+  SYS_VAR *opt, **plugin_option;
+  st_bookmark *v;
+
+  /** Used to circumvent the const attribute on my_option::name */
+  char *plugin_name_ptr, *plugin_name_with_prefix_ptr;
+
+  DBUG_TRACE;
+
+  plugin_name_ptr = (char *)mem_root->Alloc(plugin_name_len + 1);
+  strcpy(plugin_name_ptr, plugin_name);
+  my_casedn_str(&my_charset_latin1, plugin_name_ptr);
+  convert_underscore_to_dash(plugin_name_ptr, plugin_name_len);
+  plugin_name_with_prefix_ptr =
+      (char *)mem_root->Alloc(plugin_name_len + plugin_dash.length + 1);
+  strxmov(plugin_name_with_prefix_ptr, plugin_dash.str, plugin_name_ptr, NullS);
+
+  if (tmp->load_option != PLUGIN_FORCE &&
+      tmp->load_option != PLUGIN_FORCE_PLUS_PERMANENT) {
+    /* support --skip-plugin-foo syntax */
+    options[0].name = plugin_name_ptr;
+    options[1].name = plugin_name_with_prefix_ptr;
+    options[0].id = 0;
+    options[1].id = -1;
+    options[0].var_type = options[1].var_type = GET_ENUM;
+    options[0].arg_type = options[1].arg_type = OPT_ARG;
+    options[0].def_value = options[1].def_value = 1; /* ON */
+    options[0].typelib = options[1].typelib = &global_plugin_typelib;
+
+    strxnmov(comment, max_comment_len, "Enable or disable ", plugin_name,
+             " plugin. Possible values are ON, OFF, FORCE (don't start "
+             "if the plugin fails to load).",
+             NullS);
+    options[0].comment = comment;
+    /*
+      Allocate temporary space for the value of the tristate.
+      This option will have a limited lifetime and is not used beyond
+      server initialization.
+      GET_ENUM value is an unsigned long integer.
+    */
+    options[0].value = options[1].value =
+        (uchar **)mem_root->Alloc(sizeof(ulong));
+    *((ulong *)options[0].value) = (ulong)options[0].def_value;
+
+    options[0].arg_source = options[1].arg_source =
+        (get_opt_arg_source *)mem_root->Alloc(sizeof(get_opt_arg_source));
+    memset(options[0].arg_source, 0, sizeof(get_opt_arg_source));
+    options[0].arg_source->m_path_name[0] = 0;
+    options[1].arg_source->m_path_name[0] = 0;
+    options[0].arg_source->m_source = options[1].arg_source->m_source =
+        enum_variable_source::COMPILED;
+
+    options += 2;
+  }
+
+  if (!my_strcasecmp(&my_charset_latin1, plugin_name_ptr, "NDBCLUSTER")) {
+    plugin_name_ptr = const_cast<char *>("ndb");  // Use legacy "ndb" prefix
+    plugin_name_len = 3;
+  }
+
+  /*
+    Two passes as the 2nd pass will take pointer addresses for use
+    by my_getopt and register_var() in the first pass uses realloc
+  */
+
+  for (plugin_option = tmp->plugin->system_vars;
+       plugin_option && *plugin_option; plugin_option++, index++) {
+    opt = *plugin_option;
+    if (!(opt->flags & PLUGIN_VAR_THDLOCAL)) continue;
+    if (!(register_var(plugin_name_ptr, opt->name, opt->flags))) continue;
+    switch (opt->flags & PLUGIN_VAR_TYPEMASK) {
+      case PLUGIN_VAR_BOOL:
+        ((thdvar_bool_t *)opt)->resolve = mysql_sys_var_bool;
+        break;
+      case PLUGIN_VAR_INT:
+        // All PLUGIN_VAR_INT variables are actually uint,
+        // see struct System_variables
+        // Except: plugin variables declared with MYSQL_THDVAR_INT,
+        // which may actually be signed.
+        if (((thdvar_int_t *)opt)->offset == -1 &&
+            !(opt->flags & PLUGIN_VAR_UNSIGNED))
+          ((thdvar_int_t *)opt)->resolve = mysql_sys_var_int;
+        else
+          ((thdvar_uint_t *)opt)->resolve = mysql_sys_var_uint;
+        break;
+      case PLUGIN_VAR_LONG:
+        // All PLUGIN_VAR_LONG variables are actually ulong,
+        // see struct System_variables
+        ((thdvar_ulong_t *)opt)->resolve = mysql_sys_var_ulong;
+        break;
+      case PLUGIN_VAR_LONGLONG:
+        // All PLUGIN_VAR_LONGLONG variables are actually ulonglong,
+        // see struct System_variables
+        ((thdvar_ulonglong_t *)opt)->resolve = mysql_sys_var_ulonglong;
+        break;
+      case PLUGIN_VAR_STR:
+        ((thdvar_str_t *)opt)->resolve = mysql_sys_var_str;
+        break;
+      case PLUGIN_VAR_ENUM:
+        ((thdvar_enum_t *)opt)->resolve = mysql_sys_var_ulong;
+        break;
+      case PLUGIN_VAR_SET:
+        ((thdvar_set_t *)opt)->resolve = mysql_sys_var_ulonglong;
+        break;
+      case PLUGIN_VAR_DOUBLE:
+        ((thdvar_double_t *)opt)->resolve = mysql_sys_var_double;
+        break;
+      default:
+        LogErr(ERROR_LEVEL, ER_PLUGIN_UNKNOWN_VARIABLE_TYPE, opt->flags,
+               plugin_name);
+        return -1;
+    };
+  }
+
+  for (plugin_option = tmp->plugin->system_vars;
+       plugin_option && *plugin_option; plugin_option++, index++) {
+    switch ((opt = *plugin_option)->flags & PLUGIN_VAR_TYPEMASK) {
+      case PLUGIN_VAR_BOOL:
+        if (!opt->check) opt->check = check_func_bool;
+        if (!opt->update) opt->update = update_func_bool;
+        break;
+      case PLUGIN_VAR_INT:
+        if (!opt->check) opt->check = check_func_int;
+        if (!opt->update) opt->update = update_func_int;
+        break;
+      case PLUGIN_VAR_LONG:
+        if (!opt->check) opt->check = check_func_long;
+        if (!opt->update) opt->update = update_func_long;
+        break;
+      case PLUGIN_VAR_LONGLONG:
+        if (!opt->check) opt->check = check_func_longlong;
+        if (!opt->update) opt->update = update_func_longlong;
+        break;
+      case PLUGIN_VAR_STR:
+        if (!opt->check) opt->check = check_func_str;
+        if (!opt->update) {
+          opt->update = update_func_str;
+          if (!(opt->flags & (PLUGIN_VAR_MEMALLOC | PLUGIN_VAR_READONLY))) {
+            opt->flags |= PLUGIN_VAR_READONLY;
+            LogErr(WARNING_LEVEL, ER_PLUGIN_VARIABLE_SET_READ_ONLY, opt->name,
+                   plugin_name);
+          }
+        }
+        break;
+      case PLUGIN_VAR_ENUM:
+        if (!opt->check) opt->check = check_func_enum;
+        if (!opt->update) opt->update = update_func_long;
+        break;
+      case PLUGIN_VAR_SET:
+        if (!opt->check) opt->check = check_func_set;
+        if (!opt->update) opt->update = update_func_longlong;
+        break;
+      case PLUGIN_VAR_DOUBLE:
+        if (!opt->check) opt->check = check_func_double;
+        if (!opt->update) opt->update = update_func_double;
+        break;
+      default:
+        LogErr(ERROR_LEVEL, ER_PLUGIN_UNKNOWN_VARIABLE_TYPE, opt->flags,
+               plugin_name);
+        return -1;
+    }
+
+    if ((opt->flags & (PLUGIN_VAR_NOCMDOPT | PLUGIN_VAR_THDLOCAL)) ==
+        PLUGIN_VAR_NOCMDOPT)
+      continue;
+
+    if (!opt->name) {
+      LogErr(ERROR_LEVEL, ER_PLUGIN_VARIABLE_MISSING_NAME, plugin_name);
+      return -1;
+    }
+
+    if (!(opt->flags & PLUGIN_VAR_THDLOCAL)) {
+      optnamelen = strlen(opt->name);
+      optname = (char *)mem_root->Alloc(plugin_name_len + optnamelen + 2);
+      strxmov(optname, plugin_name_ptr, "-", opt->name, NullS);
+      optnamelen = plugin_name_len + optnamelen + 1;
+    } else {
+      /* this should not fail because register_var should create entry */
+      if (!(v = find_bookmark(plugin_name_ptr, opt->name, opt->flags))) {
+        LogErr(ERROR_LEVEL, ER_PLUGIN_VARIABLE_NOT_ALLOCATED_THREAD_LOCAL,
+               opt->name, plugin_name);
+        return -1;
+      }
+
+      *(int *)(opt + 1) = offset = v->offset;
+
+      if (opt->flags & PLUGIN_VAR_NOCMDOPT) continue;
+
+      optname = (char *)memdup_root(mem_root, v->key + 1,
+                                    (optnamelen = v->name_len) + 1);
+    }
+
+    convert_underscore_to_dash(optname, optnamelen);
+
+    options->name = optname;
+    options->comment = opt->comment;
+    options->app_type = opt;
+    options->id = 0;
+
+    plugin_opt_set_limits(options, opt);
+
+    if (opt->flags & PLUGIN_VAR_THDLOCAL)
+      options->value = options->u_max_value =
+          (uchar **)(global_system_variables.dynamic_variables_ptr + offset);
+    else
+      options->value = options->u_max_value = *(uchar ***)(opt + 1);
+
+    char *option_name_ptr;
+    options[1] = options[0];
+    options[1].id = -1;
+    options[1].name = option_name_ptr =
+        (char *)mem_root->Alloc(plugin_dash.length + optnamelen + 1);
+    options[1].comment = nullptr; /* Hidden from the help text */
+    strxmov(option_name_ptr, plugin_dash.str, optname, NullS);
+
+    options[0].arg_source = options[1].arg_source =
+        (get_opt_arg_source *)mem_root->Alloc(sizeof(get_opt_arg_source));
+    memset(options[0].arg_source, 0, sizeof(get_opt_arg_source));
+    options[0].arg_source->m_path_name[0] = 0;
+    options[1].arg_source->m_path_name[0] = 0;
+    options[0].arg_source->m_source = options[1].arg_source->m_source =
+        enum_variable_source::COMPILED;
+
+    options += 2;
+  }
+
+  return 0;
+}
+
+
+// Source: sql_plugin.cc
+// Lines 3227-3464
+
+
+[ANSWER]
+MUST

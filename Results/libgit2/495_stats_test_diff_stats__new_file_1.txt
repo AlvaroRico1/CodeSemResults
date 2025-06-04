@@ -1,0 +1,1 @@
+diff,libgit2/tests/libgit2/diff/stats.c,3,stat,libgit2/tests/libgit2/diff/stats.c,22,0

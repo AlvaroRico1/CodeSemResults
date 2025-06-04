@@ -1,0 +1,1 @@
+t,gcc/gcc/c/c-decl.c,1,typep,gcc/gcc/c/c-decl.c,172,0

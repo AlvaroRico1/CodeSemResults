@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'info' at line 5\n2. Pointer 'extendee' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nconst ExtensionInfo* FindRegisteredExtension(const MessageLite* extendee,\n                                             int number) {\n  if (!global_registry) return nullptr;\n\n  ExtensionInfo info;\n  info.message = extendee;\n  info.number = number;\n\n  auto it = global_registry->find(info);\n  if (it == global_registry->end()) {\n    return nullptr;\n  } else {\n    return &*it;\n  }\n}\n\n\n// Source: extension_set.cc\n// Lines 124-138\n",
+  "ANSWER": "MUST"
+}

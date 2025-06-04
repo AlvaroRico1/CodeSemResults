@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'data' at line 6\n2. Pointer 'payload' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int rename_config_entries_cb(\n\tconst git_config_entry *entry,\n\tvoid *payload)\n{\n\tint error = 0;\n\tstruct rename_data *data = (struct rename_data *)payload;\n\tsize_t base_len = git_str_len(data->name);\n\n\tif (base_len > 0 &&\n\t\t!(error = git_str_puts(data->name, entry->name + data->old_len)))\n\t{\n\t\terror = git_config_set_string(\n\t\t\tdata->config, git_str_cstr(data->name), entry->value);\n\n\t\tgit_str_truncate(data->name, base_len);\n\t}\n\n\tif (!error)\n\t\terror = git_config_delete_entry(data->config, entry->name);\n\n\treturn error;\n}\n\n\n// Source: config.c\n// Lines 1495-1516\n",
+  "ANSWER": "MUST"
+}

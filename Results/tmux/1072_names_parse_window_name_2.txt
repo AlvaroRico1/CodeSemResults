@@ -1,0 +1,1 @@
+ptr,tmux/names.c,3,name,tmux/names.c,3,1

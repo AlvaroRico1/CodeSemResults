@@ -1,0 +1,92 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'wp' at line 4
+2. Pointer 'ictx' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+input_exit_osc(struct input_ctx *ictx)
+{
+	struct screen_write_ctx	*sctx = &ictx->ctx;
+	struct window_pane	*wp = ictx->wp;
+	u_char			*p = ictx->input_buf;
+	u_int			 option;
+
+	if (ictx->flags & INPUT_DISCARD)
+		return;
+	if (ictx->input_len < 1 || *p < '0' || *p > '9')
+		return;
+
+	log_debug("%s: \"%s\" (end %s)", __func__, p,
+	    ictx->input_end == INPUT_END_ST ? "ST" : "BEL");
+
+	option = 0;
+	while (*p >= '0' && *p <= '9')
+		option = option * 10 + *p++ - '0';
+	if (*p == ';')
+		p++;
+
+	switch (option) {
+	case 0:
+	case 2:
+		if (screen_set_title(sctx->s, p) && wp != NULL) {
+			notify_pane("pane-title-changed", wp);
+			server_redraw_window_borders(wp->window);
+			server_status_window(wp->window);
+		}
+		break;
+	case 4:
+		input_osc_4(ictx, p);
+		break;
+	case 7:
+		if (utf8_isvalid(p)) {
+			screen_set_path(sctx->s, p);
+			if (wp != NULL) {
+				server_redraw_window_borders(wp->window);
+				server_status_window(wp->window);
+			}
+		}
+		break;
+	case 10:
+		input_osc_10(ictx, p);
+		break;
+	case 11:
+		input_osc_11(ictx, p);
+		break;
+	case 12:
+		if (utf8_isvalid(p) && *p != '?') /* ? is colour request */
+			screen_set_cursor_colour(sctx->s, p);
+		break;
+	case 52:
+		input_osc_52(ictx, p);
+		break;
+	case 104:
+		input_osc_104(ictx, p);
+		break;
+	case 110:
+		input_osc_110(ictx, p);
+		break;
+	case 111:
+		input_osc_111(ictx, p);
+		break;
+	case 112:
+		if (*p == '\0') /* no arguments allowed */
+			screen_set_cursor_colour(sctx->s, "");
+		break;
+	default:
+		log_debug("%s: unknown '%u'", __func__, option);
+		break;
+	}
+}
+
+
+// Source: input.c
+// Lines 2264-2336
+
+
+[ANSWER]
+MUST

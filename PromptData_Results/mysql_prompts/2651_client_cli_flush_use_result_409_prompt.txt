@@ -1,0 +1,59 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'field_count' at line 34
+2. Pointer 'is_ok_packet' at line 11
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void cli_flush_use_result(MYSQL *mysql, bool flush_all_results) {
+  /* Clear the current execution status */
+  DBUG_TRACE;
+  DBUG_PRINT("warning", ("Not all packets read, clearing them"));
+
+  if (flush_one_result(mysql)) return; /* An error occurred */
+
+  if (!flush_all_results) return;
+
+  while (mysql->server_status & SERVER_MORE_RESULTS_EXISTS) {
+    bool is_ok_packet;
+    if (opt_flush_ok_packet(mysql, &is_ok_packet))
+      return; /* An error occurred. */
+    if (is_ok_packet) {
+      /*
+        Indeed what we got from network was an OK packet, and we
+        know that OK is the last one in a multi-result-set, so
+        just return.
+      */
+      return;
+    }
+
+    /*
+      It's a result set, not an OK packet. A result set contains
+      of two result set subsequences: field metadata, terminated
+      with EOF packet, and result set data, again terminated with
+      EOF packet. Read and flush them.
+    */
+    MYSQL_TRACE_STAGE(mysql, WAIT_FOR_FIELD_DEF);
+    if (!(mysql->server_capabilities & CLIENT_DEPRECATE_EOF)) {
+      if (flush_one_result(mysql)) return; /* An error occurred. */
+    } else {
+      uchar *pos = (uchar *)mysql->net.read_pos;
+      ulong field_count = net_field_length(&pos);
+      if (read_com_query_metadata(mysql, pos, field_count)) {
+        return;
+      } else {
+        free_root(mysql->field_alloc, MYF(0));
+      }
+    }
+
+
+// Source: client.cc
+// Lines 1728-1767
+
+
+[ANSWER]
+MUST-NOT

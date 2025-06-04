@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'end' at line 3\n2. Pointer 'name' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic const char *require_quotes(const char *name, size_t name_length) {\n  bool pure_digit = true;\n  const char *end = name + name_length;\n\n  for (; name < end; name++) {\n    uchar chr = (uchar)*name;\n    uint length = my_mbcharlen(system_charset_info, chr);\n    if (length == 0 || (length == 1 && !system_charset_info->ident_map[chr]))\n      return name;\n    if (length == 1 && (chr < '0' || chr > '9')) pure_digit = false;\n  }\n  if (pure_digit) return name;\n  return nullptr;\n}\n\n\n// Source: sql_show.cc\n// Lines 1422-1435\n",
+  "ANSWER": "MUST"
+}

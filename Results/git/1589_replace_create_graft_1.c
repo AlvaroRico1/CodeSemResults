@@ -1,0 +1,59 @@
+static int create_graft(int argc, const char **argv, int force, int gentle)
+{
+	struct object_id old_oid, new_oid;
+	const char *old_ref = argv[0];
+	struct commit *commit;
+	struct strbuf buf = STRBUF_INIT;
+	const char *buffer;
+	unsigned long size;
+
+	if (get_oid(old_ref, &old_oid) < 0)
+		return error(_("not a valid object name: '%s'"), old_ref);
+	commit = lookup_commit_reference(the_repository, &old_oid);
+	if (!commit)
+		return error(_("could not parse %s"), old_ref);
+
+	buffer = get_commit_buffer(commit, &size);
+	strbuf_add(&buf, buffer, size);
+	unuse_commit_buffer(commit, buffer);
+
+	if (replace_parents(&buf, argc - 1, &argv[1]) < 0) {
+		strbuf_release(&buf);
+		return -1;
+	}
+
+	if (remove_signature(&buf)) {
+		warning(_("the original commit '%s' has a gpg signature"), old_ref);
+		warning(_("the signature will be removed in the replacement commit!"));
+	}
+
+	if (check_mergetags(commit, argc, argv)) {
+		strbuf_release(&buf);
+		return -1;
+	}
+
+	if (write_object_file(buf.buf, buf.len, commit_type, &new_oid)) {
+		strbuf_release(&buf);
+		return error(_("could not write replacement commit for: '%s'"),
+			     old_ref);
+	}
+
+	strbuf_release(&buf);
+
+	if (oideq(&commit->object.oid, &new_oid)) {
+		if (gentle) {
+			warning(_("graft for '%s' unnecessary"),
+				oid_to_hex(&commit->object.oid));
+			return 0;
+		}
+		return error(_("new commit is the same as the old one: '%s'"),
+			     oid_to_hex(&commit->object.oid));
+	}
+
+	return replace_object_oid(old_ref, &commit->object.oid,
+				  "replacement", &new_oid, force);
+}
+
+
+// Source: replace.c
+// Lines 444-498

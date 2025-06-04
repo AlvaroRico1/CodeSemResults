@@ -1,0 +1,58 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'repo2' at line 4
+2. Pointer 'ref2' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_refs_unicode__create_and_lookup(void)
+{
+	git_reference *ref0, *ref1, *ref2;
+	git_repository *repo2;
+
+	const char *REFNAME = "refs/heads/" "\303\205" "ngstr" "\303\266" "m";
+	const char *master = "refs/heads/master";
+
+	/* Create the reference */
+	cl_git_pass(git_reference_lookup(&ref0, repo, master));
+	cl_git_pass(git_reference_create(
+		&ref1, repo, REFNAME, git_reference_target(ref0), 0, NULL));
+	cl_assert_equal_s(REFNAME, git_reference_name(ref1));
+	git_reference_free(ref0);
+
+	/* Lookup the reference in a different instance of the repository */
+	cl_git_pass(git_repository_open(&repo2, "testrepo.git"));
+
+	cl_git_pass(git_reference_lookup(&ref2, repo2, REFNAME));
+	cl_assert_equal_oid(git_reference_target(ref1), git_reference_target(ref2));
+	cl_assert_equal_s(REFNAME, git_reference_name(ref2));
+	git_reference_free(ref2);
+
+#if GIT_USE_ICONV
+	/* Lookup reference by decomposed unicode name */
+
+#define REFNAME_DECOMPOSED "refs/heads/" "A" "\314\212" "ngstro" "\314\210" "m"
+
+	cl_git_pass(git_reference_lookup(&ref2, repo2, REFNAME_DECOMPOSED));
+	cl_assert_equal_oid(git_reference_target(ref1), git_reference_target(ref2));
+	cl_assert_equal_s(REFNAME, git_reference_name(ref2));
+	git_reference_free(ref2);
+#endif
+
+	/* Cleanup */
+
+	git_reference_free(ref1);
+	git_repository_free(repo2);
+}
+
+
+// Source: unicode.c
+// Lines 16-54
+
+
+[ANSWER]
+MAY

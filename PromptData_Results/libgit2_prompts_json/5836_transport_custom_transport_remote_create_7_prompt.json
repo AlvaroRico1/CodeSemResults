@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'out' at line 2\n2. Pointer 'error' at line 8\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int custom_transport_remote_create(\n\tgit_remote **out,\n\tgit_repository *repo,\n\tconst char *name,\n\tconst char *url,\n\tvoid *payload)\n{\n\tint error;\n\n\tGIT_UNUSED(payload);\n\n\tif ((error = git_remote_create(out, repo, name, url)) < 0)\n\t\treturn error;\n\n\treturn 0;\n}\n\n\n// Source: transport.c\n// Lines 18-33\n",
+  "ANSWER": "MUST-NOT"
+}

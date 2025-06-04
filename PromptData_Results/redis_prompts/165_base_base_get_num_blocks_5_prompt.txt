@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'b' at line 2
+2. Pointer 'b' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+base_get_num_blocks(base_t *base, bool with_new_block) {
+	base_block_t *b = base->blocks;
+	assert(b != NULL);
+
+	size_t n_blocks = with_new_block ? 2 : 1;
+	while (b->next != NULL) {
+		n_blocks++;
+		b = b->next;
+	}
+
+	return n_blocks;
+}
+
+
+// Source: base.c
+// Lines 130-141
+
+
+[ANSWER]
+MUST

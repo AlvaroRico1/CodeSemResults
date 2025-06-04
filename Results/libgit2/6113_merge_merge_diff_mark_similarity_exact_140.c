@@ -1,0 +1,71 @@
+static int merge_diff_mark_similarity_exact(
+	git_merge_diff_list *diff_list,
+	struct merge_diff_similarity *similarity_ours,
+	struct merge_diff_similarity *similarity_theirs)
+{
+	size_t i, j;
+	git_merge_diff *conflict_src, *conflict_tgt;
+	git_oidmap *ours_deletes_by_oid = NULL, *theirs_deletes_by_oid = NULL;
+	int error = 0;
+
+	if (git_oidmap_new(&ours_deletes_by_oid) < 0 ||
+	    git_oidmap_new(&theirs_deletes_by_oid) < 0) {
+		error = -1;
+		goto done;
+	}
+
+	/* Build a map of object ids to conflicts */
+	git_vector_foreach(&diff_list->conflicts, i, conflict_src) {
+		/* Items can be the source of a rename iff they have an item in the
+		* ancestor slot and lack an item in the ours or theirs slot. */
+		if (!GIT_MERGE_INDEX_ENTRY_EXISTS(conflict_src->ancestor_entry))
+			continue;
+
+		if (!GIT_MERGE_INDEX_ENTRY_EXISTS(conflict_src->our_entry)) {
+			error = deletes_by_oid_enqueue(ours_deletes_by_oid, &diff_list->pool, &conflict_src->ancestor_entry.id, i);
+			if (error < 0)
+				goto done;
+		}
+
+		if (!GIT_MERGE_INDEX_ENTRY_EXISTS(conflict_src->their_entry)) {
+			error = deletes_by_oid_enqueue(theirs_deletes_by_oid, &diff_list->pool, &conflict_src->ancestor_entry.id, i);
+			if (error < 0)
+				goto done;
+		}
+	}
+
+	git_vector_foreach(&diff_list->conflicts, j, conflict_tgt) {
+		if (GIT_MERGE_INDEX_ENTRY_EXISTS(conflict_tgt->ancestor_entry))
+			continue;
+
+		if (GIT_MERGE_INDEX_ENTRY_EXISTS(conflict_tgt->our_entry)) {
+			if (deletes_by_oid_dequeue(&i, ours_deletes_by_oid, &conflict_tgt->our_entry.id) == 0) {
+				similarity_ours[i].similarity = 100;
+				similarity_ours[i].other_idx = j;
+
+				similarity_ours[j].similarity = 100;
+				similarity_ours[j].other_idx = i;
+			}
+		}
+
+		if (GIT_MERGE_INDEX_ENTRY_EXISTS(conflict_tgt->their_entry)) {
+			if (deletes_by_oid_dequeue(&i, theirs_deletes_by_oid, &conflict_tgt->their_entry.id) == 0) {
+				similarity_theirs[i].similarity = 100;
+				similarity_theirs[i].other_idx = j;
+
+				similarity_theirs[j].similarity = 100;
+				similarity_theirs[j].other_idx = i;
+			}
+		}
+	}
+
+done:
+	deletes_by_oid_free(ours_deletes_by_oid);
+	deletes_by_oid_free(theirs_deletes_by_oid);
+
+	return error;
+}
+
+
+// Source: merge.c
+// Lines 1203-1269

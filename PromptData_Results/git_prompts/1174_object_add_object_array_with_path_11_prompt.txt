@@ -1,0 +1,50 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'entry' at line 8
+2. Pointer 'obj' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void add_object_array_with_path(struct object *obj, const char *name,
+				struct object_array *array,
+				unsigned mode, const char *path)
+{
+	unsigned nr = array->nr;
+	unsigned alloc = array->alloc;
+	struct object_array_entry *objects = array->objects;
+	struct object_array_entry *entry;
+
+	if (nr >= alloc) {
+		alloc = (alloc + 32) * 2;
+		REALLOC_ARRAY(objects, alloc);
+		array->alloc = alloc;
+		array->objects = objects;
+	}
+	entry = &objects[nr];
+	entry->item = obj;
+	if (!name)
+		entry->name = NULL;
+	else if (!*name)
+		/* Use our own empty string instead of allocating one: */
+		entry->name = object_array_slopbuf;
+	else
+		entry->name = xstrdup(name);
+	entry->mode = mode;
+	if (path)
+		entry->path = xstrdup(path);
+	else
+		entry->path = NULL;
+	array->nr = ++nr;
+}
+
+
+// Source: object.c
+// Lines 343-373
+
+
+[ANSWER]
+MUST

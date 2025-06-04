@@ -1,0 +1,47 @@
+control_check_subs_window(struct client *c, struct control_sub *csub)
+{
+	struct session			*s = c->session;
+	struct window			*w;
+	struct winlink			*wl;
+	struct format_tree		*ft;
+	char				*value;
+	struct control_sub_window	*csw, find;
+
+	w = window_find_by_id(csub->id);
+	if (w == NULL)
+		return;
+
+	TAILQ_FOREACH(wl, &w->winlinks, wentry) {
+		if (wl->session != s)
+			continue;
+
+		ft = format_create_defaults(NULL, c, s, wl, NULL);
+		value = format_expand(ft, csub->format);
+		format_free(ft);
+
+		find.window = w->id;
+		find.idx = wl->idx;
+
+		csw = RB_FIND(control_sub_windows, &csub->windows, &find);
+		if (csw == NULL) {
+			csw = xcalloc(1, sizeof *csw);
+			csw->window = w->id;
+			csw->idx = wl->idx;
+			RB_INSERT(control_sub_windows, &csub->windows, csw);
+		}
+
+		if (csw->last != NULL && strcmp(value, csw->last) == 0) {
+			free(value);
+			continue;
+		}
+		control_write(c,
+		    "%%subscription-changed %s $%u @%u %u - : %s",
+		    csub->name, s->id, w->id, wl->idx, value);
+		free(csw->last);
+		csw->last = value;
+	}
+}
+
+
+// Source: control.c
+// Lines 948-990

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'actual' at line 1\n2. Pointer 'offset' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void overwrite_filemode(const char *expected, git_buf *actual)\n{\n\tsize_t offset;\n\tchar *found;\n\n\tfound = strstr(expected, \"100644\");\n\tif (!found)\n\t\treturn;\n\n\toffset = ((const char *)found) - expected;\n\tif (actual->size < offset + 6)\n\t\treturn;\n\n\tif (memcmp(&actual->ptr[offset], \"100644\", 6) != 0)\n\t\tmemcpy(&actual->ptr[offset], \"100644\", 6);\n}\n\n\n// Source: drivers.c\n// Lines 18-33\n",
+  "ANSWER": "MUST-NOT"
+}

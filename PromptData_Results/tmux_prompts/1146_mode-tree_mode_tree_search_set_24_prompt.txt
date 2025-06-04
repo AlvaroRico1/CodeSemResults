@@ -1,0 +1,40 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'loop' at line 3
+2. Pointer 'loop' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+mode_tree_search_set(struct mode_tree_data *mtd)
+{
+	struct mode_tree_item	*mti, *loop;
+	uint64_t		 tag;
+
+	mti = mode_tree_search_for(mtd);
+	if (mti == NULL)
+		return;
+	tag = mti->tag;
+
+	loop = mti->parent;
+	while (loop != NULL) {
+		loop->expanded = 1;
+		loop = loop->parent;
+	}
+
+	mode_tree_build(mtd);
+	mode_tree_set_current(mtd, tag);
+	mode_tree_draw(mtd);
+	mtd->wp->flags |= PANE_REDRAW;
+}
+
+
+// Source: mode-tree.c
+// Lines 831-851
+
+
+[ANSWER]
+MUST

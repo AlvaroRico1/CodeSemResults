@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'link' at line None
+2. Pointer 'link' at line None
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int instanceLinkNegotiateTLS(redisAsyncContext *context) {
+#ifndef USE_OPENSSL
+    (void) context;
+#else
+    if (!redis_tls_ctx) return C_ERR;
+    SSL *ssl = SSL_new(redis_tls_client_ctx ? redis_tls_client_ctx : redis_tls_ctx);
+    if (!ssl) return C_ERR;
+
+    if (redisInitiateSSL(&context->c, ssl) == REDIS_ERR) return C_ERR;
+#endif
+    return C_OK;
+}
+
+
+// Source: sentinel.c
+// Lines 2397-2408
+
+
+[ANSWER]
+MUST

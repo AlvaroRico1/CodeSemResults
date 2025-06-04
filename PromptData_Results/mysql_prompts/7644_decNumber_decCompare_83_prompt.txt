@@ -1,0 +1,59 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'rhs' at line 1
+2. Pointer 'temp' at line 36
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static Int decCompare(const decNumber *lhs, const decNumber *rhs,
+                      Flag abs_c) {
+  Int   result;                    /* result value  */
+  Int   sigr;                      /* rhs signum  */
+  Int   compare;                   /* work  */
+
+  result=1;                                  /* assume signum(lhs)  */
+  if (ISZERO(lhs)) result=0;
+  if (abs_c) {
+    if (ISZERO(rhs)) return result;          /* LHS wins or both 0  */
+    /* RHS is non-zero  */
+    if (result==0) return -1;                /* LHS is 0; RHS wins  */
+    /* [here, both non-zero, result=1]  */
+    }
+   else {                                    /* signs matter  */
+    if (result && decNumberIsNegative(lhs)) result=-1;
+    sigr=1;                                  /* compute signum(rhs)  */
+    if (ISZERO(rhs)) sigr=0;
+     else if (decNumberIsNegative(rhs)) sigr=-1;
+    if (result > sigr) return +1;            /* L > R, return 1  */
+    if (result < sigr) return -1;            /* L < R, return -1  */
+    if (result==0) return 0;                   /* both 0  */
+    }
+
+  /* signums are the same; both are non-zero  */
+  if ((lhs->bits | rhs->bits) & DECINF) {    /* one or more infinities  */
+    if (decNumberIsInfinite(rhs)) {
+      if (decNumberIsInfinite(lhs)) result=0;/* both infinite  */
+       else result=-result;                  /* only rhs infinite  */
+      }
+    return result;
+    }
+  /* must compare the coefficients, allowing for exponents  */
+  if (lhs->exponent>rhs->exponent) {         /* LHS exponent larger  */
+    /* swap sides, and sign  */
+    const decNumber *temp=lhs;
+    lhs=rhs;
+    rhs=temp;
+    result=-result;
+    }
+
+
+// Source: decNumber.cpp
+// Lines 6215-6254
+
+
+[ANSWER]
+MUST

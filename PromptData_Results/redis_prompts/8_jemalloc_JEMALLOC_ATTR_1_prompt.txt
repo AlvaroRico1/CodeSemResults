@@ -1,0 +1,45 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'dopts' at line 5
+2. Pointer 'ret' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+JEMALLOC_ATTR(malloc) JEMALLOC_ALLOC_SIZE(1)
+je_malloc(size_t size) {
+	void *ret;
+	static_opts_t sopts;
+	dynamic_opts_t dopts;
+
+	LOG("core.malloc.entry", "size: %zu", size);
+
+	static_opts_init(&sopts);
+	dynamic_opts_init(&dopts);
+
+	sopts.bump_empty_alloc = true;
+	sopts.null_out_result_on_error = true;
+	sopts.set_errno_on_error = true;
+	sopts.oom_string = "<jemalloc>: Error in malloc(): out of memory\n";
+
+	dopts.result = &ret;
+	dopts.num_items = 1;
+	dopts.item_size = size;
+
+	imalloc(&sopts, &dopts);
+
+	LOG("core.malloc.exit", "result: %p", ret);
+
+	return ret;
+}
+
+
+// Source: jemalloc.c
+// Lines 2018-2043
+
+
+[ANSWER]
+MUST

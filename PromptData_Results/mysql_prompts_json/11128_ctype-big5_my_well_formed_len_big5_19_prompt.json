@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'emb' at line 5\n2. Pointer 'e' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic size_t my_well_formed_len_big5(\n    const CHARSET_INFO *cs MY_ATTRIBUTE((unused)), const char *b, const char *e,\n    size_t pos, int *error) {\n  const char *b0 = b;\n  const char *emb = e - 1; /* Last possible end of an MB character */\n\n  *error = 0;\n  while (pos-- && b < e) {\n    if ((uchar)b[0] < 128) {\n      /* Single byte ascii character */\n      b++;\n    } else if ((b < emb) && isbig5code((uchar)*b, (uchar)b[1])) {\n      /* Double byte character */\n      b += 2;\n    } else {\n      /* Wrong byte sequence */\n      *error = 1;\n      break;\n    }\n  }\n  return (size_t)(b - b0);\n}\n\n\n// Source: ctype-big5.cc\n// Lines 6468-6489\n",
+  "ANSWER": "MUST"
+}

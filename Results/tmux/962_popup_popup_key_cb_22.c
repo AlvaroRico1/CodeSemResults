@@ -1,0 +1,109 @@
+popup_key_cb(struct client *c, void *data, struct key_event *event)
+{
+	struct popup_data	*pd = data;
+	struct mouse_event	*m = &event->m;
+	const char		*buf;
+	size_t			 len;
+	u_int			 px, py, x;
+	enum { NONE, LEFT, RIGHT, TOP, BOTTOM } border = NONE;
+
+	if (pd->md != NULL) {
+		if (menu_key_cb(c, pd->md, event) == 1) {
+			pd->md = NULL;
+			pd->menu = NULL;
+			if (pd->close)
+				server_client_clear_overlay(c);
+			else
+				server_redraw_client(c);
+		}
+		return (0);
+	}
+
+	if (KEYC_IS_MOUSE(event->key)) {
+		if (pd->dragging != OFF) {
+			popup_handle_drag(c, pd, m);
+			goto out;
+		}
+		if (m->x < pd->px ||
+		    m->x > pd->px + pd->sx - 1 ||
+		    m->y < pd->py ||
+		    m->y > pd->py + pd->sy - 1) {
+			if (MOUSE_BUTTONS(m->b) == 2)
+				goto menu;
+			return (0);
+		}
+		if (pd->lines != BOX_LINES_NONE) {
+			if (m->x == pd->px)
+				border = LEFT;
+			else if (m->x == pd->px + pd->sx - 1)
+				border = RIGHT;
+			else if (m->y == pd->py)
+				border = TOP;
+			else if (m->y == pd->py + pd->sy - 1)
+				border = BOTTOM;
+		}
+		if ((m->b & MOUSE_MASK_MODIFIERS) == 0 &&
+		    MOUSE_BUTTONS(m->b) == 2 &&
+		    (border == LEFT || border == TOP))
+		    goto menu;
+		if (((m->b & MOUSE_MASK_MODIFIERS) == MOUSE_MASK_META) ||
+		    border != NONE) {
+			if (!MOUSE_DRAG(m->b))
+				goto out;
+			if (MOUSE_BUTTONS(m->lb) == 0)
+				pd->dragging = MOVE;
+			else if (MOUSE_BUTTONS(m->lb) == 2)
+				pd->dragging = SIZE;
+			pd->dx = m->lx - pd->px;
+			pd->dy = m->ly - pd->py;
+			goto out;
+		}
+	}
+	if ((((pd->flags & (POPUP_CLOSEEXIT|POPUP_CLOSEEXITZERO)) == 0) ||
+	    pd->job == NULL) &&
+	    (event->key == '\033' || event->key == '\003'))
+		return (1);
+	if (pd->job != NULL) {
+		if (KEYC_IS_MOUSE(event->key)) {
+			/* Must be inside, checked already. */
+			if (pd->lines == BOX_LINES_NONE) {
+				px = m->x - pd->px;
+				py = m->y - pd->py;
+			} else {
+				px = m->x - pd->px - 1;
+				py = m->y - pd->py - 1;
+			}
+			if (!input_key_get_mouse(&pd->s, m, px, py, &buf, &len))
+				return (0);
+			bufferevent_write(job_get_event(pd->job), buf, len);
+			return (0);
+		}
+		input_key(&pd->s, job_get_event(pd->job), event->key);
+	}
+	return (0);
+
+menu:
+	pd->menu = menu_create("");
+	if (pd->flags & POPUP_INTERNAL) {
+		menu_add_items(pd->menu, popup_internal_menu_items, NULL, NULL,
+		    NULL);
+	} else
+		menu_add_items(pd->menu, popup_menu_items, NULL, NULL, NULL);
+	if (m->x >= (pd->menu->width + 4) / 2)
+		x = m->x - (pd->menu->width + 4) / 2;
+	else
+		x = 0;
+	pd->md = menu_prepare(pd->menu, 0, NULL, x, m->y, c, NULL,
+	    popup_menu_done, pd);
+	c->flags |= CLIENT_REDRAWOVERLAY;
+
+out:
+	pd->lx = m->x;
+	pd->ly = m->y;
+	pd->lb = m->b;
+	return (0);
+}
+
+
+// Source: popup.c
+// Lines 481-585

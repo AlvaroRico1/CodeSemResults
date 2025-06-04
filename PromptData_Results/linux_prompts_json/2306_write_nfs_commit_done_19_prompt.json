@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'data' at line 3\n2. Pointer 'calldata' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void nfs_commit_done(struct rpc_task *task, void *calldata)\n{\n\tstruct nfs_commit_data\t*data = calldata;\n\n        dprintk(\"NFS: %5u nfs_commit_done (status %d)\\n\",\n                                task->tk_pid, task->tk_status);\n\n\t/* Call the NFS version-specific code */\n\tNFS_PROTO(data->inode)->commit_done(task, data);\n\ttrace_nfs_commit_done(data);\n}\n\n\n// Source: write.c\n// Lines 1817-1827\n",
+  "ANSWER": "MUST"
+}

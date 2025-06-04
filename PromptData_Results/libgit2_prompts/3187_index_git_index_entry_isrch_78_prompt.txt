@@ -1,0 +1,44 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'srch_key' at line 3
+2. Pointer 'key' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_index_entry_isrch(const void *key, const void *array_member)
+{
+	const struct entry_srch_key *srch_key = key;
+	const struct entry_internal *entry = array_member;
+	int cmp;
+	size_t len1, len2, len;
+
+	len1 = srch_key->pathlen;
+	len2 = entry->pathlen;
+	len = len1 < len2 ? len1 : len2;
+
+	cmp = strncasecmp(srch_key->path, entry->path, len);
+
+	if (cmp)
+		return cmp;
+	if (len1 < len2)
+		return -1;
+	if (len1 > len2)
+		return 1;
+
+	if (srch_key->stage != GIT_INDEX_STAGE_ANY)
+		return srch_key->stage - GIT_INDEX_ENTRY_STAGE(&entry->entry);
+
+	return 0;
+}
+
+
+// Source: index.c
+// Lines 177-201
+
+
+[ANSWER]
+MUST

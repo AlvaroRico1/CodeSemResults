@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'data' at line 4\n2. Pointer 'raw' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic size_t trailers_read(char *buffer, size_t size, size_t nitems,\n                            void *raw)\n{\n  struct Curl_easy *data = (struct Curl_easy *)raw;\n  struct dynbuf *trailers_buf = &data->state.trailers_buf;\n  size_t bytes_left = Curl_dyn_len(trailers_buf) -\n    data->state.trailers_bytes_sent;\n  size_t to_copy = (size*nitems < bytes_left) ? size*nitems : bytes_left;\n  if(to_copy) {\n    memcpy(buffer,\n           Curl_dyn_ptr(trailers_buf) + data->state.trailers_bytes_sent,\n           to_copy);\n    data->state.trailers_bytes_sent += to_copy;\n  }\n  return to_copy;\n}\n\n\n// Source: transfer.c\n// Lines 130-145\n",
+  "ANSWER": "MUST"
+}

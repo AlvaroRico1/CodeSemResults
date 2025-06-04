@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'root' at line 3
+2. Pointer 'head' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int sysctl_perm(struct ctl_table_header *head, struct ctl_table *table, int op)
+{
+	struct ctl_table_root *root = head->root;
+	int mode;
+
+	if (root->permissions)
+		mode = root->permissions(head, table);
+	else
+		mode = table->mode;
+
+	return test_perm(mode, op);
+}
+
+
+// Source: proc_sysctl.c
+// Lines 450-461
+
+
+[ANSWER]
+MUST

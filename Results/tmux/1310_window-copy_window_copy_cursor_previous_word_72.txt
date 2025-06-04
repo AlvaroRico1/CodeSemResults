@@ -1,0 +1,1 @@
+py,tmux/window-copy.c,8,separators,tmux/window-copy.c,2,2

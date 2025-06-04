@@ -1,0 +1,63 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'out' at line 2
+2. Pointer 'drv' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int git_diff_driver_builtin(
+	git_diff_driver **out,
+	git_diff_driver_registry *reg,
+	const char *driver_name)
+{
+	git_diff_driver_definition *ddef = NULL;
+	git_diff_driver *drv = NULL;
+	int error = 0;
+	size_t idx;
+
+	for (idx = 0; idx < ARRAY_SIZE(builtin_defs); ++idx) {
+		if (!strcasecmp(driver_name, builtin_defs[idx].name)) {
+			ddef = &builtin_defs[idx];
+			break;
+		}
+	}
+	if (!ddef)
+		goto done;
+
+	if ((error = diff_driver_alloc(&drv, NULL, ddef->name)) < 0)
+		goto done;
+
+	drv->type = DIFF_DRIVER_PATTERNLIST;
+
+	if (ddef->fns &&
+		(error = diff_driver_add_patterns(
+			drv, ddef->fns, ddef->flags)) < 0)
+		goto done;
+
+	if (ddef->words &&
+	    (error = git_regexp_compile(&drv->word_pattern, ddef->words, ddef->flags)) < 0)
+		goto done;
+
+	if ((error = git_strmap_set(reg->drivers, drv->name, drv)) < 0)
+		goto done;
+
+done:
+	if (error && drv)
+		git_diff_driver_free(drv);
+	else
+		*out = drv;
+
+	return error;
+}
+
+
+// Source: diff_driver.c
+// Lines 185-228
+
+
+[ANSWER]
+MUST

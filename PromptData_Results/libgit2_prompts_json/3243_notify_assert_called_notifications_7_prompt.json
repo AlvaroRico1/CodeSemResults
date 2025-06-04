@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'matched_pathspec' at line 4\n2. Pointer 'found' at line 7\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int assert_called_notifications(\n\tconst git_diff *diff_so_far,\n\tconst git_diff_delta *delta_to_add,\n\tconst char *matched_pathspec,\n\tvoid *payload)\n{\n\tbool found = false;\n\tnotify_expected *exp = (notify_expected*)payload;\n\tnotify_expected *e;\n\n\tGIT_UNUSED(diff_so_far);\n\n\tfor (e = exp; e->path != NULL; e++) {\n\t\tif (strcmp(e->path, delta_to_add->new_file.path))\n\t\t\tcontinue;\n\n\t\tcl_assert_equal_s(e->matched_pathspec, matched_pathspec);\n\n\t\tfound = true;\n\t\tbreak;\n\t}\n\n\tcl_assert(found);\n\treturn 0;\n}\n\n\n// Source: notify.c\n// Lines 15-39\n",
+  "ANSWER": "MUST-NOT"
+}

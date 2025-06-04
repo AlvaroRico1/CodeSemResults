@@ -1,0 +1,79 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ttyctx' at line 8
+2. Pointer 'cl' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+screen_write_collect_flush(struct screen_write_ctx *ctx, int scroll_only,
+    const char *from)
+{
+	struct screen			*s = ctx->s;
+	struct screen_write_citem	*ci, *tmp;
+	struct screen_write_cline	*cl;
+	u_int				 y, cx, cy, last, items = 0;
+	struct tty_ctx			 ttyctx;
+
+	if (ctx->scrolled != 0) {
+		log_debug("%s: scrolled %u (region %u-%u)", __func__,
+		    ctx->scrolled, s->rupper, s->rlower);
+		if (ctx->scrolled > s->rlower - s->rupper + 1)
+			ctx->scrolled = s->rlower - s->rupper + 1;
+
+		screen_write_initctx(ctx, &ttyctx, 1);
+		ttyctx.num = ctx->scrolled;
+		ttyctx.bg = ctx->bg;
+		tty_write(tty_cmd_scrollup, &ttyctx);
+	}
+	ctx->scrolled = 0;
+	ctx->bg = 8;
+
+	if (scroll_only)
+		return;
+
+	cx = s->cx; cy = s->cy;
+	for (y = 0; y < screen_size_y(s); y++) {
+		cl = &ctx->s->write_list[y];
+		last = UINT_MAX;
+		TAILQ_FOREACH_SAFE(ci, &cl->items, entry, tmp) {
+			if (last != UINT_MAX && ci->x <= last) {
+				fatalx("collect list not in order: %u <= %u",
+				    ci->x, last);
+			}
+			screen_write_set_cursor(ctx, ci->x, y);
+			if (ci->type == CLEAR) {
+				screen_write_initctx(ctx, &ttyctx, 1);
+				ttyctx.bg = ci->bg;
+				ttyctx.num = ci->used;
+				tty_write(tty_cmd_clearcharacter, &ttyctx);
+			} else {
+				screen_write_initctx(ctx, &ttyctx, 0);
+				ttyctx.cell = &ci->gc;
+				ttyctx.wrapped = ci->wrapped;
+				ttyctx.ptr = cl->data + ci->x;
+				ttyctx.num = ci->used;
+				tty_write(tty_cmd_cells, &ttyctx);
+			}
+			items++;
+
+			TAILQ_REMOVE(&cl->items, ci, entry);
+			screen_write_free_citem(ci);
+			last = ci->x;
+		}
+	}
+	s->cx = cx; s->cy = cy;
+
+	log_debug("%s: flushed %u items (%s)", __func__, items, from);
+}
+
+
+// Source: screen-write.c
+// Lines 1633-1692
+
+
+[ANSWER]
+MUST

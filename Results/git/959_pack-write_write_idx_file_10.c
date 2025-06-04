@@ -1,0 +1,126 @@
+const char *write_idx_file(const char *index_name, struct pack_idx_entry **objects,
+			   int nr_objects, const struct pack_idx_option *opts,
+			   const unsigned char *sha1)
+{
+	struct hashfile *f;
+	struct pack_idx_entry **sorted_by_sha, **list, **last;
+	off_t last_obj_offset = 0;
+	int i, fd;
+	uint32_t index_version;
+
+	if (nr_objects) {
+		sorted_by_sha = objects;
+		list = sorted_by_sha;
+		last = sorted_by_sha + nr_objects;
+		for (i = 0; i < nr_objects; ++i) {
+			if (objects[i]->offset > last_obj_offset)
+				last_obj_offset = objects[i]->offset;
+		}
+		QSORT(sorted_by_sha, nr_objects, sha1_compare);
+	}
+	else
+		sorted_by_sha = list = last = NULL;
+
+	if (opts->flags & WRITE_IDX_VERIFY) {
+		assert(index_name);
+		f = hashfd_check(index_name);
+	} else {
+		if (!index_name) {
+			struct strbuf tmp_file = STRBUF_INIT;
+			fd = odb_mkstemp(&tmp_file, "pack/tmp_idx_XXXXXX");
+			index_name = strbuf_detach(&tmp_file, NULL);
+		} else {
+			unlink(index_name);
+			fd = xopen(index_name, O_CREAT|O_EXCL|O_WRONLY, 0600);
+		}
+		f = hashfd(fd, index_name);
+	}
+
+	/* if last object's offset is >= 2^31 we should use index V2 */
+	index_version = need_large_offset(last_obj_offset, opts) ? 2 : opts->version;
+
+	/* index versions 2 and above need a header */
+	if (index_version >= 2) {
+		struct pack_idx_header hdr;
+		hdr.idx_signature = htonl(PACK_IDX_SIGNATURE);
+		hdr.idx_version = htonl(index_version);
+		hashwrite(f, &hdr, sizeof(hdr));
+	}
+
+	/*
+	 * Write the first-level table (the list is sorted,
+	 * but we use a 256-entry lookup to be able to avoid
+	 * having to do eight extra binary search iterations).
+	 */
+	for (i = 0; i < 256; i++) {
+		struct pack_idx_entry **next = list;
+		while (next < last) {
+			struct pack_idx_entry *obj = *next;
+			if (obj->oid.hash[0] != i)
+				break;
+			next++;
+		}
+		hashwrite_be32(f, next - sorted_by_sha);
+		list = next;
+	}
+
+	/*
+	 * Write the actual SHA1 entries..
+	 */
+	list = sorted_by_sha;
+	for (i = 0; i < nr_objects; i++) {
+		struct pack_idx_entry *obj = *list++;
+		if (index_version < 2)
+			hashwrite_be32(f, obj->offset);
+		hashwrite(f, obj->oid.hash, the_hash_algo->rawsz);
+		if ((opts->flags & WRITE_IDX_STRICT) &&
+		    (i && oideq(&list[-2]->oid, &obj->oid)))
+			die("The same object %s appears twice in the pack",
+			    oid_to_hex(&obj->oid));
+	}
+
+	if (index_version >= 2) {
+		unsigned int nr_large_offset = 0;
+
+		/* write the crc32 table */
+		list = sorted_by_sha;
+		for (i = 0; i < nr_objects; i++) {
+			struct pack_idx_entry *obj = *list++;
+			hashwrite_be32(f, obj->crc32);
+		}
+
+		/* write the 32-bit offset table */
+		list = sorted_by_sha;
+		for (i = 0; i < nr_objects; i++) {
+			struct pack_idx_entry *obj = *list++;
+			uint32_t offset;
+
+			offset = (need_large_offset(obj->offset, opts)
+				  ? (0x80000000 | nr_large_offset++)
+				  : obj->offset);
+			hashwrite_be32(f, offset);
+		}
+
+		/* write the large offset table */
+		list = sorted_by_sha;
+		while (nr_large_offset) {
+			struct pack_idx_entry *obj = *list++;
+			uint64_t offset = obj->offset;
+
+			if (!need_large_offset(offset, opts))
+				continue;
+			hashwrite_be64(f, offset);
+			nr_large_offset--;
+		}
+	}
+
+	hashwrite(f, sha1, the_hash_algo->rawsz);
+	finalize_hashfile(f, NULL, CSUM_HASH_IN_STREAM | CSUM_CLOSE |
+				    ((opts->flags & WRITE_IDX_VERIFY)
+				    ? 0 : CSUM_FSYNC));
+	return index_name;
+}
+
+
+// Source: pack-write.c
+// Lines 45-166

@@ -1,0 +1,189 @@
+ipa_inline (void)
+{
+  struct cgraph_node *node;
+  int nnodes;
+  struct cgraph_node **order;
+  int i, j;
+  int cold;
+  bool remove_functions = false;
+
+  order = XCNEWVEC (struct cgraph_node *, symtab->cgraph_count);
+
+  if (dump_file)
+    ipa_dump_fn_summaries (dump_file);
+
+  nnodes = ipa_reverse_postorder (order);
+  spec_rem = profile_count::zero ();
+
+  FOR_EACH_FUNCTION (node)
+    {
+      node->aux = 0;
+
+      /* Recompute the default reasons for inlining because they may have
+	 changed during merging.  */
+      if (in_lto_p)
+	{
+	  for (cgraph_edge *e = node->callees; e; e = e->next_callee)
+	    {
+	      gcc_assert (e->inline_failed);
+	      initialize_inline_failed (e);
+	    }
+	  for (cgraph_edge *e = node->indirect_calls; e; e = e->next_callee)
+	    initialize_inline_failed (e);
+	}
+    }
+
+  if (dump_file)
+    fprintf (dump_file, "\nFlattening functions:\n");
+
+  /* First shrink order array, so that it only contains nodes with
+     flatten attribute.  */
+  for (i = nnodes - 1, j = i; i >= 0; i--)
+    {
+      node = order[i];
+      if (node->definition
+	  /* Do not try to flatten aliases.  These may happen for example when
+	     creating local aliases.  */
+	  && !node->alias
+	  && lookup_attribute ("flatten",
+			       DECL_ATTRIBUTES (node->decl)) != NULL)
+	order[j--] = order[i];
+    }
+
+  /* After the above loop, order[j + 1] ... order[nnodes - 1] contain
+     nodes with flatten attribute.  If there is more than one such
+     node, we need to register a node removal hook, as flatten_function
+     could remove other nodes with flatten attribute.  See PR82801.  */
+  struct cgraph_node_hook_list *node_removal_hook_holder = NULL;
+  hash_set<struct cgraph_node *> *flatten_removed_nodes = NULL;
+  if (j < nnodes - 2)
+    {
+      flatten_removed_nodes = new hash_set<struct cgraph_node *>;
+      node_removal_hook_holder
+	= symtab->add_cgraph_removal_hook (&flatten_remove_node_hook,
+					   flatten_removed_nodes);
+    }
+
+  /* In the first pass handle functions to be flattened.  Do this with
+     a priority so none of our later choices will make this impossible.  */
+  for (i = nnodes - 1; i > j; i--)
+    {
+      node = order[i];
+      if (flatten_removed_nodes
+	  && flatten_removed_nodes->contains (node))
+	continue;
+
+      /* Handle nodes to be flattened.
+	 Ideally when processing callees we stop inlining at the
+	 entry of cycles, possibly cloning that entry point and
+	 try to flatten itself turning it into a self-recursive
+	 function.  */
+      if (dump_file)
+	fprintf (dump_file, "Flattening %s\n", node->dump_name ());
+      flatten_function (node, false, true);
+    }
+
+  if (j < nnodes - 2)
+    {
+      symtab->remove_cgraph_removal_hook (node_removal_hook_holder);
+      delete flatten_removed_nodes;
+    }
+  free (order);
+
+  if (dump_file)
+    dump_overall_stats ();
+
+  inline_small_functions ();
+
+  gcc_assert (symtab->state == IPA_SSA);
+  symtab->state = IPA_SSA_AFTER_INLINING;
+  /* Do first after-inlining removal.  We want to remove all "stale" extern
+     inline functions and virtual functions so we really know what is called
+     once.  */
+  symtab->remove_unreachable_nodes (dump_file);
+
+  /* Inline functions with a property that after inlining into all callers the
+     code size will shrink because the out-of-line copy is eliminated. 
+     We do this regardless on the callee size as long as function growth limits
+     are met.  */
+  if (dump_file)
+    fprintf (dump_file,
+	     "\nDeciding on functions to be inlined into all callers and "
+	     "removing useless speculations:\n");
+
+  /* Inlining one function called once has good chance of preventing
+     inlining other function into the same callee.  Ideally we should
+     work in priority order, but probably inlining hot functions first
+     is good cut without the extra pain of maintaining the queue.
+
+     ??? this is not really fitting the bill perfectly: inlining function
+     into callee often leads to better optimization of callee due to
+     increased context for optimization.
+     For example if main() function calls a function that outputs help
+     and then function that does the main optimization, we should inline
+     the second with priority even if both calls are cold by themselves.
+
+     We probably want to implement new predicate replacing our use of
+     maybe_hot_edge interpreted as maybe_hot_edge || callee is known
+     to be hot.  */
+  for (cold = 0; cold <= 1; cold ++)
+    {
+      FOR_EACH_DEFINED_FUNCTION (node)
+	{
+	  struct cgraph_edge *edge, *next;
+	  bool update=false;
+
+	  if (!opt_for_fn (node->decl, optimize)
+	      || !opt_for_fn (node->decl, flag_inline_functions_called_once))
+	    continue;
+
+	  for (edge = node->callees; edge; edge = next)
+	    {
+	      next = edge->next_callee;
+	      if (edge->speculative && !speculation_useful_p (edge, false))
+		{
+		  if (edge->count.ipa ().initialized_p ())
+		    spec_rem += edge->count.ipa ();
+		  cgraph_edge::resolve_speculation (edge);
+		  update = true;
+		  remove_functions = true;
+		}
+	    }
+	  if (update)
+	    {
+	      struct cgraph_node *where = node->inlined_to
+					  ? node->inlined_to : node;
+	      reset_edge_caches (where);
+	      ipa_update_overall_fn_summary (where);
+	    }
+	  if (want_inline_function_to_all_callers_p (node, cold))
+	    {
+	      int num_calls = 0;
+	      node->call_for_symbol_and_aliases (sum_callers, &num_calls,
+						 true);
+	      while (node->call_for_symbol_and_aliases
+		       (inline_to_all_callers, &num_calls, true))
+		;
+	      remove_functions = true;
+	    }
+	}
+    }
+
+  /* Free ipa-prop structures if they are no longer needed.  */
+  ipa_free_all_structures_after_iinln ();
+
+  if (dump_enabled_p ())
+    dump_printf (MSG_NOTE,
+		 "\nInlined %i calls, eliminated %i functions\n\n",
+		 ncalls_inlined, nfunctions_inlined);
+  if (dump_file)
+    dump_inline_stats ();
+
+  if (dump_file)
+    ipa_dump_fn_summaries (dump_file);
+  return remove_functions ? TODO_remove_functions : 0;
+}
+
+
+// Source: ipa-inline.c
+// Lines 2594-2778

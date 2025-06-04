@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'x' at line 11\n2. Pointer 'from' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nreorder_insns (rtx_insn *from, rtx_insn *to, rtx_insn *after)\n{\n  rtx_insn *prev = PREV_INSN (from);\n  basic_block bb, bb2;\n\n  reorder_insns_nobb (from, to, after);\n\n  if (!BARRIER_P (after)\n      && (bb = BLOCK_FOR_INSN (after)))\n    {\n      rtx_insn *x;\n      df_set_bb_dirty (bb);\n\n      if (!BARRIER_P (from)\n\t  && (bb2 = BLOCK_FOR_INSN (from)))\n\t{\n\t  if (BB_END (bb2) == to)\n\t    BB_END (bb2) = prev;\n\t  df_set_bb_dirty (bb2);\n\t}\n\n      if (BB_END (bb) == after)\n\tBB_END (bb) = to;\n\n      for (x = from; x != NEXT_INSN (to); x = NEXT_INSN (x))\n\tif (!BARRIER_P (x))\n\t  df_insn_change_bb (x, bb);\n    }\n\n\n// Source: emit-rtl.c\n// Lines 4445-4472\n",
+  "ANSWER": "MUST"
+}

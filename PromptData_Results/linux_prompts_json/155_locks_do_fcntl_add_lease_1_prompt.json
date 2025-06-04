@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'fl' at line 3\n2. Pointer 'new' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int do_fcntl_add_lease(unsigned int fd, struct file *filp, long arg)\n{\n\tstruct file_lock *fl;\n\tstruct fasync_struct *new;\n\tint error;\n\n\tfl = lease_alloc(filp, arg);\n\tif (IS_ERR(fl))\n\t\treturn PTR_ERR(fl);\n\n\tnew = fasync_alloc();\n\tif (!new) {\n\t\tlocks_free_lock(fl);\n\t\treturn -ENOMEM;\n\t}\n\tnew->fa_fd = fd;\n\n\terror = vfs_setlease(filp, arg, &fl, (void **)&new);\n\tif (fl)\n\t\tlocks_free_lock(fl);\n\tif (new)\n\t\tfasync_free(new);\n\treturn error;\n}\n\n\n// Source: locks.c\n// Lines 2020-2043\n",
+  "ANSWER": "MAY"
+}

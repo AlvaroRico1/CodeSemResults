@@ -1,0 +1,52 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'rev' at line 3
+2. Pointer 'caps' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_core_features__0(void)
+{
+	int major, minor, rev, caps;
+
+	git_libgit2_version(&major, &minor, &rev);
+	cl_assert_equal_i(LIBGIT2_VER_MAJOR, major);
+	cl_assert_equal_i(LIBGIT2_VER_MINOR, minor);
+	cl_assert_equal_i(LIBGIT2_VER_REVISION, rev);
+
+	caps = git_libgit2_features();
+
+#ifdef GIT_THREADS
+	cl_assert((caps & GIT_FEATURE_THREADS) != 0);
+#else
+	cl_assert((caps & GIT_FEATURE_THREADS) == 0);
+#endif
+
+#ifdef GIT_HTTPS
+	cl_assert((caps & GIT_FEATURE_HTTPS) != 0);
+#endif
+
+#if defined(GIT_SSH)
+	cl_assert((caps & GIT_FEATURE_SSH) != 0);
+#else
+	cl_assert((caps & GIT_FEATURE_SSH) == 0);
+#endif
+
+#if defined(GIT_USE_NSEC)
+	cl_assert((caps & GIT_FEATURE_NSEC) != 0);
+#else
+	cl_assert((caps & GIT_FEATURE_NSEC) == 0);
+#endif
+}
+
+
+// Source: features.c
+// Lines 3-35
+
+
+[ANSWER]
+MUST-NOT

@@ -1,0 +1,1 @@
+devid,linux/drivers/pci/quirks.c,4,reg,linux/drivers/pci/quirks.c,3,2

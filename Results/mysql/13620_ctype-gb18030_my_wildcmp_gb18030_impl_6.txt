@@ -1,0 +1,1 @@
+wildstr,mysql/strings/ctype-gb18030.cc,2,s_gb,mysql/strings/ctype-gb18030.cc,6,2

@@ -1,0 +1,250 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'res' at line 5
+2. Pointer 'allocres' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+U_CAPI decNumber * U_EXPORT2 uprv_decNumberFromString(decNumber *dn, const char chars[],
+                                decContext *set) {
+  Int   exponent=0;                /* working exponent [assume 0]  */
+  uByte bits=0;                    /* working flags [assume +ve]  */
+  Unit  *res;                      /* where result will be built  */
+  Unit  resbuff[SD2U(DECBUFFER+9)];/* local buffer in case need temporary  */
+                                   /* [+9 allows for ln() constants]  */
+  Unit  *allocres=NULL;            /* -> allocated result, iff allocated  */
+  Int   d=0;                       /* count of digits found in decimal part  */
+  const char *dotchar=NULL;        /* where dot was found  */
+  const char *cfirst=chars;        /* -> first character of decimal part  */
+  const char *last=NULL;           /* -> last digit of decimal part  */
+  const char *c;                   /* work  */
+  Unit  *up;                       /* ..  */
+  #if DECDPUN>1
+  Int   cut, out;                  /* ..  */
+  #endif
+  Int   residue;                   /* rounding residue  */
+  uInt  status=0;                  /* error code  */
+
+  #if DECCHECK
+  if (decCheckOperands(DECUNRESU, DECUNUSED, DECUNUSED, set))
+    return uprv_decNumberZero(dn);
+  #endif
+
+  do {                             /* status & malloc protection  */
+    for (c=chars;; c++) {          /* -> input character  */
+      if (*c>='0' && *c<='9') {    /* test for Arabic digit  */
+        last=c;
+        d++;                       /* count of real digits  */
+        continue;                  /* still in decimal part  */
+        }
+      if (*c=='.' && dotchar==NULL) { /* first '.'  */
+        dotchar=c;                 /* record offset into decimal part  */
+        if (c==cfirst) cfirst++;   /* first digit must follow  */
+        continue;}
+      if (c==chars) {              /* first in string...  */
+        if (*c=='-') {             /* valid - sign  */
+          cfirst++;
+          bits=DECNEG;
+          continue;}
+        if (*c=='+') {             /* valid + sign  */
+          cfirst++;
+          continue;}
+        }
+      /* *c is not a digit, or a valid +, -, or '.'  */
+      break;
+      } /* c  */
+
+    if (last==NULL) {              /* no digits yet  */
+      status=DEC_Conversion_syntax;/* assume the worst  */
+      if (*c=='\0') break;         /* and no more to come...  */
+      #if DECSUBSET
+      /* if subset then infinities and NaNs are not allowed  */
+      if (!set->extended) break;   /* hopeless  */
+      #endif
+      /* Infinities and NaNs are possible, here  */
+      if (dotchar!=NULL) break;    /* .. unless had a dot  */
+      uprv_decNumberZero(dn);           /* be optimistic  */
+      if (decBiStr(c, "infinity", "INFINITY")
+       || decBiStr(c, "inf", "INF")) {
+        dn->bits=bits | DECINF;
+        status=0;                  /* is OK  */
+        break; /* all done  */
+        }
+      /* a NaN expected  */
+      /* 2003.09.10 NaNs are now permitted to have a sign  */
+      dn->bits=bits | DECNAN;      /* assume simple NaN  */
+      if (*c=='s' || *c=='S') {    /* looks like an sNaN  */
+        c++;
+        dn->bits=bits | DECSNAN;
+        }
+      if (*c!='n' && *c!='N') break;    /* check caseless "NaN"  */
+      c++;
+      if (*c!='a' && *c!='A') break;    /* ..  */
+      c++;
+      if (*c!='n' && *c!='N') break;    /* ..  */
+      c++;
+      /* now either nothing, or nnnn payload, expected  */
+      /* -> start of integer and skip leading 0s [including plain 0]  */
+      for (cfirst=c; *cfirst=='0';) cfirst++;
+      if (*cfirst=='\0') {         /* "NaN" or "sNaN", maybe with all 0s  */
+        status=0;                  /* it's good  */
+        break;                     /* ..  */
+        }
+      /* something other than 0s; setup last and d as usual [no dots]  */
+      for (c=cfirst;; c++, d++) {
+        if (*c<'0' || *c>'9') break; /* test for Arabic digit  */
+        last=c;
+        }
+      if (*c!='\0') break;         /* not all digits  */
+      if (d>set->digits-1) {
+        /* [NB: payload in a decNumber can be full length unless  */
+        /* clamped, in which case can only be digits-1]  */
+        if (set->clamp) break;
+        if (d>set->digits) break;
+        } /* too many digits?  */
+      /* good; drop through to convert the integer to coefficient  */
+      status=0;                    /* syntax is OK  */
+      bits=dn->bits;               /* for copy-back  */
+      } /* last==NULL  */
+
+     else if (*c!='\0') {          /* more to process...  */
+      /* had some digits; exponent is only valid sequence now  */
+      Flag nege;                   /* 1=negative exponent  */
+      const char *firstexp;        /* -> first significant exponent digit  */
+      status=DEC_Conversion_syntax;/* assume the worst  */
+      if (*c!='e' && *c!='E') break;
+      /* Found 'e' or 'E' -- now process explicit exponent */
+      /* 1998.07.11: sign no longer required  */
+      nege=0;
+      c++;                         /* to (possible) sign  */
+      if (*c=='-') {nege=1; c++;}
+       else if (*c=='+') c++;
+      if (*c=='\0') break;
+
+      for (; *c=='0' && *(c+1)!='\0';) c++;  /* strip insignificant zeros  */
+      firstexp=c;                            /* save exponent digit place  */
+      uInt uexponent = 0;   /* Avoid undefined behavior on signed int overflow */
+      for (; ;c++) {
+        if (*c<'0' || *c>'9') break;         /* not a digit  */
+        uexponent=X10(uexponent)+(uInt)*c-(uInt)'0';
+        } /* c  */
+      exponent = (Int)uexponent;
+      /* if not now on a '\0', *c must not be a digit  */
+      if (*c!='\0') break;
+
+      /* (this next test must be after the syntax checks)  */
+      /* if it was too long the exponent may have wrapped, so check  */
+      /* carefully and set it to a certain overflow if wrap possible  */
+      if (c>=firstexp+9+1) {
+        if (c>firstexp+9+1 || *firstexp>'1') exponent=DECNUMMAXE*2;
+        /* [up to 1999999999 is OK, for example 1E-1000000998]  */
+        }
+      if (nege) exponent=-exponent;     /* was negative  */
+      status=0;                         /* is OK  */
+      } /* stuff after digits  */
+
+    /* Here when whole string has been inspected; syntax is good  */
+    /* cfirst->first digit (never dot), last->last digit (ditto)  */
+
+    /* strip leading zeros/dot [leave final 0 if all 0's]  */
+    if (*cfirst=='0') {                 /* [cfirst has stepped over .]  */
+      for (c=cfirst; c<last; c++, cfirst++) {
+        if (*c=='.') continue;          /* ignore dots  */
+        if (*c!='0') break;             /* non-zero found  */
+        d--;                            /* 0 stripped  */
+        } /* c  */
+      #if DECSUBSET
+      /* make a rapid exit for easy zeros if !extended  */
+      if (*cfirst=='0' && !set->extended) {
+        uprv_decNumberZero(dn);              /* clean result  */
+        break;                          /* [could be return]  */
+        }
+      #endif
+      } /* at least one leading 0  */
+
+    /* Handle decimal point...  */
+    if (dotchar!=NULL && dotchar<last)  /* non-trailing '.' found?  */
+      exponent -= static_cast<int32_t>(last-dotchar);         /* adjust exponent  */
+    /* [we can now ignore the .]  */
+
+    /* OK, the digits string is good.  Assemble in the decNumber, or in  */
+    /* a temporary units array if rounding is needed  */
+    if (d<=set->digits) res=dn->lsu;    /* fits into supplied decNumber  */
+     else {                             /* rounding needed  */
+      Int needbytes=D2U(d)*sizeof(Unit);/* bytes needed  */
+      res=resbuff;                      /* assume use local buffer  */
+      if (needbytes>(Int)sizeof(resbuff)) { /* too big for local  */
+        allocres=(Unit *)malloc(needbytes);
+        if (allocres==NULL) {status|=DEC_Insufficient_storage; break;}
+        res=allocres;
+        }
+      }
+    /* res now -> number lsu, buffer, or allocated storage for Unit array  */
+
+    /* Place the coefficient into the selected Unit array  */
+    /* [this is often 70% of the cost of this function when DECDPUN>1]  */
+    #if DECDPUN>1
+    out=0;                         /* accumulator  */
+    up=res+D2U(d)-1;               /* -> msu  */
+    cut=d-(up-res)*DECDPUN;        /* digits in top unit  */
+    for (c=cfirst;; c++) {         /* along the digits  */
+      if (*c=='.') continue;       /* ignore '.' [don't decrement cut]  */
+      out=X10(out)+(Int)*c-(Int)'0';
+      if (c==last) break;          /* done [never get to trailing '.']  */
+      cut--;
+      if (cut>0) continue;         /* more for this unit  */
+      *up=(Unit)out;               /* write unit  */
+      up--;                        /* prepare for unit below..  */
+      cut=DECDPUN;                 /* ..  */
+      out=0;                       /* ..  */
+      } /* c  */
+    *up=(Unit)out;                 /* write lsu  */
+
+    #else
+    /* DECDPUN==1  */
+    up=res;                        /* -> lsu  */
+    for (c=last; c>=cfirst; c--) { /* over each character, from least  */
+      if (*c=='.') continue;       /* ignore . [don't step up]  */
+      *up=(Unit)((Int)*c-(Int)'0');
+      up++;
+      } /* c  */
+    #endif
+
+    dn->bits=bits;
+    dn->exponent=exponent;
+    dn->digits=d;
+
+    /* if not in number (too long) shorten into the number  */
+    if (d>set->digits) {
+      residue=0;
+      decSetCoeff(dn, set, res, d, &residue, &status);
+      /* always check for overflow or subnormal and round as needed  */
+      decFinalize(dn, set, &residue, &status);
+      }
+     else { /* no rounding, but may still have overflow or subnormal  */
+      /* [these tests are just for performance; finalize repeats them]  */
+      if ((dn->exponent-1<set->emin-dn->digits)
+       || (dn->exponent-1>set->emax-set->digits)) {
+        residue=0;
+        decFinalize(dn, set, &residue, &status);
+        }
+      }
+    /* decNumberShow(dn);  */
+    } while(0);                         /* [for break]  */
+
+  if (allocres!=NULL) free(allocres);   /* drop any storage used  */
+  if (status!=0) decStatus(dn, status, set);
+  return dn;
+  } /* decNumberFromString */
+
+
+// Source: decNumber.cpp
+// Lines 512-742
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,33 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'te' at line 7
+2. Pointer 'te' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void aeDeleteEventLoop(aeEventLoop *eventLoop) {
+    aeApiFree(eventLoop);
+    zfree(eventLoop->events);
+    zfree(eventLoop->fired);
+
+    /* Free the time events list. */
+    aeTimeEvent *next_te, *te = eventLoop->timeEventHead;
+    while (te) {
+        next_te = te->next;
+        zfree(te);
+        te = next_te;
+    }
+    zfree(eventLoop);
+}
+
+
+// Source: ae.c
+// Lines 138-151
+
+
+[ANSWER]
+MUST

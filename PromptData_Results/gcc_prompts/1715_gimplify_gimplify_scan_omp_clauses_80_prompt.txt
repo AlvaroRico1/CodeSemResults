@@ -1,0 +1,492 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'octx' at line 136
+2. Pointer 'octx' at line 136
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+gimplify_scan_omp_clauses (tree *list_p, gimple_seq *pre_p,
+			   enum omp_region_type region_type,
+			   enum tree_code code)
+{
+  struct gimplify_omp_ctx *ctx, *outer_ctx;
+  tree c;
+  hash_map<tree, tree> *struct_map_to_clause = NULL;
+  hash_set<tree> *struct_deref_set = NULL;
+  tree *prev_list_p = NULL, *orig_list_p = list_p;
+  int handled_depend_iterators = -1;
+  int nowait = -1;
+
+  ctx = new_omp_context (region_type);
+  ctx->code = code;
+  outer_ctx = ctx->outer_context;
+  if (code == OMP_TARGET)
+    {
+      if (!lang_GNU_Fortran ())
+	ctx->defaultmap[GDMK_POINTER] = GOVD_MAP | GOVD_MAP_0LEN_ARRAY;
+      ctx->defaultmap[GDMK_SCALAR] = GOVD_FIRSTPRIVATE;
+    }
+  if (!lang_GNU_Fortran ())
+    switch (code)
+      {
+      case OMP_TARGET:
+      case OMP_TARGET_DATA:
+      case OMP_TARGET_ENTER_DATA:
+      case OMP_TARGET_EXIT_DATA:
+      case OACC_DECLARE:
+      case OACC_HOST_DATA:
+      case OACC_PARALLEL:
+      case OACC_KERNELS:
+	ctx->target_firstprivatize_array_bases = true;
+      default:
+	break;
+      }
+
+  while ((c = *list_p) != NULL)
+    {
+      bool remove = false;
+      bool notice_outer = true;
+      const char *check_non_private = NULL;
+      unsigned int flags;
+      tree decl;
+
+      switch (OMP_CLAUSE_CODE (c))
+	{
+	case OMP_CLAUSE_PRIVATE:
+	  flags = GOVD_PRIVATE | GOVD_EXPLICIT;
+	  if (lang_hooks.decls.omp_private_outer_ref (OMP_CLAUSE_DECL (c)))
+	    {
+	      flags |= GOVD_PRIVATE_OUTER_REF;
+	      OMP_CLAUSE_PRIVATE_OUTER_REF (c) = 1;
+	    }
+	  else
+	    notice_outer = false;
+	  goto do_add;
+	case OMP_CLAUSE_SHARED:
+	  flags = GOVD_SHARED | GOVD_EXPLICIT;
+	  goto do_add;
+	case OMP_CLAUSE_FIRSTPRIVATE:
+	  flags = GOVD_FIRSTPRIVATE | GOVD_EXPLICIT;
+	  check_non_private = "firstprivate";
+	  goto do_add;
+	case OMP_CLAUSE_LASTPRIVATE:
+	  if (OMP_CLAUSE_LASTPRIVATE_CONDITIONAL (c))
+	    switch (code)
+	      {
+	      case OMP_DISTRIBUTE:
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "conditional %<lastprivate%> clause on "
+			  "%qs construct", "distribute");
+		OMP_CLAUSE_LASTPRIVATE_CONDITIONAL (c) = 0;
+		break;
+	      case OMP_TASKLOOP:
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "conditional %<lastprivate%> clause on "
+			  "%qs construct", "taskloop");
+		OMP_CLAUSE_LASTPRIVATE_CONDITIONAL (c) = 0;
+		break;
+	      default:
+		break;
+	      }
+	  flags = GOVD_LASTPRIVATE | GOVD_SEEN | GOVD_EXPLICIT;
+	  if (code != OMP_LOOP)
+	    check_non_private = "lastprivate";
+	  decl = OMP_CLAUSE_DECL (c);
+	  if (error_operand_p (decl))
+	    goto do_add;
+	  if (OMP_CLAUSE_LASTPRIVATE_CONDITIONAL (c)
+	      && !lang_hooks.decls.omp_scalar_p (decl))
+	    {
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"non-scalar variable %qD in conditional "
+			"%<lastprivate%> clause", decl);
+	      OMP_CLAUSE_LASTPRIVATE_CONDITIONAL (c) = 0;
+	    }
+	  if (OMP_CLAUSE_LASTPRIVATE_CONDITIONAL (c))
+	    flags |= GOVD_LASTPRIVATE_CONDITIONAL;
+	  if (outer_ctx
+	      && (outer_ctx->region_type == ORT_COMBINED_PARALLEL
+		  || ((outer_ctx->region_type & ORT_COMBINED_TEAMS)
+		      == ORT_COMBINED_TEAMS))
+	      && splay_tree_lookup (outer_ctx->variables,
+				    (splay_tree_key) decl) == NULL)
+	    {
+	      omp_add_variable (outer_ctx, decl, GOVD_SHARED | GOVD_SEEN);
+	      if (outer_ctx->outer_context)
+		omp_notice_variable (outer_ctx->outer_context, decl, true);
+	    }
+	  else if (outer_ctx
+		   && (outer_ctx->region_type & ORT_TASK) != 0
+		   && outer_ctx->combined_loop
+		   && splay_tree_lookup (outer_ctx->variables,
+					 (splay_tree_key) decl) == NULL)
+	    {
+	      omp_add_variable (outer_ctx, decl, GOVD_LASTPRIVATE | GOVD_SEEN);
+	      if (outer_ctx->outer_context)
+		omp_notice_variable (outer_ctx->outer_context, decl, true);
+	    }
+	  else if (outer_ctx
+		   && (outer_ctx->region_type == ORT_WORKSHARE
+		       || outer_ctx->region_type == ORT_ACC)
+		   && outer_ctx->combined_loop
+		   && splay_tree_lookup (outer_ctx->variables,
+					 (splay_tree_key) decl) == NULL
+		   && !omp_check_private (outer_ctx, decl, false))
+	    {
+	      omp_add_variable (outer_ctx, decl, GOVD_LASTPRIVATE | GOVD_SEEN);
+	      if (outer_ctx->outer_context
+		  && (outer_ctx->outer_context->region_type
+		      == ORT_COMBINED_PARALLEL)
+		  && splay_tree_lookup (outer_ctx->outer_context->variables,
+					(splay_tree_key) decl) == NULL)
+		{
+		  struct gimplify_omp_ctx *octx = outer_ctx->outer_context;
+		  omp_add_variable (octx, decl, GOVD_SHARED | GOVD_SEEN);
+		  if (octx->outer_context)
+		    {
+		      octx = octx->outer_context;
+		      if (octx->region_type == ORT_WORKSHARE
+			  && octx->combined_loop
+			  && splay_tree_lookup (octx->variables,
+						(splay_tree_key) decl) == NULL
+			  && !omp_check_private (octx, decl, false))
+			{
+			  omp_add_variable (octx, decl,
+					    GOVD_LASTPRIVATE | GOVD_SEEN);
+			  octx = octx->outer_context;
+			  if (octx
+			      && ((octx->region_type & ORT_COMBINED_TEAMS)
+				  == ORT_COMBINED_TEAMS)
+			      && (splay_tree_lookup (octx->variables,
+						     (splay_tree_key) decl)
+				  == NULL))
+			    {
+			      omp_add_variable (octx, decl,
+						GOVD_SHARED | GOVD_SEEN);
+			      octx = octx->outer_context;
+			    }
+			}
+		      if (octx)
+			omp_notice_variable (octx, decl, true);
+		    }
+		}
+	      else if (outer_ctx->outer_context)
+		omp_notice_variable (outer_ctx->outer_context, decl, true);
+	    }
+	  goto do_add;
+	case OMP_CLAUSE_REDUCTION:
+	  if (OMP_CLAUSE_REDUCTION_TASK (c))
+	    {
+	      if (region_type == ORT_WORKSHARE)
+		{
+		  if (nowait == -1)
+		    nowait = omp_find_clause (*list_p,
+					      OMP_CLAUSE_NOWAIT) != NULL_TREE;
+		  if (nowait
+		      && (outer_ctx == NULL
+			  || outer_ctx->region_type != ORT_COMBINED_PARALLEL))
+		    {
+		      error_at (OMP_CLAUSE_LOCATION (c),
+				"%<task%> reduction modifier on a construct "
+				"with a %<nowait%> clause");
+		      OMP_CLAUSE_REDUCTION_TASK (c) = 0;
+		    }
+		}
+	      else if ((region_type & ORT_PARALLEL) != ORT_PARALLEL)
+		{
+		  error_at (OMP_CLAUSE_LOCATION (c),
+			    "invalid %<task%> reduction modifier on construct "
+			    "other than %<parallel%>, %<for%> or %<sections%>");
+		  OMP_CLAUSE_REDUCTION_TASK (c) = 0;
+		}
+	    }
+	  if (OMP_CLAUSE_REDUCTION_INSCAN (c))
+	    switch (code)
+	      {
+	      case OMP_SECTIONS:
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%<inscan%> %<reduction%> clause on "
+			  "%qs construct", "sections");
+		OMP_CLAUSE_REDUCTION_INSCAN (c) = 0;
+		break;
+	      case OMP_PARALLEL:
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%<inscan%> %<reduction%> clause on "
+			  "%qs construct", "parallel");
+		OMP_CLAUSE_REDUCTION_INSCAN (c) = 0;
+		break;
+	      case OMP_TEAMS:
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%<inscan%> %<reduction%> clause on "
+			  "%qs construct", "teams");
+		OMP_CLAUSE_REDUCTION_INSCAN (c) = 0;
+		break;
+	      case OMP_TASKLOOP:
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%<inscan%> %<reduction%> clause on "
+			  "%qs construct", "taskloop");
+		OMP_CLAUSE_REDUCTION_INSCAN (c) = 0;
+		break;
+	      default:
+		break;
+	      }
+	  /* FALLTHRU */
+	case OMP_CLAUSE_IN_REDUCTION:
+	case OMP_CLAUSE_TASK_REDUCTION:
+	  flags = GOVD_REDUCTION | GOVD_SEEN | GOVD_EXPLICIT;
+	  /* OpenACC permits reductions on private variables.  */
+	  if (!(region_type & ORT_ACC)
+	      /* taskgroup is actually not a worksharing region.  */
+	      && code != OMP_TASKGROUP)
+	    check_non_private = omp_clause_code_name[OMP_CLAUSE_CODE (c)];
+	  decl = OMP_CLAUSE_DECL (c);
+	  if (TREE_CODE (decl) == MEM_REF)
+	    {
+	      tree type = TREE_TYPE (decl);
+	      bool saved_into_ssa = gimplify_ctxp->into_ssa;
+	      gimplify_ctxp->into_ssa = false;
+	      if (gimplify_expr (&TYPE_MAX_VALUE (TYPE_DOMAIN (type)), pre_p,
+				 NULL, is_gimple_val, fb_rvalue, false)
+		  == GS_ERROR)
+		{
+		  gimplify_ctxp->into_ssa = saved_into_ssa;
+		  remove = true;
+		  break;
+		}
+	      gimplify_ctxp->into_ssa = saved_into_ssa;
+	      tree v = TYPE_MAX_VALUE (TYPE_DOMAIN (type));
+	      if (DECL_P (v))
+		{
+		  omp_firstprivatize_variable (ctx, v);
+		  omp_notice_variable (ctx, v, true);
+		}
+	      decl = TREE_OPERAND (decl, 0);
+	      if (TREE_CODE (decl) == POINTER_PLUS_EXPR)
+		{
+		  gimplify_ctxp->into_ssa = false;
+		  if (gimplify_expr (&TREE_OPERAND (decl, 1), pre_p,
+				     NULL, is_gimple_val, fb_rvalue, false)
+		      == GS_ERROR)
+		    {
+		      gimplify_ctxp->into_ssa = saved_into_ssa;
+		      remove = true;
+		      break;
+		    }
+		  gimplify_ctxp->into_ssa = saved_into_ssa;
+		  v = TREE_OPERAND (decl, 1);
+		  if (DECL_P (v))
+		    {
+		      omp_firstprivatize_variable (ctx, v);
+		      omp_notice_variable (ctx, v, true);
+		    }
+		  decl = TREE_OPERAND (decl, 0);
+		}
+	      if (TREE_CODE (decl) == ADDR_EXPR
+		  || TREE_CODE (decl) == INDIRECT_REF)
+		decl = TREE_OPERAND (decl, 0);
+	    }
+	  goto do_add_decl;
+	case OMP_CLAUSE_LINEAR:
+	  if (gimplify_expr (&OMP_CLAUSE_LINEAR_STEP (c), pre_p, NULL,
+			     is_gimple_val, fb_rvalue) == GS_ERROR)
+	    {
+	      remove = true;
+	      break;
+	    }
+	  else
+	    {
+	      if (code == OMP_SIMD
+		  && !OMP_CLAUSE_LINEAR_NO_COPYIN (c))
+		{
+		  struct gimplify_omp_ctx *octx = outer_ctx;
+		  if (octx
+		      && octx->region_type == ORT_WORKSHARE
+		      && octx->combined_loop
+		      && !octx->distribute)
+		    {
+		      if (octx->outer_context
+			  && (octx->outer_context->region_type
+			      == ORT_COMBINED_PARALLEL))
+			octx = octx->outer_context->outer_context;
+		      else
+			octx = octx->outer_context;
+		    }
+		  if (octx
+		      && octx->region_type == ORT_WORKSHARE
+		      && octx->combined_loop
+		      && octx->distribute)
+		    {
+		      error_at (OMP_CLAUSE_LOCATION (c),
+				"%<linear%> clause for variable other than "
+				"loop iterator specified on construct "
+				"combined with %<distribute%>");
+		      remove = true;
+		      break;
+		    }
+		}
+	      /* For combined #pragma omp parallel for simd, need to put
+		 lastprivate and perhaps firstprivate too on the
+		 parallel.  Similarly for #pragma omp for simd.  */
+	      struct gimplify_omp_ctx *octx = outer_ctx;
+	      decl = NULL_TREE;
+	      do
+		{
+		  if (OMP_CLAUSE_LINEAR_NO_COPYIN (c)
+		      && OMP_CLAUSE_LINEAR_NO_COPYOUT (c))
+		    break;
+		  decl = OMP_CLAUSE_DECL (c);
+		  if (error_operand_p (decl))
+		    {
+		      decl = NULL_TREE;
+		      break;
+		    }
+		  flags = GOVD_SEEN;
+		  if (!OMP_CLAUSE_LINEAR_NO_COPYIN (c))
+		    flags |= GOVD_FIRSTPRIVATE;
+		  if (!OMP_CLAUSE_LINEAR_NO_COPYOUT (c))
+		    flags |= GOVD_LASTPRIVATE;
+		  if (octx
+		      && octx->region_type == ORT_WORKSHARE
+		      && octx->combined_loop)
+		    {
+		      if (octx->outer_context
+			  && (octx->outer_context->region_type
+			      == ORT_COMBINED_PARALLEL))
+			octx = octx->outer_context;
+		      else if (omp_check_private (octx, decl, false))
+			break;
+		    }
+		  else if (octx
+			   && (octx->region_type & ORT_TASK) != 0
+			   && octx->combined_loop)
+		    ;
+		  else if (octx
+			   && octx->region_type == ORT_COMBINED_PARALLEL
+			   && ctx->region_type == ORT_WORKSHARE
+			   && octx == outer_ctx)
+		    flags = GOVD_SEEN | GOVD_SHARED;
+		  else if (octx
+			   && ((octx->region_type & ORT_COMBINED_TEAMS)
+			       == ORT_COMBINED_TEAMS))
+		    flags = GOVD_SEEN | GOVD_SHARED;
+		  else if (octx
+			   && octx->region_type == ORT_COMBINED_TARGET)
+		    {
+		      flags &= ~GOVD_LASTPRIVATE;
+		      if (flags == GOVD_SEEN)
+			break;
+		    }
+		  else
+		    break;
+		  splay_tree_node on
+		    = splay_tree_lookup (octx->variables,
+					 (splay_tree_key) decl);
+		  if (on && (on->value & GOVD_DATA_SHARE_CLASS) != 0)
+		    {
+		      octx = NULL;
+		      break;
+		    }
+		  omp_add_variable (octx, decl, flags);
+		  if (octx->outer_context == NULL)
+		    break;
+		  octx = octx->outer_context;
+		}
+	      while (1);
+	      if (octx
+		  && decl
+		  && (!OMP_CLAUSE_LINEAR_NO_COPYIN (c)
+		      || !OMP_CLAUSE_LINEAR_NO_COPYOUT (c)))
+		omp_notice_variable (octx, decl, true);
+	    }
+	  flags = GOVD_LINEAR | GOVD_EXPLICIT;
+	  if (OMP_CLAUSE_LINEAR_NO_COPYIN (c)
+	      && OMP_CLAUSE_LINEAR_NO_COPYOUT (c))
+	    {
+	      notice_outer = false;
+	      flags |= GOVD_LINEAR_LASTPRIVATE_NO_OUTER;
+	    }
+	  goto do_add;
+
+	case OMP_CLAUSE_MAP:
+	  decl = OMP_CLAUSE_DECL (c);
+	  if (error_operand_p (decl))
+	    remove = true;
+	  switch (code)
+	    {
+	    case OMP_TARGET:
+	      break;
+	    case OACC_DATA:
+	      if (TREE_CODE (TREE_TYPE (decl)) != ARRAY_TYPE)
+		break;
+	      /* FALLTHRU */
+	    case OMP_TARGET_DATA:
+	    case OMP_TARGET_ENTER_DATA:
+	    case OMP_TARGET_EXIT_DATA:
+	    case OACC_ENTER_DATA:
+	    case OACC_EXIT_DATA:
+	    case OACC_HOST_DATA:
+	      if (OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_FIRSTPRIVATE_POINTER
+		  || (OMP_CLAUSE_MAP_KIND (c)
+		      == GOMP_MAP_FIRSTPRIVATE_REFERENCE))
+		/* For target {,enter ,exit }data only the array slice is
+		   mapped, but not the pointer to it.  */
+		remove = true;
+	      break;
+	    default:
+	      break;
+	    }
+	  /* For Fortran, not only the pointer to the data is mapped but also
+	     the address of the pointer, the array descriptor etc.; for
+	     'exit data' - and in particular for 'delete:' - having an 'alloc:'
+	     does not make sense.  Likewise, for 'update' only transferring the
+	     data itself is needed as the rest has been handled in previous
+	     directives.  However, for 'exit data', the array descriptor needs
+	     to be delete; hence, we turn the MAP_TO_PSET into a MAP_DELETE.
+
+	     NOTE: Generally, it is not safe to perform "enter data" operations
+	     on arrays where the data *or the descriptor* may go out of scope
+	     before a corresponding "exit data" operation -- and such a
+	     descriptor may be synthesized temporarily, e.g. to pass an
+	     explicit-shape array to a function expecting an assumed-shape
+	     argument.  Performing "enter data" inside the called function
+	     would thus be problematic.  */
+	  if (code == OMP_TARGET_EXIT_DATA
+	      && OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_TO_PSET)
+	    OMP_CLAUSE_SET_MAP_KIND (c, OMP_CLAUSE_MAP_KIND (*prev_list_p)
+					== GOMP_MAP_DELETE
+					? GOMP_MAP_DELETE : GOMP_MAP_RELEASE);
+	  else if ((code == OMP_TARGET_EXIT_DATA || code == OMP_TARGET_UPDATE)
+		   && (OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_POINTER
+		       || OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_TO_PSET))
+	    remove = true;
+
+	  if (remove)
+	    break;
+	  if (DECL_P (decl) && outer_ctx && (region_type & ORT_ACC))
+	    {
+	      struct gimplify_omp_ctx *octx;
+	      for (octx = outer_ctx; octx; octx = octx->outer_context)
+	        {
+		  if (octx->region_type != ORT_ACC_HOST_DATA)
+		    break;
+		  splay_tree_node n2
+		    = splay_tree_lookup (octx->variables,
+					 (splay_tree_key) decl);
+		  if (n2)
+		    error_at (OMP_CLAUSE_LOCATION (c), "variable %qE "
+			      "declared in enclosing %<host_data%> region",
+			      DECL_NAME (decl));
+		}
+	    }
+
+
+// Source: gimplify.c
+// Lines 8369-8841
+
+
+[ANSWER]
+MUST

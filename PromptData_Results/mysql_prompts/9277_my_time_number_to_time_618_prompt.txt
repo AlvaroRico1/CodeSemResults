@@ -1,0 +1,28 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'warnings_backup' at line 6
+2. Pointer 'nr' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool number_to_time(longlong nr, MYSQL_TIME *ltime, int *warnings) {
+  if (nr > TIME_MAX_VALUE) {
+    /* For huge numbers try full DATETIME, like str_to_time does. */
+    if (nr >= 10000000000LL) /* '0001-00-00 00-00-00' */
+    {
+      int warnings_backup = *warnings;
+      if (number_to_datetime(nr, ltime, 0, warnings) != -1LL) return false;
+      *warnings = warnings_backup;
+    }
+
+
+// Source: my_time.cc
+// Lines 947-955
+
+
+[ANSWER]
+MUST-NOT

@@ -1,0 +1,82 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'hunk' at line 42
+2. Pointer 'd' at line 9
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int diff_foreach_via_iterator(
+	git_diff *diff,
+	git_diff_file_cb file_cb,
+	git_diff_binary_cb binary_cb,
+	git_diff_hunk_cb hunk_cb,
+	git_diff_line_cb line_cb,
+	void *data)
+{
+	size_t d, num_d = git_diff_num_deltas(diff);
+
+	GIT_UNUSED(binary_cb);
+
+	for (d = 0; d < num_d; ++d) {
+		git_patch *patch;
+		const git_diff_delta *delta;
+		size_t h, num_h;
+
+		cl_git_pass(git_patch_from_diff(&patch, diff, d));
+		cl_assert((delta = git_patch_get_delta(patch)) != NULL);
+
+		/* call file_cb for this file */
+		if (file_cb != NULL && file_cb(delta, (float)d / num_d, data) != 0) {
+			git_patch_free(patch);
+			goto abort;
+		}
+
+		/* if there are no changes, then the patch will be NULL */
+		if (!patch) {
+			cl_assert(delta->status == GIT_DELTA_UNMODIFIED ||
+					  (delta->flags & GIT_DIFF_FLAG_BINARY) != 0);
+			continue;
+		}
+
+		if (!hunk_cb && !line_cb) {
+			git_patch_free(patch);
+			continue;
+		}
+
+		num_h = git_patch_num_hunks(patch);
+
+		for (h = 0; h < num_h; h++) {
+			const git_diff_hunk *hunk;
+			size_t l, num_l;
+
+			cl_git_pass(git_patch_get_hunk(&hunk, &num_l, patch, h));
+
+			if (hunk_cb && hunk_cb(delta, hunk, data) != 0) {
+				git_patch_free(patch);
+				goto abort;
+			}
+
+			for (l = 0; l < num_l; ++l) {
+				const git_diff_line *line;
+
+				cl_git_pass(git_patch_get_line_in_hunk(&line, patch, h, l));
+
+				if (line_cb &&
+					line_cb(delta, hunk, line, data) != 0) {
+					git_patch_free(patch);
+					goto abort;
+				}
+			}
+		}
+
+
+// Source: diff_helpers.c
+// Lines 157-219
+
+
+[ANSWER]
+MUST-NOT

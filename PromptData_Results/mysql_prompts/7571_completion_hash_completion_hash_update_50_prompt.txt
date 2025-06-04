@@ -1,0 +1,66 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'nIndex' at line 3
+2. Pointer 'h' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int completion_hash_update(HashTable *ht, const char *arKey, uint nKeyLength,
+                           const char *str) {
+  uint h, nIndex;
+
+  Bucket *p;
+
+  h = ht->pHashFunction(arKey, nKeyLength);
+  nIndex = h % ht->nTableSize;
+
+  if (nKeyLength <= 0) {
+    return FAILURE;
+  }
+  p = ht->arBuckets[nIndex];
+  while (p) {
+    if ((p->h == h) && (p->nKeyLength == nKeyLength)) {
+      if (!memcmp(p->arKey, arKey, nKeyLength)) {
+        entry *n;
+
+        if (!(n = (entry *)ht->mem_root.Alloc(sizeof(entry)))) return FAILURE;
+        n->pNext = p->pData;
+        n->str = str;
+        p->pData = n;
+        p->count++;
+
+        return SUCCESS;
+      }
+    }
+    p = p->pNext;
+  }
+
+  if (!(p = (Bucket *)ht->mem_root.Alloc(sizeof(Bucket)))) return FAILURE;
+
+  p->arKey = arKey;
+  p->nKeyLength = nKeyLength;
+  p->h = h;
+
+  if (!(p->pData = (entry *)ht->mem_root.Alloc(sizeof(entry)))) return FAILURE;
+
+  p->pData->str = str;
+  p->pData->pNext = nullptr;
+  p->count = 1;
+
+  p->pNext = ht->arBuckets[nIndex];
+  ht->arBuckets[nIndex] = p;
+
+  return SUCCESS;
+}
+
+
+// Source: completion_hash.cc
+// Lines 63-109
+
+
+[ANSWER]
+MUST-NOT

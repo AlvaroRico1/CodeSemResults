@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ses' at line 3\n2. Pointer 'clp' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int nfs4_begin_drain_session(struct nfs_client *clp)\n{\n\tstruct nfs4_session *ses = clp->cl_session;\n\tint ret;\n\n\tif (clp->cl_slot_tbl)\n\t\treturn nfs4_drain_slot_tbl(clp->cl_slot_tbl);\n\n\t/* back channel */\n\tret = nfs4_drain_slot_tbl(&ses->bc_slot_table);\n\tif (ret)\n\t\treturn ret;\n\t/* fore channel */\n\treturn nfs4_drain_slot_tbl(&ses->fc_slot_table);\n}\n\n\n// Source: nfs4state.c\n// Lines 292-306\n",
+  "ANSWER": "MUST"
+}

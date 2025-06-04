@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'job' at line 4\n2. Pointer 'data' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\njob_error_callback(__unused struct bufferevent *bufev, __unused short events,\n    void *data)\n{\n\tstruct job\t*job = data;\n\n\tlog_debug(\"job error %p: %s, pid %ld\", job, job->cmd, (long) job->pid);\n\n\tif (job->state == JOB_DEAD) {\n\t\tif (job->completecb != NULL)\n\t\t\tjob->completecb(job);\n\t\tjob_free(job);\n\t} else {\n\t\tbufferevent_disable(job->event, EV_READ);\n\t\tjob->state = JOB_CLOSED;\n\t}\n}\n\n\n// Source: job.c\n// Lines 305-320\n",
+  "ANSWER": "MUST"
+}

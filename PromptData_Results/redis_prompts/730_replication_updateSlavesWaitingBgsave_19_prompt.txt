@@ -1,0 +1,93 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'slave' at line 7
+2. Pointer 'ln' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void updateSlavesWaitingBgsave(int bgsaveerr, int type) {
+    listNode *ln;
+    listIter li;
+
+    listRewind(server.slaves,&li);
+    while((ln = listNext(&li))) {
+        client *slave = ln->value;
+
+        if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_END) {
+            struct redis_stat buf;
+
+            if (bgsaveerr != C_OK) {
+                freeClient(slave);
+                serverLog(LL_WARNING,"SYNC failed. BGSAVE child returned an error");
+                continue;
+            }
+
+            /* If this was an RDB on disk save, we have to prepare to send
+             * the RDB from disk to the slave socket. Otherwise if this was
+             * already an RDB -> Slaves socket transfer, used in the case of
+             * diskless replication, our work is trivial, we can just put
+             * the slave online. */
+            if (type == RDB_CHILD_TYPE_SOCKET) {
+                serverLog(LL_NOTICE,
+                    "Streamed RDB transfer with replica %s succeeded (socket). Waiting for REPLCONF ACK from slave to enable streaming",
+                        replicationGetSlaveName(slave));
+                /* Note: we wait for a REPLCONF ACK message from the replica in
+                 * order to really put it online (install the write handler
+                 * so that the accumulated data can be transferred). However
+                 * we change the replication state ASAP, since our slave
+                 * is technically online now.
+                 *
+                 * So things work like that:
+                 *
+                 * 1. We end trasnferring the RDB file via socket.
+                 * 2. The replica is put ONLINE but the write handler
+                 *    is not installed.
+                 * 3. The replica however goes really online, and pings us
+                 *    back via REPLCONF ACK commands.
+                 * 4. Now we finally install the write handler, and send
+                 *    the buffers accumulated so far to the replica.
+                 *
+                 * But why we do that? Because the replica, when we stream
+                 * the RDB directly via the socket, must detect the RDB
+                 * EOF (end of file), that is a special random string at the
+                 * end of the RDB (for streamed RDBs we don't know the length
+                 * in advance). Detecting such final EOF string is much
+                 * simpler and less CPU intensive if no more data is sent
+                 * after such final EOF. So we don't want to glue the end of
+                 * the RDB trasfer with the start of the other replication
+                 * data. */
+                slave->replstate = SLAVE_STATE_ONLINE;
+                slave->repl_put_online_on_ack = 1;
+                slave->repl_ack_time = server.unixtime; /* Timeout otherwise. */
+            } else {
+                if ((slave->repldbfd = open(server.rdb_filename,O_RDONLY)) == -1 ||
+                    redis_fstat(slave->repldbfd,&buf) == -1) {
+                    freeClient(slave);
+                    serverLog(LL_WARNING,"SYNC failed. Can't open/stat DB after BGSAVE: %s", strerror(errno));
+                    continue;
+                }
+                slave->repldboff = 0;
+                slave->repldbsize = buf.st_size;
+                slave->replstate = SLAVE_STATE_SEND_BULK;
+                slave->replpreamble = sdscatprintf(sdsempty(),"$%lld\r\n",
+                    (unsigned long long) slave->repldbsize);
+
+                connSetWriteHandler(slave->conn,NULL);
+                if (connSetWriteHandler(slave->conn,sendBulkToSlave) == C_ERR) {
+                    freeClient(slave);
+                    continue;
+                }
+            }
+        }
+
+
+// Source: replication.c
+// Lines 1303-1376
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,1 @@
+quote,gcc/gcc/pretty-print.c,53,colorstr,gcc/gcc/pretty-print.c,52,2

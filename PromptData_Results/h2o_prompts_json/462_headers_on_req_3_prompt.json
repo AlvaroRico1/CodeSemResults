@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'sender' at line 5\n2. Pointer 'req' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int on_req(h2o_handler_t *_handler, h2o_req_t *req)\n{\n    struct st_headers_early_hints_handler_t *handler = (void *)_handler;\n\n    struct st_headers_early_hints_sender_t *sender = h2o_mem_alloc_shared(&req->pool, sizeof(*sender), on_sender_dispose);\n    sender->req = req;\n    sender->cmds = handler->cmds;\n    h2o_timer_init(&sender->deferred_timeout_entry, on_sender_deferred_timeout);\n    h2o_timer_link(req->conn->ctx->loop, 0, &sender->deferred_timeout_entry);\n\n    return -1;\n}\n\n\n// Source: headers.c\n// Lines 88-99\n",
+  "ANSWER": "MUST"
+}

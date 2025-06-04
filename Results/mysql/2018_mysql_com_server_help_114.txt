@@ -1,0 +1,1 @@
+error,mysql/client/mysql.cc,7,server_cmd,mysql/client/mysql.cc,4,0

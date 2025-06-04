@@ -1,0 +1,30 @@
+int diff_merges_parse_opts(struct rev_info *revs, const char **argv)
+{
+	int argcount = 1;
+	const char *optarg;
+	const char *arg = argv[0];
+
+	if (!suppress_m_parsing && !strcmp(arg, "-m")) {
+		set_to_default(revs);
+	} else if (!strcmp(arg, "-c")) {
+		set_combined(revs);
+		revs->merges_imply_patch = 1;
+	} else if (!strcmp(arg, "--cc")) {
+		set_dense_combined(revs);
+		revs->merges_imply_patch = 1;
+	} else if (!strcmp(arg, "--no-diff-merges")) {
+		suppress(revs);
+	} else if (!strcmp(arg, "--combined-all-paths")) {
+		revs->combined_all_paths = 1;
+	} else if ((argcount = parse_long_opt("diff-merges", argv, &optarg))) {
+		set_diff_merges(revs, optarg);
+	} else
+		return 0;
+
+	revs->explicit_diff_merges = 1;
+	return argcount;
+}
+
+
+// Source: diff-merges.c
+// Lines 99-124

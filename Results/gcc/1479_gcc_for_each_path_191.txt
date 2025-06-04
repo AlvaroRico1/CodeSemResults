@@ -1,0 +1,1 @@
+multi_suffix,gcc/gcc/gcc.c,11,multi_os_dir,gcc/gcc/gcc.c,9,2

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'cw' at line 4\n2. Pointer 'wp' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nserver_client_set_pane(struct client *c, struct window_pane *wp)\n{\n\tstruct session\t\t*s = c->session;\n\tstruct client_window\t*cw;\n\n\tif (s == NULL)\n\t\treturn;\n\n\tcw = server_client_add_client_window(c, s->curw->window->id);\n\tcw->pane = wp;\n\tlog_debug(\"%s pane now %%%u\", c->name, wp->id);\n}\n\n\n// Source: server-client.c\n// Lines 2543-2554\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,68 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'flag' at line 12
+2. Pointer 'flag' at line 12
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int open_listener(int domain, int type, int protocol, struct sockaddr *addr, socklen_t addrlen)
+{
+    int fd;
+
+    if ((fd = socket(domain, type, protocol)) == -1)
+        goto Error;
+    set_cloexec(fd);
+
+    /* set SO_*, IP_* options */
+#ifdef IPV6_V6ONLY
+    if (domain == AF_INET6) {
+        int flag = 1;
+        if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &flag, sizeof(flag)) != 0) {
+            perror("setsockopt(IPV6_V6ONLY) failed");
+            goto Error;
+        }
+    }
+#endif
+    switch (type) {
+    case SOCK_STREAM: {
+        if (conf.tcp_reuseport)
+            socket_reuseport(fd);
+        /* TCP: set SO_REUSEADDR flag to avoid TIME_WAIT after shutdown */
+        int on = 1;
+        if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) != 0)
+            goto Error;
+    } break;
+    case SOCK_DGRAM:
+        /* UDP: set SO_REUSEPORT and DF bit */
+        socket_reuseport(fd);
+        h2o_socket_set_df_bit(fd, domain);
+        break;
+    default:
+        h2o_fatal("unexpected socket type %d", type);
+        break;
+    }
+
+    /* bind */
+    if (bind(fd, addr, addrlen) != 0)
+        goto Error;
+
+    /* TCP-specific actions */
+    if (protocol == IPPROTO_TCP) {
+#ifdef TCP_DEFER_ACCEPT
+        { /* set TCP_DEFER_ACCEPT */
+            int flag = 1;
+            if (setsockopt(fd, IPPROTO_TCP, TCP_DEFER_ACCEPT, &flag, sizeof(flag)) != 0)
+                goto Error;
+        }
+
+
+// Source: main.c
+// Lines 1607-1655
+
+
+[ANSWER]
+MAY

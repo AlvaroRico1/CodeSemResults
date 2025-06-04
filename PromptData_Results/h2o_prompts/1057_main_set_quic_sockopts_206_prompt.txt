@@ -1,0 +1,41 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'on' at line 6
+2. Pointer 'on' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void set_quic_sockopts(int fd, int family, unsigned sndbuf, unsigned rcvbuf)
+{
+    /* set the option for obtaining destination address */
+    switch (family) {
+    case AF_INET: {
+#if defined(IP_PKTINFO) /* this is the de-facto API (that works on both linux, macOS) */
+        int on = 1;
+        if (setsockopt(fd, IPPROTO_IP, IP_PKTINFO, &on, sizeof(on)) != 0)
+            h2o_fatal("failed to set IP_PKTINFO option:%s", strerror(errno));
+#elif defined(IP_RECVDSTADDR) /* *BSD */
+        int on = 1;
+        if (setsockopt(fd, IPPROTO_IP, IP_RECVDSTADDR, &on, sizeof(on)) != 0)
+            h2o_fatal("failed to set IP_RECVDSTADDR option:%s", strerror(errno));
+#endif
+    } break;
+    case AF_INET6: {
+#ifdef IPV6_RECVPKTINFO /* API defined by RFC 3542 */
+        int on = 1;
+        if (setsockopt(fd, IPPROTO_IPV6, IPV6_RECVPKTINFO, &on, sizeof(on)) != 0)
+            h2o_fatal("failed to set IPV6_RECVPKTINFO option:%s", strerror(errno));
+#endif
+    } break;
+
+
+// Source: main.c
+// Lines 1706-1727
+
+
+[ANSWER]
+MAY

@@ -1,0 +1,164 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'b' at line 2
+2. Pointer 't' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+do_add (REAL_VALUE_TYPE *r, const REAL_VALUE_TYPE *a,
+	const REAL_VALUE_TYPE *b, int subtract_p)
+{
+  int dexp, sign, exp;
+  REAL_VALUE_TYPE t;
+  bool inexact = false;
+
+  /* Determine if we need to add or subtract.  */
+  sign = a->sign;
+  subtract_p = (sign ^ b->sign) ^ subtract_p;
+
+  switch (CLASS2 (a->cl, b->cl))
+    {
+    case CLASS2 (rvc_zero, rvc_zero):
+      /* -0 + -0 = -0, -0 - +0 = -0; all other cases yield +0.  */
+      get_zero (r, sign & !subtract_p);
+      return false;
+
+    case CLASS2 (rvc_zero, rvc_normal):
+    case CLASS2 (rvc_zero, rvc_inf):
+    case CLASS2 (rvc_zero, rvc_nan):
+      /* 0 + ANY = ANY.  */
+    case CLASS2 (rvc_normal, rvc_nan):
+    case CLASS2 (rvc_inf, rvc_nan):
+    case CLASS2 (rvc_nan, rvc_nan):
+      /* ANY + NaN = NaN.  */
+    case CLASS2 (rvc_normal, rvc_inf):
+      /* R + Inf = Inf.  */
+      *r = *b;
+      /* Make resulting NaN value to be qNaN. The caller has the
+         responsibility to avoid the operation if flag_signaling_nans
+         is on.  */
+      r->signalling = 0;
+      r->sign = sign ^ subtract_p;
+      return false;
+
+    case CLASS2 (rvc_normal, rvc_zero):
+    case CLASS2 (rvc_inf, rvc_zero):
+    case CLASS2 (rvc_nan, rvc_zero):
+      /* ANY + 0 = ANY.  */
+    case CLASS2 (rvc_nan, rvc_normal):
+    case CLASS2 (rvc_nan, rvc_inf):
+      /* NaN + ANY = NaN.  */
+    case CLASS2 (rvc_inf, rvc_normal):
+      /* Inf + R = Inf.  */
+      *r = *a;
+      /* Make resulting NaN value to be qNaN. The caller has the
+         responsibility to avoid the operation if flag_signaling_nans
+         is on.  */
+      r->signalling = 0;
+      return false;
+
+    case CLASS2 (rvc_inf, rvc_inf):
+      if (subtract_p)
+	/* Inf - Inf = NaN.  */
+	get_canonical_qnan (r, 0);
+      else
+	/* Inf + Inf = Inf.  */
+	*r = *a;
+      return false;
+
+    case CLASS2 (rvc_normal, rvc_normal):
+      break;
+
+    default:
+      gcc_unreachable ();
+    }
+
+  /* Swap the arguments such that A has the larger exponent.  */
+  dexp = REAL_EXP (a) - REAL_EXP (b);
+  if (dexp < 0)
+    {
+      const REAL_VALUE_TYPE *t;
+      t = a, a = b, b = t;
+      dexp = -dexp;
+      sign ^= subtract_p;
+    }
+  exp = REAL_EXP (a);
+
+  /* If the exponents are not identical, we need to shift the
+     significand of B down.  */
+  if (dexp > 0)
+    {
+      /* If the exponents are too far apart, the significands
+	 do not overlap, which makes the subtraction a noop.  */
+      if (dexp >= SIGNIFICAND_BITS)
+	{
+	  *r = *a;
+	  r->sign = sign;
+	  return true;
+	}
+
+      inexact |= sticky_rshift_significand (&t, b, dexp);
+      b = &t;
+    }
+
+  if (subtract_p)
+    {
+      if (sub_significands (r, a, b, inexact))
+	{
+	  /* We got a borrow out of the subtraction.  That means that
+	     A and B had the same exponent, and B had the larger
+	     significand.  We need to swap the sign and negate the
+	     significand.  */
+	  sign ^= 1;
+	  neg_significand (r, r);
+	}
+    }
+  else
+    {
+      if (add_significands (r, a, b))
+	{
+	  /* We got carry out of the addition.  This means we need to
+	     shift the significand back down one bit and increase the
+	     exponent.  */
+	  inexact |= sticky_rshift_significand (r, r, 1);
+	  r->sig[SIGSZ-1] |= SIG_MSB;
+	  if (++exp > MAX_EXP)
+	    {
+	      get_inf (r, sign);
+	      return true;
+	    }
+	}
+    }
+
+  r->cl = rvc_normal;
+  r->sign = sign;
+  SET_REAL_EXP (r, exp);
+  /* Zero out the remaining fields.  */
+  r->signalling = 0;
+  r->canonical = 0;
+  r->decimal = 0;
+
+  /* Re-normalize the result.  */
+  normalize (r);
+
+  /* Special case: if the subtraction results in zero, the result
+     is positive.  */
+  if (r->cl == rvc_zero)
+    r->sign = 0;
+  else
+    r->sig[0] |= inexact;
+
+  return inexact;
+}
+
+
+// Source: real.c
+// Lines 518-662
+
+
+[ANSWER]
+MUST

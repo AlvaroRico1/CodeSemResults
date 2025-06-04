@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ppos' at line 2\n2. Pointer 'val' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nevent_enable_write(struct file *filp, const char __user *ubuf, size_t cnt,\n\t\t   loff_t *ppos)\n{\n\tstruct trace_event_file *file;\n\tunsigned long val;\n\tint ret;\n\n\tret = kstrtoul_from_user(ubuf, cnt, 10, &val);\n\tif (ret)\n\t\treturn ret;\n\n\tret = tracing_update_buffers();\n\tif (ret < 0)\n\t\treturn ret;\n\n\tswitch (val) {\n\tcase 0:\n\tcase 1:\n\t\tret = -ENODEV;\n\t\tmutex_lock(&event_mutex);\n\t\tfile = event_file_data(filp);\n\t\tif (likely(file))\n\t\t\tret = ftrace_event_enable_disable(file, val);\n\t\tmutex_unlock(&event_mutex);\n\t\tbreak;\n\n\tdefault:\n\t\treturn -EINVAL;\n\t}\n\n\t*ppos += cnt;\n\n\treturn ret ? ret : cnt;\n}\n\n\n// Source: trace_events.c\n// Lines 1055-1088\n",
+  "ANSWER": "MAY"
+}

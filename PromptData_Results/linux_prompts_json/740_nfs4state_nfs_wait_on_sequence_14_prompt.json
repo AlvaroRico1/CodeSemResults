@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'sequence' at line 3\n2. Pointer 'seqid' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint nfs_wait_on_sequence(struct nfs_seqid *seqid, struct rpc_task *task)\n{\n\tstruct nfs_seqid_counter *sequence;\n\tint status = 0;\n\n\tif (seqid == NULL)\n\t\tgoto out;\n\tsequence = seqid->sequence;\n\tspin_lock(&sequence->lock);\n\tseqid->task = task;\n\tif (list_empty(&seqid->list))\n\t\tlist_add_tail(&seqid->list, &sequence->list);\n\tif (list_first_entry(&sequence->list, struct nfs_seqid, list) == seqid)\n\t\tgoto unlock;\n\trpc_sleep_on(&sequence->wait, task, NULL);\n\tstatus = -EAGAIN;\nunlock:\n\tspin_unlock(&sequence->lock);\nout:\n\treturn status;\n}\n\n\n// Source: nfs4state.c\n// Lines 1186-1206\n",
+  "ANSWER": "MUST"
+}

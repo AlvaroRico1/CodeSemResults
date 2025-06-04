@@ -1,0 +1,1 @@
+plugin,mysql/sql/sql_plugin.cc,15,sym,mysql/sql/sql_plugin.cc,7,1

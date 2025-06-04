@@ -1,0 +1,1 @@
+table,mysql/sql/sql_load.cc,19,insert_table_ref,mysql/sql/sql_load.cc,58,1

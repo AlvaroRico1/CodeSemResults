@@ -1,0 +1,1 @@
+type,protobuf/src/google/protobuf/util/internal/type_info.cc,2,camel_case_name,protobuf/src/google/protobuf/util/internal/type_info.cc,3,2

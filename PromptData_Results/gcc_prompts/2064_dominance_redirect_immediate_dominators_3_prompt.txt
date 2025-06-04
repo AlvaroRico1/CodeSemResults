@@ -1,0 +1,44 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'son' at line 5
+2. Pointer 'bb_node' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+redirect_immediate_dominators (enum cdi_direction dir, basic_block bb,
+			       basic_block to)
+{
+  unsigned int dir_index = dom_convert_dir_to_idx (dir);
+  struct et_node *bb_node, *to_node, *son;
+
+  bb_node = bb->dom[dir_index];
+  to_node = to->dom[dir_index];
+
+  gcc_checking_assert (dom_computed[dir_index]);
+
+  if (!bb_node->son)
+    return;
+
+  while (bb_node->son)
+    {
+      son = bb_node->son;
+
+      et_split (son);
+      et_set_father (son, to_node);
+    }
+
+  if (dom_computed[dir_index] == DOM_OK)
+    dom_computed[dir_index] = DOM_NO_FAST_QUERY;
+}
+
+
+// Source: dominance.c
+// Lines 976-1000
+
+
+[ANSWER]
+MUST

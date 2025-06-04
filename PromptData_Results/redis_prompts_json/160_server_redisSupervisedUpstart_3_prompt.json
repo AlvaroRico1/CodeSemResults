@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'e' at line None\n2. Pointer 'ri' at line None\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int redisSupervisedUpstart(void) {\n    const char *upstart_job = getenv(\"UPSTART_JOB\");\n\n    if (!upstart_job) {\n        serverLog(LL_WARNING,\n                \"upstart supervision requested, but UPSTART_JOB not found!\");\n        return 0;\n    }\n\n    serverLog(LL_NOTICE, \"supervised by upstart, will stop to signal readiness.\");\n    raise(SIGSTOP);\n    unsetenv(\"UPSTART_JOB\");\n    return 1;\n}\n\n\n// Source: server.c\n// Lines 6061-6074\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,1 @@
+specs_p,gcc/gcc/gcc.c,9,buffer_p,gcc/gcc/gcc.c,7,0

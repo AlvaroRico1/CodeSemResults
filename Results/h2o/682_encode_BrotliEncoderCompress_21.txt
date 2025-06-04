@@ -1,0 +1,1 @@
+available_in,h2o/deps/brotli/c/enc/encode.c,36,available_out,h2o/deps/brotli/c/enc/encode.c,38,2

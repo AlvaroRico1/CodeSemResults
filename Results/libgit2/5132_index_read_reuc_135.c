@@ -1,0 +1,50 @@
+static int read_reuc(git_index *index, const char *buffer, size_t size)
+{
+	const char *endptr;
+	size_t len;
+	int i;
+
+	/* If called multiple times, the vector might already be initialized */
+	if (index->reuc._alloc_size == 0 &&
+		git_vector_init(&index->reuc, 16, reuc_cmp) < 0)
+		return -1;
+
+	while (size) {
+		git_index_reuc_entry *lost;
+
+		len = p_strnlen(buffer, size) + 1;
+		if (size <= len)
+			return index_error_invalid("reading reuc entries");
+
+		lost = reuc_entry_alloc(buffer);
+		GIT_ERROR_CHECK_ALLOC(lost);
+
+		size -= len;
+		buffer += len;
+
+		/* read 3 ASCII octal numbers for stage entries */
+		for (i = 0; i < 3; i++) {
+			int64_t tmp;
+
+			if (git__strntol64(&tmp, buffer, size, &endptr, 8) < 0 ||
+				!endptr || endptr == buffer || *endptr ||
+				tmp < 0 || tmp > UINT32_MAX) {
+				index_entry_reuc_free(lost);
+				return index_error_invalid("reading reuc entry stage");
+			}
+
+			lost->mode[i] = (uint32_t)tmp;
+
+			len = (endptr + 1) - buffer;
+			if (size <= len) {
+				index_entry_reuc_free(lost);
+				return index_error_invalid("reading reuc entry stage");
+			}
+
+			size -= len;
+			buffer += len;
+		}
+
+
+// Source: index.c
+// Lines 2306-2351

@@ -1,0 +1,37 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'c' at line 3
+2. Pointer 'tty' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+tty_redraw_region(struct tty *tty, const struct tty_ctx *ctx)
+{
+	struct client		*c = tty->client;
+	u_int			 i;
+
+	/*
+	 * If region is large, schedule a redraw. In most cases this is likely
+	 * to be followed by some more scrolling.
+	 */
+	if (tty_large_region(tty, ctx)) {
+		log_debug("%s: %s large redraw", __func__, c->name);
+		ctx->redraw_cb(ctx);
+		return;
+	}
+
+	for (i = ctx->orupper; i <= ctx->orlower; i++)
+		tty_draw_pane(tty, ctx, i);
+}
+
+
+// Source: tty.c
+// Lines 973-990
+
+
+[ANSWER]
+MUST

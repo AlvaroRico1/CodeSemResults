@@ -1,0 +1,87 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'mysql' at line 4
+2. Pointer 'row' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+net_async_status STDCALL mysql_fetch_row_nonblocking(MYSQL_RES *res,
+                                                     MYSQL_ROW *row) {
+  DBUG_TRACE;
+  MYSQL *mysql = res->handle;
+  *row = nullptr;
+
+  if (!res->data) { /* Unbufferred fetch */
+    if (!res->eof) {
+      /*
+        Can be -1 (error), 0 (success) and 1 (eof).
+        Init to -1 so if state is not MYSQL_STATUS_USE_RESULT we get
+        out of sync error.
+      */
+      int read_row_result = -1;
+      if (mysql->status == MYSQL_STATUS_USE_RESULT) {
+        if (read_one_row_nonblocking(mysql, res->field_count, res->row,
+                                     res->lengths,
+                                     &read_row_result) == NET_ASYNC_NOT_READY) {
+          return NET_ASYNC_NOT_READY;
+        }
+
+        // we arrive here on NET_ASYNC_ERROR or NET_ASYNC_COMPLETE
+
+        if (read_row_result == 0) {  // we've got a row: process it
+          res->row_count++;
+          *row = res->current_row = res->row;
+          goto end;
+        }
+      }
+
+      if (read_row_result == -1)  // on row reading error
+        set_mysql_error(mysql,
+                        res->unbuffered_fetch_cancelled
+                            ? CR_FETCH_CANCELED
+                            : CR_COMMANDS_OUT_OF_SYNC,
+                        unknown_sqlstate);
+      DBUG_PRINT("info", ("end of data"));
+      res->eof = true;
+      mysql->status = MYSQL_STATUS_READY;
+      /*
+        Reset only if owner points to us: there is a chance that
+        somebody started new query after mysql_stmt_close():
+      */
+      if (mysql->unbuffered_fetch_owner == &res->unbuffered_fetch_cancelled)
+        mysql->unbuffered_fetch_owner = nullptr;
+      /* Don't clear handle in mysql_free_result */
+      res->handle = nullptr;
+    }
+
+    *row = nullptr;
+    goto end;
+  }
+  {
+    MYSQL_ROW tmp;
+    if (!res->data_cursor) {
+      DBUG_PRINT("info", ("end of data"));
+      *row = nullptr;
+      goto end;
+    }
+    tmp = res->data_cursor->data;
+    res->data_cursor = res->data_cursor->next;
+    *row = res->current_row = tmp;
+    goto end;
+  }
+
+end:
+  return NET_ASYNC_COMPLETE;
+}
+
+
+// Source: client.cc
+// Lines 7764-7831
+
+
+[ANSWER]
+MUST-NOT

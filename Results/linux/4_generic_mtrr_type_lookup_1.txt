@@ -1,0 +1,1 @@
+repeat,linux/arch/x86/kernel/cpu/mtrr/generic.c,4,partial_end,linux/arch/x86/kernel/cpu/mtrr/generic.c,5,0

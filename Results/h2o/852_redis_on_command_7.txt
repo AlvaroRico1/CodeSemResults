@@ -1,0 +1,1 @@
+command,h2o/lib/common/redis.c,4,privdata,h2o/lib/common/redis.c,1,1

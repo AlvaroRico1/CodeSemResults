@@ -1,0 +1,36 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'field' at line 6
+2. Pointer 'begin' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool ReflectionOps::IsInitialized(const Message& message, bool check_fields,
+                                  bool check_descendants) {
+  const Descriptor* descriptor = message.GetDescriptor();
+  const Reflection* reflection = GetReflectionOrDie(message);
+  if (const int field_count = descriptor->field_count()) {
+    const FieldDescriptor* begin = descriptor->field(0);
+    const FieldDescriptor* end = begin + field_count;
+    GOOGLE_DCHECK_EQ(descriptor->field(field_count - 1), end - 1);
+
+    if (check_fields) {
+      // Check required fields of this message.
+      for (const FieldDescriptor* field = begin; field != end; ++field) {
+        if (field->is_required() && !reflection->HasField(message, field)) {
+          return false;
+        }
+      }
+    }
+
+
+// Source: reflection_ops.cc
+// Lines 191-207
+
+
+[ANSWER]
+MUST

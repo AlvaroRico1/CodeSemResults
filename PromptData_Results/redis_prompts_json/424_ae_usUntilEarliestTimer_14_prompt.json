@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'te' at line 2\n2. Pointer 'te' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int64_t usUntilEarliestTimer(aeEventLoop *eventLoop) {\n    aeTimeEvent *te = eventLoop->timeEventHead;\n    if (te == NULL) return -1;\n\n    aeTimeEvent *earliest = NULL;\n    while (te) {\n        if (!earliest || te->when < earliest->when)\n            earliest = te;\n        te = te->next;\n    }\n\n    monotime now = getMonotonicUs();\n    return (now >= earliest->when) ? 0 : earliest->when - now;\n}\n\n\n// Source: ae.c\n// Lines 251-264\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,91 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'iter' at line 4
+2. Pointer 'entry' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int index_iterator_advance(
+	const git_index_entry **out, git_iterator *i)
+{
+	index_iterator *iter = GIT_CONTAINER_OF(i, index_iterator, base);
+	const git_index_entry *entry = NULL;
+	bool is_submodule;
+	int error = 0;
+
+	iter->base.flags |= GIT_ITERATOR_FIRST_ACCESS;
+
+	while (true) {
+		if (iter->next_idx >= iter->entries.length) {
+			error = GIT_ITEROVER;
+			break;
+		}
+
+		/* we were not asked to expand this pseudotree.  advance over it. */
+		if (iter->skip_tree) {
+			index_iterator_skip_pseudotree(iter);
+			continue;
+		}
+
+		entry = iter->entries.contents[iter->next_idx];
+		is_submodule = S_ISGITLINK(entry->mode);
+
+		if (!iterator_has_started(&iter->base, entry->path, is_submodule)) {
+			iter->next_idx++;
+			continue;
+		}
+
+		if (iterator_has_ended(&iter->base, entry->path)) {
+			error = GIT_ITEROVER;
+			break;
+		}
+
+		/* if we have a list of paths we're interested in, examine it */
+		if (!iterator_pathlist_next_is(&iter->base, entry->path)) {
+			iter->next_idx++;
+			continue;
+		}
+
+		/* if this is a conflict, skip it unless we're including conflicts */
+		if (git_index_entry_is_conflict(entry) &&
+			!iterator__include_conflicts(&iter->base)) {
+			iter->next_idx++;
+			continue;
+		}
+
+		/* we've found what will be our next _file_ entry.  but if we are
+		 * returning trees entries, we may need to return a pseudotree
+		 * entry that will contain this.  don't advance over this entry,
+		 * though, we still need to return it on the next `advance`.
+		 */
+		if (iterator__include_trees(&iter->base) &&
+			index_iterator_create_pseudotree(&entry, iter, entry->path)) {
+
+			/* Note whether this pseudo tree should be expanded or not */
+			iter->skip_tree = iterator__dont_autoexpand(&iter->base);
+			break;
+		}
+
+		iter->next_idx++;
+		break;
+	}
+
+	iter->entry = (error == 0) ? entry : NULL;
+
+	if (out)
+		*out = iter->entry;
+
+	return error;
+}
+
+
+// Source: iterator.c
+// Lines 2107-2178
+
+
+[ANSWER]
+MAY

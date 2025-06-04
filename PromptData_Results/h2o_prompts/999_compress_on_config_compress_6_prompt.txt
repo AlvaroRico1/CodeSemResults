@@ -1,0 +1,72 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'self' at line 3
+2. Pointer 'cmd' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int on_config_compress(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct compress_configurator_t *self = (void *)cmd->configurator;
+    size_t i;
+
+    switch (node->type) {
+    case YOML_TYPE_SCALAR:
+        if (strcasecmp(node->data.scalar, "OFF") == 0) {
+            *self->vars = all_off;
+        } else if (strcasecmp(node->data.scalar, "ON") == 0) {
+            *self->vars = all_on;
+        } else {
+            h2o_configurator_errprintf(cmd, node, "scalar argument must be either of: `OFF`, `ON`");
+            return -1;
+        }
+        break;
+    case YOML_TYPE_SEQUENCE:
+        *self->vars = all_off;
+        for (i = 0; i != node->data.sequence.size; ++i) {
+            yoml_t *element = node->data.sequence.elements[i];
+            if (element->type == YOML_TYPE_SCALAR && strcasecmp(element->data.scalar, "gzip") == 0) {
+                self->vars->gzip.quality = DEFAULT_GZIP_QUALITY;
+            } else if (element->type == YOML_TYPE_SCALAR && strcasecmp(element->data.scalar, "br") == 0) {
+                self->vars->brotli.quality = DEFAULT_BROTLI_QUALITY;
+            } else {
+                h2o_configurator_errprintf(cmd, element, "element of the sequence must be either of: `gzip`, `br`");
+                return -1;
+            }
+        }
+        break;
+    case YOML_TYPE_MAPPING: {
+        yoml_t **gzip_node, **br_node;
+        *self->vars = all_off;
+        if (h2o_configurator_parse_mapping(cmd, node, NULL, "gzip:*,br:*", &gzip_node, &br_node) != 0)
+            return -1;
+        if (gzip_node != NULL && obtain_quality(*gzip_node, 1, 9, DEFAULT_GZIP_QUALITY, &self->vars->gzip.quality) != 0) {
+            h2o_configurator_errprintf(cmd, *gzip_node,
+                                       "value of gzip attribute must be either of `OFF`, `ON` or an integer value between 1 and 9");
+            return -1;
+        }
+        if (br_node != NULL && obtain_quality(*br_node, 0, 11, DEFAULT_BROTLI_QUALITY, &self->vars->brotli.quality) != 0) {
+            h2o_configurator_errprintf(cmd, *br_node,
+                                       "value of br attribute must be either of `OFF`, `ON` or an integer between 0 and 11");
+            return -1;
+        }
+    } break;
+    default:
+        h2o_fatal("unexpected node type");
+        break;
+    }
+
+    return 0;
+}
+
+
+// Source: compress.c
+// Lines 76-128
+
+
+[ANSWER]
+MUST

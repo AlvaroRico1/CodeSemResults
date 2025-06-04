@@ -1,0 +1,29 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'stream' at line 3
+2. Pointer 's' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int checkout_stream_close(git_writestream *s)
+{
+	struct checkout_stream *stream = (struct checkout_stream *)s;
+
+	GIT_ASSERT_ARG(stream);
+	GIT_ASSERT_ARG(stream->open);
+
+	stream->open = 0;
+	return p_close(stream->fd);
+}
+
+
+// Source: checkout.c
+// Lines 1490-1499
+
+
+[ANSWER]
+MUST

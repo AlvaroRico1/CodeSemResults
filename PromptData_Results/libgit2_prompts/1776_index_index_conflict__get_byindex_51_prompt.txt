@@ -1,0 +1,69 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'path' at line 9
+2. Pointer 'conflict_entry' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int index_conflict__get_byindex(
+	const git_index_entry **ancestor_out,
+	const git_index_entry **our_out,
+	const git_index_entry **their_out,
+	git_index *index,
+	size_t n)
+{
+	const git_index_entry *conflict_entry;
+	const char *path = NULL;
+	size_t count;
+	int stage, len = 0;
+
+	GIT_ASSERT_ARG(ancestor_out);
+	GIT_ASSERT_ARG(our_out);
+	GIT_ASSERT_ARG(their_out);
+	GIT_ASSERT_ARG(index);
+
+	*ancestor_out = NULL;
+	*our_out = NULL;
+	*their_out = NULL;
+
+	for (count = git_index_entrycount(index); n < count; ++n) {
+		conflict_entry = git_vector_get(&index->entries, n);
+
+		if (path && index->entries_cmp_path(conflict_entry->path, path) != 0)
+			break;
+
+		stage = GIT_INDEX_ENTRY_STAGE(conflict_entry);
+		path = conflict_entry->path;
+
+		switch (stage) {
+		case 3:
+			*their_out = conflict_entry;
+			len++;
+			break;
+		case 2:
+			*our_out = conflict_entry;
+			len++;
+			break;
+		case 1:
+			*ancestor_out = conflict_entry;
+			len++;
+			break;
+		default:
+			break;
+		};
+	}
+
+	return len;
+}
+
+
+// Source: index.c
+// Lines 1869-1918
+
+
+[ANSWER]
+MUST

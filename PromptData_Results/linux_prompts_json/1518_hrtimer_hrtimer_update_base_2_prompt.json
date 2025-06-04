@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'offs_tai' at line 5\n2. Pointer 'offs_boot' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic inline ktime_t hrtimer_update_base(struct hrtimer_cpu_base *base)\n{\n\tktime_t *offs_real = &base->clock_base[HRTIMER_BASE_REALTIME].offset;\n\tktime_t *offs_boot = &base->clock_base[HRTIMER_BASE_BOOTTIME].offset;\n\tktime_t *offs_tai = &base->clock_base[HRTIMER_BASE_TAI].offset;\n\n\tktime_t now = ktime_get_update_offsets_now(&base->clock_was_set_seq,\n\t\t\t\t\t    offs_real, offs_boot, offs_tai);\n\n\tbase->clock_base[HRTIMER_BASE_REALTIME_SOFT].offset = *offs_real;\n\tbase->clock_base[HRTIMER_BASE_BOOTTIME_SOFT].offset = *offs_boot;\n\tbase->clock_base[HRTIMER_BASE_TAI_SOFT].offset = *offs_tai;\n\n\treturn now;\n}\n\n\n// Source: hrtimer.c\n// Lines 571-585\n",
+  "ANSWER": "MAY"
+}

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'sm' at line 5\n2. Pointer 'sm_loc' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic bool submodule_is_config_only(\n\tcheckout_data *data,\n\tconst char *path)\n{\n\tgit_submodule *sm = NULL;\n\tunsigned int sm_loc = 0;\n\tbool rval = false;\n\n\tif (git_submodule_lookup(&sm, data->repo, path) < 0)\n\t\treturn true;\n\n\tif (git_submodule_location(&sm_loc, sm) < 0 ||\n\t\tsm_loc == GIT_SUBMODULE_STATUS_IN_CONFIG)\n\t\trval = true;\n\n\tgit_submodule_free(sm);\n\n\treturn rval;\n}\n\n\n// Source: checkout.c\n// Lines 458-476\n",
+  "ANSWER": "MAY"
+}

@@ -1,0 +1,36 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'nl' at line 13
+2. Pointer 'summary' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int append_subject(
+	git_str *out,
+	size_t patch_idx,
+	size_t patch_count,
+	const char *summary,
+	git_email_create_options *opts)
+{
+	bool prefix = include_prefix(patch_count, opts);
+	size_t summary_len = summary ? strlen(summary) : 0;
+	int error;
+
+	if (summary_len) {
+		const char *nl = strchr(summary, '\n');
+
+		if (nl)
+			summary_len = (nl - summary);
+	}
+
+
+// Source: email.c
+// Lines 89-105
+
+
+[ANSWER]
+MUST

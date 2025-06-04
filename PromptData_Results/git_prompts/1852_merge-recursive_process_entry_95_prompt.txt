@@ -1,0 +1,131 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'temp' at line 18
+2. Pointer 'ci' at line 17
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int process_entry(struct merge_options *opt,
+			 const char *path, struct stage_data *entry)
+{
+	int clean_merge = 1;
+	int normalize = opt->renormalize;
+
+	struct diff_filespec *o = &entry->stages[1];
+	struct diff_filespec *a = &entry->stages[2];
+	struct diff_filespec *b = &entry->stages[3];
+	int o_valid = is_valid(o);
+	int a_valid = is_valid(a);
+	int b_valid = is_valid(b);
+	o->path = a->path = b->path = (char*)path;
+
+	entry->processed = 1;
+	if (entry->rename_conflict_info) {
+		struct rename_conflict_info *ci = entry->rename_conflict_info;
+		struct diff_filespec *temp;
+		int path_clean;
+
+		path_clean = warn_about_dir_renamed_entries(opt, ci->ren1);
+		path_clean &= warn_about_dir_renamed_entries(opt, ci->ren2);
+
+		/*
+		 * For cases with a single rename, {o,a,b}->path have all been
+		 * set to the rename target path; we need to set two of these
+		 * back to the rename source.
+		 * For rename/rename conflicts, we'll manually fix paths below.
+		 */
+		temp = (opt->branch1 == ci->ren1->branch) ? b : a;
+		o->path = temp->path = ci->ren1->pair->one->path;
+		if (ci->ren2) {
+			assert(opt->branch1 == ci->ren1->branch);
+		}
+
+		switch (ci->rename_type) {
+		case RENAME_NORMAL:
+		case RENAME_ONE_FILE_TO_ONE:
+			clean_merge = handle_rename_normal(opt, path, o, a, b,
+							   ci);
+			break;
+		case RENAME_VIA_DIR:
+			clean_merge = handle_rename_via_dir(opt, ci);
+			break;
+		case RENAME_ADD:
+			/*
+			 * Probably unclean merge, but if the renamed file
+			 * merges cleanly and the result can then be
+			 * two-way merged cleanly with the added file, I
+			 * guess it's a clean merge?
+			 */
+			clean_merge = handle_rename_add(opt, ci);
+			break;
+		case RENAME_DELETE:
+			clean_merge = 0;
+			if (handle_rename_delete(opt, ci))
+				clean_merge = -1;
+			break;
+		case RENAME_ONE_FILE_TO_TWO:
+			/*
+			 * Manually fix up paths; note:
+			 * ren[12]->pair->one->path are equal.
+			 */
+			o->path = ci->ren1->pair->one->path;
+			a->path = ci->ren1->pair->two->path;
+			b->path = ci->ren2->pair->two->path;
+
+			clean_merge = 0;
+			if (handle_rename_rename_1to2(opt, ci))
+				clean_merge = -1;
+			break;
+		case RENAME_TWO_FILES_TO_ONE:
+			/*
+			 * Manually fix up paths; note,
+			 * ren[12]->pair->two->path are actually equal.
+			 */
+			o->path = NULL;
+			a->path = ci->ren1->pair->two->path;
+			b->path = ci->ren2->pair->two->path;
+
+			/*
+			 * Probably unclean merge, but if the two renamed
+			 * files merge cleanly and the two resulting files
+			 * can then be two-way merged cleanly, I guess it's
+			 * a clean merge?
+			 */
+			clean_merge = handle_rename_rename_2to1(opt, ci);
+			break;
+		default:
+			entry->processed = 0;
+			break;
+		}
+		if (path_clean < clean_merge)
+			clean_merge = path_clean;
+	} else if (o_valid && (!a_valid || !b_valid)) {
+		/* Case A: Deleted in one */
+		if ((!a_valid && !b_valid) ||
+		    (!b_valid && blob_unchanged(opt, o, a, normalize, path)) ||
+		    (!a_valid && blob_unchanged(opt, o, b, normalize, path))) {
+			/* Deleted in both or deleted in one and
+			 * unchanged in the other */
+			if (a_valid)
+				output(opt, 2, _("Removing %s"), path);
+			/* do not touch working file if it did not exist */
+			remove_file(opt, 1, path, !a_valid);
+		} else {
+			/* Modify/delete; deleted side may have put a directory in the way */
+			clean_merge = 0;
+			if (handle_modify_delete(opt, path, o, a, b))
+				clean_merge = -1;
+		}
+	} else if ((!o_valid && a_valid && !b_valid) ||
+
+
+// Source: merge-recursive.c
+// Lines 3284-3395
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,1 @@
+ft,tmux/format.c,3,c,tmux/format.c,1,1

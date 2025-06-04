@@ -1,0 +1,1 @@
+consumed,gcc/gcc/gcc.c,245,temp1,gcc/gcc/gcc.c,5,2

@@ -1,0 +1,27 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'bigger' at line 3
+2. Pointer 'new_capacity' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void GrowingArrayByteSink::Expand(size_t amount) {  // Expand by at least 50%.
+  size_t new_capacity = std::max(capacity_ + amount, (3 * capacity_) / 2);
+  char* bigger = new char[new_capacity];
+  memcpy(bigger, buf_, size_);
+  delete[] buf_;
+  buf_ = bigger;
+  capacity_ = new_capacity;
+}
+
+
+// Source: bytestream.cc
+// Lines 123-130
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'len' at line 4\n2. Pointer 'is_data_packet' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nulong cli_safe_read_with_ok(MYSQL *mysql, bool parse_ok, bool *is_data_packet) {\n  DBUG_TRACE;\n  NET *net = &mysql->net;\n  ulong len = 0;\n\n  MYSQL_TRACE(READ_PACKET, mysql, ());\n\n  if (is_data_packet) *is_data_packet = false;\n\n  if (net->vio != nullptr) len = my_net_read(net);\n  return cli_safe_read_with_ok_complete(mysql, parse_ok, is_data_packet, len);\n}\n\n\n// Source: client.cc\n// Lines 1133-1144\n",
+  "ANSWER": "MUST-NOT"
+}

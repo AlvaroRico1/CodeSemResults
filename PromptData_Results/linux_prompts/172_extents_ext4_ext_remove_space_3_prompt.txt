@@ -1,0 +1,130 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'lblk' at line 12
+2. Pointer 'path' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int ext4_ext_remove_space(struct inode *inode, ext4_lblk_t start,
+			  ext4_lblk_t end)
+{
+	struct ext4_sb_info *sbi = EXT4_SB(inode->i_sb);
+	int depth = ext_depth(inode);
+	struct ext4_ext_path *path = NULL;
+	struct partial_cluster partial;
+	handle_t *handle;
+	int i = 0, err = 0;
+
+	partial.pclu = 0;
+	partial.lblk = 0;
+	partial.state = initial;
+
+	ext_debug("truncate since %u to %u\n", start, end);
+
+	/* probably first extent we're gonna free will be last in block */
+	handle = ext4_journal_start(inode, EXT4_HT_TRUNCATE, depth + 1);
+	if (IS_ERR(handle))
+		return PTR_ERR(handle);
+
+again:
+	trace_ext4_ext_remove_space(inode, start, end, depth);
+
+	/*
+	 * Check if we are removing extents inside the extent tree. If that
+	 * is the case, we are going to punch a hole inside the extent tree
+	 * so we have to check whether we need to split the extent covering
+	 * the last block to remove so we can easily remove the part of it
+	 * in ext4_ext_rm_leaf().
+	 */
+	if (end < EXT_MAX_BLOCKS - 1) {
+		struct ext4_extent *ex;
+		ext4_lblk_t ee_block, ex_end, lblk;
+		ext4_fsblk_t pblk;
+
+		/* find extent for or closest extent to this block */
+		path = ext4_find_extent(inode, end, NULL, EXT4_EX_NOCACHE);
+		if (IS_ERR(path)) {
+			ext4_journal_stop(handle);
+			return PTR_ERR(path);
+		}
+		depth = ext_depth(inode);
+		/* Leaf not may not exist only if inode has no blocks at all */
+		ex = path[depth].p_ext;
+		if (!ex) {
+			if (depth) {
+				EXT4_ERROR_INODE(inode,
+						 "path[%d].p_hdr == NULL",
+						 depth);
+				err = -EFSCORRUPTED;
+			}
+			goto out;
+		}
+
+		ee_block = le32_to_cpu(ex->ee_block);
+		ex_end = ee_block + ext4_ext_get_actual_len(ex) - 1;
+
+		/*
+		 * See if the last block is inside the extent, if so split
+		 * the extent at 'end' block so we can easily remove the
+		 * tail of the first part of the split extent in
+		 * ext4_ext_rm_leaf().
+		 */
+		if (end >= ee_block && end < ex_end) {
+
+			/*
+			 * If we're going to split the extent, note that
+			 * the cluster containing the block after 'end' is
+			 * in use to avoid freeing it when removing blocks.
+			 */
+			if (sbi->s_cluster_ratio > 1) {
+				pblk = ext4_ext_pblock(ex) + end - ee_block + 2;
+				partial.pclu = EXT4_B2C(sbi, pblk);
+				partial.state = nofree;
+			}
+
+			/*
+			 * Split the extent in two so that 'end' is the last
+			 * block in the first new extent. Also we should not
+			 * fail removing space due to ENOSPC so try to use
+			 * reserved block if that happens.
+			 */
+			err = ext4_force_split_extent_at(handle, inode, &path,
+							 end + 1, 1);
+			if (err < 0)
+				goto out;
+
+		} else if (sbi->s_cluster_ratio > 1 && end >= ex_end &&
+			   partial.state == initial) {
+			/*
+			 * If we're punching, there's an extent to the right.
+			 * If the partial cluster hasn't been set, set it to
+			 * that extent's first cluster and its state to nofree
+			 * so it won't be freed should it contain blocks to be
+			 * removed. If it's already set (tofree/nofree), we're
+			 * retrying and keep the original partial cluster info
+			 * so a cluster marked tofree as a result of earlier
+			 * extent removal is not lost.
+			 */
+			lblk = ex_end + 1;
+			err = ext4_ext_search_right(inode, path, &lblk, &pblk,
+						    &ex);
+			if (err)
+				goto out;
+			if (pblk) {
+				partial.pclu = EXT4_B2C(sbi, pblk);
+				partial.state = nofree;
+			}
+		}
+	}
+
+
+// Source: extents.c
+// Lines 2888-2998
+
+
+[ANSWER]
+MAY

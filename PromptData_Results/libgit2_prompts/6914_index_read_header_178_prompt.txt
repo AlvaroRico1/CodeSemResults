@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'source' at line 3
+2. Pointer 'buffer' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int read_header(struct index_header *dest, const void *buffer)
+{
+	const struct index_header *source = buffer;
+
+	dest->signature = ntohl(source->signature);
+	if (dest->signature != INDEX_HEADER_SIG)
+		return index_error_invalid("incorrect header signature");
+
+	dest->version = ntohl(source->version);
+	if (dest->version < INDEX_VERSION_NUMBER_LB ||
+		dest->version > INDEX_VERSION_NUMBER_UB)
+		return index_error_invalid("incorrect header version");
+
+	dest->entry_count = ntohl(source->entry_count);
+	return 0;
+}
+
+
+// Source: index.c
+// Lines 2561-2576
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,30 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'n' at line 2
+2. Pointer 'n' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+listNode *listIndex(list *list, long index) {
+    listNode *n;
+
+    if (index < 0) {
+        index = (-index)-1;
+        n = list->tail;
+        while(index-- && n) n = n->prev;
+    } else {
+        n = list->head;
+        while(index-- && n) n = n->next;
+    }
+
+
+// Source: adlist.c
+// Lines 316-326
+
+
+[ANSWER]
+MUST

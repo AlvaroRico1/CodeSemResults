@@ -1,0 +1,32 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'occ' at line 3
+2. Pointer 'node' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+et_root (struct et_node *node)
+{
+  struct et_occ *occ = node->rightmost_occ, *r;
+
+  /* The root of the tree corresponds to the rightmost occurrence in the
+     represented path.  */
+  et_splay (occ);
+  for (r = occ; r->next; r = r->next)
+    continue;
+  et_splay (r);
+
+  return r->of;
+}
+
+
+// Source: et-forest.c
+// Lines 755-767
+
+
+[ANSWER]
+MUST

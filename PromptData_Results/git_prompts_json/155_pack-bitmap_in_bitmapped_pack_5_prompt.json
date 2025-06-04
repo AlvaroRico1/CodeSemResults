@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'object' at line 5\n2. Pointer 'roots' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int in_bitmapped_pack(struct bitmap_index *bitmap_git,\n\t\t\t     struct object_list *roots)\n{\n\twhile (roots) {\n\t\tstruct object *object = roots->item;\n\t\troots = roots->next;\n\n\t\tif (bitmap_is_midx(bitmap_git)) {\n\t\t\tif (bsearch_midx(&object->oid, bitmap_git->midx, NULL))\n\t\t\t\treturn 1;\n\t\t} else {\n\t\t\tif (find_pack_entry_one(object->oid.hash, bitmap_git->pack) > 0)\n\t\t\t\treturn 1;\n\t\t}\n\t}\n\n\n// Source: pack-bitmap.c\n// Lines 940-954\n",
+  "ANSWER": "MUST"
+}

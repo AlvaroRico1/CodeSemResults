@@ -1,0 +1,54 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'mysql' at line 4
+2. Pointer 'ctx' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static mysql_state_machine_status authsm_run_second_authenticate_user(
+    mysql_async_auth *ctx) {
+  DBUG_TRACE;
+  MYSQL *mysql = ctx->mysql;
+  /* The server asked to use a different authentication plugin */
+  if (ctx->pkt_length < 2) {
+    set_mysql_error(mysql, CR_MALFORMED_PACKET,
+                    unknown_sqlstate); /* purecov: inspected */
+    return STATE_MACHINE_FAILED;
+  } else {
+    /* "use different plugin" packet */
+    uint len;
+    ctx->auth_plugin_name = (char *)mysql->net.read_pos + 1;
+    len = (uint)strlen(
+        ctx->auth_plugin_name); /* safe as my_net_read always appends \0 */
+    ctx->mpvio.cached_server_reply.pkt_len = ctx->pkt_length - len - 2;
+    ctx->mpvio.cached_server_reply.pkt = mysql->net.read_pos + len + 2;
+    DBUG_PRINT("info", ("change plugin packet from server for plugin %s",
+                        ctx->auth_plugin_name));
+  }
+  if (!(ctx->auth_plugin = (auth_plugin_t *)mysql_client_find_plugin(
+            mysql, ctx->auth_plugin_name, MYSQL_CLIENT_AUTHENTICATION_PLUGIN)))
+    return STATE_MACHINE_FAILED;
+
+  if (check_plugin_enabled(mysql, ctx)) return STATE_MACHINE_FAILED;
+
+  MYSQL_TRACE(AUTH_PLUGIN, mysql, (ctx->auth_plugin->name));
+
+  ctx->mpvio.plugin = ctx->auth_plugin;
+  ctx->res = ctx->auth_plugin->authenticate_user(
+      (struct MYSQL_PLUGIN_VIO *)&ctx->mpvio, mysql);
+
+  ctx->state_function = authsm_handle_second_authenticate_user;
+  return STATE_MACHINE_CONTINUE;
+}
+
+
+// Source: client.cc
+// Lines 5495-5529
+
+
+[ANSWER]
+MUST-NOT

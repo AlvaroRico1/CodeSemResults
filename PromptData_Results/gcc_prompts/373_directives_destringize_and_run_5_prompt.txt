@@ -1,0 +1,137 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'dest' at line 5
+2. Pointer 'src' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+destringize_and_run (cpp_reader *pfile, const cpp_string *in,
+		     location_t expansion_loc)
+{
+  const unsigned char *src, *limit;
+  char *dest, *result;
+  cpp_context *saved_context;
+  cpp_token *saved_cur_token;
+  tokenrun *saved_cur_run;
+  cpp_token *toks;
+  int count;
+  const struct directive *save_directive;
+
+  dest = result = (char *) alloca (in->len - 1);
+  src = in->text + 1 + (in->text[0] == 'L');
+  limit = in->text + in->len - 1;
+  while (src < limit)
+    {
+      /* We know there is a character following the backslash.  */
+      if (*src == '\\' && (src[1] == '\\' || src[1] == '"'))
+	src++;
+      *dest++ = *src++;
+    }
+  *dest = '\n';
+
+  /* Ugh; an awful kludge.  We are really not set up to be lexing
+     tokens when in the middle of a macro expansion.  Use a new
+     context to force cpp_get_token to lex, and so skip_rest_of_line
+     doesn't go beyond the end of the text.  Also, remember the
+     current lexing position so we can return to it later.
+
+     Something like line-at-a-time lexing should remove the need for
+     this.  */
+  saved_context = pfile->context;
+  saved_cur_token = pfile->cur_token;
+  saved_cur_run = pfile->cur_run;
+
+  pfile->context = XCNEW (cpp_context);
+
+  /* Inline run_directive, since we need to delay the _cpp_pop_buffer
+     until we've read all of the tokens that we want.  */
+  cpp_push_buffer (pfile, (const uchar *) result, dest - result,
+		   /* from_stage3 */ true);
+  /* ??? Antique Disgusting Hack.  What does this do?  */
+  if (pfile->buffer->prev)
+    pfile->buffer->file = pfile->buffer->prev->file;
+
+  start_directive (pfile);
+  _cpp_clean_line (pfile);
+  save_directive = pfile->directive;
+  pfile->directive = &dtable[T_PRAGMA];
+  do_pragma (pfile);
+  end_directive (pfile, 1);
+  pfile->directive = save_directive;
+
+  /* We always insert at least one token, the directive result.  It'll
+     either be a CPP_PADDING or a CPP_PRAGMA.  In the later case, we 
+     need to insert *all* of the tokens, including the CPP_PRAGMA_EOL.  */
+
+  /* If we're not handling the pragma internally, read all of the tokens from
+     the string buffer now, while the string buffer is still installed.  */
+  /* ??? Note that the token buffer allocated here is leaked.  It's not clear
+     to me what the true lifespan of the tokens are.  It would appear that
+     the lifespan is the entire parse of the main input stream, in which case
+     this may not be wrong.  */
+  if (pfile->directive_result.type == CPP_PRAGMA)
+    {
+      int maxcount;
+
+      count = 1;
+      maxcount = 50;
+      toks = XNEWVEC (cpp_token, maxcount);
+      toks[0] = pfile->directive_result;
+
+      do
+	{
+	  if (count == maxcount)
+	    {
+	      maxcount = maxcount * 3 / 2;
+	      toks = XRESIZEVEC (cpp_token, toks, maxcount);
+	    }
+	  toks[count] = *cpp_get_token (pfile);
+	  /* _Pragma is a builtin, so we're not within a macro-map, and so
+	     the token locations are set to bogus ordinary locations
+	     near to, but after that of the "_Pragma".
+	     Paper over this by setting them equal to the location of the
+	     _Pragma itself (PR preprocessor/69126).  */
+	  toks[count].src_loc = expansion_loc;
+	  /* Macros have been already expanded by cpp_get_token
+	     if the pragma allowed expansion.  */
+	  toks[count++].flags |= NO_EXPAND;
+	}
+      while (toks[count-1].type != CPP_PRAGMA_EOL);
+    }
+  else
+    {
+      count = 1;
+      toks = XNEW (cpp_token);
+      toks[0] = pfile->directive_result;
+
+      /* If we handled the entire pragma internally, make sure we get the
+	 line number correct for the next token.  */
+      if (pfile->cb.line_change)
+	pfile->cb.line_change (pfile, pfile->cur_token, false);
+    }
+
+  /* Finish inlining run_directive.  */
+  pfile->buffer->file = NULL;
+  _cpp_pop_buffer (pfile);
+
+  /* Reset the old macro state before ...  */
+  XDELETE (pfile->context);
+  pfile->context = saved_context;
+  pfile->cur_token = saved_cur_token;
+  pfile->cur_run = saved_cur_run;
+
+  /* ... inserting the new tokens we collected.  */
+  _cpp_push_token_context (pfile, NULL, toks, count);
+}
+
+
+// Source: directives.c
+// Lines 1818-1935
+
+
+[ANSWER]
+MAY

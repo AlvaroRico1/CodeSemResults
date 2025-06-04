@@ -1,0 +1,32 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'bin_attr' at line 5
+2. Pointer 'attr' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void remove_files(struct kernfs_node *parent,
+			 const struct attribute_group *grp)
+{
+	struct attribute *const *attr;
+	struct bin_attribute *const *bin_attr;
+
+	if (grp->attrs)
+		for (attr = grp->attrs; *attr; attr++)
+			kernfs_remove_by_name(parent, (*attr)->name);
+	if (grp->bin_attrs)
+		for (bin_attr = grp->bin_attrs; *bin_attr; bin_attr++)
+			kernfs_remove_by_name(parent, (*bin_attr)->attr.name);
+}
+
+
+// Source: group.c
+// Lines 19-31
+
+
+[ANSWER]
+MAY

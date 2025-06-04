@@ -1,0 +1,44 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'pd' at line 3
+2. Pointer 'ttyctx' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+popup_set_client_cb(struct tty_ctx *ttyctx, struct client *c)
+{
+	struct popup_data	*pd = ttyctx->arg;
+
+	if (c != pd->c)
+		return (0);
+	if (pd->c->flags & CLIENT_REDRAWOVERLAY)
+		return (0);
+
+	ttyctx->bigger = 0;
+	ttyctx->wox = 0;
+	ttyctx->woy = 0;
+	ttyctx->wsx = c->tty.sx;
+	ttyctx->wsy = c->tty.sy;
+
+	if (pd->lines == BOX_LINES_NONE) {
+		ttyctx->xoff = ttyctx->rxoff = pd->px;
+		ttyctx->yoff = ttyctx->ryoff = pd->py;
+	} else {
+		ttyctx->xoff = ttyctx->rxoff = pd->px + 1;
+		ttyctx->yoff = ttyctx->ryoff = pd->py + 1;
+	}
+
+	return (1);
+}
+
+
+// Source: popup.c
+// Lines 106-130
+
+
+[ANSWER]
+MUST

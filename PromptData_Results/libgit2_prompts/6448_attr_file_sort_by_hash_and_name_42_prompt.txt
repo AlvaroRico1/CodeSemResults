@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'b' at line 4
+2. Pointer 'b_raw' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int sort_by_hash_and_name(const void *a_raw, const void *b_raw)
+{
+	const git_attr_name *a = a_raw;
+	const git_attr_name *b = b_raw;
+
+	if (b->name_hash < a->name_hash)
+		return 1;
+	else if (b->name_hash > a->name_hash)
+		return -1;
+	else
+		return strcmp(b->name, a->name);
+}
+
+
+// Source: attr_file.c
+// Lines 841-852
+
+
+[ANSWER]
+MUST

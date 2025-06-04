@@ -1,0 +1,223 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'descriptor' at line 29
+2. Pointer 'options_descriptor' at line 16
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool DescriptorBuilder::OptionInterpreter::InterpretSingleOption(
+    Message* options, const std::vector<int>& src_path,
+    const std::vector<int>& options_path) {
+  // First do some basic validation.
+  if (uninterpreted_option_->name_size() == 0) {
+    // This should never happen unless the parser has gone seriously awry or
+    // someone has manually created the uninterpreted option badly.
+    return AddNameError("Option must have a name.");
+  }
+  if (uninterpreted_option_->name(0).name_part() == "uninterpreted_option") {
+    return AddNameError(
+        "Option must not use reserved name "
+        "\"uninterpreted_option\".");
+  }
+
+  const Descriptor* options_descriptor = nullptr;
+  // Get the options message's descriptor from the builder's pool, so that we
+  // get the version that knows about any extension options declared in the file
+  // we're currently building. The descriptor should be there as long as the
+  // file we're building imported descriptor.proto.
+
+  // Note that we use DescriptorBuilder::FindSymbolNotEnforcingDeps(), not
+  // DescriptorPool::FindMessageTypeByName() because we're already holding the
+  // pool's mutex, and the latter method locks it again.  We don't use
+  // FindSymbol() because files that use custom options only need to depend on
+  // the file that defines the option, not descriptor.proto itself.
+  Symbol symbol = builder_->FindSymbolNotEnforcingDeps(
+      options->GetDescriptor()->full_name());
+  options_descriptor = symbol.descriptor();
+  if (options_descriptor == nullptr) {
+    // The options message's descriptor was not in the builder's pool, so use
+    // the standard version from the generated pool. We're not holding the
+    // generated pool's mutex, so we can search it the straightforward way.
+    options_descriptor = options->GetDescriptor();
+  }
+  GOOGLE_CHECK(options_descriptor);
+
+  // We iterate over the name parts to drill into the submessages until we find
+  // the leaf field for the option. As we drill down we remember the current
+  // submessage's descriptor in |descriptor| and the next field in that
+  // submessage in |field|. We also track the fields we're drilling down
+  // through in |intermediate_fields|. As we go, we reconstruct the full option
+  // name in |debug_msg_name|, for use in error messages.
+  const Descriptor* descriptor = options_descriptor;
+  const FieldDescriptor* field = nullptr;
+  std::vector<const FieldDescriptor*> intermediate_fields;
+  std::string debug_msg_name = "";
+
+  std::vector<int> dest_path = options_path;
+
+  for (int i = 0; i < uninterpreted_option_->name_size(); ++i) {
+    builder_->undefine_resolved_name_.clear();
+    const std::string& name_part = uninterpreted_option_->name(i).name_part();
+    if (debug_msg_name.size() > 0) {
+      debug_msg_name += ".";
+    }
+    if (uninterpreted_option_->name(i).is_extension()) {
+      debug_msg_name += "(" + name_part + ")";
+      // Search for the extension's descriptor as an extension in the builder's
+      // pool. Note that we use DescriptorBuilder::LookupSymbol(), not
+      // DescriptorPool::FindExtensionByName(), for two reasons: 1) It allows
+      // relative lookups, and 2) because we're already holding the pool's
+      // mutex, and the latter method locks it again.
+      symbol =
+          builder_->LookupSymbol(name_part, options_to_interpret_->name_scope);
+      field = symbol.field_descriptor();
+      // If we don't find the field then the field's descriptor was not in the
+      // builder's pool, but there's no point in looking in the generated
+      // pool. We require that you import the file that defines any extensions
+      // you use, so they must be present in the builder's pool.
+    } else {
+      debug_msg_name += name_part;
+      // Search for the field's descriptor as a regular field.
+      field = descriptor->FindFieldByName(name_part);
+    }
+
+    if (field == nullptr) {
+      if (get_allow_unknown(builder_->pool_)) {
+        // We can't find the option, but AllowUnknownDependencies() is enabled,
+        // so we will just leave it as uninterpreted.
+        AddWithoutInterpreting(*uninterpreted_option_, options);
+        return true;
+      } else if (!(builder_->undefine_resolved_name_).empty()) {
+        // Option is resolved to a name which is not defined.
+        return AddNameError(
+            "Option \"" + debug_msg_name + "\" is resolved to \"(" +
+            builder_->undefine_resolved_name_ +
+            ")\", which is not defined. The innermost scope is searched first "
+            "in name resolution. Consider using a leading '.'(i.e., \"(." +
+            debug_msg_name.substr(1) +
+            "\") to start from the outermost scope.");
+      } else {
+        return AddNameError(
+            "Option \"" + debug_msg_name +
+            "\" unknown. Ensure that your proto" +
+            " definition file imports the proto which defines the option.");
+      }
+    } else if (field->containing_type() != descriptor) {
+      if (get_is_placeholder(field->containing_type())) {
+        // The field is an extension of a placeholder type, so we can't
+        // reliably verify whether it is a valid extension to use here (e.g.
+        // we don't know if it is an extension of the correct *Options message,
+        // or if it has a valid field number, etc.).  Just leave it as
+        // uninterpreted instead.
+        AddWithoutInterpreting(*uninterpreted_option_, options);
+        return true;
+      } else {
+        // This can only happen if, due to some insane misconfiguration of the
+        // pools, we find the options message in one pool but the field in
+        // another. This would probably imply a hefty bug somewhere.
+        return AddNameError("Option field \"" + debug_msg_name +
+                            "\" is not a field or extension of message \"" +
+                            descriptor->name() + "\".");
+      }
+    } else {
+      // accumulate field numbers to form path to interpreted option
+      dest_path.push_back(field->number());
+
+      if (i < uninterpreted_option_->name_size() - 1) {
+        if (field->cpp_type() != FieldDescriptor::CPPTYPE_MESSAGE) {
+          return AddNameError("Option \"" + debug_msg_name +
+                              "\" is an atomic type, not a message.");
+        } else if (field->is_repeated()) {
+          return AddNameError("Option field \"" + debug_msg_name +
+                              "\" is a repeated message. Repeated message "
+                              "options must be initialized using an "
+                              "aggregate value.");
+        } else {
+          // Drill down into the submessage.
+          intermediate_fields.push_back(field);
+          descriptor = field->message_type();
+        }
+      }
+    }
+  }
+
+  // We've found the leaf field. Now we use UnknownFieldSets to set its value
+  // on the options message. We do so because the message may not yet know
+  // about its extension fields, so we may not be able to set the fields
+  // directly. But the UnknownFieldSets will serialize to the same wire-format
+  // message, so reading that message back in once the extension fields are
+  // known will populate them correctly.
+
+  // First see if the option is already set.
+  if (!field->is_repeated() &&
+      !ExamineIfOptionIsSet(
+          intermediate_fields.begin(), intermediate_fields.end(), field,
+          debug_msg_name,
+          options->GetReflection()->GetUnknownFields(*options))) {
+    return false;  // ExamineIfOptionIsSet() already added the error.
+  }
+
+  // First set the value on the UnknownFieldSet corresponding to the
+  // innermost message.
+  std::unique_ptr<UnknownFieldSet> unknown_fields(new UnknownFieldSet());
+  if (!SetOptionValue(field, unknown_fields.get())) {
+    return false;  // SetOptionValue() already added the error.
+  }
+
+  // Now wrap the UnknownFieldSet with UnknownFieldSets corresponding to all
+  // the intermediate messages.
+  for (std::vector<const FieldDescriptor*>::reverse_iterator iter =
+           intermediate_fields.rbegin();
+       iter != intermediate_fields.rend(); ++iter) {
+    std::unique_ptr<UnknownFieldSet> parent_unknown_fields(
+        new UnknownFieldSet());
+    switch ((*iter)->type()) {
+      case FieldDescriptor::TYPE_MESSAGE: {
+        std::string* outstr =
+            parent_unknown_fields->AddLengthDelimited((*iter)->number());
+        GOOGLE_CHECK(unknown_fields->SerializeToString(outstr))
+            << "Unexpected failure while serializing option submessage "
+            << debug_msg_name << "\".";
+        break;
+      }
+
+      case FieldDescriptor::TYPE_GROUP: {
+        parent_unknown_fields->AddGroup((*iter)->number())
+            ->MergeFrom(*unknown_fields);
+        break;
+      }
+
+      default:
+        GOOGLE_LOG(FATAL) << "Invalid wire type for CPPTYPE_MESSAGE: "
+                   << (*iter)->type();
+        return false;
+    }
+    unknown_fields.reset(parent_unknown_fields.release());
+  }
+
+  // Now merge the UnknownFieldSet corresponding to the top-level message into
+  // the options message.
+  options->GetReflection()->MutableUnknownFields(options)->MergeFrom(
+      *unknown_fields);
+
+  // record the element path of the interpreted option
+  if (field->is_repeated()) {
+    int index = repeated_option_counts_[dest_path]++;
+    dest_path.push_back(index);
+  }
+  interpreted_paths_[src_path] = dest_path;
+
+  return true;
+}
+
+
+// Source: descriptor.cc
+// Lines 7235-7438
+
+
+[ANSWER]
+MUST

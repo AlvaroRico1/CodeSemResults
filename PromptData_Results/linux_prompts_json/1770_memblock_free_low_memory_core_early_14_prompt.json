@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'end' at line 4\n2. Pointer 'start' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic unsigned long __init free_low_memory_core_early(void)\n{\n\tunsigned long count = 0;\n\tphys_addr_t start, end;\n\tu64 i;\n\n\tmemblock_clear_hotplug(0, -1);\n\n\tfor_each_reserved_mem_region(i, &start, &end)\n\t\treserve_bootmem_region(start, end);\n\n\t/*\n\t * We need to use NUMA_NO_NODE instead of NODE_DATA(0)->node_id\n\t *  because in some case like Node0 doesn't have RAM installed\n\t *  low ram will be on Node1\n\t */\n\tfor_each_free_mem_range(i, NUMA_NO_NODE, MEMBLOCK_NONE, &start, &end,\n\t\t\t\tNULL)\n\t\tcount += __free_memory_core(start, end);\n\n\treturn count;\n}\n\n\n// Source: memblock.c\n// Lines 1923-1944\n",
+  "ANSWER": "MAY"
+}

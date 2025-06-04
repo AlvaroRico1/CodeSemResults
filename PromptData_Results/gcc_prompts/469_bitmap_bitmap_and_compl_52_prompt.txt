@@ -1,0 +1,130 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'dst_prev_pnext' at line 7
+2. Pointer 'dst' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bitmap_and_compl (bitmap dst, const_bitmap a, const_bitmap b)
+{
+  bitmap_element *dst_elt = dst->first;
+  const bitmap_element *a_elt = a->first;
+  const bitmap_element *b_elt = b->first;
+  bitmap_element *dst_prev = NULL;
+  bitmap_element **dst_prev_pnext = &dst->first;
+  bool changed = false;
+
+  gcc_checking_assert (!dst->tree_form && !a->tree_form && !b->tree_form);
+  gcc_assert (dst != a && dst != b);
+
+  if (a == b)
+    {
+      changed = !bitmap_empty_p (dst);
+      bitmap_clear (dst);
+      return changed;
+    }
+
+  while (a_elt)
+    {
+      while (b_elt && b_elt->indx < a_elt->indx)
+	b_elt = b_elt->next;
+
+      if (!b_elt || b_elt->indx > a_elt->indx)
+	{
+	  changed = bitmap_elt_copy (dst, dst_elt, dst_prev, a_elt, changed);
+	  dst_prev = *dst_prev_pnext;
+	  dst_prev_pnext = &dst_prev->next;
+	  dst_elt = *dst_prev_pnext;
+	  a_elt = a_elt->next;
+	}
+
+      else
+	{
+	  /* Matching elts, generate A & ~B.  */
+	  unsigned ix;
+	  BITMAP_WORD ior = 0;
+
+	  if (!changed && dst_elt && dst_elt->indx == a_elt->indx)
+	    {
+	      for (ix = 0; ix < BITMAP_ELEMENT_WORDS; ix++)
+		{
+		  BITMAP_WORD r = a_elt->bits[ix] & ~b_elt->bits[ix];
+
+		  if (dst_elt->bits[ix] != r)
+		    {
+		      changed = true;
+		      dst_elt->bits[ix] = r;
+		    }
+		  ior |= r;
+		}
+	    }
+	  else
+	    {
+	      bool new_element;
+	      if (!dst_elt || dst_elt->indx > a_elt->indx)
+		{
+		  dst_elt = bitmap_list_insert_element_after (dst, dst_prev,
+							      a_elt->indx);
+		  new_element = true;
+		}
+	      else
+		{
+		  dst_elt->indx = a_elt->indx;
+		  new_element = false;
+		}
+
+	      for (ix = 0; ix < BITMAP_ELEMENT_WORDS; ix++)
+		{
+		  BITMAP_WORD r = a_elt->bits[ix] & ~b_elt->bits[ix];
+
+		  dst_elt->bits[ix] = r;
+		  ior |= r;
+		}
+
+	      if (ior)
+	        changed = true;
+	      else
+	        {
+	          changed |= !new_element;
+		  bitmap_list_unlink_element (dst, dst_elt);
+		  dst_elt = *dst_prev_pnext;
+		}
+	    }
+
+	  if (ior)
+	    {
+	      dst_prev = *dst_prev_pnext;
+	      dst_prev_pnext = &dst_prev->next;
+	      dst_elt = *dst_prev_pnext;
+	    }
+	  a_elt = a_elt->next;
+	  b_elt = b_elt->next;
+	}
+    }
+
+  /* Ensure that dst->current is valid.  */
+  dst->current = dst->first;
+
+  if (dst_elt)
+    {
+      changed = true;
+      bitmap_elt_clear_from (dst, dst_elt);
+    }
+  gcc_checking_assert (!dst->current == !dst->first);
+  if (dst->current)
+    dst->indx = dst->current->indx;
+
+  return changed;
+}
+
+
+// Source: bitmap.c
+// Lines 1402-1512
+
+
+[ANSWER]
+MUST

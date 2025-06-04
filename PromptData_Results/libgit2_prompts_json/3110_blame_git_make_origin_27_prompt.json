@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'o' at line 3\n2. Pointer 'blob' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int make_origin(git_blame__origin **out, git_commit *commit, const char *path)\n{\n\tgit_blame__origin *o;\n\tgit_object *blob;\n\tsize_t path_len = strlen(path), alloc_len;\n\tint error = 0;\n\n\tif ((error = git_object_lookup_bypath(&blob, (git_object*)commit,\n\t\t\tpath, GIT_OBJECT_BLOB)) < 0)\n\t\treturn error;\n\n\tGIT_ERROR_CHECK_ALLOC_ADD(&alloc_len, sizeof(*o), path_len);\n\tGIT_ERROR_CHECK_ALLOC_ADD(&alloc_len, alloc_len, 1);\n\to = git__calloc(1, alloc_len);\n\tGIT_ERROR_CHECK_ALLOC(o);\n\n\to->commit = commit;\n\to->blob = (git_blob *) blob;\n\to->refcnt = 1;\n\tstrcpy(o->path, path);\n\n\t*out = o;\n\n\treturn 0;\n}\n\n\n// Source: blame_git.c\n// Lines 38-62\n",
+  "ANSWER": "MUST"
+}

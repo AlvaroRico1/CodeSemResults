@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'worktree' at line 5\n2. Pointer 'branch' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid test_worktree_refs__delete_succeeds_after_pruning_worktree(void)\n{\n\tgit_worktree_prune_options opts = GIT_WORKTREE_PRUNE_OPTIONS_INIT;\n\tgit_reference *branch;\n\tgit_worktree *worktree;\n\n\topts.flags = GIT_WORKTREE_PRUNE_VALID;\n\n\tcl_git_pass(git_worktree_lookup(&worktree, fixture.repo, fixture.worktreename));\n\tcl_git_pass(git_worktree_prune(worktree, &opts));\n\tgit_worktree_free(worktree);\n\n\tcl_git_pass(git_branch_lookup(&branch, fixture.repo,\n\t\t    \"testrepo-worktree\", GIT_BRANCH_LOCAL));\n\tcl_git_pass(git_branch_delete(branch));\n\tgit_reference_free(branch);\n}\n\n\n// Source: refs.c\n// Lines 119-135\n",
+  "ANSWER": "MAY"
+}

@@ -1,0 +1,1 @@
+is_dir,libgit2/tests/clar/clar_libgit2.c,1,path,libgit2/tests/clar/clar_libgit2.c,3,0

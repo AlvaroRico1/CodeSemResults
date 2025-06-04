@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'pipe' at line 5\n2. Pointer 'idmap' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int nfs_idmap_pipe_create(struct dentry *dir,\n\t\tstruct rpc_pipe_dir_object *pdo)\n{\n\tstruct idmap *idmap = pdo->pdo_data;\n\tstruct rpc_pipe *pipe = idmap->idmap_pipe;\n\tstruct dentry *dentry;\n\n\tdentry = rpc_mkpipe_dentry(dir, \"idmap\", idmap, pipe);\n\tif (IS_ERR(dentry))\n\t\treturn PTR_ERR(dentry);\n\tpipe->dentry = dentry;\n\treturn 0;\n}\n\n\n// Source: nfs4idmap.c\n// Lines 434-446\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,197 @@
+int PROFILING::fill_statistics_info(THD *thd_arg, TABLE_LIST *tables) {
+  DBUG_TRACE;
+  TABLE *table = tables->table;
+  ulonglong row_number = 0;
+
+  QUERY_PROFILE *query;
+  /* Go through each query in this thread's stored history... */
+  void *history_iterator;
+  for (history_iterator = history.new_iterator(); history_iterator != nullptr;
+       history_iterator = history.iterator_next(history_iterator)) {
+    query = history.iterator_value(history_iterator);
+
+    /*
+      Because we put all profiling info into a table that may be reordered, let
+      us also include a numbering of each state per query.  The query_id and
+      the "seq" together are unique.
+    */
+    ulong seq;
+
+    void *entry_iterator;
+    PROF_MEASUREMENT *entry, *previous = nullptr;
+    /* ...and for each query, go through all its state-change steps. */
+    for (entry_iterator = query->entries.new_iterator();
+         entry_iterator != nullptr;
+         entry_iterator = query->entries.iterator_next(entry_iterator),
+        previous = entry, row_number++) {
+      entry = query->entries.iterator_value(entry_iterator);
+      seq = entry->m_seq;
+
+      /* Skip the first.  We count spans of fence, not fence-posts. */
+      if (previous == nullptr) continue;
+
+      if (thd_arg->lex->sql_command == SQLCOM_SHOW_PROFILE) {
+        /*
+          We got here via a SHOW command.  That means that we stored
+          information about the query we wish to show and that isn't
+          in a WHERE clause at a higher level to filter out rows we
+          wish to exclude.
+
+          Because that functionality isn't available in the server yet,
+          we must filter here, at the wrong level.  Once one can con-
+          struct where and having conditions at the SQL layer, then this
+          condition should be ripped out.
+        */
+        if (thd_arg->lex->show_profile_query_id ==
+            0) /* 0 == show final query */
+        {
+          if (query != last) continue;
+        } else {
+          if (thd_arg->lex->show_profile_query_id != query->profiling_query_id)
+            continue;
+        }
+      }
+
+      /* Set default values for this row. */
+      restore_record(table, s->default_values);
+
+      /*
+        The order of these fields is set by the  query_profile_statistics_info
+        array.
+      */
+      table->field[0]->store((ulonglong)query->profiling_query_id, true);
+      table->field[1]->store((ulonglong)seq,
+                             true); /* the step in the sequence */
+      /*
+        This entry, n, has a point in time, T(n), and a status phrase, S(n).
+        The status phrase S(n) describes the period of time that begins at
+        T(n).  The previous status phrase S(n-1) describes the period of time
+        that starts at T(n-1) and ends at T(n).  Since we want to describe the
+        time that a status phrase took T(n)-T(n-1), this line must describe the
+        previous status.
+      */
+      table->field[2]->store(previous->status, strlen(previous->status),
+                             system_charset_info);
+
+      my_decimal duration_decimal;
+      double2my_decimal(
+          E_DEC_FATAL_ERROR,
+          (entry->time_usecs - previous->time_usecs) / (1000.0 * 1000),
+          &duration_decimal);
+
+      table->field[3]->store_decimal(&duration_decimal);
+
+#ifdef HAVE_GETRUSAGE
+
+      my_decimal cpu_utime_decimal, cpu_stime_decimal;
+
+      double2my_decimal(
+          E_DEC_FATAL_ERROR,
+          RUSAGE_DIFF_USEC(entry->rusage.ru_utime, previous->rusage.ru_utime) /
+              (1000.0 * 1000),
+          &cpu_utime_decimal);
+
+      double2my_decimal(
+          E_DEC_FATAL_ERROR,
+          RUSAGE_DIFF_USEC(entry->rusage.ru_stime, previous->rusage.ru_stime) /
+              (1000.0 * 1000),
+          &cpu_stime_decimal);
+
+      table->field[4]->store_decimal(&cpu_utime_decimal);
+      table->field[5]->store_decimal(&cpu_stime_decimal);
+      table->field[4]->set_notnull();
+      table->field[5]->set_notnull();
+#elif defined(_WIN32)
+      my_decimal cpu_utime_decimal, cpu_stime_decimal;
+
+      double2my_decimal(E_DEC_FATAL_ERROR,
+                        GetTimeDiffInSeconds(&entry->ftUser, &previous->ftUser),
+                        &cpu_utime_decimal);
+      double2my_decimal(
+          E_DEC_FATAL_ERROR,
+          GetTimeDiffInSeconds(&entry->ftKernel, &previous->ftKernel),
+          &cpu_stime_decimal);
+
+      // Store the result.
+      table->field[4]->store_decimal(&cpu_utime_decimal);
+      table->field[5]->store_decimal(&cpu_stime_decimal);
+      table->field[4]->set_notnull();
+      table->field[5]->set_notnull();
+#else
+      /* TODO: Add CPU-usage info for non-BSD systems */
+#endif
+
+#ifdef HAVE_GETRUSAGE
+      table->field[6]->store(
+          (uint32)(entry->rusage.ru_nvcsw - previous->rusage.ru_nvcsw));
+      table->field[6]->set_notnull();
+      table->field[7]->store(
+          (uint32)(entry->rusage.ru_nivcsw - previous->rusage.ru_nivcsw));
+      table->field[7]->set_notnull();
+#else
+      /* TODO: Add context switch info for non-BSD systems */
+#endif
+
+#ifdef HAVE_GETRUSAGE
+      table->field[8]->store(
+          (uint32)(entry->rusage.ru_inblock - previous->rusage.ru_inblock));
+      table->field[8]->set_notnull();
+      table->field[9]->store(
+          (uint32)(entry->rusage.ru_oublock - previous->rusage.ru_oublock));
+      table->field[9]->set_notnull();
+#else
+      /* TODO: Add block IO info for non-BSD systems */
+#endif
+
+#ifdef HAVE_GETRUSAGE
+      table->field[10]->store(
+          (uint32)(entry->rusage.ru_msgsnd - previous->rusage.ru_msgsnd), true);
+      table->field[10]->set_notnull();
+      table->field[11]->store(
+          (uint32)(entry->rusage.ru_msgrcv - previous->rusage.ru_msgrcv), true);
+      table->field[11]->set_notnull();
+#else
+      /* TODO: Add message info for non-BSD systems */
+#endif
+
+#ifdef HAVE_GETRUSAGE
+      table->field[12]->store(
+          (uint32)(entry->rusage.ru_majflt - previous->rusage.ru_majflt), true);
+      table->field[12]->set_notnull();
+      table->field[13]->store(
+          (uint32)(entry->rusage.ru_minflt - previous->rusage.ru_minflt), true);
+      table->field[13]->set_notnull();
+#else
+      /* TODO: Add page fault info for non-BSD systems */
+#endif
+
+#ifdef HAVE_GETRUSAGE
+      table->field[14]->store(
+          (uint32)(entry->rusage.ru_nswap - previous->rusage.ru_nswap), true);
+      table->field[14]->set_notnull();
+#else
+      /* TODO: Add swap info for non-BSD systems */
+#endif
+
+      /* Emit the location that started this step, not that ended it. */
+      if ((previous->function != nullptr) && (previous->file != nullptr)) {
+        table->field[15]->store(previous->function, strlen(previous->function),
+                                system_charset_info);
+        table->field[15]->set_notnull();
+        table->field[16]->store(previous->file, strlen(previous->file),
+                                system_charset_info);
+        table->field[16]->set_notnull();
+        table->field[17]->store(previous->line, true);
+        table->field[17]->set_notnull();
+      }
+
+      if (schema_table_store_record(thd_arg, table)) return 1;
+    }
+  }
+
+  return 0;
+}
+
+
+// Source: sql_profile.cc
+// Lines 500-692

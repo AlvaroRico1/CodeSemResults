@@ -1,0 +1,55 @@
+int ebitmap_netlbl_import(struct ebitmap *ebmap,
+			  struct netlbl_lsm_catmap *catmap)
+{
+	int rc;
+	struct ebitmap_node *e_iter = NULL;
+	struct ebitmap_node *e_prev = NULL;
+	u32 offset = 0, idx;
+	unsigned long bitmap;
+
+	for (;;) {
+		rc = netlbl_catmap_getlong(catmap, &offset, &bitmap);
+		if (rc < 0)
+			goto netlbl_import_failure;
+		if (offset == (u32)-1)
+			return 0;
+
+		/* don't waste ebitmap space if the netlabel bitmap is empty */
+		if (bitmap == 0) {
+			offset += EBITMAP_UNIT_SIZE;
+			continue;
+		}
+
+		if (e_iter == NULL ||
+		    offset >= e_iter->startbit + EBITMAP_SIZE) {
+			e_prev = e_iter;
+			e_iter = kmem_cache_zalloc(ebitmap_node_cachep, GFP_ATOMIC);
+			if (e_iter == NULL)
+				goto netlbl_import_failure;
+			e_iter->startbit = offset - (offset % EBITMAP_SIZE);
+			if (e_prev == NULL)
+				ebmap->node = e_iter;
+			else
+				e_prev->next = e_iter;
+			ebmap->highbit = e_iter->startbit + EBITMAP_SIZE;
+		}
+
+		/* offset will always be aligned to an unsigned long */
+		idx = EBITMAP_NODE_INDEX(e_iter, offset);
+		e_iter->maps[idx] = bitmap;
+
+		/* next */
+		offset += EBITMAP_UNIT_SIZE;
+	}
+
+	/* NOTE: we should never reach this return */
+	return 0;
+
+netlbl_import_failure:
+	ebitmap_destroy(ebmap);
+	return -ENOMEM;
+}
+
+
+// Source: ebitmap.c
+// Lines 143-193

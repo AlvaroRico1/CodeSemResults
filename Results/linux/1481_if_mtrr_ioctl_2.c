@@ -1,0 +1,202 @@
+mtrr_ioctl(struct file *file, unsigned int cmd, unsigned long __arg)
+{
+	int err = 0;
+	mtrr_type type;
+	unsigned long base;
+	unsigned long size;
+	struct mtrr_sentry sentry;
+	struct mtrr_gentry gentry;
+	void __user *arg = (void __user *) __arg;
+
+	memset(&gentry, 0, sizeof(gentry));
+
+	switch (cmd) {
+	case MTRRIOC_ADD_ENTRY:
+	case MTRRIOC_SET_ENTRY:
+	case MTRRIOC_DEL_ENTRY:
+	case MTRRIOC_KILL_ENTRY:
+	case MTRRIOC_ADD_PAGE_ENTRY:
+	case MTRRIOC_SET_PAGE_ENTRY:
+	case MTRRIOC_DEL_PAGE_ENTRY:
+	case MTRRIOC_KILL_PAGE_ENTRY:
+		if (copy_from_user(&sentry, arg, sizeof(sentry)))
+			return -EFAULT;
+		break;
+	case MTRRIOC_GET_ENTRY:
+	case MTRRIOC_GET_PAGE_ENTRY:
+		if (copy_from_user(&gentry, arg, sizeof(gentry)))
+			return -EFAULT;
+		break;
+#ifdef CONFIG_COMPAT
+	case MTRRIOC32_ADD_ENTRY:
+	case MTRRIOC32_SET_ENTRY:
+	case MTRRIOC32_DEL_ENTRY:
+	case MTRRIOC32_KILL_ENTRY:
+	case MTRRIOC32_ADD_PAGE_ENTRY:
+	case MTRRIOC32_SET_PAGE_ENTRY:
+	case MTRRIOC32_DEL_PAGE_ENTRY:
+	case MTRRIOC32_KILL_PAGE_ENTRY: {
+		struct mtrr_sentry32 __user *s32;
+
+		s32 = (struct mtrr_sentry32 __user *)__arg;
+		err = get_user(sentry.base, &s32->base);
+		err |= get_user(sentry.size, &s32->size);
+		err |= get_user(sentry.type, &s32->type);
+		if (err)
+			return err;
+		break;
+	}
+	case MTRRIOC32_GET_ENTRY:
+	case MTRRIOC32_GET_PAGE_ENTRY: {
+		struct mtrr_gentry32 __user *g32;
+
+		g32 = (struct mtrr_gentry32 __user *)__arg;
+		err = get_user(gentry.regnum, &g32->regnum);
+		err |= get_user(gentry.base, &g32->base);
+		err |= get_user(gentry.size, &g32->size);
+		err |= get_user(gentry.type, &g32->type);
+		if (err)
+			return err;
+		break;
+	}
+#endif
+	}
+
+	switch (cmd) {
+	default:
+		return -ENOTTY;
+	case MTRRIOC_ADD_ENTRY:
+#ifdef CONFIG_COMPAT
+	case MTRRIOC32_ADD_ENTRY:
+#endif
+		if (!capable(CAP_SYS_ADMIN))
+			return -EPERM;
+		err =
+		    mtrr_file_add(sentry.base, sentry.size, sentry.type, true,
+				  file, 0);
+		break;
+	case MTRRIOC_SET_ENTRY:
+#ifdef CONFIG_COMPAT
+	case MTRRIOC32_SET_ENTRY:
+#endif
+		if (!capable(CAP_SYS_ADMIN))
+			return -EPERM;
+		err = mtrr_add(sentry.base, sentry.size, sentry.type, false);
+		break;
+	case MTRRIOC_DEL_ENTRY:
+#ifdef CONFIG_COMPAT
+	case MTRRIOC32_DEL_ENTRY:
+#endif
+		if (!capable(CAP_SYS_ADMIN))
+			return -EPERM;
+		err = mtrr_file_del(sentry.base, sentry.size, file, 0);
+		break;
+	case MTRRIOC_KILL_ENTRY:
+#ifdef CONFIG_COMPAT
+	case MTRRIOC32_KILL_ENTRY:
+#endif
+		if (!capable(CAP_SYS_ADMIN))
+			return -EPERM;
+		err = mtrr_del(-1, sentry.base, sentry.size);
+		break;
+	case MTRRIOC_GET_ENTRY:
+#ifdef CONFIG_COMPAT
+	case MTRRIOC32_GET_ENTRY:
+#endif
+		if (gentry.regnum >= num_var_ranges)
+			return -EINVAL;
+		mtrr_if->get(gentry.regnum, &base, &size, &type);
+
+		/* Hide entries that go above 4GB */
+		if (base + size - 1 >= (1UL << (8 * sizeof(gentry.size) - PAGE_SHIFT))
+		    || size >= (1UL << (8 * sizeof(gentry.size) - PAGE_SHIFT)))
+			gentry.base = gentry.size = gentry.type = 0;
+		else {
+			gentry.base = base << PAGE_SHIFT;
+			gentry.size = size << PAGE_SHIFT;
+			gentry.type = type;
+		}
+
+		break;
+	case MTRRIOC_ADD_PAGE_ENTRY:
+#ifdef CONFIG_COMPAT
+	case MTRRIOC32_ADD_PAGE_ENTRY:
+#endif
+		if (!capable(CAP_SYS_ADMIN))
+			return -EPERM;
+		err =
+		    mtrr_file_add(sentry.base, sentry.size, sentry.type, true,
+				  file, 1);
+		break;
+	case MTRRIOC_SET_PAGE_ENTRY:
+#ifdef CONFIG_COMPAT
+	case MTRRIOC32_SET_PAGE_ENTRY:
+#endif
+		if (!capable(CAP_SYS_ADMIN))
+			return -EPERM;
+		err =
+		    mtrr_add_page(sentry.base, sentry.size, sentry.type, false);
+		break;
+	case MTRRIOC_DEL_PAGE_ENTRY:
+#ifdef CONFIG_COMPAT
+	case MTRRIOC32_DEL_PAGE_ENTRY:
+#endif
+		if (!capable(CAP_SYS_ADMIN))
+			return -EPERM;
+		err = mtrr_file_del(sentry.base, sentry.size, file, 1);
+		break;
+	case MTRRIOC_KILL_PAGE_ENTRY:
+#ifdef CONFIG_COMPAT
+	case MTRRIOC32_KILL_PAGE_ENTRY:
+#endif
+		if (!capable(CAP_SYS_ADMIN))
+			return -EPERM;
+		err = mtrr_del_page(-1, sentry.base, sentry.size);
+		break;
+	case MTRRIOC_GET_PAGE_ENTRY:
+#ifdef CONFIG_COMPAT
+	case MTRRIOC32_GET_PAGE_ENTRY:
+#endif
+		if (gentry.regnum >= num_var_ranges)
+			return -EINVAL;
+		mtrr_if->get(gentry.regnum, &base, &size, &type);
+		/* Hide entries that would overflow */
+		if (size != (__typeof__(gentry.size))size)
+			gentry.base = gentry.size = gentry.type = 0;
+		else {
+			gentry.base = base;
+			gentry.size = size;
+			gentry.type = type;
+		}
+		break;
+	}
+
+	if (err)
+		return err;
+
+	switch (cmd) {
+	case MTRRIOC_GET_ENTRY:
+	case MTRRIOC_GET_PAGE_ENTRY:
+		if (copy_to_user(arg, &gentry, sizeof(gentry)))
+			err = -EFAULT;
+		break;
+#ifdef CONFIG_COMPAT
+	case MTRRIOC32_GET_ENTRY:
+	case MTRRIOC32_GET_PAGE_ENTRY: {
+		struct mtrr_gentry32 __user *g32;
+
+		g32 = (struct mtrr_gentry32 __user *)__arg;
+		err = put_user(gentry.base, &g32->base);
+		err |= put_user(gentry.size, &g32->size);
+		err |= put_user(gentry.regnum, &g32->regnum);
+		err |= put_user(gentry.type, &g32->type);
+		break;
+	}
+#endif
+	}
+	return err;
+}
+
+
+// Source: if.c
+// Lines 158-355

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 's' at line 3\n2. Pointer 'wp' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ninput_key_mouse(struct window_pane *wp, struct mouse_event *m)\n{\n\tstruct screen\t*s = wp->screen;\n\tu_int\t\t x, y;\n\tconst char\t*buf;\n\tsize_t\t\t len;\n\n\t/* Ignore events if no mouse mode or the pane is not visible. */\n\tif (m->ignore || (s->mode & ALL_MOUSE_MODES) == 0)\n\t\treturn;\n\tif (cmd_mouse_at(wp, m, &x, &y, 0) != 0)\n\t\treturn;\n\tif (!window_pane_visible(wp))\n\t\treturn;\n\tif (!input_key_get_mouse(s, m, x, y, &buf, &len))\n\t\treturn;\n\tlog_debug(\"writing mouse %.*s to %%%u\", (int)len, buf, wp->id);\n\tinput_key_write(__func__, wp->event, buf, len);\n}\n\n\n// Source: input-keys.c\n// Lines 626-644\n",
+  "ANSWER": "MUST"
+}

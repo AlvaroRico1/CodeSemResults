@@ -1,0 +1,53 @@
+phdr_callback (struct dl_phdr_info *info, size_t size ATTRIBUTE_UNUSED,
+	       void *pdata)
+{
+  struct phdr_data *pd = (struct phdr_data *) pdata;
+  const char *filename;
+  int descriptor;
+  int does_not_exist;
+  fileline elf_fileline_fn;
+  int found_dwarf;
+
+  /* There is not much we can do if we don't have the module name,
+     unless executable is ET_DYN, where we expect the very first
+     phdr_callback to be for the PIE.  */
+  if (info->dlpi_name == NULL || info->dlpi_name[0] == '\0')
+    {
+      if (pd->exe_descriptor == -1)
+	return 0;
+      filename = pd->exe_filename;
+      descriptor = pd->exe_descriptor;
+      pd->exe_descriptor = -1;
+    }
+  else
+    {
+      if (pd->exe_descriptor != -1)
+	{
+	  backtrace_close (pd->exe_descriptor, pd->error_callback, pd->data);
+	  pd->exe_descriptor = -1;
+	}
+
+      filename = info->dlpi_name;
+      descriptor = backtrace_open (info->dlpi_name, pd->error_callback,
+				   pd->data, &does_not_exist);
+      if (descriptor < 0)
+	return 0;
+    }
+
+  if (elf_add (pd->state, filename, descriptor, info->dlpi_addr,
+	       pd->error_callback, pd->data, &elf_fileline_fn, pd->found_sym,
+	       &found_dwarf, NULL, 0, 0, NULL, 0))
+    {
+      if (found_dwarf)
+	{
+	  *pd->found_dwarf = 1;
+	  *pd->fileline_fn = elf_fileline_fn;
+	}
+    }
+
+  return 0;
+}
+
+
+// Source: elf.c
+// Lines 3328-3376

@@ -1,0 +1,39 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'c' at line 3
+2. Pointer 'tty' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+tty_cmd_insertcharacter(struct tty *tty, const struct tty_ctx *ctx)
+{
+	struct client	*c = tty->client;
+
+	if (ctx->bigger ||
+	    !tty_full_width(tty, ctx) ||
+	    tty_fake_bce(tty, &ctx->defaults, ctx->bg) ||
+	    (!tty_term_has(tty->term, TTYC_ICH) &&
+	    !tty_term_has(tty->term, TTYC_ICH1)) ||
+	    c->overlay_check != NULL) {
+		tty_draw_pane(tty, ctx, ctx->ocy);
+		return;
+	}
+
+	tty_default_attributes(tty, &ctx->defaults, ctx->palette, ctx->bg);
+
+	tty_cursor_pane(tty, ctx, ctx->ocx, ctx->ocy);
+
+	tty_emulate_repeat(tty, TTYC_ICH, TTYC_ICH1, ctx->num);
+}
+
+
+// Source: tty.c
+// Lines 1590-1609
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'p' at line 3\n2. Pointer 's' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int strtod_buffer_size(const char *s)\n{\n    const char *p = s;\n\n    while (valid_number_character(*p))\n        p++;\n\n    return p - s;\n}\n\n\n// Source: fpconv.c\n// Lines 94-102\n",
+  "ANSWER": "MUST"
+}

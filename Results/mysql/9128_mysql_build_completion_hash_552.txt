@@ -1,0 +1,1 @@
+fields,mysql/client/mysql.cc,4,write_info,mysql/client/mysql.cc,1,0

@@ -1,0 +1,1 @@
+insn,gcc/gcc/lra-constraints.c,4,invariant_ptr,gcc/gcc/lra-constraints.c,3,1

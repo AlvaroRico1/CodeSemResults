@@ -1,0 +1,41 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'slave' at line 18
+2. Pointer 'ln' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void replicationFeedSlavesFromMasterStream(list *slaves, char *buf, size_t buflen) {
+    listNode *ln;
+    listIter li;
+
+    /* Debugging: this is handy to see the stream sent from master
+     * to slaves. Disabled with if(0). */
+    if (0) {
+        printf("%zu:",buflen);
+        for (size_t j = 0; j < buflen; j++) {
+            printf("%c", isprint(buf[j]) ? buf[j] : '.');
+        }
+        printf("\n");
+    }
+
+    if (server.repl_backlog) feedReplicationBacklog(buf,buflen);
+    listRewind(slaves,&li);
+    while((ln = listNext(&li))) {
+        client *slave = ln->value;
+
+        if (!canFeedReplicaReplBuffer(slave)) continue;
+        addReplyProto(slave,buf,buflen);
+    }
+
+
+// Source: replication.c
+// Lines 355-376
+
+
+[ANSWER]
+MUST

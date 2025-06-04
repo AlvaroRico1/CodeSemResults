@@ -1,0 +1,699 @@
+int mysql_execute_command(THD *thd, bool first_level) {
+  int res = false;
+  LEX *const lex = thd->lex;
+  /* first Query_block (have special meaning for many of non-SELECTcommands) */
+  Query_block *const query_block = lex->query_block;
+  /* first table of first Query_block */
+  TABLE_LIST *const first_table = query_block->get_table_list();
+  /* list of all tables in query */
+  TABLE_LIST *all_tables;
+  // keep GTID violation state in order to roll it back on statement failure
+  bool gtid_consistency_violation_state = thd->has_gtid_consistency_violation;
+  assert(query_block->master_query_expression() == lex->unit);
+  DBUG_TRACE;
+  /* EXPLAIN OTHER isn't explainable command, but can have describe flag. */
+  assert(!lex->is_explain() || is_explainable_query(lex->sql_command) ||
+         lex->sql_command == SQLCOM_EXPLAIN_OTHER);
+
+  assert(!thd->m_transactional_ddl.inited() ||
+         thd->in_active_multi_stmt_transaction());
+
+  /*
+    If there is a CREATE TABLE...START TRANSACTION command which
+    is not yet committed or rollbacked, then we should allow only
+    BINLOG INSERT, COMMIT or ROLLBACK command.
+    TODO: Should we really check name of table when we cable BINLOG INSERT ?
+  */
+  if (thd->m_transactional_ddl.inited() && lex->sql_command != SQLCOM_COMMIT &&
+      lex->sql_command != SQLCOM_ROLLBACK &&
+      lex->sql_command != SQLCOM_BINLOG_BASE64_EVENT) {
+    my_error(ER_STATEMENT_NOT_ALLOWED_AFTER_START_TRANSACTION, MYF(0));
+    binlog_gtid_end_transaction(thd);
+    return 1;
+  }
+
+  thd->work_part_info = nullptr;
+
+  if (thd->optimizer_switch_flag(OPTIMIZER_SWITCH_SUBQUERY_TO_DERIVED))
+    lex->add_statement_options(OPTION_NO_CONST_TABLES);
+
+  /*
+    Each statement or replication event which might produce deadlock
+    should handle transaction rollback on its own. So by the start of
+    the next statement transaction rollback request should be fulfilled
+    already.
+  */
+  assert(!thd->transaction_rollback_request || thd->in_sub_stmt);
+  /*
+    In many cases first table of main Query_block have special meaning =>
+    check that it is first table in global list and relink it first in
+    queries_tables list if it is necessary (we need such relinking only
+    for queries with subqueries in select list, in this case tables of
+    subqueries will go to global list first)
+
+    all_tables will differ from first_table only if most upper Query_block
+    do not contain tables.
+
+    Because of above in place where should be at least one table in most
+    outer Query_block we have following check:
+    assert(first_table == all_tables);
+    assert(first_table == all_tables && first_table != 0);
+  */
+  lex->first_lists_tables_same();
+  /* should be assigned after making first tables same */
+  all_tables = lex->query_tables;
+  /* set context for commands which do not use setup_tables */
+  query_block->context.resolve_in_table_list_only(
+      query_block->get_table_list());
+
+  thd->get_stmt_da()->reset_diagnostics_area();
+  if ((thd->lex->keep_diagnostics != DA_KEEP_PARSE_ERROR) &&
+      (thd->lex->keep_diagnostics != DA_KEEP_DIAGNOSTICS)) {
+    /*
+      No parse errors, and it's not a diagnostic statement:
+      remove the sql conditions from the DA!
+      For diagnostic statements we need to keep the conditions
+      around so we can inspec them.
+    */
+    thd->get_stmt_da()->reset_condition_info(thd);
+  }
+
+  if (thd->resource_group_ctx()->m_warn != 0) {
+    auto res_grp_name = thd->resource_group_ctx()->m_switch_resource_group_str;
+    switch (thd->resource_group_ctx()->m_warn) {
+      case WARN_RESOURCE_GROUP_UNSUPPORTED: {
+        auto res_grp_mgr = resourcegroups::Resource_group_mgr::instance();
+        push_warning_printf(thd, Sql_condition::SL_WARNING,
+                            ER_FEATURE_UNSUPPORTED,
+                            ER_THD(thd, ER_FEATURE_UNSUPPORTED),
+                            "Resource groups", res_grp_mgr->unsupport_reason());
+        break;
+      }
+      case WARN_RESOURCE_GROUP_UNSUPPORTED_HINT:
+        push_warning_printf(thd, Sql_condition::SL_WARNING,
+                            ER_WARN_UNSUPPORTED_HINT,
+                            ER_THD(thd, ER_WARN_UNSUPPORTED_HINT),
+                            "Subquery or Stored procedure or Trigger");
+        break;
+      case WARN_RESOURCE_GROUP_TYPE_MISMATCH: {
+        ulonglong pfs_thread_id = 0;
+        /*
+          Resource group is unsupported with DISABLE_PSI_THREAD.
+          The below #ifdef is required for compilation when DISABLE_PSI_THREAD
+          is enabled.
+        */
+#ifdef HAVE_PSI_THREAD_INTERFACE
+        pfs_thread_id = PSI_THREAD_CALL(get_current_thread_internal_id)();
+#endif  // HAVE_PSI_THREAD_INTERFACE
+        push_warning_printf(thd, Sql_condition::SL_WARNING,
+                            ER_RESOURCE_GROUP_BIND_FAILED,
+                            ER_THD(thd, ER_RESOURCE_GROUP_BIND_FAILED),
+                            res_grp_name, pfs_thread_id,
+                            "System resource group can't be bound"
+                            " with a session thread");
+        break;
+      }
+      case WARN_RESOURCE_GROUP_NOT_EXISTS:
+        push_warning_printf(
+            thd, Sql_condition::SL_WARNING, ER_RESOURCE_GROUP_NOT_EXISTS,
+            ER_THD(thd, ER_RESOURCE_GROUP_NOT_EXISTS), res_grp_name);
+        break;
+      case WARN_RESOURCE_GROUP_ACCESS_DENIED:
+        push_warning_printf(thd, Sql_condition::SL_WARNING,
+                            ER_SPECIFIC_ACCESS_DENIED_ERROR,
+                            ER_THD(thd, ER_SPECIFIC_ACCESS_DENIED_ERROR),
+                            "SUPER OR RESOURCE_GROUP_ADMIN OR "
+                            "RESOURCE_GROUP_USER");
+    }
+    thd->resource_group_ctx()->m_warn = 0;
+    res_grp_name[0] = '\0';
+  }
+
+  if (unlikely(thd->slave_thread)) {
+    if (!check_database_filters(thd, thd->db().str, lex->sql_command)) {
+      binlog_gtid_end_transaction(thd);
+      return 0;
+    }
+
+    if (lex->sql_command == SQLCOM_DROP_TRIGGER) {
+      /*
+        When dropping a trigger, we need to load its table name
+        before checking slave filter rules.
+      */
+      TABLE_LIST *trigger_table = nullptr;
+      (void)get_table_for_trigger(thd, lex->spname->m_db, lex->spname->m_name,
+                                  true, &trigger_table);
+      if (trigger_table != nullptr) {
+        lex->add_to_query_tables(trigger_table);
+        all_tables = trigger_table;
+      } else {
+        /*
+          If table name cannot be loaded,
+          it means the trigger does not exists possibly because
+          CREATE TRIGGER was previously skipped for this trigger
+          according to slave filtering rules.
+          Returning success without producing any errors in this case.
+        */
+        binlog_gtid_end_transaction(thd);
+        return 0;
+      }
+
+      // force searching in slave.cc:tables_ok()
+      all_tables->updating = true;
+    }
+
+    /*
+      For fix of BUG#37051, the master stores the table map for update
+      in the Query_log_event, and the value is assigned to
+      thd->table_map_for_update before executing the update
+      query.
+
+      If thd->table_map_for_update is set, then we are
+      replicating from a new master, we can use this value to apply
+      filter rules without opening all the tables. However If
+      thd->table_map_for_update is not set, then we are
+      replicating from an old master, so we just skip this and
+      continue with the old method. And of course, the bug would still
+      exist for old masters.
+    */
+    if (lex->sql_command == SQLCOM_UPDATE_MULTI && thd->table_map_for_update) {
+      table_map table_map_for_update = thd->table_map_for_update;
+      uint nr = 0;
+      TABLE_LIST *table;
+      for (table = all_tables; table; table = table->next_global, nr++) {
+        if (table_map_for_update & ((table_map)1 << nr))
+          table->updating = true;
+        else
+          table->updating = false;
+      }
+
+      if (all_tables_not_ok(thd, all_tables)) {
+        /* we warn the slave SQL thread */
+        my_error(ER_SLAVE_IGNORED_TABLE, MYF(0));
+        binlog_gtid_end_transaction(thd);
+        return 0;
+      }
+
+      for (table = all_tables; table; table = table->next_global)
+        table->updating = true;
+    }
+
+    /*
+      Check if statement should be skipped because of slave filtering
+      rules
+
+      Exceptions are:
+      - UPDATE MULTI: For this statement, we want to check the filtering
+        rules later in the code
+      - SET: we always execute it (Not that many SET commands exists in
+        the binary log anyway -- only 4.1 masters write SET statements,
+        in 5.0 there are no SET statements in the binary log)
+      - DROP TEMPORARY TABLE IF EXISTS: we always execute it (otherwise we
+        have stale files on slave caused by exclusion of one tmp table).
+    */
+    if (!(lex->sql_command == SQLCOM_UPDATE_MULTI) &&
+        !(lex->sql_command == SQLCOM_SET_OPTION) &&
+        !(lex->sql_command == SQLCOM_DROP_TABLE && lex->drop_temporary &&
+          lex->drop_if_exists) &&
+        all_tables_not_ok(thd, all_tables)) {
+      /* we warn the slave SQL thread */
+      my_error(ER_SLAVE_IGNORED_TABLE, MYF(0));
+      binlog_gtid_end_transaction(thd);
+      return 0;
+    }
+    /*
+       Execute deferred events first
+    */
+    if (slave_execute_deferred_events(thd)) return -1;
+
+    int ret = launch_hook_trans_begin(thd, all_tables);
+    if (ret) {
+      my_error(ret, MYF(0));
+      return -1;
+    }
+
+  } else {
+    int ret = launch_hook_trans_begin(thd, all_tables);
+    if (ret) {
+      my_error(ret, MYF(0));
+      return -1;
+    }
+
+    /*
+      When option readonly is set deny operations which change non-temporary
+      tables. Except for the replication thread and the 'super' users.
+    */
+    if (deny_updates_if_read_only_option(thd, all_tables)) {
+      err_readonly(thd);
+      return -1;
+    }
+  } /* endif unlikely slave */
+
+  thd->status_var.com_stat[lex->sql_command]++;
+
+  Opt_trace_start ots(thd, all_tables, lex->sql_command, &lex->var_list,
+                      thd->query().str, thd->query().length, nullptr,
+                      thd->variables.character_set_client);
+
+  Opt_trace_object trace_command(&thd->opt_trace);
+  Opt_trace_array trace_command_steps(&thd->opt_trace, "steps");
+
+  if (lex->m_sql_cmd && lex->m_sql_cmd->owner())
+    lex->m_sql_cmd->owner()->trace_parameter_types();
+
+  assert(thd->get_transaction()->cannot_safely_rollback(
+             Transaction_ctx::STMT) == false);
+
+  switch (gtid_pre_statement_checks(thd)) {
+    case GTID_STATEMENT_EXECUTE:
+      break;
+    case GTID_STATEMENT_CANCEL:
+      return -1;
+    case GTID_STATEMENT_SKIP:
+      my_ok(thd);
+      binlog_gtid_end_transaction(thd);
+      return 0;
+  }
+
+  if (thd->variables.require_row_format) {
+    if (evaluate_command_row_only_restrictions(thd)) {
+      my_error(ER_CLIENT_QUERY_FAILURE_INVALID_NON_ROW_FORMAT, MYF(0));
+      return -1;
+    }
+  }
+
+  /*
+    End a active transaction so that this command will have it's
+    own transaction and will also sync the binary log. If a DDL is
+    not run in it's own transaction it may simply never appear on
+    the slave in case the outside transaction rolls back.
+  */
+  if (stmt_causes_implicit_commit(thd, CF_IMPLICIT_COMMIT_BEGIN)) {
+    /*
+      Note that this should never happen inside of stored functions
+      or triggers as all such statements prohibited there.
+    */
+    assert(!thd->in_sub_stmt);
+    /* Statement transaction still should not be started. */
+    assert(thd->get_transaction()->is_empty(Transaction_ctx::STMT));
+
+    /*
+      Implicit commit is not allowed with an active XA transaction.
+      In this case we should not release metadata locks as the XA transaction
+      will not be rolled back. Therefore we simply return here.
+    */
+    if (trans_check_state(thd)) return -1;
+
+    /* Commit the normal transaction if one is active. */
+    if (trans_commit_implicit(thd)) return -1;
+    /* Release metadata locks acquired in this transaction. */
+    thd->mdl_context.release_transactional_locks();
+  }
+
+  DEBUG_SYNC(thd, "after_implicit_pre_commit");
+
+  if (gtid_pre_statement_post_implicit_commit_checks(thd)) return -1;
+
+  if (mysql_audit_notify(thd,
+                         first_level ? MYSQL_AUDIT_QUERY_START
+                                     : MYSQL_AUDIT_QUERY_NESTED_START,
+                         first_level ? "MYSQL_AUDIT_QUERY_START"
+                                     : "MYSQL_AUDIT_QUERY_NESTED_START")) {
+    return 1;
+  }
+
+#ifndef NDEBUG
+  if (lex->sql_command != SQLCOM_SET_OPTION)
+    DEBUG_SYNC(thd, "before_execute_sql_command");
+#endif
+
+  /*
+    Start a new transaction if CREATE TABLE has START TRANSACTION clause.
+    Disable binlog so that the BEGIN is not logged in binlog.
+   */
+  if (lex->create_info && lex->create_info->m_transactional_ddl &&
+      !thd->slave_thread) {
+    Disable_binlog_guard binlog_guard(thd);
+    if (trans_begin(thd, MYSQL_START_TRANS_OPT_READ_WRITE)) return true;
+  }
+
+  /*
+    For statements which need this, prevent InnoDB from automatically
+    committing InnoDB transaction each time data-dictionary tables are
+    closed after being updated.
+  */
+  Disable_autocommit_guard autocommit_guard(
+      sqlcom_needs_autocommit_off(lex) && !thd->is_plugin_fake_ddl() ? thd
+                                                                     : nullptr);
+
+  /*
+    Check if we are in a read-only transaction and we're trying to
+    execute a statement which should always be disallowed in such cases.
+
+    Note that this check is done after any implicit commits.
+  */
+  if (thd->tx_read_only &&
+      (sql_command_flags[lex->sql_command] & CF_DISALLOW_IN_RO_TRANS)) {
+    my_error(ER_CANT_EXECUTE_IN_READ_ONLY_TRANSACTION, MYF(0));
+    goto error;
+  }
+
+  /*
+    Close tables open by HANDLERs before executing DDL statement
+    which is going to affect those tables.
+
+    This should happen before temporary tables are pre-opened as
+    otherwise we will get errors about attempt to re-open tables
+    if table to be changed is open through HANDLER.
+
+    Note that even although this is done before any privilege
+    checks there is no security problem here as closing open
+    HANDLER doesn't require any privileges anyway.
+  */
+  if (sql_command_flags[lex->sql_command] & CF_HA_CLOSE)
+    mysql_ha_rm_tables(thd, all_tables);
+
+  /*
+    Check that the command is allowed on the PROTOCOL_PLUGIN
+  */
+  if (thd->get_protocol()->type() == Protocol::PROTOCOL_PLUGIN &&
+      !(sql_command_flags[lex->sql_command] & CF_ALLOW_PROTOCOL_PLUGIN)) {
+    my_error(ER_PLUGGABLE_PROTOCOL_COMMAND_NOT_SUPPORTED, MYF(0));
+    goto error;
+  }
+
+  /*
+    Pre-open temporary tables to simplify privilege checking
+    for statements which need this.
+  */
+  if (sql_command_flags[lex->sql_command] & CF_PREOPEN_TMP_TABLES) {
+    if (open_temporary_tables(thd, all_tables)) goto error;
+  }
+
+  // Save original info for EXPLAIN FOR CONNECTION
+  if (!thd->in_sub_stmt)
+    thd->query_plan.set_query_plan(lex->sql_command, lex,
+                                   !thd->stmt_arena->is_regular());
+
+  /* Update system variables specified in SET_VAR hints. */
+  if (lex->opt_hints_global && lex->opt_hints_global->sys_var_hint)
+    lex->opt_hints_global->sys_var_hint->update_vars(thd);
+
+  /* Check if the statement fulfill the requirements on ACL CACHE */
+  if (!command_satisfy_acl_cache_requirement(lex->sql_command)) {
+    my_error(ER_OPTION_PREVENTS_STATEMENT, MYF(0), "--skip-grant-tables");
+    goto error;
+  }
+
+  DBUG_EXECUTE_IF(
+      "force_rollback_in_slave_on_transactional_ddl_commit",
+      if (thd->m_transactional_ddl.inited() &&
+          thd->lex->sql_command == SQLCOM_COMMIT) {
+        lex->sql_command = SQLCOM_ROLLBACK;
+      });
+
+  /*
+    We do not flag "is DML" (TX_STMT_DML) here as replication expects us to
+    test for LOCK TABLE etc. first. To rephrase, we try not to set TX_STMT_DML
+    until we have the MDL, and LOCK TABLE could massively delay this.
+  */
+
+  switch (lex->sql_command) {
+    case SQLCOM_PREPARE: {
+      mysql_sql_stmt_prepare(thd);
+      break;
+    }
+    case SQLCOM_EXECUTE: {
+      mysql_sql_stmt_execute(thd);
+      break;
+    }
+    case SQLCOM_DEALLOCATE_PREPARE: {
+      mysql_sql_stmt_close(thd);
+      break;
+    }
+
+    case SQLCOM_EMPTY_QUERY:
+      my_ok(thd);
+      break;
+
+    case SQLCOM_HELP:
+      res = mysqld_help(thd, lex->help_arg);
+      break;
+
+    case SQLCOM_PURGE: {
+      Security_context *sctx = thd->security_context();
+      if (!sctx->check_access(SUPER_ACL) &&
+          !sctx->has_global_grant(STRING_WITH_LEN("BINLOG_ADMIN")).first) {
+        my_error(ER_SPECIFIC_ACCESS_DENIED_ERROR, MYF(0),
+                 "SUPER or BINLOG_ADMIN");
+        goto error;
+      }
+      /* PURGE MASTER LOGS TO 'file' */
+      res = purge_master_logs(thd, lex->to_log);
+      break;
+    }
+    case SQLCOM_PURGE_BEFORE: {
+      Item *it;
+      Security_context *sctx = thd->security_context();
+      if (!sctx->check_access(SUPER_ACL) &&
+          !sctx->has_global_grant(STRING_WITH_LEN("BINLOG_ADMIN")).first) {
+        my_error(ER_SPECIFIC_ACCESS_DENIED_ERROR, MYF(0),
+                 "SUPER or BINLOG_ADMIN");
+        goto error;
+      }
+      /* PURGE MASTER LOGS BEFORE 'data' */
+      it = lex->purge_value_list.head();
+      if ((!it->fixed && it->fix_fields(lex->thd, &it)) || it->check_cols(1)) {
+        my_error(ER_WRONG_ARGUMENTS, MYF(0), "PURGE LOGS BEFORE");
+        goto error;
+      }
+      it = new Item_func_unix_timestamp(it);
+      /*
+        it is OK only emulate fix_fieds, because we need only
+        value of constant
+      */
+      it->quick_fix_field();
+      time_t purge_time = static_cast<time_t>(it->val_int());
+      if (thd->is_error()) goto error;
+      res = purge_master_logs_before_date(thd, purge_time);
+      break;
+    }
+    case SQLCOM_CHANGE_MASTER: {
+      Security_context *sctx = thd->security_context();
+      if (!sctx->check_access(SUPER_ACL) &&
+          !sctx->has_global_grant(STRING_WITH_LEN("REPLICATION_SLAVE_ADMIN"))
+               .first) {
+        my_error(ER_SPECIFIC_ACCESS_DENIED_ERROR, MYF(0),
+                 "SUPER or REPLICATION_SLAVE_ADMIN");
+        goto error;
+      }
+      res = change_master_cmd(thd);
+      break;
+    }
+    case SQLCOM_START_GROUP_REPLICATION: {
+      Security_context *sctx = thd->security_context();
+      if (!sctx->check_access(SUPER_ACL) &&
+          !sctx->has_global_grant(STRING_WITH_LEN("GROUP_REPLICATION_ADMIN"))
+               .first) {
+        my_error(ER_SPECIFIC_ACCESS_DENIED_ERROR, MYF(0),
+                 "SUPER or GROUP_REPLICATION_ADMIN");
+        goto error;
+      }
+      if (lex->slave_connection.password && !lex->slave_connection.user) {
+        my_error(ER_GROUP_REPLICATION_USER_MANDATORY_MSG, MYF(0));
+        goto error;
+      }
+
+      /*
+        If the client thread has locked tables, a deadlock is possible.
+        Assume that
+        - the client thread does LOCK TABLE t READ.
+        - then the client thread does START GROUP_REPLICATION.
+             -try to make the server in super ready only mode
+             -acquire MDL lock ownership which will be waiting for
+              LOCK on table t to be released.
+        To prevent that, refuse START GROUP_REPLICATION if the
+        client thread has locked tables
+      */
+      if (thd->locked_tables_mode || thd->in_active_multi_stmt_transaction() ||
+          thd->in_sub_stmt) {
+        my_error(ER_LOCK_OR_ACTIVE_TRANSACTION, MYF(0));
+        goto error;
+      }
+
+      if (Clone_handler::is_provisioning()) {
+        my_error(ER_GROUP_REPLICATION_COMMAND_FAILURE, MYF(0),
+                 "START GROUP_REPLICATION",
+                 "This server is being provisioned by CLONE INSTANCE, "
+                 "please wait until it is complete.");
+        goto error;
+      }
+
+      char *error_message = nullptr;
+      res = group_replication_start(&error_message, thd);
+
+      // To reduce server dependency, server errors are not used here
+      switch (res) {
+        case 1:  // GROUP_REPLICATION_CONFIGURATION_ERROR
+          my_error(ER_GROUP_REPLICATION_CONFIGURATION, MYF(0));
+          goto error;
+        case 2:  // GROUP_REPLICATION_ALREADY_RUNNING
+          my_error(ER_GROUP_REPLICATION_RUNNING, MYF(0));
+          goto error;
+        case 3:  // GROUP_REPLICATION_REPLICATION_APPLIER_INIT_ERROR
+          my_error(ER_GROUP_REPLICATION_APPLIER_INIT_ERROR, MYF(0));
+          goto error;
+        case 4:  // GROUP_REPLICATION_COMMUNICATION_LAYER_SESSION_ERROR
+          my_error(ER_GROUP_REPLICATION_COMMUNICATION_LAYER_SESSION_ERROR,
+                   MYF(0));
+          goto error;
+        case 5:  // GROUP_REPLICATION_COMMUNICATION_LAYER_JOIN_ERROR
+          my_error(ER_GROUP_REPLICATION_COMMUNICATION_LAYER_JOIN_ERROR, MYF(0));
+          goto error;
+        case 7:  // GROUP_REPLICATION_MAX_GROUP_SIZE
+          my_error(ER_GROUP_REPLICATION_MAX_GROUP_SIZE, MYF(0));
+          goto error;
+        case 8:  // GROUP_REPLICATION_COMMAND_FAILURE
+          if (error_message == nullptr) {
+            my_error(ER_GROUP_REPLICATION_COMMAND_FAILURE, MYF(0),
+                     "START GROUP_REPLICATION",
+                     "Please check error log for additional details.");
+          } else {
+            my_error(ER_GROUP_REPLICATION_COMMAND_FAILURE, MYF(0),
+                     "START GROUP_REPLICATION", error_message);
+            my_free(error_message);
+          }
+          goto error;
+        case 9:  // GROUP_REPLICATION_SERVICE_MESSAGE_INIT_FAILURE
+          my_error(ER_GRP_RPL_MESSAGE_SERVICE_INIT_FAILURE, MYF(0));
+          goto error;
+        case 10:  // GROUP_REPLICATION_RECOVERY_CHANNEL_STILL_RUNNING
+          my_error(ER_GRP_RPL_RECOVERY_CHANNEL_STILL_RUNNING, MYF(0));
+          goto error;
+      }
+      my_ok(thd);
+      res = 0;
+      break;
+    }
+
+    case SQLCOM_STOP_GROUP_REPLICATION: {
+      Security_context *sctx = thd->security_context();
+      if (!sctx->check_access(SUPER_ACL) &&
+          !sctx->has_global_grant(STRING_WITH_LEN("GROUP_REPLICATION_ADMIN"))
+               .first) {
+        my_error(ER_SPECIFIC_ACCESS_DENIED_ERROR, MYF(0),
+                 "SUPER or GROUP_REPLICATION_ADMIN");
+        goto error;
+      }
+
+      /*
+        Please see explanation @SQLCOM_SLAVE_STOP case
+        to know the reason for thd->locked_tables_mode in
+        the below if condition.
+      */
+      if (thd->locked_tables_mode || thd->in_active_multi_stmt_transaction() ||
+          thd->in_sub_stmt) {
+        my_error(ER_LOCK_OR_ACTIVE_TRANSACTION, MYF(0));
+        goto error;
+      }
+
+      char *error_message = nullptr;
+      res = group_replication_stop(&error_message);
+      if (res == 1)  // GROUP_REPLICATION_CONFIGURATION_ERROR
+      {
+        my_error(ER_GROUP_REPLICATION_CONFIGURATION, MYF(0));
+        goto error;
+      }
+      if (res == 6)  // GROUP_REPLICATION_APPLIER_THREAD_TIMEOUT
+      {
+        my_error(ER_GROUP_REPLICATION_STOP_APPLIER_THREAD_TIMEOUT, MYF(0));
+        goto error;
+      }
+      if (res == 8)  // GROUP_REPLICATION_COMMAND_FAILURE
+      {
+        if (error_message == nullptr) {
+          my_error(ER_GROUP_REPLICATION_COMMAND_FAILURE, MYF(0),
+                   "STOP GROUP_REPLICATION",
+                   "Please check error log for additonal details.");
+        } else {
+          my_error(ER_GROUP_REPLICATION_COMMAND_FAILURE, MYF(0),
+                   "STOP GROUP_REPLICATION", error_message);
+          my_free(error_message);
+        }
+        goto error;
+      }
+      if (res == 11)  // GROUP_REPLICATION_STOP_WITH_RECOVERY_TIMEOUT
+        push_warning(thd, Sql_condition::SL_WARNING,
+                     ER_GRP_RPL_RECOVERY_CHANNEL_STILL_RUNNING,
+                     ER_THD(thd, ER_GRP_RPL_RECOVERY_CHANNEL_STILL_RUNNING));
+
+      my_ok(thd);
+      res = 0;
+      break;
+    }
+
+    case SQLCOM_SLAVE_START: {
+      res = start_slave_cmd(thd);
+      break;
+    }
+    case SQLCOM_SLAVE_STOP: {
+      /*
+        If the client thread has locked tables, a deadlock is possible.
+        Assume that
+        - the client thread does LOCK TABLE t READ.
+        - then the master updates t.
+        - then the SQL slave thread wants to update t,
+          so it waits for the client thread because t is locked by it.
+        - then the client thread does SLAVE STOP.
+          SLAVE STOP waits for the SQL slave thread to terminate its
+          update t, which waits for the client thread because t is locked by it.
+        To prevent that, refuse SLAVE STOP if the
+        client thread has locked tables
+      */
+      if (thd->locked_tables_mode || thd->in_active_multi_stmt_transaction() ||
+          thd->global_read_lock.is_acquired()) {
+        my_error(ER_LOCK_OR_ACTIVE_TRANSACTION, MYF(0));
+        goto error;
+      }
+
+      res = stop_slave_cmd(thd);
+      break;
+    }
+    case SQLCOM_RENAME_TABLE: {
+      assert(first_table == all_tables && first_table != nullptr);
+      TABLE_LIST *table;
+      for (table = first_table; table; table = table->next_local->next_local) {
+        if (check_access(thd, ALTER_ACL | DROP_ACL, table->db,
+                         &table->grant.privilege, &table->grant.m_internal,
+                         false, false) ||
+            check_access(thd, INSERT_ACL | CREATE_ACL, table->next_local->db,
+                         &table->next_local->grant.privilege,
+                         &table->next_local->grant.m_internal, false, false))
+          goto error;
+
+        TABLE_LIST old_list = table[0];
+        TABLE_LIST new_list = table->next_local[0];
+        /*
+          It's not clear what the above assignments actually want to
+          accomplish. What we do know is that they do *not* want to copy the MDL
+          requests, so we overwrite them with uninitialized request.
+        */
+        old_list.mdl_request = MDL_request();
+        new_list.mdl_request = MDL_request();
+
+        if (check_grant(thd, ALTER_ACL | DROP_ACL, &old_list, false, 1,
+                        false) ||
+            (!test_all_bits(table->next_local->grant.privilege,
+                            INSERT_ACL | CREATE_ACL) &&
+             check_grant(thd, INSERT_ACL | CREATE_ACL, &new_list, false, 1,
+                         false)))
+          goto error;
+      }
+
+      if (mysql_rename_tables(thd, first_table)) goto error;
+      break;
+    }
+
+
+// Source: sql_parse.cc
+// Lines 2706-3400

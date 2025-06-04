@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'path' at line 4
+2. Pointer 'config' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_config_stress__trailing_backslash(void)
+{
+	git_config *config;
+	const char *path =  "C:\\iam\\some\\windows\\path\\";
+
+	cl_assert(git_fs_path_exists("git-test-config"));
+	cl_git_pass(git_config_open_ondisk(&config, TEST_CONFIG));
+	cl_git_pass(git_config_set_string(config, "windows.path", path));
+	git_config_free(config);
+
+	cl_git_pass(git_config_open_ondisk(&config, TEST_CONFIG));
+	assert_config_value(config, "windows.path", path);
+
+	git_config_free(config);
+}
+
+
+// Source: stress.c
+// Lines 88-102
+
+
+[ANSWER]
+MUST-NOT

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'bt' at line 2\n2. Pointer 'key' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nprof_bt_hash(const void *key, size_t r_hash[2]) {\n\tprof_bt_t *bt = (prof_bt_t *)key;\n\n\tcassert(config_prof);\n\n\thash(bt->vec, bt->len * sizeof(void *), 0x94122f33U, r_hash);\n}\n\n\n// Source: prof.c\n// Lines 1869-1875\n",
+  "ANSWER": "MUST"
+}

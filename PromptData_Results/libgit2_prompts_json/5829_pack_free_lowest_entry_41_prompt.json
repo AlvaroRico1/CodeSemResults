@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'entry' at line 4\n2. Pointer 'offset' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void free_lowest_entry(git_pack_cache *cache)\n{\n\toff64_t offset;\n\tgit_pack_cache_entry *entry;\n\n\tgit_offmap_foreach(cache->entries, offset, entry, {\n\t\tif (entry && git_atomic32_get(&entry->refcount) == 0) {\n\t\t\tcache->memory_used -= entry->raw.len;\n\t\t\tgit_offmap_delete(cache->entries, offset);\n\t\t\tfree_cache_object(entry);\n\t\t}\n\t});\n}\n\n\n// Source: pack.c\n// Lines 126-138\n",
+  "ANSWER": "MAY"
+}

@@ -1,0 +1,91 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'set_tail' at line 17
+2. Pointer 'first' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+unsigned char *__ziplistDelete(unsigned char *zl, unsigned char *p, unsigned int num) {
+    unsigned int i, totlen, deleted = 0;
+    size_t offset;
+    int nextdiff = 0;
+    zlentry first, tail;
+    size_t zlbytes = intrev32ifbe(ZIPLIST_BYTES(zl));
+
+    zipEntry(p, &first); /* no need for "safe" variant since the input pointer was validated by the function that returned it. */
+    for (i = 0; p[0] != ZIP_END && i < num; i++) {
+        p += zipRawEntryLengthSafe(zl, zlbytes, p);
+        deleted++;
+    }
+
+    assert(p >= first.p);
+    totlen = p-first.p; /* Bytes taken by the element(s) to delete. */
+    if (totlen > 0) {
+        uint32_t set_tail;
+        if (p[0] != ZIP_END) {
+            /* Storing `prevrawlen` in this entry may increase or decrease the
+             * number of bytes required compare to the current `prevrawlen`.
+             * There always is room to store this, because it was previously
+             * stored by an entry that is now being deleted. */
+            nextdiff = zipPrevLenByteDiff(p,first.prevrawlen);
+
+            /* Note that there is always space when p jumps backward: if
+             * the new previous entry is large, one of the deleted elements
+             * had a 5 bytes prevlen header, so there is for sure at least
+             * 5 bytes free and we need just 4. */
+            p -= nextdiff;
+            assert(p >= first.p && p<zl+zlbytes-1);
+            zipStorePrevEntryLength(p,first.prevrawlen);
+
+            /* Update offset for tail */
+            set_tail = intrev32ifbe(ZIPLIST_TAIL_OFFSET(zl))-totlen;
+
+            /* When the tail contains more than one entry, we need to take
+             * "nextdiff" in account as well. Otherwise, a change in the
+             * size of prevlen doesn't have an effect on the *tail* offset. */
+            assert(zipEntrySafe(zl, zlbytes, p, &tail, 1));
+            if (p[tail.headersize+tail.len] != ZIP_END) {
+                set_tail = set_tail + nextdiff;
+            }
+
+            /* Move tail to the front of the ziplist */
+            /* since we asserted that p >= first.p. we know totlen >= 0,
+             * so we know that p > first.p and this is guaranteed not to reach
+             * beyond the allocation, even if the entries lens are corrupted. */
+            size_t bytes_to_move = zlbytes-(p-zl)-1;
+            memmove(first.p,p,bytes_to_move);
+        } else {
+            /* The entire tail was deleted. No need to move memory. */
+            set_tail = (first.p-zl)-first.prevrawlen;
+        }
+
+        /* Resize the ziplist */
+        offset = first.p-zl;
+        zlbytes -= totlen - nextdiff;
+        zl = ziplistResize(zl, zlbytes);
+        p = zl+offset;
+
+        /* Update record count */
+        ZIPLIST_INCR_LENGTH(zl,-deleted);
+
+        /* Set the tail offset computed above */
+        assert(set_tail <= zlbytes - ZIPLIST_END_SIZE);
+        ZIPLIST_TAIL_OFFSET(zl) = intrev32ifbe(set_tail);
+
+        /* When nextdiff != 0, the raw length of the next entry has changed, so
+         * we need to cascade the update throughout the ziplist */
+        if (nextdiff != 0)
+            zl = __ziplistCascadeUpdate(zl,p);
+    }
+
+
+// Source: ziplist.c
+// Lines 850-921
+
+
+[ANSWER]
+MUST

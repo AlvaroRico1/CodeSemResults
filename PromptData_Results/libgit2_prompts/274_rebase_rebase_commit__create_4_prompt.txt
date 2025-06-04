@@ -1,0 +1,106 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'current_commit' at line 12
+2. Pointer 'tree' at line 13
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int rebase_commit__create(
+	git_commit **out,
+	git_rebase *rebase,
+	git_index *index,
+	git_commit *parent_commit,
+	const git_signature *author,
+	const git_signature *committer,
+	const char *message_encoding,
+	const char *message)
+{
+	git_rebase_operation *operation;
+	git_commit *current_commit = NULL, *commit = NULL;
+	git_tree *parent_tree = NULL, *tree = NULL;
+	git_oid tree_id, commit_id;
+	int error;
+
+	operation = git_array_get(rebase->operations, rebase->current);
+
+	if (git_index_has_conflicts(index)) {
+		git_error_set(GIT_ERROR_REBASE, "conflicts have not been resolved");
+		error = GIT_EUNMERGED;
+		goto done;
+	}
+
+	if ((error = git_commit_lookup(&current_commit, rebase->repo, &operation->id)) < 0 ||
+		(error = git_commit_tree(&parent_tree, parent_commit)) < 0 ||
+		(error = git_index_write_tree_to(&tree_id, index, rebase->repo)) < 0 ||
+		(error = git_tree_lookup(&tree, rebase->repo, &tree_id)) < 0)
+		goto done;
+
+	if (git_oid_equal(&tree_id, git_tree_id(parent_tree))) {
+		git_error_set(GIT_ERROR_REBASE, "this patch has already been applied");
+		error = GIT_EAPPLIED;
+		goto done;
+	}
+
+	if (!author)
+		author = git_commit_author(current_commit);
+
+	if (!message) {
+		message_encoding = git_commit_message_encoding(current_commit);
+		message = git_commit_message(current_commit);
+	}
+
+	git_error_clear();
+	error = GIT_PASSTHROUGH;
+
+	if (rebase->options.commit_create_cb) {
+		error = rebase->options.commit_create_cb(&commit_id,
+			author, committer, message_encoding, message,
+			tree, 1, (const git_commit **)&parent_commit,
+			rebase->options.payload);
+
+		git_error_set_after_callback_function(error,
+			"commit_create_cb");
+	}
+#ifndef GIT_DEPRECATE_HARD
+	else if (rebase->options.signing_cb) {
+		error = create_signed(&commit_id, rebase, author,
+			committer, message_encoding, message, tree,
+			1, (const git_commit **)&parent_commit);
+	}
+#endif
+
+	if (error == GIT_PASSTHROUGH)
+		error = git_commit_create(&commit_id, rebase->repo, NULL,
+			author, committer, message_encoding, message,
+			tree, 1, (const git_commit **)&parent_commit);
+
+	if (error)
+		goto done;
+
+	if ((error = git_commit_lookup(&commit, rebase->repo, &commit_id)) < 0)
+		goto done;
+
+	*out = commit;
+
+done:
+	if (error < 0)
+		git_commit_free(commit);
+
+	git_commit_free(current_commit);
+	git_tree_free(parent_tree);
+	git_tree_free(tree);
+
+	return error;
+}
+
+
+// Source: rebase.c
+// Lines 995-1081
+
+
+[ANSWER]
+MAY

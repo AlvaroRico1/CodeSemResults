@@ -1,0 +1,349 @@
+static decNumber * decAddOp(decNumber *res, const decNumber *lhs,
+                            const decNumber *rhs, decContext *set,
+                            uByte negate, uInt *status) {
+  #if DECSUBSET
+  decNumber *alloclhs=NULL;        /* non-NULL if rounded lhs allocated  */
+  decNumber *allocrhs=NULL;        /* .., rhs  */
+  #endif
+  Int   rhsshift;                  /* working shift (in Units)  */
+  Int   maxdigits;                 /* longest logical length  */
+  Int   mult;                      /* multiplier  */
+  Int   residue;                   /* rounding accumulator  */
+  uByte bits;                      /* result bits  */
+  Flag  diffsign;                  /* non-0 if arguments have different sign  */
+  Unit  *acc;                      /* accumulator for result  */
+  Unit  accbuff[SD2U(DECBUFFER*2+20)]; /* local buffer [*2+20 reduces many  */
+                                   /* allocations when called from  */
+                                   /* other operations, notable exp]  */
+  Unit  *allocacc=NULL;            /* -> allocated acc buffer, iff allocated  */
+  Int   reqdigits=set->digits;     /* local copy; requested DIGITS  */
+  Int   padding;                   /* work  */
+
+  #if DECCHECK
+  if (decCheckOperands(res, lhs, rhs, set)) return res;
+  #endif
+
+  do {                             /* protect allocated storage  */
+    #if DECSUBSET
+    if (!set->extended) {
+      /* reduce operands and set lostDigits status, as needed  */
+      if (lhs->digits>reqdigits) {
+        alloclhs=decRoundOperand(lhs, set, status);
+        if (alloclhs==NULL) break;
+        lhs=alloclhs;
+        }
+      if (rhs->digits>reqdigits) {
+        allocrhs=decRoundOperand(rhs, set, status);
+        if (allocrhs==NULL) break;
+        rhs=allocrhs;
+        }
+      }
+    #endif
+    /* [following code does not require input rounding]  */
+
+    /* note whether signs differ [used all paths]  */
+    diffsign=(Flag)((lhs->bits^rhs->bits^negate)&DECNEG);
+
+    /* handle infinities and NaNs  */
+    if (SPECIALARGS) {                  /* a special bit set  */
+      if (SPECIALARGS & (DECSNAN | DECNAN))  /* a NaN  */
+        decNaNs(res, lhs, rhs, set, status);
+       else { /* one or two infinities  */
+        if (decNumberIsInfinite(lhs)) { /* LHS is infinity  */
+          /* two infinities with different signs is invalid  */
+          if (decNumberIsInfinite(rhs) && diffsign) {
+            *status|=DEC_Invalid_operation;
+            break;
+            }
+          bits=lhs->bits & DECNEG;      /* get sign from LHS  */
+          }
+         else bits=(rhs->bits^negate) & DECNEG;/* RHS must be Infinity  */
+        bits|=DECINF;
+        uprv_decNumberZero(res);
+        res->bits=bits;                 /* set +/- infinity  */
+        } /* an infinity  */
+      break;
+      }
+
+    /* Quick exit for add 0s; return the non-0, modified as need be  */
+    if (ISZERO(lhs)) {
+      Int adjust;                       /* work  */
+      Int lexp=lhs->exponent;           /* save in case LHS==RES  */
+      bits=lhs->bits;                   /* ..  */
+      residue=0;                        /* clear accumulator  */
+      decCopyFit(res, rhs, set, &residue, status); /* copy (as needed)  */
+      res->bits^=negate;                /* flip if rhs was negated  */
+      #if DECSUBSET
+      if (set->extended) {              /* exponents on zeros count  */
+      #endif
+        /* exponent will be the lower of the two  */
+        adjust=lexp-res->exponent;      /* adjustment needed [if -ve]  */
+        if (ISZERO(res)) {              /* both 0: special IEEE 754 rules  */
+          if (adjust<0) res->exponent=lexp;  /* set exponent  */
+          /* 0-0 gives +0 unless rounding to -infinity, and -0-0 gives -0  */
+          if (diffsign) {
+            if (set->round!=DEC_ROUND_FLOOR) res->bits=0;
+             else res->bits=DECNEG;     /* preserve 0 sign  */
+            }
+          }
+         else { /* non-0 res  */
+          if (adjust<0) {     /* 0-padding needed  */
+            if ((res->digits-adjust)>set->digits) {
+              adjust=res->digits-set->digits;     /* to fit exactly  */
+              *status|=DEC_Rounded;               /* [but exact]  */
+              }
+            res->digits=decShiftToMost(res->lsu, res->digits, -adjust);
+            res->exponent+=adjust;                /* set the exponent.  */
+            }
+          } /* non-0 res  */
+      #if DECSUBSET
+        } /* extended  */
+      #endif
+      decFinish(res, set, &residue, status);      /* clean and finalize  */
+      break;}
+
+    if (ISZERO(rhs)) {                  /* [lhs is non-zero]  */
+      Int adjust;                       /* work  */
+      Int rexp=rhs->exponent;           /* save in case RHS==RES  */
+      bits=rhs->bits;                   /* be clean  */
+      residue=0;                        /* clear accumulator  */
+      decCopyFit(res, lhs, set, &residue, status); /* copy (as needed)  */
+      #if DECSUBSET
+      if (set->extended) {              /* exponents on zeros count  */
+      #endif
+        /* exponent will be the lower of the two  */
+        /* [0-0 case handled above]  */
+        adjust=rexp-res->exponent;      /* adjustment needed [if -ve]  */
+        if (adjust<0) {     /* 0-padding needed  */
+          if ((res->digits-adjust)>set->digits) {
+            adjust=res->digits-set->digits;     /* to fit exactly  */
+            *status|=DEC_Rounded;               /* [but exact]  */
+            }
+          res->digits=decShiftToMost(res->lsu, res->digits, -adjust);
+          res->exponent+=adjust;                /* set the exponent.  */
+          }
+      #if DECSUBSET
+        } /* extended  */
+      #endif
+      decFinish(res, set, &residue, status);      /* clean and finalize  */
+      break;}
+
+    /* [NB: both fastpath and mainpath code below assume these cases  */
+    /* (notably 0-0) have already been handled]  */
+
+    /* calculate the padding needed to align the operands  */
+    padding=rhs->exponent-lhs->exponent;
+
+    /* Fastpath cases where the numbers are aligned and normal, the RHS  */
+    /* is all in one unit, no operand rounding is needed, and no carry,  */
+    /* lengthening, or borrow is needed  */
+    if (padding==0
+        && rhs->digits<=DECDPUN
+        && rhs->exponent>=set->emin     /* [some normals drop through]  */
+        && rhs->exponent<=set->emax-set->digits+1 /* [could clamp]  */
+        && rhs->digits<=reqdigits
+        && lhs->digits<=reqdigits) {
+      Int partial=*lhs->lsu;
+      if (!diffsign) {                  /* adding  */
+        partial+=*rhs->lsu;
+        if ((partial<=DECDPUNMAX)       /* result fits in unit  */
+         && (lhs->digits>=DECDPUN ||    /* .. and no digits-count change  */
+             partial<(Int)powers[lhs->digits])) { /* ..  */
+          if (res!=lhs) uprv_decNumberCopy(res, lhs);  /* not in place  */
+          *res->lsu=(Unit)partial;      /* [copy could have overwritten RHS]  */
+          break;
+          }
+        /* else drop out for careful add  */
+        }
+       else {                           /* signs differ  */
+        partial-=*rhs->lsu;
+        if (partial>0) { /* no borrow needed, and non-0 result  */
+          if (res!=lhs) uprv_decNumberCopy(res, lhs);  /* not in place  */
+          *res->lsu=(Unit)partial;
+          /* this could have reduced digits [but result>0]  */
+          res->digits=decGetDigits(res->lsu, D2U(res->digits));
+          break;
+          }
+        /* else drop out for careful subtract  */
+        }
+      }
+
+    /* Now align (pad) the lhs or rhs so they can be added or  */
+    /* subtracted, as necessary.  If one number is much larger than  */
+    /* the other (that is, if in plain form there is a least one  */
+    /* digit between the lowest digit of one and the highest of the  */
+    /* other) padding with up to DIGITS-1 trailing zeros may be  */
+    /* needed; then apply rounding (as exotic rounding modes may be  */
+    /* affected by the residue).  */
+    rhsshift=0;               /* rhs shift to left (padding) in Units  */
+    bits=lhs->bits;           /* assume sign is that of LHS  */
+    mult=1;                   /* likely multiplier  */
+
+    /* [if padding==0 the operands are aligned; no padding is needed]  */
+    if (padding!=0) {
+      /* some padding needed; always pad the RHS, as any required  */
+      /* padding can then be effected by a simple combination of  */
+      /* shifts and a multiply  */
+      Flag swapped=0;
+      if (padding<0) {                  /* LHS needs the padding  */
+        const decNumber *t;
+        padding=-padding;               /* will be +ve  */
+        bits=(uByte)(rhs->bits^negate); /* assumed sign is now that of RHS  */
+        t=lhs; lhs=rhs; rhs=t;
+        swapped=1;
+        }
+
+      /* If, after pad, rhs would be longer than lhs by digits+1 or  */
+      /* more then lhs cannot affect the answer, except as a residue,  */
+      /* so only need to pad up to a length of DIGITS+1.  */
+      if (rhs->digits+padding > lhs->digits+reqdigits+1) {
+        /* The RHS is sufficient  */
+        /* for residue use the relative sign indication...  */
+        Int shift=reqdigits-rhs->digits;     /* left shift needed  */
+        residue=1;                           /* residue for rounding  */
+        if (diffsign) residue=-residue;      /* signs differ  */
+        /* copy, shortening if necessary  */
+        decCopyFit(res, rhs, set, &residue, status);
+        /* if it was already shorter, then need to pad with zeros  */
+        if (shift>0) {
+          res->digits=decShiftToMost(res->lsu, res->digits, shift);
+          res->exponent-=shift;              /* adjust the exponent.  */
+          }
+        /* flip the result sign if unswapped and rhs was negated  */
+        if (!swapped) res->bits^=negate;
+        decFinish(res, set, &residue, status);    /* done  */
+        break;}
+
+      /* LHS digits may affect result  */
+      rhsshift=D2U(padding+1)-1;        /* this much by Unit shift ..  */
+      mult=powers[padding-(rhsshift*DECDPUN)]; /* .. this by multiplication  */
+      } /* padding needed  */
+
+    if (diffsign) mult=-mult;           /* signs differ  */
+
+    /* determine the longer operand  */
+    maxdigits=rhs->digits+padding;      /* virtual length of RHS  */
+    if (lhs->digits>maxdigits) maxdigits=lhs->digits;
+
+    /* Decide on the result buffer to use; if possible place directly  */
+    /* into result.  */
+    acc=res->lsu;                       /* assume add direct to result  */
+    /* If destructive overlap, or the number is too long, or a carry or  */
+    /* borrow to DIGITS+1 might be possible, a buffer must be used.  */
+    /* [Might be worth more sophisticated tests when maxdigits==reqdigits]  */
+    if ((maxdigits>=reqdigits)          /* is, or could be, too large  */
+     || (res==rhs && rhsshift>0)) {     /* destructive overlap  */
+      /* buffer needed, choose it; units for maxdigits digits will be  */
+      /* needed, +1 Unit for carry or borrow  */
+      Int need=D2U(maxdigits)+1;
+      acc=accbuff;                      /* assume use local buffer  */
+      if (need*sizeof(Unit)>sizeof(accbuff)) {
+        /* printf("malloc add %ld %ld\n", need, sizeof(accbuff));  */
+        allocacc=(Unit *)malloc(need*sizeof(Unit));
+        if (allocacc==NULL) {           /* hopeless -- abandon  */
+          *status|=DEC_Insufficient_storage;
+          break;}
+        acc=allocacc;
+        }
+      }
+
+    res->bits=(uByte)(bits&DECNEG);     /* it's now safe to overwrite..  */
+    res->exponent=lhs->exponent;        /* .. operands (even if aliased)  */
+
+    #if DECTRACE
+      decDumpAr('A', lhs->lsu, D2U(lhs->digits));
+      decDumpAr('B', rhs->lsu, D2U(rhs->digits));
+      printf("  :h: %ld %ld\n", rhsshift, mult);
+    #endif
+
+    /* add [A+B*m] or subtract [A+B*(-m)]  */
+    U_ASSERT(rhs->digits > 0);
+    U_ASSERT(lhs->digits > 0);
+    res->digits=decUnitAddSub(lhs->lsu, D2U(lhs->digits),
+                              rhs->lsu, D2U(rhs->digits),
+                              rhsshift, acc, mult)
+               *DECDPUN;           /* [units -> digits]  */
+    if (res->digits<0) {           /* borrowed...  */
+      res->digits=-res->digits;
+      res->bits^=DECNEG;           /* flip the sign  */
+      }
+    #if DECTRACE
+      decDumpAr('+', acc, D2U(res->digits));
+    #endif
+
+    /* If a buffer was used the result must be copied back, possibly  */
+    /* shortening.  (If no buffer was used then the result must have  */
+    /* fit, so can't need rounding and residue must be 0.)  */
+    residue=0;                     /* clear accumulator  */
+    if (acc!=res->lsu) {
+      #if DECSUBSET
+      if (set->extended) {         /* round from first significant digit  */
+      #endif
+        /* remove leading zeros that were added due to rounding up to  */
+        /* integral Units -- before the test for rounding.  */
+        if (res->digits>reqdigits)
+          res->digits=decGetDigits(acc, D2U(res->digits));
+        decSetCoeff(res, set, acc, res->digits, &residue, status);
+      #if DECSUBSET
+        }
+       else { /* subset arithmetic rounds from original significant digit  */
+        /* May have an underestimate.  This only occurs when both  */
+        /* numbers fit in DECDPUN digits and are padding with a  */
+        /* negative multiple (-10, -100...) and the top digit(s) become  */
+        /* 0.  (This only matters when using X3.274 rules where the  */
+        /* leading zero could be included in the rounding.)  */
+        if (res->digits<maxdigits) {
+          *(acc+D2U(res->digits))=0; /* ensure leading 0 is there  */
+          res->digits=maxdigits;
+          }
+         else {
+          /* remove leading zeros that added due to rounding up to  */
+          /* integral Units (but only those in excess of the original  */
+          /* maxdigits length, unless extended) before test for rounding.  */
+          if (res->digits>reqdigits) {
+            res->digits=decGetDigits(acc, D2U(res->digits));
+            if (res->digits<maxdigits) res->digits=maxdigits;
+            }
+          }
+        decSetCoeff(res, set, acc, res->digits, &residue, status);
+        /* Now apply rounding if needed before removing leading zeros.  */
+        /* This is safe because subnormals are not a possibility  */
+        if (residue!=0) {
+          decApplyRound(res, set, residue, status);
+          residue=0;                 /* did what needed to be done  */
+          }
+        } /* subset  */
+      #endif
+      } /* used buffer  */
+
+    /* strip leading zeros [these were left on in case of subset subtract]  */
+    res->digits=decGetDigits(res->lsu, D2U(res->digits));
+
+    /* apply checks and rounding  */
+    decFinish(res, set, &residue, status);
+
+    /* "When the sum of two operands with opposite signs is exactly  */
+    /* zero, the sign of that sum shall be '+' in all rounding modes  */
+    /* except round toward -Infinity, in which mode that sign shall be  */
+    /* '-'."  [Subset zeros also never have '-', set by decFinish.]  */
+    if (ISZERO(res) && diffsign
+     #if DECSUBSET
+     && set->extended
+     #endif
+     && (*status&DEC_Inexact)==0) {
+      if (set->round==DEC_ROUND_FLOOR) res->bits|=DECNEG;   /* sign -  */
+                                  else res->bits&=~DECNEG;  /* sign +  */
+      }
+    } while(0);                              /* end protected  */
+
+  if (allocacc!=NULL) free(allocacc);        /* drop any storage used  */
+  #if DECSUBSET
+  if (allocrhs!=NULL) free(allocrhs);        /* ..  */
+  if (alloclhs!=NULL) free(alloclhs);        /* ..  */
+  #endif
+  return res;
+  } /* decAddOp  */
+
+
+// Source: decNumber.cpp
+// Lines 3836-4180

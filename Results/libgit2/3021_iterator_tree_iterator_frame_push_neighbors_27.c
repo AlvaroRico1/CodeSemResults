@@ -1,0 +1,61 @@
+GIT_INLINE(int) tree_iterator_frame_push_neighbors(
+	tree_iterator *iter,
+	tree_iterator_frame *parent_frame,
+	tree_iterator_frame *frame,
+	const char *filename)
+{
+	tree_iterator_entry *entry, *new_entry;
+	git_tree *tree = NULL;
+	git_tree_entry *tree_entry;
+	git_str *path;
+	size_t new_size, i;
+	int error = 0;
+
+	while (parent_frame->next_idx < parent_frame->entries.length) {
+		entry = parent_frame->entries.contents[parent_frame->next_idx];
+
+		if (strcasecmp(filename, entry->tree_entry->filename) != 0)
+			break;
+
+		if ((error = git_tree_lookup(&tree,
+			iter->base.repo, entry->tree_entry->oid)) < 0)
+			break;
+
+		if (git_vector_insert(&parent_frame->similar_trees, tree) < 0)
+			break;
+
+		path = git_array_alloc(parent_frame->similar_paths);
+		GIT_ERROR_CHECK_ALLOC(path);
+
+		memset(path, 0, sizeof(git_str));
+
+		if ((error = tree_iterator_compute_path(path, entry)) < 0)
+			break;
+
+		GIT_ERROR_CHECK_ALLOC_ADD(&new_size,
+			frame->entries.length, tree->entries.size);
+		git_vector_size_hint(&frame->entries, new_size);
+
+		git_array_foreach(tree->entries, i, tree_entry) {
+			new_entry = git_pool_malloc(&iter->entry_pool, 1);
+			GIT_ERROR_CHECK_ALLOC(new_entry);
+
+			new_entry->tree_entry = tree_entry;
+			new_entry->parent_path = path->ptr;
+
+			if ((error = git_vector_insert(&frame->entries, new_entry)) < 0)
+				break;
+		}
+
+		if (error)
+			break;
+
+		parent_frame->next_idx++;
+	}
+
+	return error;
+}
+
+
+// Source: iterator.c
+// Lines 596-652

@@ -1,0 +1,45 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'cs' at line 4
+2. Pointer 'c' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+control_add_sub(struct client *c, const char *name, enum control_sub_type type,
+    int id, const char *format)
+{
+	struct control_state	*cs = c->control_state;
+	struct control_sub	*csub, find;
+	struct timeval		 tv = { .tv_sec = 1 };
+
+	find.name = (char *)name;
+	if ((csub = RB_FIND(control_subs, &cs->subs, &find)) != NULL)
+		control_free_sub(cs, csub);
+
+	csub = xcalloc(1, sizeof *csub);
+	csub->name = xstrdup(name);
+	csub->type = type;
+	csub->id = id;
+	csub->format = xstrdup(format);
+	RB_INSERT(control_subs, &cs->subs, csub);
+
+	RB_INIT(&csub->panes);
+	RB_INIT(&csub->windows);
+
+	if (!evtimer_initialized(&cs->subs_timer))
+		evtimer_set(&cs->subs_timer, control_check_subs_timer, c);
+	if (!evtimer_pending(&cs->subs_timer, NULL))
+		evtimer_add(&cs->subs_timer, &tv);
+}
+
+
+// Source: control.c
+// Lines 1068-1093
+
+
+[ANSWER]
+MUST

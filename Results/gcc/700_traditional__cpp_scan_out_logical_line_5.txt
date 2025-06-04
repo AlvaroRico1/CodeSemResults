@@ -1,0 +1,1 @@
+out,gcc/libcpp/traditional.c,7,cur,gcc/libcpp/traditional.c,6,2

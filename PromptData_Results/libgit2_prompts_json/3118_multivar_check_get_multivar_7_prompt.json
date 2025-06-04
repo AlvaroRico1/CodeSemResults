@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'cfg' at line 1\n2. Pointer 'n' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void check_get_multivar(git_config *cfg, int expected)\n{\n\tgit_config_iterator *iter;\n\tgit_config_entry *entry;\n\tint n = 0;\n\n\tcl_git_pass(git_config_multivar_iterator_new(&iter, cfg, _name, NULL));\n\n\twhile (git_config_next(&entry, iter) == 0)\n\t\tn++;\n\n\tcl_assert_equal_i(expected, n);\n\tgit_config_iterator_free(iter);\n\n}\n\n\n// Source: multivar.c\n// Lines 73-87\n",
+  "ANSWER": "MUST-NOT"
+}

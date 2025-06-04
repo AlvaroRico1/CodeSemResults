@@ -1,0 +1,112 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'src' at line 5
+2. Pointer 'src' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int parse_esni_keys(ptls_context_t *ctx, uint16_t *esni_version, ptls_key_exchange_algorithm_t **selected_key_share,
+                           ptls_cipher_suite_t **selected_cipher, ptls_iovec_t *peer_key, uint16_t *padded_length,
+                           char **published_sni, ptls_iovec_t input)
+{
+    const uint8_t *src = input.base, *const end = input.base + input.len;
+    uint16_t version;
+    uint64_t not_before, not_after, now;
+    int ret = 0;
+
+    /* version */
+    if ((ret = ptls_decode16(&version, &src, end)) != 0)
+        goto Exit;
+    if (version != PTLS_ESNI_VERSION_DRAFT03) {
+        ret = PTLS_ALERT_DECODE_ERROR;
+        goto Exit;
+    }
+
+    { /* verify checksum */
+        ptls_hash_context_t *hctx;
+        uint8_t digest[PTLS_SHA256_DIGEST_SIZE];
+        if (end - src < 4) {
+            ret = PTLS_ALERT_DECODE_ERROR;
+            goto Exit;
+        }
+        if ((hctx = create_sha256_context(ctx)) == NULL) {
+            ret = PTLS_ERROR_LIBRARY;
+            goto Exit;
+        }
+        hctx->update(hctx, input.base, src - input.base);
+        hctx->update(hctx, "\0\0\0\0", 4);
+        hctx->update(hctx, src + 4, end - (src + 4));
+        hctx->final(hctx, digest, PTLS_HASH_FINAL_MODE_FREE);
+        if (memcmp(src, digest, 4) != 0) {
+            ret = PTLS_ALERT_DECODE_ERROR;
+            goto Exit;
+        }
+        src += 4;
+    }
+    *esni_version = version;
+    /* published sni */
+    ptls_decode_open_block(src, end, 2, {
+        size_t len = end - src;
+        *published_sni = malloc(len + 1);
+        if (*published_sni == NULL) {
+            ret = PTLS_ERROR_NO_MEMORY;
+            goto Exit;
+        }
+        if (len > 0) {
+            memcpy(*published_sni, src, len);
+        }
+        (*published_sni)[len] = 0;
+        src = end;
+    });
+    /* key-shares */
+    ptls_decode_open_block(src, end, 2, {
+        if ((ret = select_key_share(selected_key_share, peer_key, ctx->key_exchanges, &src, end, 0)) != 0)
+            goto Exit;
+    });
+    /* cipher-suite */
+    ptls_decode_open_block(src, end, 2, {
+        if ((ret = select_cipher(selected_cipher, ctx->cipher_suites, src, end, ctx->server_cipher_preference)) != 0)
+            goto Exit;
+        src = end;
+    });
+    /* padded-length */
+    if ((ret = ptls_decode16(padded_length, &src, end)) != 0)
+        goto Exit;
+    if (padded_length == 0)
+        goto Exit;
+    /* not-before, not_after */
+    if ((ret = ptls_decode64(&not_before, &src, end)) != 0 || (ret = ptls_decode64(&not_after, &src, end)) != 0)
+        goto Exit;
+    /* extensions */
+    ptls_decode_block(src, end, 2, {
+        while (src != end) {
+            uint16_t id;
+            if ((ret = ptls_decode16(&id, &src, end)) != 0)
+                goto Exit;
+            ptls_decode_open_block(src, end, 2, { src = end; });
+        }
+    });
+
+    /* check validity period */
+    now = ctx->get_time->cb(ctx->get_time);
+    if (!(not_before * 1000 <= now && now <= not_after * 1000)) {
+        ret = PTLS_ALERT_DECODE_ERROR;
+        goto Exit;
+    }
+
+    ret = 0;
+Exit:
+    return ret;
+}
+
+
+// Source: picotls.c
+// Lines 1687-1779
+
+
+[ANSWER]
+MUST

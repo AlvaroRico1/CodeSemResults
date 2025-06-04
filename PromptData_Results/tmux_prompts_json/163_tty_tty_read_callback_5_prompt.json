@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'c' at line 4\n2. Pointer 'tty' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ntty_read_callback(__unused int fd, __unused short events, void *data)\n{\n\tstruct tty\t*tty = data;\n\tstruct client\t*c = tty->client;\n\tconst char\t*name = c->name;\n\tsize_t\t\t size = EVBUFFER_LENGTH(tty->in);\n\tint\t\t nread;\n\n\tnread = evbuffer_read(tty->in, c->fd, -1);\n\tif (nread == 0 || nread == -1) {\n\t\tif (nread == 0)\n\t\t\tlog_debug(\"%s: read closed\", name);\n\t\telse\n\t\t\tlog_debug(\"%s: read error: %s\", name, strerror(errno));\n\t\tevent_del(&tty->event_in);\n\t\tserver_client_lost(tty->client);\n\t\treturn;\n\t}\n\tlog_debug(\"%s: read %d bytes (already %zu)\", name, nread, size);\n\n\twhile (tty_keys_next(tty))\n\t\t;\n}\n\n\n// Source: tty.c\n// Lines 157-179\n",
+  "ANSWER": "MUST"
+}

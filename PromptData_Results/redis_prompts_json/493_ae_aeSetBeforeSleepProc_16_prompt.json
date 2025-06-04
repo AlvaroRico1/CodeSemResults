@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'eventLoop' at line 1\n2. Pointer 'beforesleep' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid aeSetBeforeSleepProc(aeEventLoop *eventLoop, aeBeforeSleepProc *beforesleep) {\n    eventLoop->beforesleep = beforesleep;\n}\n\n\n// Source: ae.c\n// Lines 497-499\n",
+  "ANSWER": "MUST"
+}

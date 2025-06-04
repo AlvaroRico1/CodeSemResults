@@ -1,0 +1,468 @@
+process_command (unsigned int decoded_options_count,
+		 struct cl_decoded_option *decoded_options)
+{
+  const char *temp;
+  char *temp1;
+  char *tooldir_prefix, *tooldir_prefix2;
+  char *(*get_relative_prefix) (const char *, const char *,
+				const char *) = NULL;
+  struct cl_option_handlers handlers;
+  unsigned int j;
+
+  gcc_exec_prefix = env.get ("GCC_EXEC_PREFIX");
+
+  n_switches = 0;
+  n_infiles = 0;
+  added_libraries = 0;
+
+  /* Figure compiler version from version string.  */
+
+  compiler_version = temp1 = xstrdup (version_string);
+
+  for (; *temp1; ++temp1)
+    {
+      if (*temp1 == ' ')
+	{
+	  *temp1 = '\0';
+	  break;
+	}
+    }
+
+  /* Handle any -no-canonical-prefixes flag early, to assign the function
+     that builds relative prefixes.  This function creates default search
+     paths that are needed later in normal option handling.  */
+
+  for (j = 1; j < decoded_options_count; j++)
+    {
+      if (decoded_options[j].opt_index == OPT_no_canonical_prefixes)
+	{
+	  get_relative_prefix = make_relative_prefix_ignore_links;
+	  break;
+	}
+    }
+  if (! get_relative_prefix)
+    get_relative_prefix = make_relative_prefix;
+
+  /* Set up the default search paths.  If there is no GCC_EXEC_PREFIX,
+     see if we can create it from the pathname specified in
+     decoded_options[0].arg.  */
+
+  gcc_libexec_prefix = standard_libexec_prefix;
+#ifndef VMS
+  /* FIXME: make_relative_prefix doesn't yet work for VMS.  */
+  if (!gcc_exec_prefix)
+    {
+      gcc_exec_prefix = get_relative_prefix (decoded_options[0].arg,
+					     standard_bindir_prefix,
+					     standard_exec_prefix);
+      gcc_libexec_prefix = get_relative_prefix (decoded_options[0].arg,
+					     standard_bindir_prefix,
+					     standard_libexec_prefix);
+      if (gcc_exec_prefix)
+	xputenv (concat ("GCC_EXEC_PREFIX=", gcc_exec_prefix, NULL));
+    }
+  else
+    {
+      /* make_relative_prefix requires a program name, but
+	 GCC_EXEC_PREFIX is typically a directory name with a trailing
+	 / (which is ignored by make_relative_prefix), so append a
+	 program name.  */
+      char *tmp_prefix = concat (gcc_exec_prefix, "gcc", NULL);
+      gcc_libexec_prefix = get_relative_prefix (tmp_prefix,
+						standard_exec_prefix,
+						standard_libexec_prefix);
+
+      /* The path is unrelocated, so fallback to the original setting.  */
+      if (!gcc_libexec_prefix)
+	gcc_libexec_prefix = standard_libexec_prefix;
+
+      free (tmp_prefix);
+    }
+#else
+#endif
+  /* From this point onward, gcc_exec_prefix is non-null if the toolchain
+     is relocated. The toolchain was either relocated using GCC_EXEC_PREFIX
+     or an automatically created GCC_EXEC_PREFIX from
+     decoded_options[0].arg.  */
+
+  /* Do language-specific adjustment/addition of flags.  */
+  lang_specific_driver (&decoded_options, &decoded_options_count,
+			&added_libraries);
+
+  if (gcc_exec_prefix)
+    {
+      int len = strlen (gcc_exec_prefix);
+
+      if (len > (int) sizeof ("/lib/gcc/") - 1
+	  && (IS_DIR_SEPARATOR (gcc_exec_prefix[len-1])))
+	{
+	  temp = gcc_exec_prefix + len - sizeof ("/lib/gcc/") + 1;
+	  if (IS_DIR_SEPARATOR (*temp)
+	      && filename_ncmp (temp + 1, "lib", 3) == 0
+	      && IS_DIR_SEPARATOR (temp[4])
+	      && filename_ncmp (temp + 5, "gcc", 3) == 0)
+	    len -= sizeof ("/lib/gcc/") - 1;
+	}
+
+      set_std_prefix (gcc_exec_prefix, len);
+      add_prefix (&exec_prefixes, gcc_libexec_prefix, "GCC",
+		  PREFIX_PRIORITY_LAST, 0, 0);
+      add_prefix (&startfile_prefixes, gcc_exec_prefix, "GCC",
+		  PREFIX_PRIORITY_LAST, 0, 0);
+    }
+
+  /* COMPILER_PATH and LIBRARY_PATH have values
+     that are lists of directory names with colons.  */
+
+  temp = env.get ("COMPILER_PATH");
+  if (temp)
+    {
+      const char *startp, *endp;
+      char *nstore = (char *) alloca (strlen (temp) + 3);
+
+      startp = endp = temp;
+      while (1)
+	{
+	  if (*endp == PATH_SEPARATOR || *endp == 0)
+	    {
+	      strncpy (nstore, startp, endp - startp);
+	      if (endp == startp)
+		strcpy (nstore, concat (".", dir_separator_str, NULL));
+	      else if (!IS_DIR_SEPARATOR (endp[-1]))
+		{
+		  nstore[endp - startp] = DIR_SEPARATOR;
+		  nstore[endp - startp + 1] = 0;
+		}
+	      else
+		nstore[endp - startp] = 0;
+	      add_prefix (&exec_prefixes, nstore, 0,
+			  PREFIX_PRIORITY_LAST, 0, 0);
+	      add_prefix (&include_prefixes, nstore, 0,
+			  PREFIX_PRIORITY_LAST, 0, 0);
+	      if (*endp == 0)
+		break;
+	      endp = startp = endp + 1;
+	    }
+	  else
+	    endp++;
+	}
+    }
+
+  temp = env.get (LIBRARY_PATH_ENV);
+  if (temp && *cross_compile == '0')
+    {
+      const char *startp, *endp;
+      char *nstore = (char *) alloca (strlen (temp) + 3);
+
+      startp = endp = temp;
+      while (1)
+	{
+	  if (*endp == PATH_SEPARATOR || *endp == 0)
+	    {
+	      strncpy (nstore, startp, endp - startp);
+	      if (endp == startp)
+		strcpy (nstore, concat (".", dir_separator_str, NULL));
+	      else if (!IS_DIR_SEPARATOR (endp[-1]))
+		{
+		  nstore[endp - startp] = DIR_SEPARATOR;
+		  nstore[endp - startp + 1] = 0;
+		}
+	      else
+		nstore[endp - startp] = 0;
+	      add_prefix (&startfile_prefixes, nstore, NULL,
+			  PREFIX_PRIORITY_LAST, 0, 1);
+	      if (*endp == 0)
+		break;
+	      endp = startp = endp + 1;
+	    }
+	  else
+	    endp++;
+	}
+    }
+
+  /* Use LPATH like LIBRARY_PATH (for the CMU build program).  */
+  temp = env.get ("LPATH");
+  if (temp && *cross_compile == '0')
+    {
+      const char *startp, *endp;
+      char *nstore = (char *) alloca (strlen (temp) + 3);
+
+      startp = endp = temp;
+      while (1)
+	{
+	  if (*endp == PATH_SEPARATOR || *endp == 0)
+	    {
+	      strncpy (nstore, startp, endp - startp);
+	      if (endp == startp)
+		strcpy (nstore, concat (".", dir_separator_str, NULL));
+	      else if (!IS_DIR_SEPARATOR (endp[-1]))
+		{
+		  nstore[endp - startp] = DIR_SEPARATOR;
+		  nstore[endp - startp + 1] = 0;
+		}
+	      else
+		nstore[endp - startp] = 0;
+	      add_prefix (&startfile_prefixes, nstore, NULL,
+			  PREFIX_PRIORITY_LAST, 0, 1);
+	      if (*endp == 0)
+		break;
+	      endp = startp = endp + 1;
+	    }
+	  else
+	    endp++;
+	}
+    }
+
+  /* Process the options and store input files and switches in their
+     vectors.  */
+
+  last_language_n_infiles = -1;
+
+  set_option_handlers (&handlers);
+
+  for (j = 1; j < decoded_options_count; j++)
+    {
+      switch (decoded_options[j].opt_index)
+	{
+	case OPT_S:
+	case OPT_c:
+	case OPT_E:
+	  have_c = 1;
+	  break;
+	}
+      if (have_c)
+	break;
+    }
+
+  for (j = 1; j < decoded_options_count; j++)
+    {
+      if (decoded_options[j].opt_index == OPT_SPECIAL_input_file)
+	{
+	  const char *arg = decoded_options[j].arg;
+          const char *p = strrchr (arg, '@');
+          char *fname;
+	  long offset;
+	  int consumed;
+#ifdef HAVE_TARGET_OBJECT_SUFFIX
+	  arg = convert_filename (arg, 0, access (arg, F_OK));
+#endif
+	  /* For LTO static archive support we handle input file
+	     specifications that are composed of a filename and
+	     an offset like FNAME@OFFSET.  */
+	  if (p
+	      && p != arg
+	      && sscanf (p, "@%li%n", &offset, &consumed) >= 1
+	      && strlen (p) == (unsigned int)consumed)
+	    {
+              fname = (char *)xmalloc (p - arg + 1);
+              memcpy (fname, arg, p - arg);
+              fname[p - arg] = '\0';
+	      /* Only accept non-stdin and existing FNAME parts, otherwise
+		 try with the full name.  */
+	      if (strcmp (fname, "-") == 0 || access (fname, F_OK) < 0)
+		{
+		  free (fname);
+		  fname = xstrdup (arg);
+		}
+	    }
+	  else
+	    fname = xstrdup (arg);
+
+          if (strcmp (fname, "-") != 0 && access (fname, F_OK) < 0)
+	    {
+	      bool resp = fname[0] == '@' && access (fname + 1, F_OK) < 0;
+	      error ("%s: %m", fname + resp);
+	    }
+          else
+	    add_infile (arg, spec_lang);
+
+          free (fname);
+	  continue;
+	}
+
+      read_cmdline_option (&global_options, &global_options_set,
+			   decoded_options + j, UNKNOWN_LOCATION,
+			   CL_DRIVER, &handlers, global_dc);
+    }
+
+  /* If the user didn't specify any, default to all configured offload
+     targets.  */
+  if (ENABLE_OFFLOADING && offload_targets == NULL)
+    handle_foffload_option (OFFLOAD_TARGETS);
+
+  if (output_file
+      && strcmp (output_file, "-") != 0
+      && strcmp (output_file, HOST_BIT_BUCKET) != 0)
+    {
+      int i;
+      for (i = 0; i < n_infiles; i++)
+	if ((!infiles[i].language || infiles[i].language[0] != '*')
+	    && canonical_filename_eq (infiles[i].name, output_file))
+	  fatal_error (input_location,
+		       "input file %qs is the same as output file",
+		       output_file);
+    }
+
+  if (output_file != NULL && output_file[0] == '\0')
+    fatal_error (input_location, "output filename may not be empty");
+
+  /* If -save-temps=obj and -o name, create the prefix to use for %b.
+     Otherwise just make -save-temps=obj the same as -save-temps=cwd.  */
+  if (save_temps_flag == SAVE_TEMPS_OBJ && save_temps_prefix != NULL)
+    {
+      save_temps_length = strlen (save_temps_prefix);
+      temp = strrchr (lbasename (save_temps_prefix), '.');
+      if (temp)
+	{
+	  save_temps_length -= strlen (temp);
+	  save_temps_prefix[save_temps_length] = '\0';
+	}
+
+    }
+  else if (save_temps_prefix != NULL)
+    {
+      free (save_temps_prefix);
+      save_temps_prefix = NULL;
+    }
+
+  if (save_temps_flag && use_pipes)
+    {
+      /* -save-temps overrides -pipe, so that temp files are produced */
+      if (save_temps_flag)
+	warning (0, "%<-pipe%> ignored because %<-save-temps%> specified");
+      use_pipes = 0;
+    }
+
+  if (!compare_debug)
+    {
+      const char *gcd = env.get ("GCC_COMPARE_DEBUG");
+
+      if (gcd && gcd[0] == '-')
+	{
+	  compare_debug = 2;
+	  compare_debug_opt = gcd;
+	}
+      else if (gcd && *gcd && strcmp (gcd, "0"))
+	{
+	  compare_debug = 3;
+	  compare_debug_opt = "-gtoggle";
+	}
+    }
+  else if (compare_debug < 0)
+    {
+      compare_debug = 0;
+      gcc_assert (!compare_debug_opt);
+    }
+
+  /* Set up the search paths.  We add directories that we expect to
+     contain GNU Toolchain components before directories specified by
+     the machine description so that we will find GNU components (like
+     the GNU assembler) before those of the host system.  */
+
+  /* If we don't know where the toolchain has been installed, use the
+     configured-in locations.  */
+  if (!gcc_exec_prefix)
+    {
+#ifndef OS2
+      add_prefix (&exec_prefixes, standard_libexec_prefix, "GCC",
+		  PREFIX_PRIORITY_LAST, 1, 0);
+      add_prefix (&exec_prefixes, standard_libexec_prefix, "BINUTILS",
+		  PREFIX_PRIORITY_LAST, 2, 0);
+      add_prefix (&exec_prefixes, standard_exec_prefix, "BINUTILS",
+		  PREFIX_PRIORITY_LAST, 2, 0);
+#endif
+      add_prefix (&startfile_prefixes, standard_exec_prefix, "BINUTILS",
+		  PREFIX_PRIORITY_LAST, 1, 0);
+    }
+
+  gcc_assert (!IS_ABSOLUTE_PATH (tooldir_base_prefix));
+  tooldir_prefix2 = concat (tooldir_base_prefix, spec_machine,
+			    dir_separator_str, NULL);
+
+  /* Look for tools relative to the location from which the driver is
+     running, or, if that is not available, the configured prefix.  */
+  tooldir_prefix
+    = concat (gcc_exec_prefix ? gcc_exec_prefix : standard_exec_prefix,
+	      spec_host_machine, dir_separator_str, spec_version,
+	      accel_dir_suffix, dir_separator_str, tooldir_prefix2, NULL);
+  free (tooldir_prefix2);
+
+  add_prefix (&exec_prefixes,
+	      concat (tooldir_prefix, "bin", dir_separator_str, NULL),
+	      "BINUTILS", PREFIX_PRIORITY_LAST, 0, 0);
+  add_prefix (&startfile_prefixes,
+	      concat (tooldir_prefix, "lib", dir_separator_str, NULL),
+	      "BINUTILS", PREFIX_PRIORITY_LAST, 0, 1);
+  free (tooldir_prefix);
+
+#if defined(TARGET_SYSTEM_ROOT_RELOCATABLE) && !defined(VMS)
+  /* If the normal TARGET_SYSTEM_ROOT is inside of $exec_prefix,
+     then consider it to relocate with the rest of the GCC installation
+     if GCC_EXEC_PREFIX is set.
+     ``make_relative_prefix'' is not compiled for VMS, so don't call it.  */
+  if (target_system_root && !target_system_root_changed && gcc_exec_prefix)
+    {
+      char *tmp_prefix = get_relative_prefix (decoded_options[0].arg,
+					      standard_bindir_prefix,
+					      target_system_root);
+      if (tmp_prefix && access_check (tmp_prefix, F_OK) == 0)
+	{
+	  target_system_root = tmp_prefix;
+	  target_system_root_changed = 1;
+	}
+    }
+#endif
+
+  /* More prefixes are enabled in main, after we read the specs file
+     and determine whether this is cross-compilation or not.  */
+
+  if (n_infiles != 0 && n_infiles == last_language_n_infiles && spec_lang != 0)
+    warning (0, "%<-x %s%> after last input file has no effect", spec_lang);
+
+  /* Synthesize -fcompare-debug flag from the GCC_COMPARE_DEBUG
+     environment variable.  */
+  if (compare_debug == 2 || compare_debug == 3)
+    {
+      const char *opt = concat ("-fcompare-debug=", compare_debug_opt, NULL);
+      save_switch (opt, 0, NULL, false, true);
+      compare_debug = 1;
+    }
+
+  /* Ensure we only invoke each subprocess once.  */
+  if (n_infiles == 0
+      && (print_subprocess_help || print_help_list || print_version))
+    {
+      /* Create a dummy input file, so that we can pass
+	 the help option on to the various sub-processes.  */
+      add_infile ("help-dummy", "c");
+    }
+
+  /* Decide if undefined variable references are allowed in specs.  */
+
+  /* -v alone is safe. --version and --help alone or together are safe.  Note
+     that -v would make them unsafe, as they'd then be run for subprocesses as
+     well, the location of which might depend on variables possibly coming
+     from self-specs.  Note also that the command name is counted in
+     decoded_options_count.  */
+
+  unsigned help_version_count = 0;
+
+  if (print_version)
+    help_version_count++;
+
+  if (print_help_list)
+    help_version_count++;
+
+  spec_undefvar_allowed =
+    ((verbose_flag && decoded_options_count == 2)
+     || help_version_count == decoded_options_count - 1);
+
+  alloc_switch ();
+  switches[n_switches].part1 = 0;
+  alloc_infile ();
+  infiles[n_infiles].name = 0;
+}
+
+
+// Source: gcc.c
+// Lines 4326-4789

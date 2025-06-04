@@ -1,0 +1,50 @@
+bool Validate_scramble::validate() {
+  DBUG_TRACE;
+  unsigned char *digest_stage1 = nullptr;
+  unsigned char *digest_stage2 = nullptr;
+  unsigned char *scramble_stage1 = nullptr;
+
+  switch (m_digest_type) {
+    case Digest_info::SHA256_DIGEST: {
+      digest_stage1 = (unsigned char *)alloca(m_digest_length);
+      digest_stage2 = (unsigned char *)alloca(m_digest_length);
+      scramble_stage1 = (unsigned char *)alloca(m_digest_length);
+      break;
+    }
+    default: {
+      assert(false);
+      return true;
+    }
+  }
+
+  /* SHA2(known, m_rnd) => scramble_stage1 */
+  if (m_digest_generator->update_digest(m_known, m_digest_length) ||
+      m_digest_generator->update_digest(m_rnd, m_rnd_length) ||
+      m_digest_generator->retrieve_digest(scramble_stage1, m_digest_length)) {
+    DBUG_PRINT("info",
+               ("Failed to generate scramble_stage1: SHA2(known, m_rnd)"));
+    return true;
+  }
+
+  /* XOR(scramble, scramble_stage1) => digest_stage1 */
+  for (unsigned int i = 0; i < m_digest_length; ++i)
+    digest_stage1[i] = (m_scramble[i] ^ scramble_stage1[i]);
+
+  /* SHA2(digest_stage1) => digest_stage2 */
+  m_digest_generator->scrub();
+  if (m_digest_generator->update_digest(digest_stage1, m_digest_length) ||
+      m_digest_generator->retrieve_digest(digest_stage2, m_digest_length)) {
+    DBUG_PRINT("info",
+               ("Failed to generate digest_stage2: SHA2(digest_stage1)"));
+    return true;
+  }
+
+  /* m_known == digest_stage2 */
+  if (memcmp(m_known, digest_stage2, m_digest_length) == 0) return false;
+
+  return true;
+}
+
+
+// Source: sha2_password_common.cc
+// Lines 316-361

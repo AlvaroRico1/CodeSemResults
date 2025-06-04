@@ -1,0 +1,1 @@
+num_literals,h2o/deps/brotli/c/enc/backward_references_hq.c,6,last_insert_len,h2o/deps/brotli/c/enc/backward_references_hq.c,5,2

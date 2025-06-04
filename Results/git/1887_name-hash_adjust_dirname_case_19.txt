@@ -1,0 +1,1 @@
+startPtr,git/name-hash.c,3,ptr,git/name-hash.c,4,1

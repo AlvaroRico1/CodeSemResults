@@ -1,0 +1,1 @@
+sc,tmux/cmd-respawn-window.c,5,target,tmux/cmd-respawn-window.c,4,1

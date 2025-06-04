@@ -1,0 +1,1 @@
+self,h2o/lib/handler/self_trace.c,15,req,h2o/lib/handler/self_trace.c,1,1

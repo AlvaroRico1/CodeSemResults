@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'index' at line 3
+2. Pointer 'expected' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_diff_binary__print_patch_from_diff(void)
+{
+	git_index *index;
+	git_diff *diff;
+	git_str actual = GIT_STR_INIT;
+	git_diff_options opts = GIT_DIFF_OPTIONS_INIT;
+	const char *expected =
+		"diff --git a/untimely.txt b/untimely.txt\n" \
+		"index 9a69d960ae94b060f56c2a8702545e2bb1abb935..1111d4f11f4b35bf6759e0fb714fe09731ef0840 100644\n" \
+		"GIT binary patch\n" \
+		"delta 32\n" \
+		"nc%1vf+QYWt3zLL@hC)e3Vu?a>QDRl4f_G*?PG(-ZA}<#J$+QbW\n" \
+
+
+// Source: binary.c
+// Lines 374-385
+
+
+[ANSWER]
+MUST-NOT

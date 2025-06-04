@@ -1,0 +1,43 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'data' at line 3
+2. Pointer '_data' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int should_include(struct commit *commit, void *_data)
+{
+	struct include_data *data = _data;
+	int bitmap_pos;
+
+	bitmap_pos = bitmap_position(data->bitmap_git, &commit->object.oid);
+	if (bitmap_pos < 0)
+		bitmap_pos = ext_index_add_object(data->bitmap_git,
+						  (struct object *)commit,
+						  NULL);
+
+	if (!add_to_include_set(data->bitmap_git, data, commit, bitmap_pos)) {
+		struct commit_list *parent = commit->parents;
+
+		while (parent) {
+			parent->item->object.flags |= SEEN;
+			parent = parent->next;
+		}
+
+		return 0;
+	}
+
+	return 1;
+}
+
+
+// Source: pack-bitmap.c
+// Lines 672-695
+
+
+[ANSWER]
+MUST

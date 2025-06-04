@@ -1,0 +1,1 @@
+verify_identity,mysql/sql-common/client.cc,43,ssl_init_error,mysql/sql-common/client.cc,39,0

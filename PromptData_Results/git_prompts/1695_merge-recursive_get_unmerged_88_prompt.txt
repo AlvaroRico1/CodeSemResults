@@ -1,0 +1,40 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ce' at line 13
+2. Pointer 'istate' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static struct string_list *get_unmerged(struct index_state *istate)
+{
+	struct string_list *unmerged = xcalloc(1, sizeof(struct string_list));
+	int i;
+
+	unmerged->strdup_strings = 1;
+
+	/* TODO: audit for interaction with sparse-index. */
+	ensure_full_index(istate);
+	for (i = 0; i < istate->cache_nr; i++) {
+		struct string_list_item *item;
+		struct stage_data *e;
+		const struct cache_entry *ce = istate->cache[i];
+		if (!ce_stage(ce))
+			continue;
+
+		item = string_list_lookup(unmerged, ce->name);
+		if (!item) {
+			item = string_list_insert(unmerged, ce->name);
+			item->util = xcalloc(1, sizeof(struct stage_data));
+		}
+
+
+// Source: merge-recursive.c
+// Lines 515-535
+
+
+[ANSWER]
+MUST

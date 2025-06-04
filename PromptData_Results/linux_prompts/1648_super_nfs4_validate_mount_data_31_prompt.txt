@@ -1,0 +1,116 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'args' at line 2
+2. Pointer 'c' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int nfs4_validate_mount_data(void *options,
+				    struct nfs_parsed_mount_data *args,
+				    const char *dev_name)
+{
+	struct sockaddr *sap = (struct sockaddr *)&args->nfs_server.address;
+	struct nfs4_mount_data *data = (struct nfs4_mount_data *)options;
+	char *c;
+
+	if (data == NULL)
+		goto out_no_data;
+
+	args->version = 4;
+
+	switch (data->version) {
+	case 1:
+		if (data->host_addrlen > sizeof(args->nfs_server.address))
+			goto out_no_address;
+		if (data->host_addrlen == 0)
+			goto out_no_address;
+		args->nfs_server.addrlen = data->host_addrlen;
+		if (copy_from_user(sap, data->host_addr, data->host_addrlen))
+			return -EFAULT;
+		if (!nfs_verify_server_address(sap))
+			goto out_no_address;
+		args->nfs_server.port = ntohs(((struct sockaddr_in *)sap)->sin_port);
+
+		if (data->auth_flavourlen) {
+			rpc_authflavor_t pseudoflavor;
+			if (data->auth_flavourlen > 1)
+				goto out_inval_auth;
+			if (copy_from_user(&pseudoflavor,
+					   data->auth_flavours,
+					   sizeof(pseudoflavor)))
+				return -EFAULT;
+			args->selected_flavor = pseudoflavor;
+		} else
+			args->selected_flavor = RPC_AUTH_UNIX;
+
+		c = strndup_user(data->hostname.data, NFS4_MAXNAMLEN);
+		if (IS_ERR(c))
+			return PTR_ERR(c);
+		args->nfs_server.hostname = c;
+
+		c = strndup_user(data->mnt_path.data, NFS4_MAXPATHLEN);
+		if (IS_ERR(c))
+			return PTR_ERR(c);
+		args->nfs_server.export_path = c;
+		dfprintk(MOUNT, "NFS: MNTPATH: '%s'\n", c);
+
+		c = strndup_user(data->client_addr.data, 16);
+		if (IS_ERR(c))
+			return PTR_ERR(c);
+		args->client_address = c;
+
+		/*
+		 * Translate to nfs_parsed_mount_data, which nfs4_fill_super
+		 * can deal with.
+		 */
+
+		args->flags	= data->flags & NFS4_MOUNT_FLAGMASK;
+		args->rsize	= data->rsize;
+		args->wsize	= data->wsize;
+		args->timeo	= data->timeo;
+		args->retrans	= data->retrans;
+		args->acregmin	= data->acregmin;
+		args->acregmax	= data->acregmax;
+		args->acdirmin	= data->acdirmin;
+		args->acdirmax	= data->acdirmax;
+		args->nfs_server.protocol = data->proto;
+		nfs_validate_transport_protocol(args);
+		if (args->nfs_server.protocol == XPRT_TRANSPORT_UDP)
+			goto out_invalid_transport_udp;
+
+		break;
+	default:
+		return NFS_TEXT_DATA;
+	}
+
+	return 0;
+
+out_no_data:
+	dfprintk(MOUNT, "NFS4: mount program didn't pass any mount data\n");
+	return -EINVAL;
+
+out_inval_auth:
+	dfprintk(MOUNT, "NFS4: Invalid number of RPC auth flavours %d\n",
+		 data->auth_flavourlen);
+	return -EINVAL;
+
+out_no_address:
+	dfprintk(MOUNT, "NFS4: mount program didn't pass remote address\n");
+	return -EINVAL;
+
+out_invalid_transport_udp:
+	dfprintk(MOUNT, "NFSv4: Unsupported transport protocol udp\n");
+	return -EINVAL;
+}
+
+
+// Source: super.c
+// Lines 2814-2910
+
+
+[ANSWER]
+MUST

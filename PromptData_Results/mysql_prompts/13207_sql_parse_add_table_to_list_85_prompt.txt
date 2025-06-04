@@ -1,0 +1,164 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ptr' at line 42
+2. Pointer 'schema_table' at line 87
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+TABLE_LIST *Query_block::add_table_to_list(
+    THD *thd, Table_ident *table_name, const char *alias, ulong table_options,
+    thr_lock_type lock_type, enum_mdl_type mdl_type,
+    List<Index_hint> *index_hints_arg, List<String> *partition_names,
+    LEX_STRING *option, Parse_context *pc) {
+  TABLE_LIST *previous_table_ref =
+      nullptr; /* The table preceding the current one. */
+  LEX *lex = thd->lex;
+  DBUG_TRACE;
+
+  assert(table_name != nullptr);
+  // A derived table has no table name, only an alias.
+  if (!(table_options & TL_OPTION_ALIAS) && !table_name->is_derived_table()) {
+    Ident_name_check ident_check_status =
+        check_table_name(table_name->table.str, table_name->table.length);
+    if (ident_check_status == Ident_name_check::WRONG) {
+      my_error(ER_WRONG_TABLE_NAME, MYF(0), table_name->table.str);
+      return nullptr;
+    } else if (ident_check_status == Ident_name_check::TOO_LONG) {
+      my_error(ER_TOO_LONG_IDENT, MYF(0), table_name->table.str);
+      return nullptr;
+    }
+  }
+  LEX_STRING db = to_lex_string(table_name->db);
+  if (!table_name->is_derived_table() && !table_name->is_table_function() &&
+      table_name->db.str &&
+      (check_and_convert_db_name(&db, false) != Ident_name_check::OK))
+    return nullptr;
+
+  const char *alias_str = alias ? alias : table_name->table.str;
+  if (!alias) /* Alias is case sensitive */
+  {
+    if (table_name->sel) {
+      my_error(ER_DERIVED_MUST_HAVE_ALIAS, MYF(0));
+      return nullptr;
+    }
+    if (!(alias_str =
+              (char *)thd->memdup(alias_str, table_name->table.length + 1)))
+      return nullptr;
+  }
+
+  TABLE_LIST *ptr = new (thd->mem_root) TABLE_LIST;
+  if (ptr == nullptr) return nullptr; /* purecov: inspected */
+
+  if (lower_case_table_names && table_name->table.length)
+    table_name->table.length = my_casedn_str(
+        files_charset_info, const_cast<char *>(table_name->table.str));
+
+  ptr->query_block = this;
+  ptr->table_name = table_name->table.str;
+  ptr->table_name_length = table_name->table.length;
+  ptr->alias = alias_str;
+  ptr->is_alias = alias != nullptr;
+  ptr->table_function = table_name->table_function;
+  if (table_name->table_function) {
+    table_func_count++;
+    ptr->derived_key_list.clear();
+  }
+
+  if (table_name->db.str) {
+    ptr->is_fqtn = true;
+    ptr->db = table_name->db.str;
+    ptr->db_length = table_name->db.length;
+  } else {
+    bool found_cte;
+    if (find_common_table_expr(thd, table_name, ptr, pc, &found_cte))
+      return nullptr;
+    if (!found_cte && lex->copy_db_to(&ptr->db, &ptr->db_length))
+      return nullptr;
+  }
+
+  ptr->set_tableno(0);
+  ptr->set_lock({lock_type, THR_DEFAULT});
+  ptr->updating = table_options & TL_OPTION_UPDATING;
+  ptr->ignore_leaves = table_options & TL_OPTION_IGNORE_LEAVES;
+  ptr->set_derived_query_expression(table_name->sel);
+
+  if (!ptr->is_derived() && !ptr->is_table_function() &&
+      is_infoschema_db(ptr->db, ptr->db_length)) {
+    dd::info_schema::convert_table_name_case(
+        const_cast<char *>(ptr->db), const_cast<char *>(ptr->table_name));
+
+    bool hidden_system_view = false;
+    ptr->is_system_view = dd::get_dictionary()->is_system_view_name(
+        ptr->db, ptr->table_name, &hidden_system_view);
+
+    ST_SCHEMA_TABLE *schema_table;
+    if (ptr->updating &&
+        /* Special cases which are processed by commands itself */
+        lex->sql_command != SQLCOM_CHECK &&
+        lex->sql_command != SQLCOM_CHECKSUM &&
+        !(lex->sql_command == SQLCOM_CREATE_VIEW && ptr->is_system_view)) {
+      my_error(ER_DBACCESS_DENIED_ERROR, MYF(0),
+               thd->security_context()->priv_user().str,
+               thd->security_context()->priv_host().str,
+               INFORMATION_SCHEMA_NAME.str);
+      return nullptr;
+    }
+    if (ptr->is_system_view) {
+      if (thd->lex->sql_command != SQLCOM_CREATE_VIEW) {
+        /*
+          Stop users from using hidden system views, unless
+          it is used by SHOW commands.
+        */
+        if (thd->lex->query_block && hidden_system_view &&
+            !(thd->lex->query_block->active_options() &
+              OPTION_SELECT_FOR_SHOW)) {
+          my_error(ER_NO_SYSTEM_VIEW_ACCESS, MYF(0), ptr->table_name);
+          return nullptr;
+        }
+
+        /*
+          Stop users from accessing I_S.FILES if they do not have
+          PROCESS privilege.
+        */
+        if (!strcmp(ptr->table_name, "FILES") &&
+            check_global_access(thd, PROCESS_ACL))
+          return nullptr;
+      }
+    } else {
+      schema_table = find_schema_table(thd, ptr->table_name);
+      /*
+        Report an error
+          if hidden schema table name is used in the statement other than
+          SHOW statement OR
+          if unknown schema table is used in the statement other than
+          SHOW CREATE VIEW statement.
+        Invalid view warning is reported for SHOW CREATE VIEW statement in
+        the table open stage.
+      */
+      if ((!schema_table &&
+           !(thd->query_plan.get_command() == SQLCOM_SHOW_CREATE &&
+             thd->query_plan.get_lex()->only_view)) ||
+          (schema_table && schema_table->hidden &&
+           (sql_command_flags[lex->sql_command] & CF_STATUS_COMMAND) == 0)) {
+        my_error(ER_UNKNOWN_TABLE, MYF(0), ptr->table_name,
+                 INFORMATION_SCHEMA_NAME.str);
+        return nullptr;
+      }
+
+      if (schema_table) {
+        ptr->schema_table = schema_table;
+      }
+    }
+  }
+
+
+// Source: sql_parse.cc
+// Lines 5570-5714
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,48 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'field' at line 18
+2. Pointer 'row' at line 19
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int STDCALL mysql_stmt_fetch_column(MYSQL_STMT *stmt, MYSQL_BIND *my_bind,
+                                    uint column, ulong offset) {
+  MYSQL_BIND *param = stmt->bind + column;
+  DBUG_TRACE;
+
+  if ((int)stmt->state < (int)MYSQL_STMT_FETCH_DONE) {
+    set_stmt_error(stmt, CR_NO_DATA, unknown_sqlstate, nullptr);
+    return 1;
+  }
+  if (column >= stmt->field_count) {
+    set_stmt_error(stmt, CR_INVALID_PARAMETER_NO, unknown_sqlstate, nullptr);
+    return 1;
+  }
+
+  if (!my_bind->error) my_bind->error = &my_bind->error_value;
+  *my_bind->error = false;
+  if (param->row_ptr) {
+    MYSQL_FIELD *field = stmt->fields + column;
+    uchar *row = param->row_ptr;
+    my_bind->offset = offset;
+    if (my_bind->is_null) *my_bind->is_null = false;
+    if (my_bind->length) /* Set the length if non char/binary types */
+      *my_bind->length = *param->length;
+    else
+      my_bind->length = &param->length_value; /* Needed for fetch_result() */
+    fetch_result_with_conversion(my_bind, field, &row);
+  } else {
+    if (my_bind->is_null) *my_bind->is_null = true;
+  }
+
+
+// Source: libmysql.cc
+// Lines 3768-3796
+
+
+[ANSWER]
+MUST-NOT

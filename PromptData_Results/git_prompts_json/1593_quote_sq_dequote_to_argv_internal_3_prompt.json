@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'alloc' at line 2\n2. Pointer 'next' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int sq_dequote_to_argv_internal(char *arg,\n\t\t\t\t       const char ***argv, int *nr, int *alloc,\n\t\t\t\t       struct strvec *array)\n{\n\tchar *next = arg;\n\n\tif (!*arg)\n\t\treturn 0;\n\tdo {\n\t\tchar *dequoted = sq_dequote_step(next, &next);\n\t\tif (!dequoted)\n\t\t\treturn -1;\n\t\tif (next) {\n\t\t\tchar c;\n\t\t\tif (!isspace(*next))\n\t\t\t\treturn -1;\n\t\t\tdo {\n\t\t\t\tc = *++next;\n\t\t\t} while (isspace(c));\n\t\t}\n\t\tif (argv) {\n\t\t\tALLOC_GROW(*argv, *nr + 1, *alloc);\n\t\t\t(*argv)[(*nr)++] = dequoted;\n\t\t}\n\t\tif (array)\n\t\t\tstrvec_push(array, dequoted);\n\t} while (next);\n\n\treturn 0;\n}\n\n\n// Source: quote.c\n// Lines 170-199\n",
+  "ANSWER": "MAY"
+}

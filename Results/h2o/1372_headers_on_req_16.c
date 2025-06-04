@@ -1,0 +1,16 @@
+static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
+{
+    struct st_headers_early_hints_handler_t *handler = (void *)_handler;
+
+    struct st_headers_early_hints_sender_t *sender = h2o_mem_alloc_shared(&req->pool, sizeof(*sender), on_sender_dispose);
+    sender->req = req;
+    sender->cmds = handler->cmds;
+    h2o_timer_init(&sender->deferred_timeout_entry, on_sender_deferred_timeout);
+    h2o_timer_link(req->conn->ctx->loop, 0, &sender->deferred_timeout_entry);
+
+    return -1;
+}
+
+
+// Source: headers.c
+// Lines 88-99

@@ -1,0 +1,1 @@
+window,tmux/cmd-find.c,1,errstr,tmux/cmd-find.c,4,0

@@ -1,0 +1,148 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'r' at line 8
+2. Pointer 'r' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void bitmap_builder_init(struct bitmap_builder *bb,
+				struct bitmap_writer *writer,
+				struct bitmap_index *old_bitmap)
+{
+	struct rev_info revs;
+	struct commit *commit;
+	struct commit_list *reusable = NULL;
+	struct commit_list *r;
+	unsigned int i, num_maximal = 0;
+
+	memset(bb, 0, sizeof(*bb));
+	init_bb_data(&bb->data);
+
+	reset_revision_walk();
+	repo_init_revisions(writer->to_pack->repo, &revs, NULL);
+	revs.topo_order = 1;
+	revs.first_parent_only = 1;
+
+	for (i = 0; i < writer->selected_nr; i++) {
+		struct commit *c = writer->selected[i].commit;
+		struct bb_commit *ent = bb_data_at(&bb->data, c);
+
+		ent->selected = 1;
+		ent->maximal = 1;
+		ent->idx = i;
+
+		ent->commit_mask = bitmap_new();
+		bitmap_set(ent->commit_mask, i);
+
+		add_pending_object(&revs, &c->object, "");
+	}
+
+	if (prepare_revision_walk(&revs))
+		die("revision walk setup failed");
+
+	while ((commit = get_revision(&revs))) {
+		struct commit_list *p = commit->parents;
+		struct bb_commit *c_ent;
+
+		parse_commit_or_die(commit);
+
+		c_ent = bb_data_at(&bb->data, commit);
+
+		/*
+		 * If there is no commit_mask, there is no reason to iterate
+		 * over this commit; it is not selected (if it were, it would
+		 * not have a blank commit mask) and all its children have
+		 * existing bitmaps (see the comment starting with "This commit
+		 * has an existing bitmap" below), so it does not contribute
+		 * anything to the final bitmap file or its descendants.
+		 */
+		if (!c_ent->commit_mask)
+			continue;
+
+		if (old_bitmap && bitmap_for_commit(old_bitmap, commit)) {
+			/*
+			 * This commit has an existing bitmap, so we can
+			 * get its bits immediately without an object
+			 * walk. That is, it is reusable as-is and there is no
+			 * need to continue walking beyond it.
+			 *
+			 * Mark it as such and add it to bb->commits separately
+			 * to avoid allocating a position in the commit mask.
+			 */
+			commit_list_insert(commit, &reusable);
+			goto next;
+		}
+
+		if (c_ent->maximal) {
+			num_maximal++;
+			ALLOC_GROW(bb->commits, bb->commits_nr + 1, bb->commits_alloc);
+			bb->commits[bb->commits_nr++] = commit;
+		}
+
+		if (p) {
+			struct bb_commit *p_ent = bb_data_at(&bb->data, p->item);
+			int c_not_p, p_not_c;
+
+			if (!p_ent->commit_mask) {
+				p_ent->commit_mask = bitmap_new();
+				c_not_p = 1;
+				p_not_c = 0;
+			} else {
+				c_not_p = bitmap_is_subset(c_ent->commit_mask, p_ent->commit_mask);
+				p_not_c = bitmap_is_subset(p_ent->commit_mask, c_ent->commit_mask);
+			}
+
+			if (!c_not_p)
+				continue;
+
+			bitmap_or(p_ent->commit_mask, c_ent->commit_mask);
+
+			if (p_not_c)
+				p_ent->maximal = 1;
+			else {
+				p_ent->maximal = 0;
+				free_commit_list(p_ent->reverse_edges);
+				p_ent->reverse_edges = NULL;
+			}
+
+			if (c_ent->maximal) {
+				commit_list_insert(commit, &p_ent->reverse_edges);
+			} else {
+				struct commit_list *cc = c_ent->reverse_edges;
+
+				for (; cc; cc = cc->next) {
+					if (!commit_list_contains(cc->item, p_ent->reverse_edges))
+						commit_list_insert(cc->item, &p_ent->reverse_edges);
+				}
+			}
+		}
+
+next:
+		bitmap_free(c_ent->commit_mask);
+		c_ent->commit_mask = NULL;
+	}
+
+	for (r = reusable; r; r = r->next) {
+		ALLOC_GROW(bb->commits, bb->commits_nr + 1, bb->commits_alloc);
+		bb->commits[bb->commits_nr++] = r->item;
+	}
+
+	trace2_data_intmax("pack-bitmap-write", the_repository,
+			   "num_selected_commits", writer->selected_nr);
+	trace2_data_intmax("pack-bitmap-write", the_repository,
+			   "num_maximal_commits", num_maximal);
+
+	free_commit_list(reusable);
+}
+
+
+// Source: pack-bitmap-write.c
+// Lines 202-330
+
+
+[ANSWER]
+MUST

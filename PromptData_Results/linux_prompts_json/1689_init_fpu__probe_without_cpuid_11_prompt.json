@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'fcw' at line 4\n2. Pointer 'fsw' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic bool fpu__probe_without_cpuid(void)\n{\n\tunsigned long cr0;\n\tu16 fsw, fcw;\n\n\tfsw = fcw = 0xffff;\n\n\tcr0 = read_cr0();\n\tcr0 &= ~(X86_CR0_TS | X86_CR0_EM);\n\twrite_cr0(cr0);\n\n\tasm volatile(\"fninit ; fnstsw %0 ; fnstcw %1\" : \"+m\" (fsw), \"+m\" (fcw));\n\n\tpr_info(\"x86/fpu: Probing for FPU: FSW=0x%04hx FCW=0x%04hx\\n\", fsw, fcw);\n\n\treturn fsw == 0 && (fcw & 0x103f) == 0x003f;\n}\n\n\n// Source: init.c\n// Lines 53-69\n",
+  "ANSWER": "MAY"
+}

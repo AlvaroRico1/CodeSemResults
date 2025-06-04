@@ -1,0 +1,1 @@
+self,h2o/lib/handler/throttle_resp.c,3,_self,h2o/lib/handler/throttle_resp.c,1,1

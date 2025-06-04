@@ -1,0 +1,265 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'subq' at line 78
+2. Pointer 'subquery' at line 50
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+          [&](Item **expr_p) mutable -> bool {
+            subqueries.m_location =
+                Item::Collect_scalar_subquery_info::L_JOIN_COND;
+            if ((*expr_p)->has_subquery() &&
+                (*expr_p)->walk(&Item::collect_scalar_subqueries,
+                                enum_walk::PREFIX | enum_walk::POSTFIX,
+                                pointer_cast<uchar *>(&subqueries)))
+              return true; /* purecov: inspected */
+            return false;
+          },
+          &subqueries))
+    return true; /* purecov: inspected */
+
+  subqueries.m_location = Item::Collect_scalar_subquery_info::L_WHERE;
+
+  Item **where_expr_p = &m_where_cond;
+  if (*where_expr_p != nullptr && (*where_expr_p)->has_subquery()) {
+    if ((*where_expr_p)
+            ->walk(&Item::collect_scalar_subqueries,
+                   enum_walk::PREFIX | enum_walk::POSTFIX,
+                   pointer_cast<uchar *>(&subqueries)))
+      return true; /* purecov: inspected */
+  }
+
+  subqueries.m_location =
+      Item_singlerow_subselect::Collect_scalar_subquery_info::L_SELECT;
+  for (Item *select_expr : visible_fields()) {
+    if (select_expr->has_subquery() &&
+        select_expr->walk(&Item::collect_scalar_subqueries,
+                          enum_walk::PREFIX | enum_walk::POSTFIX,
+                          pointer_cast<uchar *>(&subqueries)))
+      return true; /* purecov: inspected */
+  }
+
+  subqueries.m_location = Item::Collect_scalar_subquery_info::L_HAVING;
+  Item **having_expr_p = &m_having_cond;
+  if (*having_expr_p != nullptr && (*having_expr_p)->has_subquery()) {
+    if ((*having_expr_p)
+            ->walk(&Item::collect_scalar_subqueries,
+                   enum_walk::PREFIX | enum_walk::POSTFIX,
+                   pointer_cast<uchar *>(&subqueries)))
+      return true; /* purecov: inspected */
+  }
+
+  /*
+    Loop through eligible subqueries and see if we need the extra transform of
+    implicit grouping into a separate derived table before we can
+    transform the scalar subqueries to more derived tables.  But we
+    cannot do this if we have a HAVING expression which references or contains
+    a subquery.
+    In that case, we throw in the towel and don't do any transformations. E.g.
+
+    1. SELECT SUM(a), (SELECT SUM(b) FROM t3) scalar
+       FROM t1
+       HAVING SUM(a) > scalar;
+
+    2. SELECT MAX(a)
+       FROM t1
+       WHERE FALSE
+       HAVING (SELECT MIN(a) FROM t1) > 0;
+
+   TODO: we could solve this by not moving the HAVING condition into the derived
+   table, but instead letting it remain in the transformed block as a WHERE
+   predicate, e.g. in the case of example 1:
+
+     SELECT derived0.summ, derived1.scalar
+     FROM (SELECT SUM(a) AS summ FROM t1) AS derived0
+           LEFT JOIN
+           (SELECT SUM(b) AS scalar FROM t3) AS derived1
+           ON TRUE
+     WHERE derived0.sum > derived1.scalar;
+
+   but this is not yet done.
+  */
+  if (is_implicitly_grouped()) {
+    bool need_new_outer = false;
+    for (auto subquery : subqueries.m_list) {
+      auto *subq = subquery.item;
+      if (!query_block_contains_subquery(this, subq->unit)) continue;
+
+      // Possibly contradicting requirements
+      // (1) Subquery is in SELECT list: new_outer
+      // (2) No new outer possible if HAVING contains subquery
+      if (subquery.m_location & Item::Collect_scalar_subquery_info::L_SELECT) {
+        need_new_outer = true;
+      }
+      if (subquery.m_location & Item::Collect_scalar_subquery_info::L_HAVING)
+        return false;
+    }
+
+    if (need_new_outer) {
+      /*
+        In this case, the default transform with a single new derived table and
+        a LEFT OUTER JOIN isn't always correct - we need to first move the
+        aggregated query to a new derived subquery before we can transform the
+        scalar subqueries to other derived tables.
+      */
+      bool break_off = false;
+      if (transform_grouped_to_derived(thd, &break_off)) return true;
+      if (break_off) return false;  // skip transformation
+    }
+  }
+
+  /*
+    Loop through eligible subqueries and transform them to derived tables
+    and replace occurrences in expression trees with a field of the relevant
+    derived table.
+  */
+  for (auto subquery : subqueries.m_list) {
+    Item_singlerow_subselect *const subq = subquery.item;
+    Query_expression *const subs_query_expression = subq->unit;
+
+    /*
+      [1] A reference to a scalar subquery from another query expression can
+          happen. We can't transform it here, but it may be replaced from
+          another query block.
+      [2] A constant scalar subquery will be evaluated at prepare time
+    */
+    if (!query_block_contains_subquery(this, subs_query_expression) ||  // [1]
+        (subq->const_item() && subs_query_expression->is_optimized()))  // [2]
+      continue;
+
+    TABLE_LIST *tl;
+
+    // Do we need a run-time cardinality check?
+    bool needs_cardinality_check = !subquery.m_implicitly_grouped_and_no_union;
+
+    Item *lifted_where = nullptr;
+    if (subquery.m_correlation_map != 0) {
+      // We have a correlated subquery. Check if we can handle it or not (only
+      // applicable for subqueries without unions)
+      if (!subs_query_expression->is_union()) {
+        if (subs_query_expression->first_query_block()
+                ->supported_correlated_scalar_subquery(thd, &subquery,
+                                                       &lifted_where))
+          return true;
+        if (lifted_where == nullptr) continue;
+      } else
+        continue;
+      // Since we have a correlated subquery, we will use GROUP BY to
+      // materialize so, we do not expect a single row result set. For
+      // correlated scalar subquery, we use another run-time check.
+      needs_cardinality_check = false;
+    }
+    // Create a derived table for the subquery and nest it. If we found the
+    // subquery outside of a join condition, we simply nest it at the end
+    // with a LEFT OUTER .. ON TRUE, e.g.
+    //
+    // SELECT (SELECT COUNT(a) FROM t2) + a FROM t1;
+    // ->
+    // SELECT derived.cnt + t1.a FROM
+    //   t1 LEFT OUTER JOIN
+    //   (select COUNT(a) AS cnt FROM t2) AS derived
+    // ON TRUE;
+    //
+    // If we have a subquery inside a join condition we nest it after the
+    // outer table:
+    //
+    // SELECT * FROM t1 LEFT JOIN
+    //               t2
+    //             ON (SELECT COUNT(a) AS cnt FROM t2) = t1.a;
+    // ->
+    // SELECT * FROM t1 LEFT JOIN
+    //               (SELECT COUNT(t2.a) AS cnt
+    //                FROM t2) derived_1_0
+    //             ON(TRUE) LEFT JOIN
+    //               t2
+    //             ON derived_1_0.cnt = t1.a
+    //
+    if (transform_subquery_to_derived(thd, &tl, subs_query_expression, subq,
+                                      /*use_inner_join=*/false,
+                                      needs_cardinality_check,
+                                      subquery.m_join_condition, lifted_where))
+      return true;
+
+    /*
+      Replace the subquery with a field in the materialized tmp table
+      in WHERE, JOIN conditions, HAVING clause or SELECT expressions (could be
+      optimized by keeping track in which expression the subquery was found)
+    */
+
+    // Replace in WHERE clause?
+    if (subquery.m_location & Item::Collect_scalar_subquery_info::L_WHERE) {
+      if (*where_expr_p != nullptr &&
+          replace_subquery_in_expr(thd, &subquery, tl, where_expr_p))
+        return true; /* purecov: inspected */
+    }
+
+    // Replace in join conditions?
+    if (subquery.m_location & Item::Collect_scalar_subquery_info::L_JOIN_COND) {
+      if (walk_join_conditions(
+              top_join_list,
+              [&](Item **expr_p) mutable -> bool {
+                subqueries.m_location =
+                    Item::Collect_scalar_subquery_info::L_JOIN_COND;
+                if (*expr_p != nullptr &&
+                    replace_subquery_in_expr(thd, &subquery, tl, expr_p))
+                  return true; /* purecov: inspected */
+                return false;
+              },
+              &subqueries))
+        return true; /* purecov: inspected */
+    }
+
+    size_t old_size;
+    do {
+      old_size = fields.size();
+      for (Item *&select_expr : fields) {
+        Item *prev_value = select_expr;
+        if (replace_subquery_in_expr(thd, &subquery, tl, &select_expr))
+          return true;
+        if (select_expr != prev_value) {
+          for (size_t i = 0; i < fields.size(); i++) {
+            if (base_ref_items[i] == prev_value)
+              base_ref_items[i] = select_expr;
+          }
+        }
+        if (fields.size() != old_size) {
+          // The (implicit) iterator over fields has been invalidated,
+          // probably due to a call to split_sum_func(), so we cannot
+          // iterate any further. The simplest fix is just restarting
+          // the loop, as it is idempotent.
+          break;
+        }
+      }
+    } while (old_size != fields.size());
+
+    // Replace in HAVING clause?
+    if (subquery.m_location & (Item::Collect_scalar_subquery_info::L_HAVING)) {
+      if (*having_expr_p != nullptr &&
+          replace_subquery_in_expr(thd, &subquery, tl, having_expr_p))
+        return true; /* purecov: inspected */
+    }
+
+    // A subquery in the SELECT list can be present in the GROUP BY clause
+    // so we potentially need to replace there too.
+    for (ORDER *ord = group_list.first; ord != nullptr; ord = ord->next) {
+      if (replace_subquery_in_expr(thd, &subquery, tl, ord->item)) return true;
+    }
+
+    OPT_TRACE_TRANSFORM(
+        &thd->opt_trace, trace_wrapper, trace_object,
+        tl->derived_query_expression()->first_query_block()->select_number,
+        "scalar subquery", "derived table");
+    opt_trace_print_expanded_query(thd, this, &trace_object);
+  }
+
+
+// Source: sql_resolver.cc
+// Lines 7244-7489
+
+
+[ANSWER]
+MUST

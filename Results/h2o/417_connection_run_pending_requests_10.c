@@ -1,0 +1,32 @@
+static void run_pending_requests(h2o_http2_conn_t *conn)
+{
+    h2o_linklist_t *link, *lnext;
+    int ran_one_request;
+
+    do {
+        ran_one_request = 0;
+
+        for (link = conn->_pending_reqs.next; link != &conn->_pending_reqs && can_run_requests(conn); link = lnext) {
+            /* fetch and detach a pending stream */
+            h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _link, link);
+
+            lnext = link->next;
+
+            /* handle no more than specified number of streaming requests at a time */
+            if (stream->req.proceed_req != NULL &&
+                conn->num_streams._req_streaming_in_progress - conn->num_streams.tunnel >=
+                    conn->super.ctx->globalconf->http2.max_concurrent_streaming_requests_per_connection)
+                continue;
+
+            /* handle it */
+            h2o_linklist_unlink(&stream->_link);
+            ran_one_request = 1;
+            process_request(conn, stream);
+        }
+
+    } while (ran_one_request && !h2o_linklist_is_empty(&conn->_pending_reqs));
+}
+
+
+// Source: connection.c
+// Lines 212-239

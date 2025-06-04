@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 's' at line 4
+2. Pointer '_s' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int range_cmp(const void *_r, const void *_s)
+{
+	const struct range *r = _r;
+	const struct range *s = _s;
+
+	/* this could be simply 'return r.start-s.start', but for the types */
+	if (r->start == s->start)
+		return 0;
+	if (r->start < s->start)
+		return -1;
+	return 1;
+}
+
+
+// Source: line-log.c
+// Lines 76-87
+
+
+[ANSWER]
+MUST

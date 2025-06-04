@@ -1,0 +1,83 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'r' at line 4
+2. Pointer 'o1' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+et_nca (struct et_node *n1, struct et_node *n2)
+{
+  struct et_occ *o1 = n1->rightmost_occ, *o2 = n2->rightmost_occ, *om;
+  struct et_occ *l, *r, *ret;
+  int mn;
+
+  if (n1 == n2)
+    return n1;
+
+  et_splay (o1);
+  l = o1->prev;
+  r = o1->next;
+  if (l)
+    l->parent = NULL;
+  if (r)
+    r->parent = NULL;
+  et_splay (o2);
+
+  if (l == o2 || (l && l->parent != NULL))
+    {
+      ret = o2->next;
+
+      set_prev (o1, o2);
+      if (r)
+	r->parent = o1;
+    }
+  else if (r == o2 || (r && r->parent != NULL))
+    {
+      ret = o2->prev;
+
+      set_next (o1, o2);
+      if (l)
+	l->parent = o1;
+    }
+  else
+    {
+      /* O1 and O2 are in different components of the forest.  */
+      if (l)
+	l->parent = o1;
+      if (r)
+	r->parent = o1;
+      return NULL;
+    }
+
+  if (o2->depth > 0)
+    {
+      om = o1;
+      mn = o1->depth;
+    }
+  else
+    {
+      om = o2;
+      mn = o2->depth + o1->depth;
+    }
+
+#ifdef DEBUG_ET
+  et_check_tree_sanity (o2);
+#endif
+
+  if (ret && ret->min + o1->depth + o2->depth < mn)
+    return ret->min_occ->of;
+  else
+    return om->of;
+}
+
+
+// Source: et-forest.c
+// Lines 630-693
+
+
+[ANSWER]
+MUST

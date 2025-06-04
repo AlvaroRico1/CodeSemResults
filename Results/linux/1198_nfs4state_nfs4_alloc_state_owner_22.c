@@ -1,0 +1,30 @@
+nfs4_alloc_state_owner(struct nfs_server *server,
+		const struct cred *cred,
+		gfp_t gfp_flags)
+{
+	struct nfs4_state_owner *sp;
+
+	sp = kzalloc(sizeof(*sp), gfp_flags);
+	if (!sp)
+		return NULL;
+	sp->so_seqid.owner_id = ida_simple_get(&server->openowner_id, 0, 0,
+						gfp_flags);
+	if (sp->so_seqid.owner_id < 0) {
+		kfree(sp);
+		return NULL;
+	}
+	sp->so_server = server;
+	sp->so_cred = get_cred(cred);
+	spin_lock_init(&sp->so_lock);
+	INIT_LIST_HEAD(&sp->so_states);
+	nfs4_init_seqid_counter(&sp->so_seqid);
+	atomic_set(&sp->so_count, 1);
+	INIT_LIST_HEAD(&sp->so_lru);
+	seqcount_init(&sp->so_reclaim_seqcount);
+	mutex_init(&sp->so_delegreturn_mutex);
+	return sp;
+}
+
+
+// Source: nfs4state.c
+// Lines 491-516

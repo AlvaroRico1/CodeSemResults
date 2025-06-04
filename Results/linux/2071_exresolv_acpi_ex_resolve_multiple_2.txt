@@ -1,0 +1,1 @@
+node,linux/drivers/acpi/acpica/exresolv.c,7,obj_desc,linux/drivers/acpi/acpica/exresolv.c,6,2

@@ -1,0 +1,19 @@
+window_client_do_detach(void *modedata, void *itemdata,
+    __unused struct client *c, key_code key)
+{
+	struct window_client_modedata	*data = modedata;
+	struct window_client_itemdata	*item = itemdata;
+
+	if (item == mode_tree_get_current(data->data))
+		mode_tree_down(data->data, 0);
+	if (key == 'd' || key == 'D')
+		server_client_detach(item->c, MSG_DETACH);
+	else if (key == 'x' || key == 'X')
+		server_client_detach(item->c, MSG_DETACHKILL);
+	else if (key == 'z' || key == 'Z')
+		server_client_suspend(item->c);
+}
+
+
+// Source: window-client.c
+// Lines 364-378

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'expected' at line 1\n2. Pointer 'dummy' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void assert_commit_body(const char *expected, const char *given)\n{\n\tgit_commit *dummy;\n\n\tcl_assert(dummy = git__calloc(1, sizeof(struct git_commit)));\n\n\tdummy->raw_message = git__strdup(given);\n\tcl_assert_equal_s(expected, git_commit_body(dummy));\n\n\tgit_commit__free(dummy);\n}\n\n\n// Source: commit.c\n// Lines 126-136\n",
+  "ANSWER": "MUST-NOT"
+}

@@ -1,0 +1,48 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'pos' at line 19
+2. Pointer 'is_data_packet' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static net_async_status flush_one_result_nonblocking(MYSQL *mysql, bool *res) {
+  DBUG_TRACE;
+
+  *res = false;
+  while (true) {
+    ulong packet_length;
+    bool is_data_packet;
+    if (cli_safe_read_nonblocking(mysql, &is_data_packet, &packet_length) ==
+        NET_ASYNC_NOT_READY) {
+      return NET_ASYNC_NOT_READY;
+    }
+    mysql->packet_length = packet_length;
+    if (packet_length == packet_error) {
+      *res = true;
+      break;
+    }
+    if (mysql->net.read_pos[0] != 0 && !is_data_packet) {
+      if (protocol_41(mysql)) {
+        uchar *pos = mysql->net.read_pos + 1;
+        if (mysql->server_capabilities & CLIENT_DEPRECATE_EOF &&
+            !is_data_packet) {
+          read_ok_ex(mysql, packet_length);
+        } else {
+          mysql->warning_count = uint2korr(pos);
+          pos += 2;
+          mysql->server_status = uint2korr(pos);
+        }
+        pos += 2;
+      }
+
+
+// Source: client.cc
+// Lines 1592-1620
+
+
+[ANSWER]
+MUST-NOT

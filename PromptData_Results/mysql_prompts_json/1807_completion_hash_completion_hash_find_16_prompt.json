@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'nIndex' at line 3\n2. Pointer 'ht' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic Bucket *completion_hash_find(HashTable *ht, const char *arKey,\n                                    uint nKeyLength) {\n  uint h, nIndex;\n  Bucket *p;\n\n  h = ht->pHashFunction(arKey, nKeyLength);\n  nIndex = h % ht->nTableSize;\n\n  p = ht->arBuckets[nIndex];\n  while (p) {\n    if ((p->h == h) && (p->nKeyLength == nKeyLength)) {\n      if (!memcmp(p->arKey, arKey, nKeyLength)) {\n        return p;\n      }\n    }\n    p = p->pNext;\n  }\n  return (Bucket *)nullptr;\n}\n\n\n// Source: completion_hash.cc\n// Lines 111-129\n",
+  "ANSWER": "MUST-NOT"
+}

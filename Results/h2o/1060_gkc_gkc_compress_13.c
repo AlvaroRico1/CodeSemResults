@@ -1,0 +1,37 @@
+static void gkc_compress(struct gkc_summary *s)
+{
+    int max_compress;
+    struct list *cur, *prev;
+    struct gkc_tuple *tcur, *tprev;
+    uint64_t bi, b_plus_1;
+
+    max_compress = 2 * s->epsilon * s->nr_elems;
+    if (s->nr_elems < 2) {
+        return;
+    }
+
+    prev = s->head.prev;
+    cur = prev->prev;
+
+    while (cur != &s->head) {
+        tcur = list_to_tuple(cur);
+        tprev = list_to_tuple(prev);
+
+        b_plus_1 = band(s, tprev->delta);
+        bi = band(s, tcur->delta);
+
+        if (bi <= b_plus_1 && ((tcur->g + tprev->g + tprev->delta) <= max_compress)) {
+            tprev->g += tcur->g;
+            list_del(cur);
+            gkc_free(s, tcur);
+            cur = prev->prev;
+            continue;
+        }
+        prev = cur;
+        cur = cur->prev;
+    }
+}
+
+
+// Source: gkc.c
+// Lines 275-307

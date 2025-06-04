@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'clp' at line 3\n2. Pointer 'server' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint nfs4_handle_exception(struct nfs_server *server, int errorcode, struct nfs4_exception *exception)\n{\n\tstruct nfs_client *clp = server->nfs_client;\n\tint ret;\n\n\tret = nfs4_do_handle_exception(server, errorcode, exception);\n\tif (exception->delay) {\n\t\tret = nfs4_delay(&exception->timeout,\n\t\t\t\texception->interruptible);\n\t\tgoto out_retry;\n\t}\n\tif (exception->recovering) {\n\t\tret = nfs4_wait_clnt_recover(clp);\n\t\tif (test_bit(NFS_MIG_FAILED, &server->mig_status))\n\t\t\treturn -EIO;\n\t\tgoto out_retry;\n\t}\n\treturn ret;\nout_retry:\n\tif (ret == 0)\n\t\texception->retry = 1;\n\treturn ret;\n}\n\n\n// Source: nfs4proc.c\n// Lines 574-596\n",
+  "ANSWER": "MUST"
+}

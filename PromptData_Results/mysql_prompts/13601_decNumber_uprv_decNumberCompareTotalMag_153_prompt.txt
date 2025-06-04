@@ -1,0 +1,71 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'rhs' at line 2
+2. Pointer 'allocbufb' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+U_CAPI decNumber * U_EXPORT2 uprv_decNumberCompareTotalMag(decNumber *res, const decNumber *lhs,
+                                     const decNumber *rhs, decContext *set) {
+  uInt status=0;                   /* accumulator  */
+  uInt needbytes;                  /* for space calculations  */
+  decNumber bufa[D2N(DECBUFFER+1)];/* +1 in case DECBUFFER=0  */
+  decNumber *allocbufa=NULL;       /* -> allocated bufa, iff allocated  */
+  decNumber bufb[D2N(DECBUFFER+1)];
+  decNumber *allocbufb=NULL;       /* -> allocated bufb, iff allocated  */
+  decNumber *a, *b;                /* temporary pointers  */
+
+  #if DECCHECK
+  if (decCheckOperands(res, lhs, rhs, set)) return res;
+  #endif
+
+  do {                                  /* protect allocated storage  */
+    /* if either is negative, take a copy and absolute  */
+    if (decNumberIsNegative(lhs)) {     /* lhs<0  */
+      a=bufa;
+      needbytes=sizeof(decNumber)+(D2U(lhs->digits)-1)*sizeof(Unit);
+      if (needbytes>sizeof(bufa)) {     /* need malloc space  */
+        allocbufa=(decNumber *)malloc(needbytes);
+        if (allocbufa==NULL) {          /* hopeless -- abandon  */
+          status|=DEC_Insufficient_storage;
+          break;}
+        a=allocbufa;                    /* use the allocated space  */
+        }
+      uprv_decNumberCopy(a, lhs);            /* copy content  */
+      a->bits&=~DECNEG;                 /* .. and clear the sign  */
+      lhs=a;                            /* use copy from here on  */
+      }
+    if (decNumberIsNegative(rhs)) {     /* rhs<0  */
+      b=bufb;
+      needbytes=sizeof(decNumber)+(D2U(rhs->digits)-1)*sizeof(Unit);
+      if (needbytes>sizeof(bufb)) {     /* need malloc space  */
+        allocbufb=(decNumber *)malloc(needbytes);
+        if (allocbufb==NULL) {          /* hopeless -- abandon  */
+          status|=DEC_Insufficient_storage;
+          break;}
+        b=allocbufb;                    /* use the allocated space  */
+        }
+      uprv_decNumberCopy(b, rhs);            /* copy content  */
+      b->bits&=~DECNEG;                 /* .. and clear the sign  */
+      rhs=b;                            /* use copy from here on  */
+      }
+    decCompareOp(res, lhs, rhs, set, COMPTOTAL, &status);
+    } while(0);                         /* end protected  */
+
+  if (allocbufa!=NULL) free(allocbufa); /* drop any storage used  */
+  if (allocbufb!=NULL) free(allocbufb); /* ..  */
+  if (status!=0) decStatus(res, status, set);
+  return res;
+  } /* decNumberCompareTotalMag  */
+
+
+// Source: decNumber.cpp
+// Lines 951-1002
+
+
+[ANSWER]
+MUST

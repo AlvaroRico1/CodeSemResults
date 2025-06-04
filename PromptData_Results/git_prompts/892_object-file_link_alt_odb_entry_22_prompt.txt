@@ -1,0 +1,67 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'r' at line 1
+2. Pointer 'ent' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int link_alt_odb_entry(struct repository *r, const struct strbuf *entry,
+	const char *relative_base, int depth, const char *normalized_objdir)
+{
+	struct object_directory *ent;
+	struct strbuf pathbuf = STRBUF_INIT;
+	khiter_t pos;
+
+	if (!is_absolute_path(entry->buf) && relative_base) {
+		strbuf_realpath(&pathbuf, relative_base, 1);
+		strbuf_addch(&pathbuf, '/');
+	}
+	strbuf_addbuf(&pathbuf, entry);
+
+	if (strbuf_normalize_path(&pathbuf) < 0 && relative_base) {
+		error(_("unable to normalize alternate object path: %s"),
+		      pathbuf.buf);
+		strbuf_release(&pathbuf);
+		return -1;
+	}
+
+	/*
+	 * The trailing slash after the directory name is given by
+	 * this function at the end. Remove duplicates.
+	 */
+	while (pathbuf.len && pathbuf.buf[pathbuf.len - 1] == '/')
+		strbuf_setlen(&pathbuf, pathbuf.len - 1);
+
+	if (!alt_odb_usable(r->objects, &pathbuf, normalized_objdir, &pos)) {
+		strbuf_release(&pathbuf);
+		return -1;
+	}
+
+	CALLOC_ARRAY(ent, 1);
+	/* pathbuf.buf is already in r->objects->odb_by_path */
+	ent->path = strbuf_detach(&pathbuf, NULL);
+
+	/* add the alternate entry */
+	*r->objects->odb_tail = ent;
+	r->objects->odb_tail = &(ent->next);
+	ent->next = NULL;
+	assert(r->objects->odb_by_path);
+	kh_value(r->objects->odb_by_path, pos) = ent;
+
+	/* recursively add alternates */
+	read_info_alternates(r, ent->path, depth + 1);
+
+	return 0;
+}
+
+
+// Source: object-file.c
+// Lines 503-550
+
+
+[ANSWER]
+MUST

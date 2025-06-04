@@ -1,0 +1,39 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'basename' at line 4
+2. Pointer 'cmp' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void empty_workdir(const char *name)
+{
+	git_vector contents = GIT_VECTOR_INIT;
+	char *basename;
+	int cmp;
+	size_t i;
+	const char *fn;
+
+	cl_git_pass(git_fs_path_dirload(&contents, name, 0, 0));
+	git_vector_foreach(&contents, i, fn) {
+		cl_assert(basename = git_fs_path_basename(fn));
+		cmp = strncasecmp(basename, ".git", 4);
+
+		git__free(basename);
+
+		if (cmp)
+			cl_git_pass(p_unlink(fn));
+	}
+	git_vector_free_deep(&contents);
+}
+
+
+// Source: crlf.c
+// Lines 182-201
+
+
+[ANSWER]
+MUST-NOT

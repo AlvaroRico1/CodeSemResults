@@ -1,0 +1,1 @@
+available_in,h2o/deps/brotli/c/dec/decode.c,2,next_in,h2o/deps/brotli/c/dec/decode.c,2,2

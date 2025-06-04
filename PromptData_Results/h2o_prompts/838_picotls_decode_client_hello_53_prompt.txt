@@ -1,0 +1,310 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'end' at line 1
+2. Pointer 'src' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int decode_client_hello(ptls_t *tls, struct st_ptls_client_hello_t *ch, const uint8_t *src, const uint8_t *const end,
+                               ptls_handshake_properties_t *properties)
+{
+    uint16_t exttype = 0;
+    int ret;
+
+    /* decode protocol version (do not bare to decode something older than TLS 1.0) */
+    if ((ret = ptls_decode16(&ch->legacy_version, &src, end)) != 0)
+        goto Exit;
+    if (ch->legacy_version < 0x0301) {
+        ret = PTLS_ALERT_PROTOCOL_VERSION;
+        goto Exit;
+    }
+
+    /* skip random */
+    if (end - src < PTLS_HELLO_RANDOM_SIZE) {
+        ret = PTLS_ALERT_DECODE_ERROR;
+        goto Exit;
+    }
+    ch->random_bytes = src;
+    src += PTLS_HELLO_RANDOM_SIZE;
+
+    /* skip legacy_session_id */
+    ptls_decode_open_block(src, end, 1, {
+        if (end - src > 32) {
+            ret = PTLS_ALERT_DECODE_ERROR;
+            goto Exit;
+        }
+        ch->legacy_session_id = ptls_iovec_init(src, end - src);
+        src = end;
+    });
+
+    /* decode and select from ciphersuites */
+    ptls_decode_open_block(src, end, 2, {
+        ch->cipher_suites = ptls_iovec_init(src, end - src);
+        uint16_t *id = ch->client_ciphers.list;
+        do {
+            if ((ret = ptls_decode16(id, &src, end)) != 0)
+                goto Exit;
+            id++;
+            ch->client_ciphers.count++;
+            if (id >= ch->client_ciphers.list + MAX_CLIENT_CIPHERS) {
+                src = end;
+                break;
+            }
+        } while (src != end);
+    });
+
+    /* decode legacy_compression_methods */
+    ptls_decode_open_block(src, end, 1, {
+        if (src == end) {
+            ret = PTLS_ALERT_DECODE_ERROR;
+            goto Exit;
+        }
+        ch->compression_methods.ids = src;
+        ch->compression_methods.count = end - src;
+        src = end;
+    });
+
+    /* decode extensions */
+    decode_extensions(src, end, PTLS_HANDSHAKE_TYPE_CLIENT_HELLO, &exttype, {
+        ch->psk.is_last_extension = 0;
+        if (tls->ctx->on_extension != NULL &&
+            (ret = tls->ctx->on_extension->cb(tls->ctx->on_extension, tls, PTLS_HANDSHAKE_TYPE_CLIENT_HELLO, exttype,
+                                              ptls_iovec_init(src, end - src)) != 0))
+            goto Exit;
+        switch (exttype) {
+        case PTLS_EXTENSION_TYPE_SERVER_NAME:
+            if ((ret = client_hello_decode_server_name(&ch->server_name, &src, end)) != 0)
+                goto Exit;
+            if (src != end) {
+                ret = PTLS_ALERT_DECODE_ERROR;
+                goto Exit;
+            }
+            break;
+        case PTLS_EXTENSION_TYPE_ENCRYPTED_SERVER_NAME: {
+            ptls_cipher_suite_t **cipher;
+            if (ch->esni.cipher != NULL) {
+                ret = PTLS_ALERT_ILLEGAL_PARAMETER;
+                goto Exit;
+            }
+            { /* cipher-suite */
+                uint16_t csid;
+                if ((ret = ptls_decode16(&csid, &src, end)) != 0)
+                    goto Exit;
+                for (cipher = tls->ctx->cipher_suites; *cipher != NULL; ++cipher)
+                    if ((*cipher)->id == csid)
+                        break;
+                if (*cipher == NULL) {
+                    ret = PTLS_ALERT_ILLEGAL_PARAMETER;
+                    goto Exit;
+                }
+            }
+            /* key-share (including peer-key) */
+            if ((ret = select_key_share(&ch->esni.key_share, &ch->esni.peer_key, tls->ctx->key_exchanges, &src, end, 1)) != 0)
+                goto Exit;
+            ptls_decode_open_block(src, end, 2, {
+                size_t len = end - src;
+                if (len != (*cipher)->hash->digest_size) {
+                    ret = PTLS_ALERT_ILLEGAL_PARAMETER;
+                    goto Exit;
+                }
+                ch->esni.record_digest = src;
+                src += len;
+            });
+            ptls_decode_block(src, end, 2, {
+                size_t len = end - src;
+                if (len < (*cipher)->aead->tag_size) {
+                    ret = PTLS_ALERT_ILLEGAL_PARAMETER;
+                    goto Exit;
+                }
+                ch->esni.encrypted_sni = ptls_iovec_init(src, len);
+                src += len;
+            });
+            ch->esni.cipher = *cipher; /* set only after successful parsing */
+        } break;
+        case PTLS_EXTENSION_TYPE_ALPN:
+            ptls_decode_block(src, end, 2, {
+                do {
+                    ptls_decode_open_block(src, end, 1, {
+                        /* rfc7301 3.1: empty strings MUST NOT be included */
+                        if (src == end) {
+                            ret = PTLS_ALERT_DECODE_ERROR;
+                            goto Exit;
+                        }
+                        if (ch->alpn.count < PTLS_ELEMENTSOF(ch->alpn.list))
+                            ch->alpn.list[ch->alpn.count++] = ptls_iovec_init(src, end - src);
+                        src = end;
+                    });
+                } while (src != end);
+            });
+            break;
+        case PTLS_EXTENSION_TYPE_SERVER_CERTIFICATE_TYPE:
+            ptls_decode_block(src, end, 1, {
+                size_t list_size = end - src;
+
+                /* RFC7250 4.1: No empty list, no list with single x509 element */
+                if (list_size == 0 || (list_size == 1 && *src == PTLS_CERTIFICATE_TYPE_X509)) {
+                    ret = PTLS_ALERT_DECODE_ERROR;
+                    goto Exit;
+                }
+
+                do {
+                    if (ch->server_certificate_types.count < PTLS_ELEMENTSOF(ch->server_certificate_types.list))
+                        ch->server_certificate_types.list[ch->server_certificate_types.count++] = *src;
+                    src++;
+                } while (src != end);
+            });
+            break;
+        case PTLS_EXTENSION_TYPE_COMPRESS_CERTIFICATE:
+            ptls_decode_block(src, end, 1, {
+                do {
+                    uint16_t id;
+                    if ((ret = ptls_decode16(&id, &src, end)) != 0)
+                        goto Exit;
+                    if (ch->cert_compression_algos.count < PTLS_ELEMENTSOF(ch->cert_compression_algos.list))
+                        ch->cert_compression_algos.list[ch->cert_compression_algos.count++] = id;
+                } while (src != end);
+            });
+            break;
+        case PTLS_EXTENSION_TYPE_SUPPORTED_GROUPS:
+            ch->negotiated_groups = ptls_iovec_init(src, end - src);
+            break;
+        case PTLS_EXTENSION_TYPE_SIGNATURE_ALGORITHMS:
+            if ((ret = decode_signature_algorithms(&ch->signature_algorithms, &src, end)) != 0)
+                goto Exit;
+            break;
+        case PTLS_EXTENSION_TYPE_KEY_SHARE:
+            ch->key_shares = ptls_iovec_init(src, end - src);
+            break;
+        case PTLS_EXTENSION_TYPE_SUPPORTED_VERSIONS:
+            ptls_decode_block(src, end, 1, {
+                size_t selected_index = PTLS_ELEMENTSOF(supported_versions);
+                do {
+                    size_t i;
+                    uint16_t v;
+                    if ((ret = ptls_decode16(&v, &src, end)) != 0)
+                        goto Exit;
+                    for (i = 0; i != selected_index; ++i) {
+                        if (supported_versions[i] == v) {
+                            selected_index = i;
+                            break;
+                        }
+                    }
+                } while (src != end);
+                if (selected_index != PTLS_ELEMENTSOF(supported_versions))
+                    ch->selected_version = supported_versions[selected_index];
+            });
+            break;
+        case PTLS_EXTENSION_TYPE_COOKIE:
+            if (properties == NULL || properties->server.cookie.key == NULL) {
+                ret = PTLS_ALERT_ILLEGAL_PARAMETER;
+                goto Exit;
+            }
+            ch->cookie.all = ptls_iovec_init(src, end - src);
+            ptls_decode_block(src, end, 2, {
+                ch->cookie.tbs.base = (void *)src;
+                ptls_decode_open_block(src, end, 2, {
+                    ptls_decode_open_block(src, end, 1, {
+                        ch->cookie.ch1_hash = ptls_iovec_init(src, end - src);
+                        src = end;
+                    });
+                    if (src == end) {
+                        ret = PTLS_ALERT_DECODE_ERROR;
+                        goto Exit;
+                    }
+                    switch (*src++) {
+                    case 0:
+                        assert(!ch->cookie.sent_key_share);
+                        break;
+                    case 1:
+                        ch->cookie.sent_key_share = 1;
+                        break;
+                    default:
+                        ret = PTLS_ALERT_DECODE_ERROR;
+                        goto Exit;
+                    }
+                });
+                ch->cookie.tbs.len = src - ch->cookie.tbs.base;
+                ptls_decode_block(src, end, 1, {
+                    ch->cookie.signature = ptls_iovec_init(src, end - src);
+                    src = end;
+                });
+            });
+            break;
+        case PTLS_EXTENSION_TYPE_PRE_SHARED_KEY: {
+            size_t num_identities = 0;
+            ptls_decode_open_block(src, end, 2, {
+                do {
+                    struct st_ptls_client_hello_psk_t psk = {{NULL}};
+                    ptls_decode_open_block(src, end, 2, {
+                        psk.identity = ptls_iovec_init(src, end - src);
+                        src = end;
+                    });
+                    if ((ret = ptls_decode32(&psk.obfuscated_ticket_age, &src, end)) != 0)
+                        goto Exit;
+                    if (ch->psk.identities.count < PTLS_ELEMENTSOF(ch->psk.identities.list))
+                        ch->psk.identities.list[ch->psk.identities.count++] = psk;
+                    ++num_identities;
+                } while (src != end);
+            });
+            ch->psk.hash_end = src;
+            ptls_decode_block(src, end, 2, {
+                size_t num_binders = 0;
+                do {
+                    ptls_decode_open_block(src, end, 1, {
+                        if (num_binders < ch->psk.identities.count)
+                            ch->psk.identities.list[num_binders].binder = ptls_iovec_init(src, end - src);
+                        src = end;
+                    });
+                    ++num_binders;
+                } while (src != end);
+                if (num_identities != num_binders) {
+                    ret = PTLS_ALERT_ILLEGAL_PARAMETER;
+                    goto Exit;
+                }
+            });
+            ch->psk.is_last_extension = 1;
+        } break;
+        case PTLS_EXTENSION_TYPE_PSK_KEY_EXCHANGE_MODES:
+            ptls_decode_block(src, end, 1, {
+                if (src == end) {
+                    ret = PTLS_ALERT_DECODE_ERROR;
+                    goto Exit;
+                }
+                for (; src != end; ++src) {
+                    if (*src < sizeof(ch->psk.ke_modes) * 8)
+                        ch->psk.ke_modes |= 1u << *src;
+                }
+            });
+            break;
+        case PTLS_EXTENSION_TYPE_EARLY_DATA:
+            ch->psk.early_data_indication = 1;
+            break;
+        case PTLS_EXTENSION_TYPE_STATUS_REQUEST:
+            ch->status_request = 1;
+            break;
+        default:
+            if (should_collect_unknown_extension(tls, properties, exttype)) {
+                if ((ret = collect_unknown_extension(tls, exttype, src, end, ch->unknown_extensions)) != 0)
+                    goto Exit;
+            }
+            break;
+        }
+        src = end;
+    });
+
+    ret = 0;
+Exit:
+    return ret;
+}
+
+
+// Source: picotls.c
+// Lines 3191-3481
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'end' at line 5\n2. Pointer 'temp' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic struct dir_rename_entry *check_dir_renamed(const char *path,\n\t\t\t\t\t\t  struct hashmap *dir_renames)\n{\n\tchar *temp = xstrdup(path);\n\tchar *end;\n\tstruct dir_rename_entry *entry = NULL;\n\n\twhile ((end = strrchr(temp, '/'))) {\n\t\t*end = '\\0';\n\t\tentry = dir_rename_find_entry(dir_renames, temp);\n\t\tif (entry)\n\t\t\tbreak;\n\t}\n\tfree(temp);\n\treturn entry;\n}\n\n\n// Source: merge-recursive.c\n// Lines 2360-2375\n",
+  "ANSWER": "MUST"
+}

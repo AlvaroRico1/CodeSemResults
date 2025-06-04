@@ -1,0 +1,41 @@
+static bool find_eq_ref_candidate(TABLE_LIST *tl, table_map sj_inner_tables) {
+  Key_use *keyuse = tl->table->reginfo.join_tab->keyuse();
+
+  if (keyuse) {
+    while (true) /* For each key */
+    {
+      const uint key = keyuse->key;
+      KEY *const keyinfo = tl->table->key_info + key;
+      key_part_map bound_parts = 0;
+      if ((keyinfo->flags & (HA_NOSAME)) == HA_NOSAME) {
+        do /* For all equalities on all key parts */
+        {
+          /* Check if this is "t.keypart = expr(outer_tables) */
+          if (!(keyuse->used_tables & sj_inner_tables) &&
+              !(keyuse->optimize & KEY_OPTIMIZE_REF_OR_NULL)) {
+            /*
+              Consider only if the resulting condition does not pass a NULL
+              value through. Especially needed for a UNIQUE index on NULLable
+              columns where a duplicate row is possible with NULL values.
+            */
+            if (keyuse->null_rejecting || !keyuse->val->is_nullable() ||
+                !keyinfo->key_part[keyuse->keypart].field->is_nullable())
+              bound_parts |= (key_part_map)1 << keyuse->keypart;
+          }
+          keyuse++;
+        } while (keyuse->key == key && keyuse->table_ref == tl);
+
+        if (bound_parts == LOWER_BITS(uint, keyinfo->user_defined_key_parts))
+          return true;
+        if (keyuse->table_ref != tl) return false;
+      } else {
+        do {
+          keyuse++;
+          if (keyuse->table_ref != tl) return false;
+        } while (keyuse->key == key);
+      }
+    }
+
+
+// Source: sql_optimizer.cc
+// Lines 6303-6339

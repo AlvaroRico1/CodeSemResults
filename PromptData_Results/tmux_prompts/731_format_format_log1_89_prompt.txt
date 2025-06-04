@@ -1,0 +1,40 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ft' at line 4
+2. Pointer 'es' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+format_log1(struct format_expand_state *es, const char *from, const char *fmt,
+    ...)
+{
+	struct format_tree	*ft = es->ft;
+	va_list			 ap;
+	char			*s;
+	static const char	 spaces[] = "          ";
+
+	if (!format_logging(ft))
+		return;
+
+	va_start(ap, fmt);
+	xvasprintf(&s, fmt, ap);
+	va_end(ap);
+
+	log_debug("%s: %s", from, s);
+	if (ft->item != NULL && (ft->flags & FORMAT_VERBOSE))
+		cmdq_print(ft->item, "#%.*s%s", es->loop, spaces, s);
+
+	free(s);
+}
+
+
+// Source: format.c
+// Lines 245-265
+
+
+[ANSWER]
+MUST

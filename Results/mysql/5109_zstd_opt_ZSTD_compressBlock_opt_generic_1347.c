@@ -1,0 +1,68 @@
+ZSTD_compressBlock_opt_generic(ZSTD_matchState_t* ms,
+                               seqStore_t* seqStore,
+                               U32 rep[ZSTD_REP_NUM],
+                         const void* src, size_t srcSize,
+                         const int optLevel,
+                         const ZSTD_dictMode_e dictMode)
+{
+    optState_t* const optStatePtr = &ms->opt;
+    const BYTE* const istart = (const BYTE*)src;
+    const BYTE* ip = istart;
+    const BYTE* anchor = istart;
+    const BYTE* const iend = istart + srcSize;
+    const BYTE* const ilimit = iend - 8;
+    const BYTE* const base = ms->window.base;
+    const BYTE* const prefixStart = base + ms->window.dictLimit;
+    const ZSTD_compressionParameters* const cParams = &ms->cParams;
+
+    U32 const sufficient_len = MIN(cParams->targetLength, ZSTD_OPT_NUM -1);
+    U32 const minMatch = (cParams->minMatch == 3) ? 3 : 4;
+    U32 nextToUpdate3 = ms->nextToUpdate;
+
+    ZSTD_optimal_t* const opt = optStatePtr->priceTable;
+    ZSTD_match_t* const matches = optStatePtr->matchTable;
+    ZSTD_optimal_t lastSequence;
+
+    /* init */
+    DEBUGLOG(5, "ZSTD_compressBlock_opt_generic: current=%u, prefix=%u, nextToUpdate=%u",
+                (U32)(ip - base), ms->window.dictLimit, ms->nextToUpdate);
+    assert(optLevel <= 2);
+    ZSTD_rescaleFreqs(optStatePtr, (const BYTE*)src, srcSize, optLevel);
+    ip += (ip==prefixStart);
+
+    /* Match Loop */
+    while (ip < ilimit) {
+        U32 cur, last_pos = 0;
+
+        /* find first match */
+        {   U32 const litlen = (U32)(ip - anchor);
+            U32 const ll0 = !litlen;
+            U32 const nbMatches = ZSTD_BtGetAllMatches(matches, ms, &nextToUpdate3, ip, iend, dictMode, rep, ll0, minMatch);
+            if (!nbMatches) { ip++; continue; }
+
+            /* initialize opt[0] */
+            { U32 i ; for (i=0; i<ZSTD_REP_NUM; i++) opt[0].rep[i] = rep[i]; }
+            opt[0].mlen = 0;  /* means is_a_literal */
+            opt[0].litlen = litlen;
+            opt[0].price = ZSTD_literalsContribution(anchor, litlen, optStatePtr, optLevel);
+
+            /* large match -> immediate encoding */
+            {   U32 const maxML = matches[nbMatches-1].len;
+                U32 const maxOffset = matches[nbMatches-1].off;
+                DEBUGLOG(6, "found %u matches of maxLength=%u and maxOffCode=%u at cPos=%u => start new series",
+                            nbMatches, maxML, maxOffset, (U32)(ip-prefixStart));
+
+                if (maxML > sufficient_len) {
+                    lastSequence.litlen = litlen;
+                    lastSequence.mlen = maxML;
+                    lastSequence.off = maxOffset;
+                    DEBUGLOG(6, "large match (%u>%u), immediate encoding",
+                                maxML, sufficient_len);
+                    cur = 0;
+                    last_pos = ZSTD_totalLen(lastSequence);
+                    goto _shortestPath;
+            }   }
+
+
+// Source: zstd_opt.c
+// Lines 854-917

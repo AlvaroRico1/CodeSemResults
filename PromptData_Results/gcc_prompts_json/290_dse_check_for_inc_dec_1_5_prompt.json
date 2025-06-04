@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'insn' at line 3\n2. Pointer 'insn_info' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ncheck_for_inc_dec_1 (insn_info_t insn_info)\n{\n  rtx_insn *insn = insn_info->insn;\n  rtx note = find_reg_note (insn, REG_INC, NULL_RTX);\n  if (note)\n    return for_each_inc_dec (PATTERN (insn), emit_inc_dec_insn_before,\n\t\t\t     insn_info) == 0;\n\n  /* Punt on stack pushes, those don't have REG_INC notes and we are\n     unprepared to deal with distribution of REG_ARGS_SIZE notes etc.  */\n  subrtx_iterator::array_type array;\n  FOR_EACH_SUBRTX (iter, array, PATTERN (insn), NONCONST)\n    {\n      const_rtx x = *iter;\n      if (GET_RTX_CLASS (GET_CODE (x)) == RTX_AUTOINC)\n\treturn false;\n    }\n\n  return true;\n}\n\n\n// Source: dse.c\n// Lines 842-861\n",
+  "ANSWER": "MUST"
+}

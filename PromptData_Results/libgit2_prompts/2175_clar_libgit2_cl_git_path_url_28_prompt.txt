@@ -1,0 +1,65 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'path' at line 1
+2. Pointer 'in_buf' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+const char* cl_git_path_url(const char *path)
+{
+	static char url[4096 + 1];
+
+	const char *in_buf;
+	git_str path_buf = GIT_STR_INIT;
+	git_str url_buf = GIT_STR_INIT;
+
+	cl_git_pass(git_fs_path_prettify_dir(&path_buf, path, NULL));
+	cl_git_pass(git_str_puts(&url_buf, "file://"));
+
+#ifdef GIT_WIN32
+	/*
+	 * A FILE uri matches the following format: file://[host]/path
+	 * where "host" can be empty and "path" is an absolute path to the resource.
+	 *
+	 * In this test, no hostname is used, but we have to ensure the leading triple slashes:
+	 *
+	 * *nix: file:///usr/home/...
+	 * Windows: file:///C:/Users/...
+	 */
+	cl_git_pass(git_str_putc(&url_buf, '/'));
+#endif
+
+	in_buf = git_str_cstr(&path_buf);
+
+	/*
+	 * A very hacky Url encoding that only takes care of escaping the spaces
+	 */
+	while (*in_buf) {
+		if (*in_buf == ' ')
+			cl_git_pass(git_str_puts(&url_buf, "%20"));
+		else
+			cl_git_pass(git_str_putc(&url_buf, *in_buf));
+
+		in_buf++;
+	}
+
+	cl_assert(url_buf.size < sizeof(url) - 1);
+
+	strncpy(url, git_str_cstr(&url_buf), sizeof(url) - 1);
+	url[sizeof(url) - 1] = '\0';
+	git_str_dispose(&url_buf);
+	git_str_dispose(&path_buf);
+	return url;
+}
+
+
+// Source: clar_libgit2.c
+// Lines 276-321
+
+
+[ANSWER]
+MUST-NOT

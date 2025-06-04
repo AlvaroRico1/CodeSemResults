@@ -1,0 +1,26 @@
+void my_init_time() {
+  time_t seconds;
+  struct tm *l_time;
+  struct tm tm_tmp;
+  MYSQL_TIME my_time;
+  bool not_used;
+
+  seconds = time(nullptr);
+  localtime_r(&seconds, &tm_tmp);
+  l_time = &tm_tmp;
+  my_time_zone = 3600; /* Comp. for -3600 in my_gmt_sec */
+  my_time.year = static_cast<uint>(l_time->tm_year) + 1900;
+  my_time.month = static_cast<uint>(l_time->tm_mon) + 1;
+  my_time.day = static_cast<uint>(l_time->tm_mday);
+  my_time.hour = static_cast<uint>(l_time->tm_hour);
+  my_time.minute = static_cast<uint>(l_time->tm_min);
+  my_time.second = static_cast<uint>(l_time->tm_sec);
+  my_time.time_type = MYSQL_TIMESTAMP_DATETIME;
+  my_time.neg = false;
+  my_time.second_part = 0;
+  my_system_gmt_sec(my_time, &my_time_zone, &not_used); /* Init my_time_zone */
+}
+
+
+// Source: my_time.cc
+// Lines 1000-1021

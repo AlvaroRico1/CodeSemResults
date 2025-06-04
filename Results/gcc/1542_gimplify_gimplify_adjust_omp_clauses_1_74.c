@@ -1,0 +1,81 @@
+gimplify_adjust_omp_clauses_1 (splay_tree_node n, void *data)
+{
+  tree *list_p = ((struct gimplify_adjust_omp_clauses_data *) data)->list_p;
+  gimple_seq *pre_p
+    = ((struct gimplify_adjust_omp_clauses_data *) data)->pre_p;
+  tree decl = (tree) n->key;
+  unsigned flags = n->value;
+  enum omp_clause_code code;
+  tree clause;
+  bool private_debug;
+
+  if (gimplify_omp_ctxp->region_type == ORT_COMBINED_PARALLEL
+      && (flags & GOVD_LASTPRIVATE_CONDITIONAL) != 0)
+    flags = GOVD_SHARED | GOVD_SEEN | GOVD_WRITTEN;
+  if (flags & (GOVD_EXPLICIT | GOVD_LOCAL))
+    return 0;
+  if ((flags & GOVD_SEEN) == 0)
+    return 0;
+  if ((flags & GOVD_MAP_HAS_ATTACHMENTS) != 0)
+    return 0;
+  if (flags & GOVD_DEBUG_PRIVATE)
+    {
+      gcc_assert ((flags & GOVD_DATA_SHARE_CLASS) == GOVD_SHARED);
+      private_debug = true;
+    }
+  else if (flags & GOVD_MAP)
+    private_debug = false;
+  else
+    private_debug
+      = lang_hooks.decls.omp_private_debug_clause (decl,
+						   !!(flags & GOVD_SHARED));
+  if (private_debug)
+    code = OMP_CLAUSE_PRIVATE;
+  else if (flags & GOVD_MAP)
+    {
+      code = OMP_CLAUSE_MAP;
+      if ((gimplify_omp_ctxp->region_type & ORT_ACC) == 0
+	  && TYPE_ATOMIC (strip_array_types (TREE_TYPE (decl))))
+	{
+	  error ("%<_Atomic%> %qD in implicit %<map%> clause", decl);
+	  return 0;
+	}
+      if (VAR_P (decl)
+	  && DECL_IN_CONSTANT_POOL (decl)
+          && !lookup_attribute ("omp declare target",
+				DECL_ATTRIBUTES (decl)))
+	{
+	  tree id = get_identifier ("omp declare target");
+	  DECL_ATTRIBUTES (decl)
+	    = tree_cons (id, NULL_TREE, DECL_ATTRIBUTES (decl));
+	  varpool_node *node = varpool_node::get (decl);
+	  if (node)
+	    {
+	      node->offloadable = 1;
+	      if (ENABLE_OFFLOADING)
+		g->have_offload = true;
+	    }
+	}
+    }
+  else if (flags & GOVD_SHARED)
+    {
+      if (is_global_var (decl))
+	{
+	  struct gimplify_omp_ctx *ctx = gimplify_omp_ctxp->outer_context;
+	  while (ctx != NULL)
+	    {
+	      splay_tree_node on
+		= splay_tree_lookup (ctx->variables, (splay_tree_key) decl);
+	      if (on && (on->value & (GOVD_FIRSTPRIVATE | GOVD_LASTPRIVATE
+				      | GOVD_PRIVATE | GOVD_REDUCTION
+				      | GOVD_LINEAR | GOVD_MAP)) != 0)
+		break;
+	      ctx = ctx->outer_context;
+	    }
+	  if (ctx == NULL)
+	    return 0;
+	}
+
+
+// Source: gimplify.c
+// Lines 9902-9978

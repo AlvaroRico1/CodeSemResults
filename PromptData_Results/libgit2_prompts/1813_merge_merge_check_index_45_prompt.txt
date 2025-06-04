@@ -1,0 +1,76 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'index_repo' at line 4
+2. Pointer 'index_diff_list' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int merge_check_index(size_t *conflicts, git_repository *repo, git_index *index_new, git_vector *merged_paths)
+{
+	git_tree *head_tree = NULL;
+	git_index *index_repo = NULL;
+	git_iterator *iter_repo = NULL, *iter_new = NULL;
+	git_iterator_options iter_opts = GIT_ITERATOR_OPTIONS_INIT;
+	git_diff *staged_diff_list = NULL, *index_diff_list = NULL;
+	git_diff_delta *delta;
+	git_diff_options opts = GIT_DIFF_OPTIONS_INIT;
+	git_vector staged_paths = GIT_VECTOR_INIT;
+	size_t i;
+	int error = 0;
+
+	GIT_UNUSED(merged_paths);
+
+	*conflicts = 0;
+
+	/* No staged changes may exist unless the change staged is identical to
+	 * the result of the merge.  This allows one to apply to merge manually,
+	 * then run merge.  Any other staged change would be overwritten by
+	 * a reset merge.
+	 */
+	if ((error = git_repository_head_tree(&head_tree, repo)) < 0 ||
+		(error = git_repository_index(&index_repo, repo)) < 0 ||
+		(error = git_diff_tree_to_index(&staged_diff_list, repo, head_tree, index_repo, &opts)) < 0)
+		goto done;
+
+	if (staged_diff_list->deltas.length == 0)
+		goto done;
+
+	git_vector_foreach(&staged_diff_list->deltas, i, delta) {
+		if ((error = git_vector_insert(&staged_paths, (char *)delta->new_file.path)) < 0)
+			goto done;
+	}
+
+	iter_opts.flags = GIT_ITERATOR_DONT_IGNORE_CASE;
+	iter_opts.pathlist.strings = (char **)staged_paths.contents;
+	iter_opts.pathlist.count = staged_paths.length;
+
+	if ((error = git_iterator_for_index(&iter_repo, repo, index_repo, &iter_opts)) < 0 ||
+		(error = git_iterator_for_index(&iter_new, repo, index_new, &iter_opts)) < 0 ||
+		(error = git_diff__from_iterators(&index_diff_list, repo, iter_repo, iter_new, &opts)) < 0)
+		goto done;
+
+	*conflicts = index_diff_list->deltas.length;
+
+done:
+	git_tree_free(head_tree);
+	git_index_free(index_repo);
+	git_iterator_free(iter_repo);
+	git_iterator_free(iter_new);
+	git_diff_free(staged_diff_list);
+	git_diff_free(index_diff_list);
+	git_vector_free(&staged_paths);
+
+	return error;
+}
+
+
+// Source: merge.c
+// Lines 2953-3009
+
+
+[ANSWER]
+MAY

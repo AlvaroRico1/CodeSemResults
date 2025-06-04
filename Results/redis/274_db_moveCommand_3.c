@@ -1,0 +1,65 @@
+void moveCommand(client *c) {
+    robj *o;
+    redisDb *src, *dst;
+    int srcid, dbid;
+    long long expire;
+
+    if (server.cluster_enabled) {
+        addReplyError(c,"MOVE is not allowed in cluster mode");
+        return;
+    }
+
+    /* Obtain source and target DB pointers */
+    src = c->db;
+    srcid = c->db->id;
+
+    if (getIntFromObjectOrReply(c, c->argv[2], &dbid, NULL) != C_OK)
+        return;
+
+    if (selectDb(c,dbid) == C_ERR) {
+        addReplyError(c,"DB index is out of range");
+        return;
+    }
+    dst = c->db;
+    selectDb(c,srcid); /* Back to the source DB */
+
+    /* If the user is moving using as target the same
+     * DB as the source DB it is probably an error. */
+    if (src == dst) {
+        addReplyErrorObject(c,shared.sameobjecterr);
+        return;
+    }
+
+    /* Check if the element exists and get a reference */
+    o = lookupKeyWrite(c->db,c->argv[1]);
+    if (!o) {
+        addReply(c,shared.czero);
+        return;
+    }
+    expire = getExpire(c->db,c->argv[1]);
+
+    /* Return zero if the key already exists in the target DB */
+    if (lookupKeyWrite(dst,c->argv[1]) != NULL) {
+        addReply(c,shared.czero);
+        return;
+    }
+    dbAdd(dst,c->argv[1],o);
+    if (expire != -1) setExpire(c,dst,c->argv[1],expire);
+    incrRefCount(o);
+
+    /* OK! key moved, free the entry in the source DB */
+    dbDelete(src,c->argv[1]);
+    signalModifiedKey(c,src,c->argv[1]);
+    signalModifiedKey(c,dst,c->argv[1]);
+    notifyKeyspaceEvent(NOTIFY_GENERIC,
+                "move_from",c->argv[1],src->id);
+    notifyKeyspaceEvent(NOTIFY_GENERIC,
+                "move_to",c->argv[1],dst->id);
+
+    server.dirty++;
+    addReply(c,shared.cone);
+}
+
+
+// Source: db.c
+// Lines 1140-1200

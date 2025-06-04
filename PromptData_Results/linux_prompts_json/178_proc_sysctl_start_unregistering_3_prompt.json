@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'p' at line 1\n2. Pointer 'wait' at line 8\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void start_unregistering(struct ctl_table_header *p)\n{\n\t/*\n\t * if p->used is 0, nobody will ever touch that entry again;\n\t * we'll eliminate all paths to it before dropping sysctl_lock\n\t */\n\tif (unlikely(p->used)) {\n\t\tstruct completion wait;\n\t\tinit_completion(&wait);\n\t\tp->unregistering = &wait;\n\t\tspin_unlock(&sysctl_lock);\n\t\twait_for_completion(&wait);\n\t} else {\n\t\t/* anything non-NULL; we'll never dereference it */\n\t\tp->unregistering = ERR_PTR(-EINVAL);\n\t\tspin_unlock(&sysctl_lock);\n\t}\n\n\n// Source: proc_sysctl.c\n// Lines 309-325\n",
+  "ANSWER": "MUST"
+}

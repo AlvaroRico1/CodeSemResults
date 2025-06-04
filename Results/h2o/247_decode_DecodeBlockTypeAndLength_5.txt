@@ -1,0 +1,1 @@
+block_type,h2o/deps/brotli/c/dec/decode.c,10,ringbuffer,h2o/deps/brotli/c/dec/decode.c,9,2

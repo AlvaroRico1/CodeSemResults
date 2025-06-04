@@ -1,0 +1,138 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'com' at line 17
+2. Pointer 'prompt' at line 71
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int read_and_execute(bool interactive) {
+#if defined(_WIN32)
+  String tmpbuf;
+  String buffer;
+#endif
+
+  /*
+    line can be allocated by:
+    - batch_readline. Use my_free()
+    - my_win_console_readline. Do not free, see tmpbuf.
+    - readline. Use free()
+  */
+  char *line = nullptr;
+  char in_string = 0;
+  ulong line_number = 0;
+  bool ml_comment = false;
+  COMMANDS *com;
+  size_t line_length = 0;
+  status.exit_status = 1;
+
+  real_binary_mode = !interactive && opt_binary_mode;
+  for (;;) {
+    /* Reset as SIGINT has already got handled. */
+    sigint_received = false;
+
+    if (!interactive) {
+      /*
+        batch_readline can return 0 on EOF or error.
+        In that case, we need to double check that we have a valid
+        line before actually setting line_length to read_length.
+        */
+      line = batch_readline(status.line_buff, real_binary_mode);
+      if (line) {
+        line_length = status.line_buff->read_length;
+
+        /*
+          ASCII 0x00 is not allowed appearing in queries if it is not in binary
+          mode.
+        */
+        if (!real_binary_mode && strlen(line) != line_length) {
+          status.exit_status = 1;
+          String msg;
+          msg.append(
+              "ASCII '\\0' appeared in the statement, but this is not "
+              "allowed unless option --binary-mode is enabled and mysql is "
+              "run in non-interactive mode. Set --binary-mode to 1 if ASCII "
+              "'\\0' is expected. Query: '");
+          msg.append(glob_buffer);
+          msg.append(line);
+          msg.append("'.");
+          put_info(msg.c_ptr(), INFO_ERROR);
+          break;
+        }
+
+        /*
+          Skip UTF8 Byte Order Marker (BOM) 0xEFBBBF.
+          Editors like "notepad" put this marker in
+          the very beginning of a text file when
+          you save the file using "Unicode UTF-8" format.
+        */
+        if (!line_number && (uchar)line[0] == 0xEF && (uchar)line[1] == 0xBB &&
+            (uchar)line[2] == 0xBF) {
+          line += 3;
+          // decrease the line length accordingly to the 3 bytes chopped
+          line_length -= 3;
+        }
+      }
+      line_number++;
+      if (!glob_buffer.length()) status.query_start_line = line_number;
+    } else {
+      const char *prompt =
+          (ml_comment
+               ? "   /*> "
+               : glob_buffer.is_empty()
+                     ? construct_prompt()
+                     : !in_string
+                           ? "    -> "
+                           : in_string == '\''
+                                 ? "    '> "
+                                 : (in_string == '`' ? "    `> " : "    \"> "));
+      if (opt_outfile && glob_buffer.is_empty()) fflush(OUTFILE);
+
+#if defined(_WIN32)
+      size_t nread;
+      tee_fputs(prompt, stdout);
+      if (!tmpbuf.is_alloced()) tmpbuf.alloc(65535);
+      tmpbuf.length(0);
+      buffer.length(0);
+      line = my_win_console_readline(charset_info, (char *)tmpbuf.ptr(),
+                                     tmpbuf.alloced_length(), &nread);
+      if (line && (nread == 0)) {
+        tee_puts("^C", stdout);
+        reset_prompt(&in_string, &ml_comment);
+        continue;
+      } else if (*line == 0x1A) /* (Ctrl + Z) */
+        break;
+#else
+      if (opt_outfile) fputs(prompt, OUTFILE);
+      /*
+        free the previous entered line.
+      */
+      if (line) free(line);
+      line = readline(prompt);
+
+      if (sigint_received) {
+        sigint_received = false;
+        tee_puts("^C", stdout);
+        reset_prompt(&in_string, &ml_comment);
+        continue;
+      }
+#endif /* defined(_WIN32) */
+      /*
+        When Ctrl+d or Ctrl+z is pressed, the line may be NULL on some OS
+        which may cause coredump.
+      */
+      if (opt_outfile && line) fprintf(OUTFILE, "%s\n", line);
+
+      line_length = line ? strlen(line) : 0;
+    }
+
+
+// Source: mysql.cc
+// Lines 2169-2287
+
+
+[ANSWER]
+MUST-NOT

@@ -1,0 +1,24 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ch' at line 1
+2. Pointer 'found' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+GIT_INLINE(ssize_t) git_str_find(const git_str *str, char ch)
+{
+	void *found = memchr(str->ptr, ch, str->size);
+	return found ? (ssize_t)((const char *)found - str->ptr) : -1;
+}
+
+
+// Source: str.h
+// Lines 203-207
+
+
+[ANSWER]
+MUST-NOT

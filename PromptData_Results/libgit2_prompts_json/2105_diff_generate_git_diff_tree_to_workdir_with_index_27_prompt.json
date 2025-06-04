@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'd2' at line 7\n2. Pointer 'index' at line 8\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint git_diff_tree_to_workdir_with_index(\n\tgit_diff **out,\n\tgit_repository *repo,\n\tgit_tree *tree,\n\tconst git_diff_options *opts)\n{\n\tgit_diff *d1 = NULL, *d2 = NULL;\n\tgit_index *index = NULL;\n\tint error = 0;\n\n\tGIT_ASSERT_ARG(out);\n\tGIT_ASSERT_ARG(repo);\n\n\t*out = NULL;\n\n\tif ((error = diff_load_index(&index, repo)) < 0)\n\t\treturn error;\n\n\tif (!(error = git_diff_tree_to_index(&d1, repo, tree, index, opts)) &&\n\t\t!(error = git_diff_index_to_workdir(&d2, repo, index, opts)))\n\t\terror = git_diff_merge(d1, d2);\n\n\tgit_diff_free(d2);\n\n\tif (error) {\n\t\tgit_diff_free(d1);\n\t\td1 = NULL;\n\t}\n\n\t*out = d1;\n\treturn error;\n}\n\n\n// Source: diff_generate.c\n// Lines 1520-1551\n",
+  "ANSWER": "MAY"
+}

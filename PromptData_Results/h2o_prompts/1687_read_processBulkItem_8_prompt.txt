@@ -1,0 +1,71 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'p' at line 4
+2. Pointer 'r' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int processBulkItem(redisReader *r) {
+    redisReadTask *cur = &(r->rstack[r->ridx]);
+    void *obj = NULL;
+    char *p, *s;
+    long len;
+    unsigned long bytelen;
+    int success = 0;
+
+    p = r->buf+r->pos;
+    s = seekNewline(p,r->len-r->pos);
+    if (s != NULL) {
+        p = r->buf+r->pos;
+        bytelen = s-(r->buf+r->pos)+2; /* include \r\n */
+        len = readLongLong(p);
+
+        if (len < 0) {
+            /* The nil object can always be created. */
+            if (r->fn && r->fn->createNil)
+                obj = r->fn->createNil(cur);
+            else
+                obj = (void*)REDIS_REPLY_NIL;
+            success = 1;
+        } else {
+            /* Only continue when the buffer contains the entire bulk item. */
+            bytelen += len+2; /* include \r\n */
+            if (r->pos+bytelen <= r->len) {
+                if (r->fn && r->fn->createString)
+                    obj = r->fn->createString(cur,s+2,len);
+                else
+                    obj = (void*)REDIS_REPLY_STRING;
+                success = 1;
+            }
+        }
+
+        /* Proceed when obj was created. */
+        if (success) {
+            if (obj == NULL) {
+                __redisReaderSetErrorOOM(r);
+                return REDIS_ERR;
+            }
+
+            r->pos += bytelen;
+
+            /* Set reply if this is the root object. */
+            if (r->ridx == 0) r->reply = obj;
+            moveToNextTask(r);
+            return REDIS_OK;
+        }
+    }
+
+    return REDIS_ERR;
+}
+
+
+// Source: read.c
+// Lines 249-300
+
+
+[ANSWER]
+MUST

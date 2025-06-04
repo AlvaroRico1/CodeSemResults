@@ -1,0 +1,91 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'args' at line 9
+2. Pointer 'mount_info' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static struct nfs_server *nfs_try_mount_request(struct nfs_mount_info *mount_info,
+					struct nfs_subversion *nfs_mod)
+{
+	int status;
+	unsigned int i;
+	bool tried_auth_unix = false;
+	bool auth_null_in_list = false;
+	struct nfs_server *server = ERR_PTR(-EACCES);
+	struct nfs_parsed_mount_data *args = mount_info->parsed;
+	rpc_authflavor_t authlist[NFS_MAX_SECFLAVORS];
+	unsigned int authlist_len = ARRAY_SIZE(authlist);
+
+	status = nfs_request_mount(args, mount_info->mntfh, authlist,
+					&authlist_len);
+	if (status)
+		return ERR_PTR(status);
+
+	/*
+	 * Was a sec= authflavor specified in the options? First, verify
+	 * whether the server supports it, and then just try to use it if so.
+	 */
+	if (args->auth_info.flavor_len > 0) {
+		status = nfs_verify_authflavors(args, authlist, authlist_len);
+		dfprintk(MOUNT, "NFS: using auth flavor %u\n",
+			 args->selected_flavor);
+		if (status)
+			return ERR_PTR(status);
+		return nfs_mod->rpc_ops->create_server(mount_info, nfs_mod);
+	}
+
+	/*
+	 * No sec= option was provided. RFC 2623, section 2.7 suggests we
+	 * SHOULD prefer the flavor listed first. However, some servers list
+	 * AUTH_NULL first. Avoid ever choosing AUTH_NULL.
+	 */
+	for (i = 0; i < authlist_len; ++i) {
+		rpc_authflavor_t flavor;
+		struct rpcsec_gss_info info;
+
+		flavor = authlist[i];
+		switch (flavor) {
+		case RPC_AUTH_UNIX:
+			tried_auth_unix = true;
+			break;
+		case RPC_AUTH_NULL:
+			auth_null_in_list = true;
+			continue;
+		default:
+			if (rpcauth_get_gssinfo(flavor, &info) != 0)
+				continue;
+			/* Fallthrough */
+		}
+		dfprintk(MOUNT, "NFS: attempting to use auth flavor %u\n", flavor);
+		args->selected_flavor = flavor;
+		server = nfs_mod->rpc_ops->create_server(mount_info, nfs_mod);
+		if (!IS_ERR(server))
+			return server;
+	}
+
+	/*
+	 * Nothing we tried so far worked. At this point, give up if we've
+	 * already tried AUTH_UNIX or if the server's list doesn't contain
+	 * AUTH_NULL
+	 */
+	if (tried_auth_unix || !auth_null_in_list)
+		return server;
+
+	/* Last chance! Try AUTH_UNIX */
+	dfprintk(MOUNT, "NFS: attempting to use auth flavor %u\n", RPC_AUTH_UNIX);
+	args->selected_flavor = RPC_AUTH_UNIX;
+	return nfs_mod->rpc_ops->create_server(mount_info, nfs_mod);
+}
+
+
+// Source: super.c
+// Lines 1822-1893
+
+
+[ANSWER]
+MUST

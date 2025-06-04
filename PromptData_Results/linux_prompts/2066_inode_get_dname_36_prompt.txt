@@ -1,0 +1,33 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'dname' at line 3
+2. Pointer 'name' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static char *get_dname(struct dentry *dentry)
+{
+	const char *dname;
+	char *name;
+	int len = dentry->d_name.len;
+
+	dname = dentry->d_name.name;
+	name = kmalloc(len + 1, GFP_KERNEL);
+	if (!name)
+		return NULL;
+	memcpy(name, dname, len);
+	name[len] = 0;
+	return name;
+}
+
+
+// Source: inode.c
+// Lines 54-67
+
+
+[ANSWER]
+MAY

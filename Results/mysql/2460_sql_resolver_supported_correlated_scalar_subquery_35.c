@@ -1,0 +1,54 @@
+bool Query_block::supported_correlated_scalar_subquery(THD *thd,
+                                                       Item::Css_info *subquery,
+                                                       Item **lifted_where) {
+  // Disallow if subquery is in a JOIN clause
+  if (subquery->m_location &
+      Item_aggregate_type::Collect_scalar_subquery_info::L_JOIN_COND)
+    return false;
+
+  // Check that we do no have correlation inside a derived table in the
+  // FROM list
+  for (TABLE_LIST *tr = leaf_tables; tr != nullptr; tr = tr->next_leaf)
+    if (tr->is_derived() && tr->derived_query_expression()->uncacheable)
+      return false;
+
+  // Disallow LIMIT, OFFSET
+  if (has_limit()) return false;
+
+  // Disallow window functions: transform not valid in their presence.
+  if (has_windows()) return false;
+
+  const size_t first_selected = CountHiddenFields(fields);
+  if (is_implicitly_grouped()) {
+    Item_sum::Collect_grouped_aggregate_info aggregates(this);
+    if (fields[first_selected]->walk(&Item::collect_grouped_aggregates,
+                                     enum_walk::PREFIX,
+                                     pointer_cast<uchar *>(&aggregates))) {
+      return true;
+    }
+    bool saw_count{false};
+    Item_sum *cnt_item{nullptr};
+    for (auto a : aggregates.list) {
+      if (a->sum_func() == Item_sum::COUNT_FUNC ||
+          a->sum_func() == Item_sum::COUNT_DISTINCT_FUNC) {
+        saw_count = true;
+        cnt_item = a;
+      }
+    }
+
+    if (saw_count) {
+      // The COUNT() must be the selected item, no expression involved
+      if (fields[first_selected] != cnt_item) return false;
+      // If we have an occurrence of COUNT() in the selected expression and
+      // implicit grouping , we know that the transform can yield NULL rather
+      // than 0. In such a case, we need to add a COALESCE around the replaced
+      // subquery expression, i.e. COALESCE(derived.`COUNT()`, 0). This is
+      // because in a LEFT JOIN inner position, a COUNT(0) can yield NULL
+      // which it could not in the original subquery position.
+      subquery->m_add_coalesce = true;
+    }
+  }
+
+
+// Source: sql_resolver.cc
+// Lines 6995-7044

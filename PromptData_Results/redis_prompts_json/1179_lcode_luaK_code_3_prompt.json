@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'f' at line 2\n2. Pointer 'fs' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int luaK_code (FuncState *fs, Instruction i, int line) {\n  Proto *f = fs->f;\n  dischargejpc(fs);  /* `pc' will change */\n  /* put new instruction in code array */\n  luaM_growvector(fs->L, f->code, fs->pc, f->sizecode, Instruction,\n                  MAX_INT, \"code size overflow\");\n  f->code[fs->pc] = i;\n  /* save corresponding line information */\n  luaM_growvector(fs->L, f->lineinfo, fs->pc, f->sizelineinfo, int,\n                  MAX_INT, \"code size overflow\");\n  f->lineinfo[fs->pc] = line;\n  return fs->pc++;\n}\n\n\n// Source: lcode.c\n// Lines 789-801\n",
+  "ANSWER": "MUST"
+}

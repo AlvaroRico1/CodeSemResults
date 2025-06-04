@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'name_out' at line 2\n2. Pointer 'driver_name' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint git_merge_driver_for_source(\n\tconst char **name_out,\n\tgit_merge_driver **driver_out,\n\tconst git_merge_driver_source *src)\n{\n\tconst char *path, *driver_name;\n\tint error = 0;\n\n\tpath = git_merge_file__best_path(\n\t\tsrc->ancestor ? src->ancestor->path : NULL,\n\t\tsrc->ours ? src->ours->path : NULL,\n\t\tsrc->theirs ? src->theirs->path : NULL);\n\n\tif ((error = merge_driver_name_for_path(\n\t\t\t&driver_name, src->repo, path, src->default_driver)) < 0)\n\t\treturn error;\n\n\t*name_out = driver_name;\n\t*driver_out = merge_driver_lookup_with_wildcard(driver_name);\n\treturn error;\n}\n\n\n// Source: merge_driver.c\n// Lines 411-431\n",
+  "ANSWER": "MUST"
+}

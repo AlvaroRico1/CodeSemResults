@@ -1,0 +1,1 @@
+tp,gcc/gcc/c/c-decl.c,1,vars,gcc/gcc/c/c-decl.c,3,0

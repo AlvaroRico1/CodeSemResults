@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'dg' at line 8
+2. Pointer 'out' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int crypto_cbcmac_digest_final(struct shash_desc *pdesc, u8 *out)
+{
+	struct crypto_shash *parent = pdesc->tfm;
+	struct cbcmac_tfm_ctx *tctx = crypto_shash_ctx(parent);
+	struct cbcmac_desc_ctx *ctx = shash_desc_ctx(pdesc);
+	struct crypto_cipher *tfm = tctx->child;
+	int bs = crypto_shash_digestsize(parent);
+	u8 *dg = (u8 *)ctx + crypto_shash_descsize(parent) - bs;
+
+	if (ctx->len)
+		crypto_cipher_encrypt_one(tfm, dg, dg);
+
+	memcpy(out, dg, bs);
+	return 0;
+}
+
+
+// Source: ccm.c
+// Lines 879-893
+
+
+[ANSWER]
+MAY

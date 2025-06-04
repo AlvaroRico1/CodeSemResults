@@ -1,0 +1,1 @@
+startp,gcc/gcc/gcc.c,120,nstore,gcc/gcc/gcc.c,121,2

@@ -1,0 +1,73 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'result' at line 34
+2. Pointer 'is_data_packet' at line 12
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+net_async_status cli_read_rows_nonblocking(MYSQL *mysql,
+                                           MYSQL_FIELD *mysql_fields,
+                                           unsigned int fields,
+                                           MYSQL_DATA **result_out) {
+  uint field;
+  ulong pkt_len;
+  ulong len;
+  uchar *cp;
+  char *to, *end_to;
+  MYSQL_ROWS *cur;
+  NET *net = &mysql->net;
+  bool is_data_packet;
+  DBUG_TRACE;
+  MYSQL_ASYNC *async_context = ASYNC_DATA(mysql);
+  NET_ASYNC *net_async = NET_ASYNC_DATA(net);
+  *result_out = nullptr;
+
+  if (cli_safe_read_nonblocking(mysql, &is_data_packet, &pkt_len) ==
+      NET_ASYNC_NOT_READY) {
+    return NET_ASYNC_NOT_READY;
+  }
+
+  mysql->packet_length = pkt_len;
+  if (pkt_len == packet_error) {
+    if (net_async->read_rows_is_first_read) {
+      free_rows(async_context->rows_result_buffer);
+      async_context->rows_result_buffer = nullptr;
+    }
+    net_async->read_rows_is_first_read = true;
+    return NET_ASYNC_COMPLETE;
+  }
+
+  if (net_async->read_rows_is_first_read) {
+    MYSQL_DATA *result;
+    if (!(result =
+              (MYSQL_DATA *)my_malloc(key_memory_MYSQL_DATA, sizeof(MYSQL_DATA),
+                                      MYF(MY_WME | MY_ZEROFILL))) ||
+        !(result->alloc =
+              (MEM_ROOT *)my_malloc(key_memory_MYSQL_DATA, sizeof(MEM_ROOT),
+                                    MYF(MY_WME | MY_ZEROFILL)))) {
+      set_mysql_error(mysql, CR_OUT_OF_MEMORY, unknown_sqlstate);
+      net_async->read_rows_is_first_read = true;
+      free_rows(result);
+      return NET_ASYNC_COMPLETE;
+    }
+    async_context->rows_result_buffer = result;
+    init_alloc_root(PSI_NOT_INSTRUMENTED, result->alloc, 8192,
+                    0); /* Assume rowlength < 8192 */
+    async_context->prev_row_ptr = &result->data;
+    result->rows = 0;
+    result->fields = fields;
+
+    net_async->read_rows_is_first_read = false;
+  }
+
+
+// Source: client.cc
+// Lines 2782-2835
+
+
+[ANSWER]
+MUST-NOT

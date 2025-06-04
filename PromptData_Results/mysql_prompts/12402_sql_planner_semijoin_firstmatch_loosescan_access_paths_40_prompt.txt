@@ -1,0 +1,132 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'pos' at line 51
+2. Pointer 'regular_pos' at line 49
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool Optimize_table_order::semijoin_firstmatch_loosescan_access_paths(
+    uint first_tab, uint last_tab, table_map remaining_tables, bool loosescan,
+    double *newcount, double *newcost) {
+  DBUG_TRACE;
+  double cost;                // Contains running estimate of calculated cost.
+  double rowcount;            // Rowcount of join prefix (ie before first_tab).
+  double outer_fanout = 1.0;  // Fanout contributed by outer tables in range.
+  double inner_fanout = 1.0;  // Fanout contributed by inner tables in range.
+  const Cost_model_server *const cost_model = join->cost_model();
+  Opt_trace_context *const trace = &thd->opt_trace;
+  Opt_trace_object recalculate(trace, "recalculate_access_paths_and_cost");
+  Opt_trace_array trace_tables(trace, "tables");
+  POSITION *const positions =
+      got_final_plan ? join->best_positions : join->positions;
+
+  if (first_tab == join->const_tables) {
+    cost = 0.0;
+    rowcount = 1.0;
+  } else {
+    cost = positions[first_tab - 1].prefix_cost;
+    rowcount = positions[first_tab - 1].prefix_rowcount;
+  }
+
+  uint table_count = 0;
+  uint no_jbuf_before;
+  for (uint i = first_tab; i <= last_tab; i++) {
+    remaining_tables |= positions[i].table->table_ref->map();
+    if (positions[i].table->emb_sj_nest) table_count++;
+  }
+  if (loosescan) {
+    // LooseScan: May use join buffering for all tables after last inner table.
+    for (no_jbuf_before = last_tab; no_jbuf_before > first_tab;
+         no_jbuf_before--) {
+      if (positions[no_jbuf_before].table->emb_sj_nest != nullptr)
+        break;  // Encountered the last inner table.
+    }
+    no_jbuf_before++;
+  } else {
+    // FirstMatch: May use join buffering if there is only one inner table.
+    no_jbuf_before = (table_count > 1) ? last_tab + 1 : first_tab;
+  }
+
+  Deps_of_remaining_lateral_derived_tables deps_lateral(join, ~excluded_tables);
+  // recalculate, as we go back in the range of "unoptimized" tables:
+  deps_lateral.recalculate(first_tab);
+
+  for (uint i = first_tab; i <= last_tab; i++) {
+    JOIN_TAB *const tab = positions[i].table;
+    POSITION regular_pos;
+    POSITION *const dst_pos = got_final_plan ? positions + i : &regular_pos;
+    POSITION *pos;  // Position for later calculations
+    /*
+      We always need a new calculation for the first inner table in
+      the LooseScan strategy.
+    */
+    const bool is_ls_driving_tab = (i == first_tab) && loosescan;
+    if (is_ls_driving_tab || positions[i].use_join_buffer) {
+      Opt_trace_object trace_one_table(trace);
+      trace_one_table.add_utf8_table(tab->table_ref);
+
+      /*
+        Find the best access method with specified join buffering strategy.
+        If this is a loosescan driving table,
+        semijoin_loosescan_fill_driving_table_position will consider all keys,
+        so best_access_path() should fill bound_keyparts/read_cost/fanout for
+        all keys => test_all_ref_keys==true.
+       */
+      assert(!test_all_ref_keys);
+      test_all_ref_keys = is_ls_driving_tab;
+      double prefix_rowcount = rowcount * inner_fanout * outer_fanout;
+      best_access_path(tab, remaining_tables, i, i < no_jbuf_before,
+                       prefix_rowcount, dst_pos);
+      test_all_ref_keys = false;
+      if (is_ls_driving_tab)  // Use loose scan position
+      {
+        if (semijoin_loosescan_fill_driving_table_position(
+                tab, remaining_tables, i, prefix_rowcount, dst_pos)) {
+          dst_pos->table = tab;
+          const double rows = rowcount * dst_pos->rows_fetched;
+          dst_pos->set_prefix_cost(
+              cost + dst_pos->read_cost + cost_model->row_evaluate_cost(rows),
+              rows * dst_pos->filter_effect);
+        } else {
+          assert(!got_final_plan);
+          return false;
+        }
+      }
+      pos = dst_pos;
+    } else
+      pos = positions + i;  // Use result from prior calculation
+
+    /*
+      Terminate search if best_access_path found no possible plan.
+      Otherwise we will be getting infinite cost when summing up below.
+     */
+    if (pos->read_cost == DBL_MAX) {
+      assert(loosescan && !got_final_plan);
+      return false;
+    }
+
+    remaining_tables &= ~tab->table_ref->map();
+
+    cost += pos->read_cost +
+            cost_model->row_evaluate_cost(rowcount * inner_fanout *
+                                          outer_fanout * pos->rows_fetched);
+
+    if (tab->emb_sj_nest)
+      inner_fanout *= pos->rows_fetched * pos->filter_effect;
+    else
+      outer_fanout *= pos->rows_fetched * pos->filter_effect;
+
+    deps_lateral.recalculate(tab, i + 1);
+  }
+
+
+// Source: sql_planner.cc
+// Lines 3632-3744
+
+
+[ANSWER]
+MUST

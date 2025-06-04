@@ -1,0 +1,65 @@
+static void on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *len, int *wrote_all)
+{
+    struct st_h2o_http3_server_stream_t *stream = qs->data;
+
+    assert(stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS || stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
+
+    uint8_t *dst = _dst, *dst_end = dst + *len;
+    size_t vec_index = 0;
+
+    /* find the start position identified by vec_index and off */
+    off += stream->sendbuf.off_within_first_vec;
+    while (off != 0) {
+        assert(vec_index < stream->sendbuf.vecs.size);
+        if (off < stream->sendbuf.vecs.entries[vec_index].vec.len)
+            break;
+        off -= stream->sendbuf.vecs.entries[vec_index].vec.len;
+        ++vec_index;
+    }
+    assert(vec_index < stream->sendbuf.vecs.size);
+
+    /* write */
+    *wrote_all = 0;
+    do {
+        struct st_h2o_http3_server_sendvec_t *this_vec = stream->sendbuf.vecs.entries + vec_index;
+        size_t sz = this_vec->vec.len - off;
+        if (dst_end - dst < sz)
+            sz = dst_end - dst;
+        if (!(this_vec->vec.callbacks->flatten)(&this_vec->vec, &stream->req, h2o_iovec_init(dst, sz), off))
+            goto Error;
+        if (this_vec->entity_offset != UINT64_MAX && stream->req.bytes_sent < this_vec->entity_offset + off + sz)
+            stream->req.bytes_sent = this_vec->entity_offset + off + sz;
+        dst += sz;
+        off += sz;
+        /* when reaching the end of the current vector, update vec_index, wrote_all */
+        if (off == this_vec->vec.len) {
+            off = 0;
+            ++vec_index;
+            if (vec_index == stream->sendbuf.vecs.size) {
+                *wrote_all = 1;
+                break;
+            }
+        }
+    } while (dst != dst_end);
+
+    *len = dst - (uint8_t *)_dst;
+
+    /* retain the payload of response body before calling `h2o_proceed_request`, as the generator might discard the buffer */
+    if (stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY && *wrote_all &&
+        quicly_sendstate_is_open(&stream->quic->sendstate) && !stream->proceed_requested) {
+        if (!retain_sendvecs(stream))
+            goto Error;
+        stream->proceed_requested = 1;
+        stream->proceed_while_sending = 1;
+    }
+
+    return;
+Error:
+    *len = 0;
+    *wrote_all = 1;
+    shutdown_stream(stream, H2O_HTTP3_ERROR_EARLY_RESPONSE, H2O_HTTP3_ERROR_INTERNAL, 0);
+}
+
+
+// Source: server.c
+// Lines 759-819

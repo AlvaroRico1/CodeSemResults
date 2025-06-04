@@ -1,0 +1,68 @@
+int git_fs_path_walk_up(
+	git_str *path,
+	const char *ceiling,
+	int (*cb)(void *data, const char *),
+	void *data)
+{
+	int error = 0;
+	git_str iter;
+	ssize_t stop = 0, scan;
+	char oldc = '\0';
+
+	GIT_ASSERT_ARG(path);
+	GIT_ASSERT_ARG(cb);
+
+	if (ceiling != NULL) {
+		if (git__prefixcmp(path->ptr, ceiling) == 0)
+			stop = (ssize_t)strlen(ceiling);
+		else
+			stop = git_str_len(path);
+	}
+	scan = git_str_len(path);
+
+	/* empty path: yield only once */
+	if (!scan) {
+		error = cb(data, "");
+		if (error)
+			ensure_error_set(error);
+		return error;
+	}
+
+	iter.ptr = path->ptr;
+	iter.size = git_str_len(path);
+	iter.asize = path->asize;
+
+	while (scan >= stop) {
+		error = cb(data, iter.ptr);
+		iter.ptr[scan] = oldc;
+
+		if (error) {
+			ensure_error_set(error);
+			break;
+		}
+
+		scan = git_str_rfind_next(&iter, '/');
+		if (scan >= 0) {
+			scan++;
+			oldc = iter.ptr[scan];
+			iter.size = scan;
+			iter.ptr[scan] = '\0';
+		}
+	}
+
+	if (scan >= 0)
+		iter.ptr[scan] = oldc;
+
+	/* relative path: yield for the last component */
+	if (!error && stop == 0 && iter.ptr[0] != '/') {
+		error = cb(data, "");
+		if (error)
+			ensure_error_set(error);
+	}
+
+	return error;
+}
+
+
+// Source: fs_path.c
+// Lines 513-576

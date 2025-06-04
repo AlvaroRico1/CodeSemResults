@@ -1,0 +1,64 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'env' at line 15
+2. Pointer 'result' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int STDCALL mysql_server_init(int argc MY_ATTRIBUTE((unused)),
+                              char **argv MY_ATTRIBUTE((unused)),
+                              char **groups MY_ATTRIBUTE((unused))) {
+  int result = 0;
+  if (!mysql_client_init) {
+    mysql_client_init = true;
+    org_my_init_done = my_init_done;
+    if (my_init()) /* Will init threads */
+      return 1;
+    init_client_errs();
+    if (mysql_client_plugin_init()) return 1;
+    ssl_start();
+
+    if (!mysql_port) {
+      char *env;
+      struct servent *serv_ptr MY_ATTRIBUTE((unused));
+
+      mysql_port = MYSQL_PORT;
+
+      /*
+        if builder specifically requested a default port, use that
+        (even if it coincides with our factory default).
+        only if they didn't do we check /etc/services (and, failing
+        on that, fall back to the factory default of 3306).
+        either default can be overridden by the environment variable
+        MYSQL_TCP_PORT, which in turn can be overridden with command
+        line options.
+      */
+
+#if MYSQL_PORT_DEFAULT == 0
+      if ((serv_ptr = getservbyname("mysql", "tcp")))
+        mysql_port = (uint)ntohs((ushort)serv_ptr->s_port);
+#endif
+      if ((env = getenv("MYSQL_TCP_PORT"))) mysql_port = (uint)atoi(env);
+    }
+
+    if (!mysql_unix_port) {
+      char *env;
+#ifdef _WIN32
+      mysql_unix_port = const_cast<char *>(MYSQL_NAMEDPIPE);
+#else
+      mysql_unix_port = const_cast<char *>(MYSQL_UNIX_ADDR);
+#endif
+      if ((env = getenv("MYSQL_UNIX_PORT"))) mysql_unix_port = env;
+    }
+
+
+// Source: libmysql.cc
+// Lines 128-172
+
+
+[ANSWER]
+MUST-NOT

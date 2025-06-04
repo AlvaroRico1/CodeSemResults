@@ -1,0 +1,111 @@
+dse_step5 (void)
+{
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, cfun)
+    {
+      bb_info_t bb_info = bb_table[bb->index];
+      insn_info_t insn_info = bb_info->last_insn;
+      bitmap v = bb_info->out;
+
+      while (insn_info)
+	{
+	  bool deleted = false;
+	  if (dump_file && insn_info->insn)
+	    {
+	      fprintf (dump_file, "starting to process insn %d\n",
+		       INSN_UID (insn_info->insn));
+	      bitmap_print (dump_file, v, "  v:  ", "\n");
+	    }
+
+	  /* There may have been code deleted by the dce pass run before
+	     this phase.  */
+	  if (insn_info->insn
+	      && INSN_P (insn_info->insn)
+	      && (!insn_info->cannot_delete)
+	      && (!bitmap_empty_p (v)))
+	    {
+	      store_info *store_info = insn_info->store_rec;
+
+	      /* Try to delete the current insn.  */
+	      deleted = true;
+
+	      /* Skip the clobbers.  */
+	      while (!store_info->is_set)
+		store_info = store_info->next;
+
+	      HOST_WIDE_INT i, offset, width;
+	      group_info *group_info = rtx_group_vec[store_info->group_id];
+
+	      if (!store_info->offset.is_constant (&offset)
+		  || !store_info->width.is_constant (&width))
+		deleted = false;
+	      else
+		{
+		  HOST_WIDE_INT end = offset + width;
+		  for (i = offset; i < end; i++)
+		    {
+		      int index = get_bitmap_index (group_info, i);
+
+		      if (dump_file && (dump_flags & TDF_DETAILS))
+			fprintf (dump_file, "i = %d, index = %d\n",
+				 (int) i, index);
+		      if (index == 0 || !bitmap_bit_p (v, index))
+			{
+			  if (dump_file && (dump_flags & TDF_DETAILS))
+			    fprintf (dump_file, "failing at i = %d\n",
+				     (int) i);
+			  deleted = false;
+			  break;
+			}
+		    }
+		}
+	      if (deleted)
+		{
+		  if (dbg_cnt (dse)
+		      && check_for_inc_dec_1 (insn_info))
+		    {
+		      delete_insn (insn_info->insn);
+		      insn_info->insn = NULL;
+		      globally_deleted++;
+		    }
+		}
+	    }
+	  /* We do want to process the local info if the insn was
+	     deleted.  For instance, if the insn did a wild read, we
+	     no longer need to trash the info.  */
+	  if (insn_info->insn
+	      && INSN_P (insn_info->insn)
+	      && (!deleted))
+	    {
+	      scan_stores (insn_info->store_rec, v, NULL);
+	      if (insn_info->wild_read)
+		{
+		  if (dump_file && (dump_flags & TDF_DETAILS))
+		    fprintf (dump_file, "wild read\n");
+		  bitmap_clear (v);
+		}
+	      else if (insn_info->read_rec
+		       || insn_info->non_frame_wild_read
+		       || insn_info->frame_read)
+		{
+		  if (dump_file && (dump_flags & TDF_DETAILS))
+		    {
+		      if (!insn_info->non_frame_wild_read
+			  && !insn_info->frame_read)
+			fprintf (dump_file, "regular read\n");
+		      if (insn_info->non_frame_wild_read)
+			fprintf (dump_file, "non-frame wild read\n");
+		      if (insn_info->frame_read)
+			fprintf (dump_file, "frame read\n");
+		    }
+		  scan_reads (insn_info, v, NULL);
+		}
+	    }
+
+	  insn_info = insn_info->prev_insn;
+	}
+    }
+
+
+// Source: dse.c
+// Lines 3453-3559

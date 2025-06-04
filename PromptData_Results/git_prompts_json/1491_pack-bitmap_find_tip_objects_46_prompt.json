@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'p' at line 6\n2. Pointer 'p' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic struct bitmap *find_tip_objects(struct bitmap_index *bitmap_git,\n\t\t\t\t       struct object_list *tip_objects,\n\t\t\t\t       enum object_type type)\n{\n\tstruct bitmap *result = bitmap_new();\n\tstruct object_list *p;\n\n\tfor (p = tip_objects; p; p = p->next) {\n\t\tint pos;\n\n\t\tif (p->item->type != type)\n\t\t\tcontinue;\n\n\t\tpos = bitmap_position(bitmap_git, &p->item->oid);\n\t\tif (pos < 0)\n\t\t\tcontinue;\n\n\t\tbitmap_set(result, pos);\n\t}\n\n\treturn result;\n}\n\n\n// Source: pack-bitmap.c\n// Lines 959-980\n",
+  "ANSWER": "MUST"
+}

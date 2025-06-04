@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'hdr' at line 1\n2. Pointer 'p' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int decode_compound_hdr(struct xdr_stream *xdr, struct compound_hdr *hdr)\n{\n\t__be32 *p;\n\n\tp = xdr_inline_decode(xdr, 8);\n\tif (unlikely(!p))\n\t\treturn -EIO;\n\thdr->status = be32_to_cpup(p++);\n\thdr->taglen = be32_to_cpup(p);\n\n\tp = xdr_inline_decode(xdr, hdr->taglen + 4);\n\tif (unlikely(!p))\n\t\treturn -EIO;\n\thdr->tag = (char *)p;\n\tp += XDR_QUADLEN(hdr->taglen);\n\thdr->nops = be32_to_cpup(p);\n\tif (unlikely(hdr->nops < 1))\n\t\treturn nfs4_stat_to_errno(hdr->status);\n\treturn 0;\n}\n\n\n// Source: nfs4xdr.c\n// Lines 3156-3175\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,37 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ltype' at line 4
+2. Pointer 'lsize' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+generic_get_free_region(unsigned long base, unsigned long size, int replace_reg)
+{
+	unsigned long lbase, lsize;
+	mtrr_type ltype;
+	int i, max;
+
+	max = num_var_ranges;
+	if (replace_reg >= 0 && replace_reg < max)
+		return replace_reg;
+
+	for (i = 0; i < max; ++i) {
+		mtrr_if->get(i, &lbase, &lsize, &ltype);
+		if (lsize == 0)
+			return i;
+	}
+
+	return -ENOSPC;
+}
+
+
+// Source: generic.c
+// Lines 560-577
+
+
+[ANSWER]
+MUST-NOT

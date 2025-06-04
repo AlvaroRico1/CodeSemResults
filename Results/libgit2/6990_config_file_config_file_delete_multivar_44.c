@@ -1,0 +1,37 @@
+static int config_file_delete_multivar(git_config_backend *cfg, const char *name, const char *regexp)
+{
+	config_file_backend *b = GIT_CONTAINER_OF(cfg, config_file_backend, parent);
+	git_config_entries *entries = NULL;
+	git_config_entry *entry = NULL;
+	git_regexp preg = GIT_REGEX_INIT;
+	char *key = NULL;
+	int result;
+
+	if ((result = git_config__normalize_name(name, &key)) < 0)
+		goto out;
+
+	if ((result = config_file_entries_take(&entries, b)) < 0)
+		goto out;
+
+	if ((result = git_config_entries_get(&entry, entries, key)) < 0) {
+		if (result == GIT_ENOTFOUND)
+			git_error_set(GIT_ERROR_CONFIG, "could not find key '%s' to delete", name);
+		goto out;
+	}
+
+	if ((result = git_regexp_compile(&preg, regexp, 0)) < 0)
+		goto out;
+
+	if ((result = config_file_write(b, name, key, &preg, NULL)) < 0)
+		goto out;
+
+out:
+	git_config_entries_free(entries);
+	git__free(key);
+	git_regexp_dispose(&preg);
+	return result;
+}
+
+
+// Source: config_file.c
+// Lines 426-458

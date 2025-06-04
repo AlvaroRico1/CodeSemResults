@@ -1,0 +1,85 @@
+bool Query_block::transform_subquery_to_derived(
+    THD *thd, TABLE_LIST **out_tl, Query_expression *subs_query_expression,
+    Item_subselect *subq, bool use_inner_join, bool reject_multiple_rows,
+    Item *join_condition, Item *lifted_where_cond) {
+  TABLE_LIST *tl;
+  {
+    // We did not do the transformation yet
+    remember_transform(thd, this);
+
+    // We want the TABLE_LIST, Table_ident and m_join_cond to be permanent
+    Prepared_stmt_arena_holder ps_arena_holder(thd);
+
+    tl = synthesize_derived(thd, subs_query_expression, join_condition,
+                            /*left_outer=*/true, use_inner_join);
+
+    if (tl == nullptr) return true;
+
+    if (lifted_where_cond != nullptr) {
+      tl->set_join_cond(lifted_where_cond);
+      cond_count += (lifted_where_cond->type() == Item::COND_ITEM)
+                        ? down_cast<Item_cond *>(lifted_where_cond)
+                              ->argument_list()
+                              ->elements
+                        : 1;
+    }
+
+    // Append to end of leaf tables list
+    TABLE_LIST *leaf;
+    for (leaf = leaf_tables; leaf->next_leaf != nullptr;
+         leaf = leaf->next_leaf) {
+    }
+    leaf->next_leaf = tl;
+
+    // Adjust table no and map
+    tl->set_tableno(leaf_table_count);
+
+    tl->embedding->nested_join->query_block_id =
+        subq->unit->first_query_block()->select_number;
+    leaf_table_count += 1;
+
+    if (!(tl->derived_result = new (thd->mem_root) Query_result_union()))
+      return true; /* purecov: inspected */
+    subs_query_expression->m_reject_multiple_rows = reject_multiple_rows;
+    subs_query_expression->set_explain_marker(thd, CTX_DERIVED);
+    subs_query_expression->first_query_block()->linkage = DERIVED_TABLE_TYPE;
+
+    // Break connection to the subquery expression:
+    subs_query_expression->item = nullptr;
+  }
+  subs_query_expression->set_query_result(tl->derived_result);
+  subs_query_expression->first_query_block()->set_query_result(
+      tl->derived_result);
+
+  materialized_derived_table_count++;
+  derived_table_count++;
+
+  Lifted_fields_map lifted_where_fields;
+  bool added_cardinality_check = false;
+  if (lifted_where_cond != nullptr) {
+    assert(!subs_query_expression->is_union());
+    if (subs_query_expression->first_query_block()
+            ->decorrelate_derived_scalar_subquery_pre(
+                thd, tl, lifted_where_cond, &lifted_where_fields,
+                &added_cardinality_check))
+      return true;
+  }
+  // We skip resolve_derived(), as the subquery has already been resolved before
+  // the conversion to derived table.
+  assert(tl->table == nullptr);
+  if (tl->setup_materialized_derived(thd)) return true; /* purecov: inspected */
+
+  if (lifted_where_cond != nullptr) {
+    assert(tl->join_cond() == lifted_where_cond);
+    if (decorrelate_derived_scalar_subquery_post(thd, tl, &lifted_where_fields,
+                                                 added_cardinality_check))
+      return true;
+  }
+
+  *out_tl = tl;
+  return false;
+}
+
+
+// Source: sql_resolver.cc
+// Lines 6793-6873

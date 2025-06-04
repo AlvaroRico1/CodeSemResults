@@ -1,0 +1,401 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'destination' at line 7
+2. Pointer 'source' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+acpi_rs_convert_aml_to_resource(struct acpi_resource *resource,
+				union aml_resource *aml,
+				struct acpi_rsconvert_info *info)
+{
+	acpi_rs_length aml_resource_length;
+	void *source;
+	void *destination;
+	char *target;
+	u8 count;
+	u8 flags_mode = FALSE;
+	u16 item_count = 0;
+	u16 temp16 = 0;
+
+	ACPI_FUNCTION_TRACE(rs_convert_aml_to_resource);
+
+	if (!info) {
+		return_ACPI_STATUS(AE_BAD_PARAMETER);
+	}
+
+	if (((acpi_size)resource) & 0x3) {
+
+		/* Each internal resource struct is expected to be 32-bit aligned */
+
+		ACPI_WARNING((AE_INFO,
+			      "Misaligned resource pointer (get): %p Type 0x%2.2X Length %u",
+			      resource, resource->type, resource->length));
+	}
+
+	/* Extract the resource Length field (does not include header length) */
+
+	aml_resource_length = acpi_ut_get_resource_length(aml);
+
+	/*
+	 * First table entry must be ACPI_RSC_INITxxx and must contain the
+	 * table length (# of table entries)
+	 */
+	count = INIT_TABLE_LENGTH(info);
+	while (count) {
+		/*
+		 * Source is the external AML byte stream buffer,
+		 * destination is the internal resource descriptor
+		 */
+		source = ACPI_ADD_PTR(void, aml, info->aml_offset);
+		destination =
+		    ACPI_ADD_PTR(void, resource, info->resource_offset);
+
+		switch (info->opcode) {
+		case ACPI_RSC_INITGET:
+			/*
+			 * Get the resource type and the initial (minimum) length
+			 */
+			memset(resource, 0, INIT_RESOURCE_LENGTH(info));
+			resource->type = INIT_RESOURCE_TYPE(info);
+			resource->length = INIT_RESOURCE_LENGTH(info);
+			break;
+
+		case ACPI_RSC_INITSET:
+			break;
+
+		case ACPI_RSC_FLAGINIT:
+
+			flags_mode = TRUE;
+			break;
+
+		case ACPI_RSC_1BITFLAG:
+			/*
+			 * Mask and shift the flag bit
+			 */
+			ACPI_SET8(destination,
+				  ((ACPI_GET8(source) >> info->value) & 0x01));
+			break;
+
+		case ACPI_RSC_2BITFLAG:
+			/*
+			 * Mask and shift the flag bits
+			 */
+			ACPI_SET8(destination,
+				  ((ACPI_GET8(source) >> info->value) & 0x03));
+			break;
+
+		case ACPI_RSC_3BITFLAG:
+			/*
+			 * Mask and shift the flag bits
+			 */
+			ACPI_SET8(destination,
+				  ((ACPI_GET8(source) >> info->value) & 0x07));
+			break;
+
+		case ACPI_RSC_COUNT:
+
+			item_count = ACPI_GET8(source);
+			ACPI_SET8(destination, item_count);
+
+			resource->length = resource->length +
+			    (info->value * (item_count - 1));
+			break;
+
+		case ACPI_RSC_COUNT16:
+
+			item_count = aml_resource_length;
+			ACPI_SET16(destination, item_count);
+
+			resource->length = resource->length +
+			    (info->value * (item_count - 1));
+			break;
+
+		case ACPI_RSC_COUNT_GPIO_PIN:
+
+			target = ACPI_ADD_PTR(void, aml, info->value);
+			item_count = ACPI_GET16(target) - ACPI_GET16(source);
+
+			resource->length = resource->length + item_count;
+			item_count = item_count / 2;
+			ACPI_SET16(destination, item_count);
+			break;
+
+		case ACPI_RSC_COUNT_GPIO_VEN:
+
+			item_count = ACPI_GET8(source);
+			ACPI_SET8(destination, item_count);
+
+			resource->length =
+			    resource->length + (info->value * item_count);
+			break;
+
+		case ACPI_RSC_COUNT_GPIO_RES:
+			/*
+			 * Vendor data is optional (length/offset may both be zero)
+			 * Examine vendor data length field first
+			 */
+			target = ACPI_ADD_PTR(void, aml, (info->value + 2));
+			if (ACPI_GET16(target)) {
+
+				/* Use vendor offset to get resource source length */
+
+				target = ACPI_ADD_PTR(void, aml, info->value);
+				item_count =
+				    ACPI_GET16(target) - ACPI_GET16(source);
+			} else {
+				/* No vendor data to worry about */
+
+				item_count = aml->large_header.resource_length +
+				    sizeof(struct aml_resource_large_header) -
+				    ACPI_GET16(source);
+			}
+
+			resource->length = resource->length + item_count;
+			ACPI_SET16(destination, item_count);
+			break;
+
+		case ACPI_RSC_COUNT_SERIAL_VEN:
+
+			item_count = ACPI_GET16(source) - info->value;
+
+			resource->length = resource->length + item_count;
+			ACPI_SET16(destination, item_count);
+			break;
+
+		case ACPI_RSC_COUNT_SERIAL_RES:
+
+			item_count = (aml_resource_length +
+				      sizeof(struct aml_resource_large_header))
+			    - ACPI_GET16(source) - info->value;
+
+			resource->length = resource->length + item_count;
+			ACPI_SET16(destination, item_count);
+			break;
+
+		case ACPI_RSC_LENGTH:
+
+			resource->length = resource->length + info->value;
+			break;
+
+		case ACPI_RSC_MOVE8:
+		case ACPI_RSC_MOVE16:
+		case ACPI_RSC_MOVE32:
+		case ACPI_RSC_MOVE64:
+			/*
+			 * Raw data move. Use the Info value field unless item_count has
+			 * been previously initialized via a COUNT opcode
+			 */
+			if (info->value) {
+				item_count = info->value;
+			}
+			acpi_rs_move_data(destination, source, item_count,
+					  info->opcode);
+			break;
+
+		case ACPI_RSC_MOVE_GPIO_PIN:
+
+			/* Generate and set the PIN data pointer */
+
+			target = (char *)ACPI_ADD_PTR(void, resource,
+						      (resource->length -
+						       item_count * 2));
+			*(u16 **)destination = ACPI_CAST_PTR(u16, target);
+
+			/* Copy the PIN data */
+
+			source = ACPI_ADD_PTR(void, aml, ACPI_GET16(source));
+			acpi_rs_move_data(target, source, item_count,
+					  info->opcode);
+			break;
+
+		case ACPI_RSC_MOVE_GPIO_RES:
+
+			/* Generate and set the resource_source string pointer */
+
+			target = (char *)ACPI_ADD_PTR(void, resource,
+						      (resource->length -
+						       item_count));
+			*(u8 **)destination = ACPI_CAST_PTR(u8, target);
+
+			/* Copy the resource_source string */
+
+			source = ACPI_ADD_PTR(void, aml, ACPI_GET16(source));
+			acpi_rs_move_data(target, source, item_count,
+					  info->opcode);
+			break;
+
+		case ACPI_RSC_MOVE_SERIAL_VEN:
+
+			/* Generate and set the Vendor Data pointer */
+
+			target = (char *)ACPI_ADD_PTR(void, resource,
+						      (resource->length -
+						       item_count));
+			*(u8 **)destination = ACPI_CAST_PTR(u8, target);
+
+			/* Copy the Vendor Data */
+
+			source = ACPI_ADD_PTR(void, aml, info->value);
+			acpi_rs_move_data(target, source, item_count,
+					  info->opcode);
+			break;
+
+		case ACPI_RSC_MOVE_SERIAL_RES:
+
+			/* Generate and set the resource_source string pointer */
+
+			target = (char *)ACPI_ADD_PTR(void, resource,
+						      (resource->length -
+						       item_count));
+			*(u8 **)destination = ACPI_CAST_PTR(u8, target);
+
+			/* Copy the resource_source string */
+
+			source =
+			    ACPI_ADD_PTR(void, aml,
+					 (ACPI_GET16(source) + info->value));
+			acpi_rs_move_data(target, source, item_count,
+					  info->opcode);
+			break;
+
+		case ACPI_RSC_SET8:
+
+			memset(destination, info->aml_offset, info->value);
+			break;
+
+		case ACPI_RSC_DATA8:
+
+			target = ACPI_ADD_PTR(char, resource, info->value);
+			memcpy(destination, source, ACPI_GET16(target));
+			break;
+
+		case ACPI_RSC_ADDRESS:
+			/*
+			 * Common handler for address descriptor flags
+			 */
+			if (!acpi_rs_get_address_common(resource, aml)) {
+				return_ACPI_STATUS
+				    (AE_AML_INVALID_RESOURCE_TYPE);
+			}
+			break;
+
+		case ACPI_RSC_SOURCE:
+			/*
+			 * Optional resource_source (Index and String)
+			 */
+			resource->length +=
+			    acpi_rs_get_resource_source(aml_resource_length,
+							info->value,
+							destination, aml, NULL);
+			break;
+
+		case ACPI_RSC_SOURCEX:
+			/*
+			 * Optional resource_source (Index and String). This is the more
+			 * complicated case used by the Interrupt() macro
+			 */
+			target = ACPI_ADD_PTR(char, resource,
+					      info->aml_offset +
+					      (item_count * 4));
+
+			resource->length +=
+			    acpi_rs_get_resource_source(aml_resource_length,
+							(acpi_rs_length)
+							(((item_count -
+							   1) * sizeof(u32)) +
+							 info->value),
+							destination, aml,
+							target);
+			break;
+
+		case ACPI_RSC_BITMASK:
+			/*
+			 * 8-bit encoded bitmask (DMA macro)
+			 */
+			item_count =
+			    acpi_rs_decode_bitmask(ACPI_GET8(source),
+						   destination);
+			if (item_count) {
+				resource->length += (item_count - 1);
+			}
+
+			target = ACPI_ADD_PTR(char, resource, info->value);
+			ACPI_SET8(target, item_count);
+			break;
+
+		case ACPI_RSC_BITMASK16:
+			/*
+			 * 16-bit encoded bitmask (IRQ macro)
+			 */
+			ACPI_MOVE_16_TO_16(&temp16, source);
+
+			item_count =
+			    acpi_rs_decode_bitmask(temp16, destination);
+			if (item_count) {
+				resource->length += (item_count - 1);
+			}
+
+			target = ACPI_ADD_PTR(char, resource, info->value);
+			ACPI_SET8(target, item_count);
+			break;
+
+		case ACPI_RSC_EXIT_NE:
+			/*
+			 * control - Exit conversion if not equal
+			 */
+			switch (info->resource_offset) {
+			case ACPI_RSC_COMPARE_AML_LENGTH:
+
+				if (aml_resource_length != info->value) {
+					goto exit;
+				}
+				break;
+
+			case ACPI_RSC_COMPARE_VALUE:
+
+				if (ACPI_GET8(source) != info->value) {
+					goto exit;
+				}
+				break;
+
+			default:
+
+				ACPI_ERROR((AE_INFO,
+					    "Invalid conversion sub-opcode"));
+				return_ACPI_STATUS(AE_BAD_PARAMETER);
+			}
+			break;
+
+		default:
+
+			ACPI_ERROR((AE_INFO, "Invalid conversion opcode"));
+			return_ACPI_STATUS(AE_BAD_PARAMETER);
+		}
+
+		count--;
+		info++;
+	}
+
+exit:
+	if (!flags_mode) {
+
+		/* Round the resource struct length up to the next boundary (32 or 64) */
+
+		resource->length = (u32)
+		    ACPI_ROUND_UP_TO_NATIVE_WORD(resource->length);
+	}
+	return_ACPI_STATUS(AE_OK);
+}
+
+
+// Source: rsmisc.c
+// Lines 35-416
+
+
+[ANSWER]
+MAY

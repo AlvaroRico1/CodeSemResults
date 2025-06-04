@@ -1,0 +1,44 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ctxt' at line 8
+2. Pointer 'payload' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static long diff_context_find(
+	const char *line,
+	long line_len,
+	char *out,
+	long out_size,
+	void *payload)
+{
+	git_diff_find_context_payload *ctxt = payload;
+
+	if (git_str_set(&ctxt->line, line, (size_t)line_len) < 0)
+		return -1;
+	git_str_rtrim(&ctxt->line);
+
+	if (!ctxt->line.size)
+		return -1;
+
+	if (!ctxt->match_line || !ctxt->match_line(ctxt->driver, &ctxt->line))
+		return -1;
+
+	if (out_size > (long)ctxt->line.size)
+		out_size = (long)ctxt->line.size;
+	memcpy(out, ctxt->line.ptr, (size_t)out_size);
+
+	return out_size;
+}
+
+
+// Source: diff_driver.c
+// Lines 474-498
+
+
+[ANSWER]
+MUST

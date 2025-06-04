@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'kobj' at line 4\n2. Pointer 'kset' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic struct kobject *nfs_netns_object_alloc(const char *name,\n\t\tstruct kset *kset, struct kobject *parent)\n{\n\tstruct kobject *kobj;\n\n\tkobj = kzalloc(sizeof(*kobj), GFP_KERNEL);\n\tif (kobj) {\n\t\tkobj->kset = kset;\n\t\tif (kobject_init_and_add(kobj, &nfs_netns_object_type,\n\t\t\t\t\tparent, \"%s\", name) == 0)\n\t\t\treturn kobj;\n\t\tkobject_put(kobj);\n\t}\n\treturn NULL;\n}\n\n\n// Source: sysfs.c\n// Lines 40-54\n",
+  "ANSWER": "MUST"
+}

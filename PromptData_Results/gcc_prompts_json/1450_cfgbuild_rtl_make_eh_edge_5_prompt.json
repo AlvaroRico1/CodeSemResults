@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'label' at line 7\n2. Pointer 'lp' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nrtl_make_eh_edge (sbitmap edge_cache, basic_block src, rtx insn)\n{\n  eh_landing_pad lp = get_eh_landing_pad_from_rtx (insn);\n\n  if (lp)\n    {\n      rtx_insn *label = lp->landing_pad;\n\n      /* During initial rtl generation, use the post_landing_pad.  */\n      if (label == NULL)\n\t{\n\t  gcc_assert (lp->post_landing_pad);\n\t  label = label_rtx (lp->post_landing_pad);\n\t}\n\n      make_label_edge (edge_cache, src, label,\n\t\t       EDGE_ABNORMAL | EDGE_EH\n\t\t       | (CALL_P (insn) ? EDGE_ABNORMAL_CALL : 0));\n    }\n\n\n// Source: cfgbuild.c\n// Lines 146-164\n",
+  "ANSWER": "MUST"
+}

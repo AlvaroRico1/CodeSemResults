@@ -1,0 +1,146 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'body' at line None
+2. Pointer 'reversed' at line 29
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static struct commit *lookup_label(const char *label, int len,
+				   struct strbuf *buf)
+{
+	struct commit *commit;
+
+	strbuf_reset(buf);
+	strbuf_addf(buf, "refs/rewritten/%.*s", len, label);
+	commit = lookup_commit_reference_by_name(buf->buf);
+	if (!commit) {
+		/* fall back to non-rewritten ref or commit */
+		strbuf_splice(buf, 0, strlen("refs/rewritten/"), "", 0);
+		commit = lookup_commit_reference_by_name(buf->buf);
+	}
+
+	if (!commit)
+		error(_("could not resolve '%s'"), buf->buf);
+
+	return commit;
+}
+
+static int do_merge(struct repository *r,
+		    struct commit *commit,
+		    const char *arg, int arg_len,
+		    int flags, int *check_todo, struct replay_opts *opts)
+{
+	int run_commit_flags = 0;
+	struct strbuf ref_name = STRBUF_INIT;
+	struct commit *head_commit, *merge_commit, *i;
+	struct commit_list *bases, *j, *reversed = NULL;
+	struct commit_list *to_merge = NULL, **tail = &to_merge;
+	const char *strategy = !opts->xopts_nr &&
+		(!opts->strategy ||
+		 !strcmp(opts->strategy, "recursive") ||
+		 !strcmp(opts->strategy, "ort")) ?
+		NULL : opts->strategy;
+	struct merge_options o;
+	int merge_arg_len, oneline_offset, can_fast_forward, ret, k;
+	static struct lock_file lock;
+	const char *p;
+
+	if (repo_hold_locked_index(r, &lock, LOCK_REPORT_ON_ERROR) < 0) {
+		ret = -1;
+		goto leave_merge;
+	}
+
+	head_commit = lookup_commit_reference_by_name("HEAD");
+	if (!head_commit) {
+		ret = error(_("cannot merge without a current revision"));
+		goto leave_merge;
+	}
+
+	/*
+	 * For octopus merges, the arg starts with the list of revisions to be
+	 * merged. The list is optionally followed by '#' and the oneline.
+	 */
+	merge_arg_len = oneline_offset = arg_len;
+	for (p = arg; p - arg < arg_len; p += strspn(p, " \t\n")) {
+		if (!*p)
+			break;
+		if (*p == '#' && (!p[1] || isspace(p[1]))) {
+			p += 1 + strspn(p + 1, " \t\n");
+			oneline_offset = p - arg;
+			break;
+		}
+		k = strcspn(p, " \t\n");
+		if (!k)
+			continue;
+		merge_commit = lookup_label(p, k, &ref_name);
+		if (!merge_commit) {
+			ret = error(_("unable to parse '%.*s'"), k, p);
+			goto leave_merge;
+		}
+		tail = &commit_list_insert(merge_commit, tail)->next;
+		p += k;
+		merge_arg_len = p - arg;
+	}
+
+	if (!to_merge) {
+		ret = error(_("nothing to merge: '%.*s'"), arg_len, arg);
+		goto leave_merge;
+	}
+
+	if (opts->have_squash_onto &&
+	    oideq(&head_commit->object.oid, &opts->squash_onto)) {
+		/*
+		 * When the user tells us to "merge" something into a
+		 * "[new root]", let's simply fast-forward to the merge head.
+		 */
+		rollback_lock_file(&lock);
+		if (to_merge->next)
+			ret = error(_("octopus merge cannot be executed on "
+				      "top of a [new root]"));
+		else
+			ret = fast_forward_to(r, &to_merge->item->object.oid,
+					      &head_commit->object.oid, 0,
+					      opts);
+		goto leave_merge;
+	}
+
+	/*
+	 * If HEAD is not identical to the first parent of the original merge
+	 * commit, we cannot fast-forward.
+	 */
+	can_fast_forward = opts->allow_ff && commit && commit->parents &&
+		oideq(&commit->parents->item->object.oid,
+		      &head_commit->object.oid);
+
+	/*
+	 * If any merge head is different from the original one, we cannot
+	 * fast-forward.
+	 */
+	if (can_fast_forward) {
+		struct commit_list *p = commit->parents->next;
+
+		for (j = to_merge; j && p; j = j->next, p = p->next)
+			if (!oideq(&j->item->object.oid,
+				   &p->item->object.oid)) {
+				can_fast_forward = 0;
+				break;
+			}
+		/*
+		 * If the number of merge heads differs from the original merge
+		 * commit, we cannot fast-forward.
+		 */
+		if (j || p)
+			can_fast_forward = 0;
+	}
+
+
+// Source: sequencer.c
+// Lines 3737-3863
+
+
+[ANSWER]
+MAY

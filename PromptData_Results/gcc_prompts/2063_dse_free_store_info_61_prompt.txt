@@ -1,0 +1,33 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'next' at line 6
+2. Pointer 'cur' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+free_store_info (insn_info_t insn_info)
+{
+  store_info *cur = insn_info->store_rec;
+  while (cur)
+    {
+      store_info *next = cur->next;
+      if (cur->is_large)
+	BITMAP_FREE (cur->positions_needed.large.bmap);
+      if (cur->cse_base)
+	cse_store_info_pool.remove (cur);
+      else
+	rtx_store_info_pool.remove (cur);
+      cur = next;
+    }
+
+
+// Source: dse.c
+// Lines 732-745
+
+
+[ANSWER]
+MUST

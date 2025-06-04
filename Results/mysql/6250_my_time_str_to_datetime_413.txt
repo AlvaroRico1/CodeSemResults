@@ -1,0 +1,1 @@
+is_internal_format,mysql/mysys/my_time.cc,14,end,mysql/mysys/my_time.cc,17,0

@@ -1,0 +1,36 @@
+void clar__assert_equal(
+	const char *file,
+	const char *function,
+	size_t line,
+	const char *err,
+	int should_abort,
+	const char *fmt,
+	...)
+{
+	va_list args;
+	char buf[4096];
+	int is_equal = 1;
+
+	va_start(args, fmt);
+
+	if (!strcmp("%s", fmt)) {
+		const char *s1 = va_arg(args, const char *);
+		const char *s2 = va_arg(args, const char *);
+		is_equal = (!s1 || !s2) ? (s1 == s2) : !strcmp(s1, s2);
+
+		if (!is_equal) {
+			if (s1 && s2) {
+				int pos;
+				for (pos = 0; s1[pos] == s2[pos] && s1[pos] && s2[pos]; ++pos)
+					/* find differing byte offset */;
+				p_snprintf(buf, sizeof(buf), "'%s' != '%s' (at byte %d)",
+					s1, s2, pos);
+			} else {
+				p_snprintf(buf, sizeof(buf), "'%s' != '%s'", s1, s2);
+			}
+		}
+	}
+
+
+// Source: clar.c
+// Lines 662-693

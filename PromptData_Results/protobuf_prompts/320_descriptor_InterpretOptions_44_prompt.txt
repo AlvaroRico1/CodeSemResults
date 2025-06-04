@@ -1,0 +1,101 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'original_options' at line 6
+2. Pointer 'options_to_interpret' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool DescriptorBuilder::OptionInterpreter::InterpretOptions(
+    OptionsToInterpret* options_to_interpret) {
+  // Note that these may be in different pools, so we can't use the same
+  // descriptor and reflection objects on both.
+  Message* options = options_to_interpret->options;
+  const Message* original_options = options_to_interpret->original_options;
+
+  bool failed = false;
+  options_to_interpret_ = options_to_interpret;
+
+  // Find the uninterpreted_option field in the mutable copy of the options
+  // and clear them, since we're about to interpret them.
+  const FieldDescriptor* uninterpreted_options_field =
+      options->GetDescriptor()->FindFieldByName("uninterpreted_option");
+  GOOGLE_CHECK(uninterpreted_options_field != nullptr)
+      << "No field named \"uninterpreted_option\" in the Options proto.";
+  options->GetReflection()->ClearField(options, uninterpreted_options_field);
+
+  std::vector<int> src_path = options_to_interpret->element_path;
+  src_path.push_back(uninterpreted_options_field->number());
+
+  // Find the uninterpreted_option field in the original options.
+  const FieldDescriptor* original_uninterpreted_options_field =
+      original_options->GetDescriptor()->FindFieldByName(
+          "uninterpreted_option");
+  GOOGLE_CHECK(original_uninterpreted_options_field != nullptr)
+      << "No field named \"uninterpreted_option\" in the Options proto.";
+
+  const int num_uninterpreted_options =
+      original_options->GetReflection()->FieldSize(
+          *original_options, original_uninterpreted_options_field);
+  for (int i = 0; i < num_uninterpreted_options; ++i) {
+    src_path.push_back(i);
+    uninterpreted_option_ = down_cast<const UninterpretedOption*>(
+        &original_options->GetReflection()->GetRepeatedMessage(
+            *original_options, original_uninterpreted_options_field, i));
+    if (!InterpretSingleOption(options, src_path,
+                               options_to_interpret->element_path)) {
+      // Error already added by InterpretSingleOption().
+      failed = true;
+      break;
+    }
+    src_path.pop_back();
+  }
+  // Reset these, so we don't have any dangling pointers.
+  uninterpreted_option_ = nullptr;
+  options_to_interpret_ = nullptr;
+
+  if (!failed) {
+    // InterpretSingleOption() added the interpreted options in the
+    // UnknownFieldSet, in case the option isn't yet known to us.  Now we
+    // serialize the options message and deserialize it back.  That way, any
+    // option fields that we do happen to know about will get moved from the
+    // UnknownFieldSet into the real fields, and thus be available right away.
+    // If they are not known, that's OK too. They will get reparsed into the
+    // UnknownFieldSet and wait there until the message is parsed by something
+    // that does know about the options.
+
+    // Keep the unparsed options around in case the reparsing fails.
+    std::unique_ptr<Message> unparsed_options(options->New());
+    options->GetReflection()->Swap(unparsed_options.get(), options);
+
+    std::string buf;
+    if (!unparsed_options->AppendToString(&buf) ||
+        !options->ParseFromString(buf)) {
+      builder_->AddError(
+          options_to_interpret->element_name, *original_options,
+          DescriptorPool::ErrorCollector::OTHER,
+          "Some options could not be correctly parsed using the proto "
+          "descriptors compiled into this binary.\n"
+          "Unparsed options: " +
+              unparsed_options->ShortDebugString() +
+              "\n"
+              "Parsing attempt:  " +
+              options->ShortDebugString());
+      // Restore the unparsed options.
+      options->GetReflection()->Swap(unparsed_options.get(), options);
+    }
+  }
+
+  return !failed;
+}
+
+
+// Source: descriptor.cc
+// Lines 7152-7233
+
+
+[ANSWER]
+MUST

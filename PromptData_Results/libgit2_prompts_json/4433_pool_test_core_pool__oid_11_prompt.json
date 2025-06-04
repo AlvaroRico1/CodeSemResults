@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'i' at line 6\n2. Pointer 'j' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid test_core_pool__oid(void)\n{\n\tgit_pool p;\n\tchar oid_hex[GIT_OID_HEXSZ];\n\tgit_oid *oid;\n\tint i, j;\n\n\tmemset(oid_hex, '0', sizeof(oid_hex));\n\n\tgit_pool_init(&p, sizeof(git_oid));\n\tp.page_size = 4000;\n\n\tfor (i = 1000; i < 10000; i++) {\n\t\toid = git_pool_malloc(&p, 1);\n\t\tcl_assert(oid != NULL);\n\n\t\tfor (j = 0; j < 8; j++)\n\t\t\toid_hex[j] = to_hex[(i >> (4 * j)) & 0x0f];\n\t\tcl_git_pass(git_oid_fromstr(oid, oid_hex));\n\t}\n\n#ifndef GIT_DEBUG_POOL\n\t/* with fixed page size, allocation must end up with these values */\n\tcl_assert_equal_i(sizeof(void *) == 8 ? 55 : 45, git_pool__open_pages(&p));\n#endif\n\tgit_pool_clear(&p);\n}\n\n\n// Source: pool.c\n// Lines 7-33\n",
+  "ANSWER": "MUST-NOT"
+}

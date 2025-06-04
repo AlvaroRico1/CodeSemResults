@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'why' at line 2\n2. Pointer 'at_file' at line 9\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int clone_cancel_checkout_cb(\n\tgit_checkout_notify_t why,\n\tconst char *path,\n\tconst git_diff_file *b,\n\tconst git_diff_file *t,\n\tconst git_diff_file *w,\n\tvoid *payload)\n{\n\tconst char *at_file = payload;\n\tGIT_UNUSED(why); GIT_UNUSED(b); GIT_UNUSED(t); GIT_UNUSED(w);\n\tif (!strcmp(path, at_file))\n\t\treturn -12345;\n\treturn 0;\n}\n\n\n// Source: nonetwork.c\n// Lines 202-215\n",
+  "ANSWER": "MUST-NOT"
+}

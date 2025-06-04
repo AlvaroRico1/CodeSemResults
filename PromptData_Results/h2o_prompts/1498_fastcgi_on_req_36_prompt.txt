@@ -1,0 +1,42 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'generator' at line 4
+2. Pointer '_handler' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
+{
+    h2o_fastcgi_handler_t *handler = (void *)_handler;
+    struct st_fcgi_generator_t *generator;
+
+    generator = h2o_mem_alloc_shared(&req->pool, sizeof(*generator), (void (*)(void *))close_generator);
+    generator->super.proceed = do_proceed;
+    generator->super.stop = do_stop;
+    generator->handler = handler;
+    generator->req = req;
+    generator->sock = NULL;
+    generator->sent_headers = 0;
+    h2o_doublebuffer_init(&generator->resp.sending, &h2o_socket_buffer_prototype);
+    h2o_buffer_init(&generator->resp.receiving, &h2o_socket_buffer_prototype);
+    h2o_timer_init(&generator->timeout, on_connect_timeout);
+    h2o_timer_link(req->conn->ctx->loop, generator->handler->config.io_timeout, &generator->timeout);
+
+    h2o_socketpool_connect(&generator->connect_req, &handler->sockpool, &handler->sockpool.targets.entries[0]->url,
+                           req->conn->ctx->loop, &req->conn->ctx->receivers.hostinfo_getaddr, h2o_iovec_init(NULL, 0), on_connect,
+                           generator);
+
+    return 0;
+}
+
+
+// Source: fastcgi.c
+// Lines 784-806
+
+
+[ANSWER]
+MUST

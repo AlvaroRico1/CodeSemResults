@@ -1,0 +1,38 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'end' at line None
+2. Pointer 'temp' at line None
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void handle_directory_level_conflicts(struct merge_options *opt)
+{
+	struct hashmap_iter iter;
+	struct strmap_entry *entry;
+	struct string_list duplicated = STRING_LIST_INIT_NODUP;
+	struct rename_info *renames = &opt->priv->renames;
+	struct strmap *side1_dir_renames = &renames->dir_renames[MERGE_SIDE1];
+	struct strmap *side2_dir_renames = &renames->dir_renames[MERGE_SIDE2];
+	int i;
+
+	strmap_for_each_entry(side1_dir_renames, &iter, entry) {
+		if (strmap_contains(side2_dir_renames, entry->key))
+			string_list_append(&duplicated, entry->key);
+	}
+
+	for (i = 0; i < duplicated.nr; i++) {
+		strmap_remove(side1_dir_renames, duplicated.items[i].string, 0);
+		strmap_remove(side2_dir_renames, duplicated.items[i].string, 0);
+	}
+
+
+// Source: merge-ort.c
+// Lines 2130-2148
+
+
+[ANSWER]
+MUST

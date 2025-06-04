@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'r' at line 4\n2. Pointer 'config' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid promisor_remote_clear(struct promisor_remote_config *config)\n{\n\twhile (config->promisors) {\n\t\tstruct promisor_remote *r = config->promisors;\n\t\tconfig->promisors = config->promisors->next;\n\t\tfree(r);\n\t}\n\n\n// Source: promisor-remote.c\n// Lines 167-173\n",
+  "ANSWER": "MUST"
+}

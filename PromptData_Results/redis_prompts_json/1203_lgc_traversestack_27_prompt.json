@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ci' at line 3\n2. Pointer 'l' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void traversestack (global_State *g, lua_State *l) {\n  StkId o, lim;\n  CallInfo *ci;\n  markvalue(g, gt(l));\n  lim = l->top;\n  for (ci = l->base_ci; ci <= l->ci; ci++) {\n    lua_assert(ci->top <= l->stack_last);\n    if (lim < ci->top) lim = ci->top;\n  }\n  for (o = l->stack; o < l->top; o++)\n    markvalue(g, o);\n  for (; o <= lim; o++)\n    setnilvalue(o);\n  checkstacksizes(l, lim);\n}\n\n\n// Source: lgc.c\n// Lines 256-270\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,39 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'table' at line 1
+2. Pointer 'newbuf' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void header_table_insert(struct st_h2o_qpack_header_table_t *table, struct st_h2o_qpack_header_t *added)
+{
+    header_table_evict(table, added->name->len + added->value_len + HEADER_ENTRY_SIZE_OFFSET);
+
+    if (table->last == table->buf_end) {
+        size_t count = table->last - table->first, new_capacity = count <= 2 ? 4 : count * 2;
+        if (new_capacity > table->buf_end - table->buf_start) {
+            struct st_h2o_qpack_header_t **newbuf = h2o_mem_alloc(sizeof(*newbuf) * new_capacity);
+            memcpy(newbuf, table->first, sizeof(*newbuf) * count);
+            free(table->buf_start);
+            table->buf_start = newbuf;
+            table->first = newbuf;
+            table->last = newbuf + count;
+            table->buf_end = newbuf + new_capacity;
+        } else {
+            assert(table->buf_start != table->first);
+            memmove(table->buf_start, table->first, sizeof(*table->buf_start) * count);
+            table->first = table->buf_start;
+            table->last = table->buf_start + count;
+        }
+
+
+// Source: qpack.c
+// Lines 178-197
+
+
+[ANSWER]
+MUST

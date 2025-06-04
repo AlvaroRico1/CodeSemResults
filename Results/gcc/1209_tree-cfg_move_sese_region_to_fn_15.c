@@ -1,0 +1,143 @@
+move_sese_region_to_fn (struct function *dest_cfun, basic_block entry_bb,
+		        basic_block exit_bb, tree orig_block)
+{
+  vec<basic_block> bbs, dom_bbs;
+  basic_block dom_entry = get_immediate_dominator (CDI_DOMINATORS, entry_bb);
+  basic_block after, bb, *entry_pred, *exit_succ, abb;
+  struct function *saved_cfun = cfun;
+  int *entry_flag, *exit_flag;
+  profile_probability *entry_prob, *exit_prob;
+  unsigned i, num_entry_edges, num_exit_edges, num_nodes;
+  edge e;
+  edge_iterator ei;
+  htab_t new_label_map;
+  hash_map<void *, void *> *eh_map;
+  class loop *loop = entry_bb->loop_father;
+  class loop *loop0 = get_loop (saved_cfun, 0);
+  struct move_stmt_d d;
+
+  /* If ENTRY does not strictly dominate EXIT, this cannot be an SESE
+     region.  */
+  gcc_assert (entry_bb != exit_bb
+              && (!exit_bb
+		  || dominated_by_p (CDI_DOMINATORS, exit_bb, entry_bb)));
+
+  /* Collect all the blocks in the region.  Manually add ENTRY_BB
+     because it won't be added by dfs_enumerate_from.  */
+  bbs.create (0);
+  bbs.safe_push (entry_bb);
+  gather_blocks_in_sese_region (entry_bb, exit_bb, &bbs);
+
+  if (flag_checking)
+    verify_sese (entry_bb, exit_bb, &bbs);
+
+  /* The blocks that used to be dominated by something in BBS will now be
+     dominated by the new block.  */
+  dom_bbs = get_dominated_by_region (CDI_DOMINATORS,
+				     bbs.address (),
+				     bbs.length ());
+
+  /* Detach ENTRY_BB and EXIT_BB from CFUN->CFG.  We need to remember
+     the predecessor edges to ENTRY_BB and the successor edges to
+     EXIT_BB so that we can re-attach them to the new basic block that
+     will replace the region.  */
+  num_entry_edges = EDGE_COUNT (entry_bb->preds);
+  entry_pred = XNEWVEC (basic_block, num_entry_edges);
+  entry_flag = XNEWVEC (int, num_entry_edges);
+  entry_prob = XNEWVEC (profile_probability, num_entry_edges);
+  i = 0;
+  for (ei = ei_start (entry_bb->preds); (e = ei_safe_edge (ei)) != NULL;)
+    {
+      entry_prob[i] = e->probability;
+      entry_flag[i] = e->flags;
+      entry_pred[i++] = e->src;
+      remove_edge (e);
+    }
+
+  if (exit_bb)
+    {
+      num_exit_edges = EDGE_COUNT (exit_bb->succs);
+      exit_succ = XNEWVEC (basic_block, num_exit_edges);
+      exit_flag = XNEWVEC (int, num_exit_edges);
+      exit_prob = XNEWVEC (profile_probability, num_exit_edges);
+      i = 0;
+      for (ei = ei_start (exit_bb->succs); (e = ei_safe_edge (ei)) != NULL;)
+	{
+	  exit_prob[i] = e->probability;
+	  exit_flag[i] = e->flags;
+	  exit_succ[i++] = e->dest;
+	  remove_edge (e);
+	}
+    }
+  else
+    {
+      num_exit_edges = 0;
+      exit_succ = NULL;
+      exit_flag = NULL;
+      exit_prob = NULL;
+    }
+
+  /* Switch context to the child function to initialize DEST_FN's CFG.  */
+  gcc_assert (dest_cfun->cfg == NULL);
+  push_cfun (dest_cfun);
+
+  init_empty_tree_cfg ();
+
+  /* Initialize EH information for the new function.  */
+  eh_map = NULL;
+  new_label_map = NULL;
+  if (saved_cfun->eh)
+    {
+      eh_region region = NULL;
+      bool all = false;
+
+      FOR_EACH_VEC_ELT (bbs, i, bb)
+	{
+	  region = find_outermost_region_in_block (saved_cfun, bb, region, &all);
+	  if (all)
+	    break;
+	}
+
+      init_eh_for_function ();
+      if (region != NULL || all)
+	{
+	  new_label_map = htab_create (17, tree_map_hash, tree_map_eq, free);
+	  eh_map = duplicate_eh_regions (saved_cfun, region, 0,
+					 new_label_mapper, new_label_map);
+	}
+    }
+
+  /* Initialize an empty loop tree.  */
+  struct loops *loops = ggc_cleared_alloc<struct loops> ();
+  init_loops_structure (dest_cfun, loops, 1);
+  loops->state = LOOPS_MAY_HAVE_MULTIPLE_LATCHES;
+  set_loops_for_fn (dest_cfun, loops);
+
+  vec<loop_p, va_gc> *larray = get_loops (saved_cfun)->copy ();
+
+  /* Move the outlined loop tree part.  */
+  num_nodes = bbs.length ();
+  FOR_EACH_VEC_ELT (bbs, i, bb)
+    {
+      if (bb->loop_father->header == bb)
+	{
+	  class loop *this_loop = bb->loop_father;
+	  class loop *outer = loop_outer (this_loop);
+	  if (outer == loop
+	      /* If the SESE region contains some bbs ending with
+		 a noreturn call, those are considered to belong
+		 to the outermost loop in saved_cfun, rather than
+		 the entry_bb's loop_father.  */
+	      || outer == loop0)
+	    {
+	      if (outer != loop)
+		num_nodes -= this_loop->num_nodes;
+	      flow_loop_tree_node_remove (bb->loop_father);
+	      flow_loop_tree_node_add (get_loop (dest_cfun, 0), this_loop);
+	      fixup_loop_arrays_after_move (saved_cfun, cfun, this_loop);
+	    }
+	}
+
+
+// Source: tree-cfg.c
+// Lines 7538-7676

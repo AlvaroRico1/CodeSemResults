@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'self' at line 3\n2. Pointer 'cmd' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int on_config_timeout_io(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)\n{\n    struct fastcgi_configurator_t *self = (void *)cmd->configurator;\n    return h2o_configurator_scanf(cmd, node, \"%\" SCNu64, &self->vars->io_timeout);\n}\n\n\n// Source: fastcgi.c\n// Lines 42-46\n",
+  "ANSWER": "MUST"
+}

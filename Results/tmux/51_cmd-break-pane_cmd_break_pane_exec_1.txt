@@ -1,0 +1,1 @@
+w,tmux/cmd-break-pane.c,12,wp,tmux/cmd-break-pane.c,11,1

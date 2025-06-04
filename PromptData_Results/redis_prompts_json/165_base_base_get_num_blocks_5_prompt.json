@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'b' at line 2\n2. Pointer 'b' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nbase_get_num_blocks(base_t *base, bool with_new_block) {\n\tbase_block_t *b = base->blocks;\n\tassert(b != NULL);\n\n\tsize_t n_blocks = with_new_block ? 2 : 1;\n\twhile (b->next != NULL) {\n\t\tn_blocks++;\n\t\tb = b->next;\n\t}\n\n\treturn n_blocks;\n}\n\n\n// Source: base.c\n// Lines 130-141\n",
+  "ANSWER": "MUST"
+}

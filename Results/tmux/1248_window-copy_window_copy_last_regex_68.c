@@ -1,0 +1,52 @@
+window_copy_last_regex(struct grid *gd, u_int py, u_int first, u_int last,
+    u_int len, u_int *ppx, u_int *psx, const char *buf, const regex_t *preg,
+    int eflags)
+{
+	u_int		foundx, foundy, oldx, px = 0, savepx, savesx = 0;
+	regmatch_t	regmatch;
+
+	foundx = first;
+	foundy = py;
+	oldx = first;
+	while (regexec(preg, buf + px, 1, &regmatch, eflags) == 0) {
+		if (regmatch.rm_so == regmatch.rm_eo)
+			break;
+		window_copy_cstrtocellpos(gd, len, &foundx, &foundy,
+		    buf + px + regmatch.rm_so);
+		if (foundy > py || foundx >= last)
+			break;
+		len -= foundx - oldx;
+		savepx = foundx;
+		window_copy_cstrtocellpos(gd, len, &foundx, &foundy,
+		    buf + px + regmatch.rm_eo);
+		if (foundy > py || foundx >= last) {
+			*ppx = savepx;
+			*psx = foundx;
+			while (foundy > py) {
+				*psx += gd->sx;
+				foundy--;
+			}
+			*psx -= *ppx;
+			return (1);
+		} else {
+			savesx = foundx - savepx;
+			len -= savesx;
+			oldx = foundx;
+		}
+		px += regmatch.rm_eo;
+	}
+
+	if (savesx > 0) {
+		*ppx = savepx;
+		*psx = savesx;
+		return (1);
+	} else {
+		*ppx = 0;
+		*psx = 0;
+		return (0);
+	}
+}
+
+
+// Source: window-copy.c
+// Lines 3161-3208

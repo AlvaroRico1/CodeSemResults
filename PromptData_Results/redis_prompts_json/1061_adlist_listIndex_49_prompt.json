@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'n' at line 2\n2. Pointer 'list' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nlistNode *listIndex(list *list, long index) {\n    listNode *n;\n\n    if (index < 0) {\n        index = (-index)-1;\n        n = list->tail;\n        while(index-- && n) n = n->prev;\n    } else {\n        n = list->head;\n        while(index-- && n) n = n->next;\n    }\n\n\n// Source: adlist.c\n// Lines 316-326\n",
+  "ANSWER": "MUST"
+}

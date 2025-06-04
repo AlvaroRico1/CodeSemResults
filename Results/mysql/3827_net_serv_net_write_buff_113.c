@@ -1,0 +1,45 @@
+static bool net_write_buff(NET *net, const uchar *packet, size_t len) {
+  DBUG_TRACE;
+  ulong left_length;
+  if (net->compress && net->max_packet > MAX_PACKET_LENGTH)
+    left_length = (ulong)(MAX_PACKET_LENGTH - (net->write_pos - net->buff));
+  else
+    left_length = (ulong)(net->buff_end - net->write_pos);
+
+#ifdef DEBUG_DATA_PACKETS
+  DBUG_DUMP("data", packet, len);
+#endif
+  if (len > left_length) {
+    if (net->write_pos != net->buff) {
+      /* Fill up already used packet and write it */
+      memcpy(net->write_pos, packet, left_length);
+      if (net_write_packet(net, net->buff,
+                           (size_t)(net->write_pos - net->buff) + left_length))
+        return true;
+      net->write_pos = net->buff;
+      packet += left_length;
+      len -= left_length;
+    }
+    if (net->compress) {
+      /*
+        We can't have bigger packets than 16M with compression
+        Because the uncompressed length is stored in 3 bytes
+      */
+      left_length = MAX_PACKET_LENGTH;
+      while (len > left_length) {
+        if (net_write_packet(net, packet, left_length)) return true;
+        packet += left_length;
+        len -= left_length;
+      }
+    }
+    if (len > net->max_packet) return net_write_packet(net, packet, len);
+    /* Send out rest of the blocks as full sized blocks */
+  }
+  if (len > 0) memcpy(net->write_pos, packet, len);
+  net->write_pos += len;
+  return false;
+}
+
+
+// Source: net_serv.cc
+// Lines 935-975

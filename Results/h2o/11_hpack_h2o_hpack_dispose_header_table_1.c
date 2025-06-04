@@ -1,0 +1,16 @@
+void h2o_hpack_dispose_header_table(h2o_hpack_header_table_t *header_table)
+{
+    if (header_table->num_entries != 0) {
+        size_t index = header_table->entry_start_index;
+        do {
+            struct st_h2o_hpack_header_table_entry_t *entry = header_table->entries + index;
+            if (!h2o_iovec_is_token(entry->name))
+                h2o_mem_release_shared(entry->name);
+            if (!value_is_part_of_static_table(entry->value))
+                h2o_mem_release_shared(entry->value);
+            index = (index + 1) % header_table->entry_capacity;
+        } while (--header_table->num_entries != 0);
+
+
+// Source: hpack.c
+// Lines 463-474

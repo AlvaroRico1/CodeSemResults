@@ -1,0 +1,55 @@
+screen_write_initctx(struct screen_write_ctx *ctx, struct tty_ctx *ttyctx,
+    int sync)
+{
+	struct screen	*s = ctx->s;
+
+	memset(ttyctx, 0, sizeof *ttyctx);
+
+	ttyctx->s = s;
+	ttyctx->sx = screen_size_x(s);
+	ttyctx->sy = screen_size_y(s);
+
+	ttyctx->ocx = s->cx;
+	ttyctx->ocy = s->cy;
+	ttyctx->orlower = s->rlower;
+	ttyctx->orupper = s->rupper;
+
+	memcpy(&ttyctx->defaults, &grid_default_cell, sizeof ttyctx->defaults);
+	if (ctx->init_ctx_cb != NULL) {
+		ctx->init_ctx_cb(ctx, ttyctx);
+		if (ttyctx->palette != NULL) {
+			ttyctx->defaults.fg = ttyctx->palette->fg;
+			ttyctx->defaults.bg = ttyctx->palette->bg;
+		}
+	} else {
+		ttyctx->redraw_cb = screen_write_redraw_cb;
+		if (ctx->wp != NULL) {
+			tty_default_colours(&ttyctx->defaults, ctx->wp);
+			ttyctx->palette = &ctx->wp->palette;
+			ttyctx->set_client_cb = screen_write_set_client_cb;
+			ttyctx->arg = ctx->wp;
+		}
+	}
+
+	if (~ctx->flags & SCREEN_WRITE_SYNC) {
+		/*
+		 * For the active pane or for an overlay (no pane), we want to
+		 * only use synchronized updates if requested (commands that
+		 * move the cursor); for other panes, always use it, since the
+		 * cursor will have to move.
+		 */
+		if (ctx->wp != NULL) {
+			if (ctx->wp != ctx->wp->window->active)
+				ttyctx->num = 1;
+			else
+				ttyctx->num = sync;
+		} else
+			ttyctx->num = 0x10|sync;
+		tty_write(tty_cmd_syncstart, ttyctx);
+		ctx->flags |= SCREEN_WRITE_SYNC;
+	}
+}
+
+
+// Source: screen-write.c
+// Lines 167-217

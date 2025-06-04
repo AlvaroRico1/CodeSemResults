@@ -1,0 +1,30 @@
+static void filter_sparse_oid__init(
+	struct list_objects_filter_options *filter_options,
+	struct filter *filter)
+{
+	struct filter_sparse_data *d = xcalloc(1, sizeof(*d));
+	struct object_context oc;
+	struct object_id sparse_oid;
+
+	if (get_oid_with_context(the_repository,
+				 filter_options->sparse_oid_name,
+				 GET_OID_BLOB, &sparse_oid, &oc))
+		die(_("unable to access sparse blob in '%s'"),
+		    filter_options->sparse_oid_name);
+	if (add_patterns_from_blob_to_list(&sparse_oid, "", 0, &d->pl) < 0)
+		die(_("unable to parse sparse filter data in %s"),
+		    oid_to_hex(&sparse_oid));
+
+	ALLOC_GROW(d->array_frame, d->nr + 1, d->alloc);
+	d->array_frame[d->nr].default_match = 0; /* default to include */
+	d->array_frame[d->nr].child_prov_omit = 0;
+	d->nr++;
+
+	filter->filter_data = d;
+	filter->filter_object_fn = filter_sparse;
+	filter->free_fn = filter_sparse_free;
+}
+
+
+// Source: list-objects-filter.c
+// Lines 521-546

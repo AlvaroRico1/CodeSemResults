@@ -1,0 +1,68 @@
+int git_reference_dwim(git_reference **out, git_repository *repo, const char *refname)
+{
+	int error = 0, i, valid;
+	bool fallbackmode = true, foundvalid = false;
+	git_reference *ref;
+	git_str refnamebuf = GIT_STR_INIT, name = GIT_STR_INIT;
+
+	static const char *formatters[] = {
+		"%s",
+		GIT_REFS_DIR "%s",
+		GIT_REFS_TAGS_DIR "%s",
+		GIT_REFS_HEADS_DIR "%s",
+		GIT_REFS_REMOTES_DIR "%s",
+		GIT_REFS_REMOTES_DIR "%s/" GIT_HEAD_FILE,
+		NULL
+	};
+
+	if (*refname)
+		git_str_puts(&name, refname);
+	else {
+		git_str_puts(&name, GIT_HEAD_FILE);
+		fallbackmode = false;
+	}
+
+	for (i = 0; formatters[i] && (fallbackmode || i == 0); i++) {
+
+		git_str_clear(&refnamebuf);
+
+		if ((error = git_str_printf(&refnamebuf, formatters[i], git_str_cstr(&name))) < 0 ||
+		    (error = git_reference_name_is_valid(&valid, git_str_cstr(&refnamebuf))) < 0)
+			goto cleanup;
+
+		if (!valid) {
+			error = GIT_EINVALIDSPEC;
+			continue;
+		}
+		foundvalid = true;
+
+		error = git_reference_lookup_resolved(&ref, repo, git_str_cstr(&refnamebuf), -1);
+
+		if (!error) {
+			*out = ref;
+			error = 0;
+			goto cleanup;
+		}
+
+		if (error != GIT_ENOTFOUND)
+			goto cleanup;
+	}
+
+cleanup:
+	if (error && !foundvalid) {
+		/* never found a valid reference name */
+		git_error_set(GIT_ERROR_REFERENCE,
+			"could not use '%s' as valid reference name", git_str_cstr(&name));
+	}
+
+	if (error == GIT_ENOTFOUND)
+		git_error_set(GIT_ERROR_REFERENCE, "no reference found for shorthand '%s'", refname);
+
+	git_str_dispose(&name);
+	git_str_dispose(&refnamebuf);
+	return error;
+}
+
+
+// Source: refs.c
+// Lines 245-308

@@ -1,0 +1,53 @@
+bool git_str_gather_text_stats(
+	git_str_text_stats *stats, const git_str *buf, bool skip_bom)
+{
+	const char *scan = buf->ptr, *end = buf->ptr + buf->size;
+	int skip;
+
+	memset(stats, 0, sizeof(*stats));
+
+	/* BOM detection */
+	skip = git_str_detect_bom(&stats->bom, buf);
+	if (skip_bom)
+		scan += skip;
+
+	/* Ignore EOF character */
+	if (buf->size > 0 && end[-1] == '\032')
+		end--;
+
+	/* Counting loop */
+	while (scan < end) {
+		unsigned char c = *scan++;
+
+		if (c > 0x1F && c != 0x7F)
+			stats->printable++;
+		else switch (c) {
+			case '\0':
+				stats->nul++;
+				stats->nonprintable++;
+				break;
+			case '\n':
+				stats->lf++;
+				break;
+			case '\r':
+				stats->cr++;
+				if (scan < end && *scan == '\n')
+					stats->crlf++;
+				break;
+			case '\t': case '\f': case '\v': case '\b': case 0x1b: /*ESC*/
+				stats->printable++;
+				break;
+			default:
+				stats->nonprintable++;
+				break;
+			}
+	}
+
+	/* Treat files with a bare CR as binary */
+	return (stats->cr != stats->crlf || stats->nul > 0 ||
+		((stats->printable >> 7) < stats->nonprintable));
+}
+
+
+// Source: str.c
+// Lines 1324-1372

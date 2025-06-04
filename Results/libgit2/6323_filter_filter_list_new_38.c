@@ -1,0 +1,27 @@
+static int filter_list_new(
+	git_filter_list **out, const git_filter_source *src)
+{
+	git_filter_list *fl = NULL;
+	size_t pathlen = src->path ? strlen(src->path) : 0, alloclen;
+
+	GIT_ERROR_CHECK_ALLOC_ADD(&alloclen, sizeof(git_filter_list), pathlen);
+	GIT_ERROR_CHECK_ALLOC_ADD(&alloclen, alloclen, 1);
+
+	fl = git__calloc(1, alloclen);
+	GIT_ERROR_CHECK_ALLOC(fl);
+
+	if (src->path)
+		memcpy(fl->path, src->path, pathlen);
+	fl->source.repo = src->repo;
+	fl->source.path = fl->path;
+	fl->source.mode = src->mode;
+
+	memcpy(&fl->source.options, &src->options, sizeof(git_filter_options));
+
+	*out = fl;
+	return 0;
+}
+
+
+// Source: filter.c
+// Lines 405-427

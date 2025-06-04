@@ -1,0 +1,82 @@
+move_stmt_op (tree *tp, int *walk_subtrees, void *data)
+{
+  struct walk_stmt_info *wi = (struct walk_stmt_info *) data;
+  struct move_stmt_d *p = (struct move_stmt_d *) wi->info;
+  tree t = *tp;
+
+  if (EXPR_P (t))
+    {
+      tree block = TREE_BLOCK (t);
+      if (block == NULL_TREE)
+	;
+      else if (block == p->orig_block
+	       || p->orig_block == NULL_TREE)
+	{
+	  /* tree_node_can_be_shared says we can share invariant
+	     addresses but unshare_expr copies them anyways.  Make sure
+	     to unshare before adjusting the block in place - we do not
+	     always see a copy here.  */
+	  if (TREE_CODE (t) == ADDR_EXPR
+	      && is_gimple_min_invariant (t))
+	    *tp = t = unshare_expr (t);
+	  TREE_SET_BLOCK (t, p->new_block);
+	}
+      else if (flag_checking)
+	{
+	  while (block && TREE_CODE (block) == BLOCK && block != p->orig_block)
+	    block = BLOCK_SUPERCONTEXT (block);
+	  gcc_assert (block == p->orig_block);
+	}
+    }
+  else if (DECL_P (t) || TREE_CODE (t) == SSA_NAME)
+    {
+      if (TREE_CODE (t) == SSA_NAME)
+	*tp = replace_ssa_name (t, p->vars_map, p->to_context);
+      else if (TREE_CODE (t) == PARM_DECL
+	       && gimple_in_ssa_p (cfun))
+	*tp = *(p->vars_map->get (t));
+      else if (TREE_CODE (t) == LABEL_DECL)
+	{
+	  if (p->new_label_map)
+	    {
+	      struct tree_map in, *out;
+	      in.base.from = t;
+	      out = (struct tree_map *)
+		htab_find_with_hash (p->new_label_map, &in, DECL_UID (t));
+	      if (out)
+		*tp = t = out->to;
+	    }
+
+	  /* For FORCED_LABELs we can end up with references from other
+	     functions if some SESE regions are outlined.  It is UB to
+	     jump in between them, but they could be used just for printing
+	     addresses etc.  In that case, DECL_CONTEXT on the label should
+	     be the function containing the glabel stmt with that LABEL_DECL,
+	     rather than whatever function a reference to the label was seen
+	     last time.  */
+	  if (!FORCED_LABEL (t) && !DECL_NONLOCAL (t))
+	    DECL_CONTEXT (t) = p->to_context;
+	}
+      else if (p->remap_decls_p)
+	{
+	  /* Replace T with its duplicate.  T should no longer appear in the
+	     parent function, so this looks wasteful; however, it may appear
+	     in referenced_vars, and more importantly, as virtual operands of
+	     statements, and in alias lists of other variables.  It would be
+	     quite difficult to expunge it from all those places.  ??? It might
+	     suffice to do this for addressable variables.  */
+	  if ((VAR_P (t) && !is_global_var (t))
+	      || TREE_CODE (t) == CONST_DECL)
+	    replace_by_duplicate_decl (tp, p->vars_map, p->to_context);
+	}
+      *walk_subtrees = 0;
+    }
+  else if (TYPE_P (t))
+    *walk_subtrees = 0;
+
+  return NULL_TREE;
+}
+
+
+// Source: tree-cfg.c
+// Lines 6880-6957

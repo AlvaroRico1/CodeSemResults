@@ -1,0 +1,65 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'callback' at line 38
+2. Pointer 'callback' at line 38
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+invoke_plugin_callbacks_full (int event, void *gcc_data)
+{
+  int retval = PLUGEVT_SUCCESS;
+
+  timevar_push (TV_PLUGIN_RUN);
+
+  switch (event)
+    {
+      case PLUGIN_EVENT_FIRST_DYNAMIC:
+      default:
+	gcc_assert (event >= PLUGIN_EVENT_FIRST_DYNAMIC);
+	gcc_assert (event < event_last);
+      /* Fall through.  */
+      case PLUGIN_START_PARSE_FUNCTION:
+      case PLUGIN_FINISH_PARSE_FUNCTION:
+      case PLUGIN_FINISH_TYPE:
+      case PLUGIN_FINISH_DECL:
+      case PLUGIN_START_UNIT:
+      case PLUGIN_FINISH_UNIT:
+      case PLUGIN_PRE_GENERICIZE:
+      case PLUGIN_ATTRIBUTES:
+      case PLUGIN_PRAGMAS:
+      case PLUGIN_FINISH:
+      case PLUGIN_GGC_START:
+      case PLUGIN_GGC_MARKING:
+      case PLUGIN_GGC_END:
+      case PLUGIN_ALL_PASSES_START:
+      case PLUGIN_ALL_PASSES_END:
+      case PLUGIN_ALL_IPA_PASSES_START:
+      case PLUGIN_ALL_IPA_PASSES_END:
+      case PLUGIN_OVERRIDE_GATE:
+      case PLUGIN_PASS_EXECUTION:
+      case PLUGIN_EARLY_GIMPLE_PASSES_START:
+      case PLUGIN_EARLY_GIMPLE_PASSES_END:
+      case PLUGIN_NEW_PASS:
+      case PLUGIN_INCLUDE_FILE:
+        {
+          /* Iterate over every callback registered with this event and
+             call it.  */
+          struct callback_info *callback = plugin_callbacks[event];
+
+	  if (!callback)
+	    retval = PLUGEVT_NO_CALLBACK;
+          for ( ; callback; callback = callback->next)
+            (*callback->func) (gcc_data, callback->user_data);
+        }
+
+
+// Source: plugin.c
+// Lines 544-589
+
+
+[ANSWER]
+MUST

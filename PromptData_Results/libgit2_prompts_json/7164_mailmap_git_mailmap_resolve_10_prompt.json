@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'real_name' at line 2\n2. Pointer 'entry' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint git_mailmap_resolve(\n\tconst char **real_name, const char **real_email,\n\tconst git_mailmap *mailmap,\n\tconst char *name, const char *email)\n{\n\tconst git_mailmap_entry *entry = NULL;\n\n\tGIT_ASSERT(name);\n\tGIT_ASSERT(email);\n\n\t*real_name = name;\n\t*real_email = email;\n\n\tif ((entry = git_mailmap_entry_lookup(mailmap, name, email))) {\n\t\tif (entry->real_name)\n\t\t\t*real_name = entry->real_name;\n\t\tif (entry->real_email)\n\t\t\t*real_email = entry->real_email;\n\t}\n\treturn 0;\n}\n\n\n// Source: mailmap.c\n// Lines 457-477\n",
+  "ANSWER": "MUST"
+}

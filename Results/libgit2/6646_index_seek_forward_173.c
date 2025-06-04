@@ -1,0 +1,76 @@
+#define seek_forward(_increase) { \
+	if (_increase >= buffer_size) { \
+		error = index_error_invalid("ran out of data while parsing"); \
+		goto done; } \
+	buffer += _increase; \
+	buffer_size -= _increase;\
+}
+
+	if (buffer_size < INDEX_HEADER_SIZE + checksum_size)
+		return index_error_invalid("insufficient buffer space");
+
+	/* Precalculate the SHA1 of the files's contents -- we'll match it to
+	 * the provided SHA1 in the footer */
+	git_hash_buf(checksum, buffer, buffer_size - checksum_size, GIT_HASH_ALGORITHM_SHA1);
+
+	/* Parse header */
+	if ((error = read_header(&header, buffer)) < 0)
+		return error;
+
+	index->version = header.version;
+	if (index->version >= INDEX_VERSION_NUMBER_COMP)
+		last = empty;
+
+	seek_forward(INDEX_HEADER_SIZE);
+
+	GIT_ASSERT(!index->entries.length);
+
+	if ((error = index_map_resize(index->entries_map, header.entry_count, index->ignore_case)) < 0)
+		return error;
+
+	/* Parse all the entries */
+	for (i = 0; i < header.entry_count && buffer_size > checksum_size; ++i) {
+		git_index_entry *entry = NULL;
+		size_t entry_size;
+
+		if ((error = read_entry(&entry, &entry_size, index, buffer, buffer_size, last)) < 0) {
+			error = index_error_invalid("invalid entry");
+			goto done;
+		}
+
+		if ((error = git_vector_insert(&index->entries, entry)) < 0) {
+			index_entry_free(entry);
+			goto done;
+		}
+
+		if ((error = index_map_set(index->entries_map, entry, index->ignore_case)) < 0) {
+			index_entry_free(entry);
+			goto done;
+		}
+		error = 0;
+
+		if (index->version >= INDEX_VERSION_NUMBER_COMP)
+			last = entry->path;
+
+		seek_forward(entry_size);
+	}
+
+	if (i != header.entry_count) {
+		error = index_error_invalid("header entries changed while parsing");
+		goto done;
+	}
+
+	/* There's still space for some extensions! */
+	while (buffer_size > checksum_size) {
+		size_t extension_size;
+
+		if ((error = read_extension(&extension_size, index, buffer, buffer_size)) < 0) {
+			goto done;
+		}
+
+		seek_forward(extension_size);
+	}
+
+
+// Source: index.c
+// Lines 2634-2705

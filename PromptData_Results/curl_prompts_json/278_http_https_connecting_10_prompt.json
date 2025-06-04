@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'conn' at line 4\n2. Pointer 'data' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic CURLcode https_connecting(struct Curl_easy *data, bool *done)\n{\n  CURLcode result;\n  struct connectdata *conn = data->conn;\n  DEBUGASSERT((data) && (data->conn->handler->flags & PROTOPT_SSL));\n\n#ifdef ENABLE_QUIC\n  if(conn->transport == TRNSPRT_QUIC) {\n    *done = TRUE;\n    return CURLE_OK;\n  }\n#endif\n\n  /* perform SSL initialization for this socket */\n  result = Curl_ssl_connect_nonblocking(data, conn, FALSE, FIRSTSOCKET, done);\n  if(result)\n    connclose(conn, \"Failed HTTPS connection\");\n\n  return result;\n}\n\n\n// Source: http.c\n// Lines 1577-1596\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,1 @@
+dels,libgit2/tests/libgit2/diff/patch.c,3,actual_dels,libgit2/tests/libgit2/diff/patch.c,9,0

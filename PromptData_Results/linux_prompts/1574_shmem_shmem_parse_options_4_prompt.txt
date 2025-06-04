@@ -1,0 +1,133 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'rest' at line 4
+2. Pointer 'mpol' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int shmem_parse_options(char *options, struct shmem_sb_info *sbinfo,
+			       bool remount)
+{
+	char *this_char, *value, *rest;
+	struct mempolicy *mpol = NULL;
+	uid_t uid;
+	gid_t gid;
+
+	while (options != NULL) {
+		this_char = options;
+		for (;;) {
+			/*
+			 * NUL-terminate this option: unfortunately,
+			 * mount options form a comma-separated list,
+			 * but mpol's nodelist may also contain commas.
+			 */
+			options = strchr(options, ',');
+			if (options == NULL)
+				break;
+			options++;
+			if (!isdigit(*options)) {
+				options[-1] = '\0';
+				break;
+			}
+		}
+		if (!*this_char)
+			continue;
+		if ((value = strchr(this_char,'=')) != NULL) {
+			*value++ = 0;
+		} else {
+			pr_err("tmpfs: No value for mount option '%s'\n",
+			       this_char);
+			goto error;
+		}
+
+		if (!strcmp(this_char,"size")) {
+			unsigned long long size;
+			size = memparse(value,&rest);
+			if (*rest == '%') {
+				size <<= PAGE_SHIFT;
+				size *= totalram_pages();
+				do_div(size, 100);
+				rest++;
+			}
+			if (*rest)
+				goto bad_val;
+			sbinfo->max_blocks =
+				DIV_ROUND_UP(size, PAGE_SIZE);
+		} else if (!strcmp(this_char,"nr_blocks")) {
+			sbinfo->max_blocks = memparse(value, &rest);
+			if (*rest)
+				goto bad_val;
+		} else if (!strcmp(this_char,"nr_inodes")) {
+			sbinfo->max_inodes = memparse(value, &rest);
+			if (*rest)
+				goto bad_val;
+		} else if (!strcmp(this_char,"mode")) {
+			if (remount)
+				continue;
+			sbinfo->mode = simple_strtoul(value, &rest, 8) & 07777;
+			if (*rest)
+				goto bad_val;
+		} else if (!strcmp(this_char,"uid")) {
+			if (remount)
+				continue;
+			uid = simple_strtoul(value, &rest, 0);
+			if (*rest)
+				goto bad_val;
+			sbinfo->uid = make_kuid(current_user_ns(), uid);
+			if (!uid_valid(sbinfo->uid))
+				goto bad_val;
+		} else if (!strcmp(this_char,"gid")) {
+			if (remount)
+				continue;
+			gid = simple_strtoul(value, &rest, 0);
+			if (*rest)
+				goto bad_val;
+			sbinfo->gid = make_kgid(current_user_ns(), gid);
+			if (!gid_valid(sbinfo->gid))
+				goto bad_val;
+#ifdef CONFIG_TRANSPARENT_HUGE_PAGECACHE
+		} else if (!strcmp(this_char, "huge")) {
+			int huge;
+			huge = shmem_parse_huge(value);
+			if (huge < 0)
+				goto bad_val;
+			if (!has_transparent_hugepage() &&
+					huge != SHMEM_HUGE_NEVER)
+				goto bad_val;
+			sbinfo->huge = huge;
+#endif
+#ifdef CONFIG_NUMA
+		} else if (!strcmp(this_char,"mpol")) {
+			mpol_put(mpol);
+			mpol = NULL;
+			if (mpol_parse_str(value, &mpol))
+				goto bad_val;
+#endif
+		} else {
+			pr_err("tmpfs: Bad mount option %s\n", this_char);
+			goto error;
+		}
+	}
+	sbinfo->mpol = mpol;
+	return 0;
+
+bad_val:
+	pr_err("tmpfs: Bad value '%s' for mount option '%s'\n",
+	       value, this_char);
+error:
+	mpol_put(mpol);
+	return 1;
+
+}
+
+
+// Source: shmem.c
+// Lines 3352-3465
+
+
+[ANSWER]
+MAY

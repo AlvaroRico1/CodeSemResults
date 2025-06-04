@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'dir' at line 4\n2. Pointer 'dir' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void add_dir_entry(struct index_state *istate, struct cache_entry *ce)\n{\n\t/* Add reference to the directory entry (and parents if 0). */\n\tstruct dir_entry *dir = hash_dir_entry(istate, ce, ce_namelen(ce));\n\twhile (dir && !(dir->nr++))\n\t\tdir = dir->parent;\n}\n\n\n// Source: name-hash.c\n// Lines 85-91\n",
+  "ANSWER": "MUST"
+}

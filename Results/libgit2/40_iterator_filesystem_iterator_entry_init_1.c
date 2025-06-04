@@ -1,0 +1,48 @@
+static int filesystem_iterator_entry_init(
+	filesystem_iterator_entry **out,
+	filesystem_iterator *iter,
+	filesystem_iterator_frame *frame,
+	const char *path,
+	size_t path_len,
+	struct stat *statbuf,
+	iterator_pathlist_search_t pathlist_match)
+{
+	filesystem_iterator_entry *entry;
+	size_t entry_size;
+	int error = 0;
+
+	*out = NULL;
+
+	/* Make sure to append two bytes, one for the path's null
+	 * termination, one for a possible trailing '/' for folders.
+	 */
+	GIT_ERROR_CHECK_ALLOC_ADD(&entry_size,
+		sizeof(filesystem_iterator_entry), path_len);
+	GIT_ERROR_CHECK_ALLOC_ADD(&entry_size, entry_size, 2);
+
+	entry = git_pool_malloc(&frame->entry_pool, entry_size);
+	GIT_ERROR_CHECK_ALLOC(entry);
+
+	entry->path_len = path_len;
+	entry->match = pathlist_match;
+	memcpy(entry->path, path, path_len);
+	memcpy(&entry->st, statbuf, sizeof(struct stat));
+
+	/* Suffix directory paths with a '/' */
+	if (S_ISDIR(entry->st.st_mode))
+		entry->path[entry->path_len++] = '/';
+
+	entry->path[entry->path_len] = '\0';
+
+	if (iter->base.flags & GIT_ITERATOR_INCLUDE_HASH)
+		error = filesystem_iterator_entry_hash(iter, entry);
+
+	if (!error)
+		*out = entry;
+
+	return error;
+}
+
+
+// Source: iterator.c
+// Lines 1290-1333

@@ -1,0 +1,92 @@
+static int diff_file_stats_full_to_buf(
+	git_str *out,
+	const git_diff_delta *delta,
+	const diff_file_stats *filestat,
+	const git_diff_stats *stats,
+	size_t width)
+{
+	const char *old_path = NULL, *new_path = NULL, *adddel_path = NULL;
+	size_t padding;
+	git_object_size_t old_size, new_size;
+
+	old_path = delta->old_file.path;
+	new_path = delta->new_file.path;
+	old_size = delta->old_file.size;
+	new_size = delta->new_file.size;
+
+	if (old_path && new_path && strcmp(old_path, new_path) != 0) {
+		size_t common_dirlen;
+		int error;
+
+		padding = stats->max_name - strlen(old_path) - strlen(new_path);
+
+		if ((common_dirlen = git_fs_path_common_dirlen(old_path, new_path)) &&
+		    common_dirlen <= INT_MAX) {
+			error = git_str_printf(out, " %.*s{%s"DIFF_RENAME_FILE_SEPARATOR"%s}",
+					       (int) common_dirlen, old_path,
+					       old_path + common_dirlen,
+					       new_path + common_dirlen);
+		} else {
+			error = git_str_printf(out, " %s" DIFF_RENAME_FILE_SEPARATOR "%s",
+					       old_path, new_path);
+		}
+
+		if (error < 0)
+			goto on_error;
+	} else {
+		adddel_path = new_path ? new_path : old_path;
+		if (git_str_printf(out, " %s", adddel_path) < 0)
+			goto on_error;
+
+		padding = stats->max_name - strlen(adddel_path);
+
+		if (stats->renames > 0)
+			padding += strlen(DIFF_RENAME_FILE_SEPARATOR);
+	}
+
+	if (git_str_putcn(out, ' ', padding) < 0 ||
+		git_str_puts(out, " | ") < 0)
+		goto on_error;
+
+	if (delta->flags & GIT_DIFF_FLAG_BINARY) {
+		if (git_str_printf(out,
+				"Bin %" PRId64 " -> %" PRId64 " bytes", old_size, new_size) < 0)
+			goto on_error;
+	}
+	else {
+		if (git_str_printf(out,
+				"%*" PRIuZ, stats->max_digits,
+				filestat->insertions + filestat->deletions) < 0)
+			goto on_error;
+
+		if (filestat->insertions || filestat->deletions) {
+			if (git_str_putc(out, ' ') < 0)
+				goto on_error;
+
+			if (!width) {
+				if (git_str_putcn(out, '+', filestat->insertions) < 0 ||
+					git_str_putcn(out, '-', filestat->deletions) < 0)
+					goto on_error;
+			} else {
+				size_t total = filestat->insertions + filestat->deletions;
+				size_t full = (total * width + stats->max_filestat / 2) /
+					stats->max_filestat;
+				size_t plus = full * filestat->insertions / total;
+				size_t minus = full - plus;
+
+				if (git_str_putcn(out, '+', max(plus,  1)) < 0 ||
+					git_str_putcn(out, '-', max(minus, 1)) < 0)
+					goto on_error;
+			}
+		}
+	}
+
+	git_str_putc(out, '\n');
+
+on_error:
+	return (git_str_oom(out) ? -1 : 0);
+}
+
+
+// Source: diff_stats.c
+// Lines 51-138

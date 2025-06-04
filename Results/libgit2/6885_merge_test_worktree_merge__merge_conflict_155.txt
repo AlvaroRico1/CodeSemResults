@@ -1,0 +1,1 @@
+index,libgit2/tests/libgit2/worktree/merge.c,6,theirs,libgit2/tests/libgit2/worktree/merge.c,5,2

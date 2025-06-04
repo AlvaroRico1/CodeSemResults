@@ -1,0 +1,1 @@
+retry_count,mysql/vio/viosocket.cc,3,ts_ptr,mysql/vio/viosocket.cc,44,2

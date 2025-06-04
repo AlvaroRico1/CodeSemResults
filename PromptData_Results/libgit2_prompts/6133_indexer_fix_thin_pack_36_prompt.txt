@@ -1,0 +1,80 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'curpos' at line 9
+2. Pointer 'left' at line 11
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int fix_thin_pack(git_indexer *idx, git_indexer_progress *stats)
+{
+	int error, found_ref_delta = 0;
+	unsigned int i;
+	struct delta_info *delta;
+	size_t size;
+	git_object_t type;
+	git_mwindow *w = NULL;
+	off64_t curpos = 0;
+	unsigned char *base_info;
+	unsigned int left = 0;
+	git_oid base;
+
+	GIT_ASSERT(git_vector_length(&idx->deltas) > 0);
+
+	if (idx->odb == NULL) {
+		git_error_set(GIT_ERROR_INDEXER, "cannot fix a thin pack without an ODB");
+		return -1;
+	}
+
+	/* Loop until we find the first REF delta */
+	git_vector_foreach(&idx->deltas, i, delta) {
+		if (!delta)
+			continue;
+
+		curpos = delta->delta_off;
+		error = git_packfile_unpack_header(&size, &type, idx->pack, &w, &curpos);
+		if (error < 0)
+			return error;
+
+		if (type == GIT_OBJECT_REF_DELTA) {
+			found_ref_delta = 1;
+			break;
+		}
+	}
+
+	if (!found_ref_delta) {
+		git_error_set(GIT_ERROR_INDEXER, "no REF_DELTA found, cannot inject object");
+		return -1;
+	}
+
+	/* curpos now points to the base information, which is an OID */
+	base_info = git_mwindow_open(&idx->pack->mwf, &w, curpos, GIT_OID_RAWSZ, &left);
+	if (base_info == NULL) {
+		git_error_set(GIT_ERROR_INDEXER, "failed to map delta information");
+		return -1;
+	}
+
+	git_oid_fromraw(&base, base_info);
+	git_mwindow_close(&w);
+
+	if (has_entry(idx, &base))
+		return 0;
+
+	if (inject_object(idx, &base) < 0)
+		return -1;
+
+	stats->local_objects++;
+
+	return 0;
+}
+
+
+// Source: indexer.c
+// Lines 1001-1061
+
+
+[ANSWER]
+MAY

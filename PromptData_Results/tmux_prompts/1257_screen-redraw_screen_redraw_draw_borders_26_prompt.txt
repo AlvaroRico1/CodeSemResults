@@ -1,0 +1,37 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'w' at line 5
+2. Pointer 's' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+screen_redraw_draw_borders(struct screen_redraw_ctx *ctx)
+{
+	struct client		*c = ctx->c;
+	struct session		*s = c->session;
+	struct window		*w = s->curw->window;
+	struct window_pane	*wp;
+	u_int		 	 i, j;
+
+	log_debug("%s: %s @%u", __func__, c->name, w->id);
+
+	TAILQ_FOREACH(wp, &w->panes, entry)
+		wp->border_gc_set = 0;
+
+	for (j = 0; j < c->tty.sy - ctx->statuslines; j++) {
+		for (i = 0; i < c->tty.sx; i++)
+			screen_redraw_draw_borders_cell(ctx, i, j);
+	}
+}
+
+
+// Source: screen-redraw.c
+// Lines 699-716
+
+
+[ANSWER]
+MUST

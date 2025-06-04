@@ -1,0 +1,43 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tab' at line 5
+2. Pointer 'join' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static bool only_eq_ref_tables(JOIN *join, ORDER *order, table_map tables,
+                               table_map *cached_eq_ref_tables,
+                               table_map *eq_ref_tables) {
+  tables &= ~PSEUDO_TABLE_BITS;
+  for (JOIN_TAB **tab = join->map2table; tables; tab++, tables >>= 1) {
+    if (tables & 1) {
+      const table_map map = (*tab)->table_ref->map();
+      bool is_eq_ref;
+      if (*cached_eq_ref_tables & map)  // then there exists a cached bit
+        is_eq_ref = *eq_ref_tables & map;
+      else {
+        is_eq_ref = eq_ref_table(join, order, *tab, cached_eq_ref_tables,
+                                 eq_ref_tables);
+        if (is_eq_ref)
+          *eq_ref_tables |= map;
+        else
+          *eq_ref_tables &= ~map;
+        *cached_eq_ref_tables |= map;  // now there exists a cached bit
+      }
+      if (!is_eq_ref) return false;
+    }
+  }
+  return true;
+}
+
+
+// Source: sql_optimizer.cc
+// Lines 9651-9674
+
+
+[ANSWER]
+MUST

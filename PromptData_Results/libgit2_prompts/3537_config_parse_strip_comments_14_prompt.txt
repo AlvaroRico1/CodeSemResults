@@ -1,0 +1,49 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ptr' at line 4
+2. Pointer 'line' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int strip_comments(char *line, int in_quotes)
+{
+	int quote_count = in_quotes, backslash_count = 0;
+	char *ptr;
+
+	for (ptr = line; *ptr; ++ptr) {
+		if (ptr[0] == '"' && ((ptr > line && ptr[-1] != '\\') || ptr == line))
+			quote_count++;
+
+		if ((ptr[0] == ';' || ptr[0] == '#') &&
+			(quote_count % 2) == 0 &&
+			(backslash_count % 2) == 0) {
+			ptr[0] = '\0';
+			break;
+		}
+
+		if (ptr[0] == '\\')
+			backslash_count++;
+		else
+			backslash_count = 0;
+	}
+
+	/* skip any space at the end */
+	while (ptr > line && git__isspace(ptr[-1])) {
+		ptr--;
+	}
+	ptr[0] = '\0';
+
+	return quote_count;
+}
+
+
+// Source: config_parse.c
+// Lines 33-62
+
+
+[ANSWER]
+MUST

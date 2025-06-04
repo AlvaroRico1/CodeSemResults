@@ -1,0 +1,80 @@
+void Tokenizer::ParseStringAppend(const std::string& text,
+                                  std::string* output) {
+  // Reminder: text[0] is always a quote character.  (If text is
+  // empty, it's invalid, so we'll just return).
+  const size_t text_size = text.size();
+  if (text_size == 0) {
+    GOOGLE_LOG(DFATAL) << " Tokenizer::ParseStringAppend() passed text that could not"
+                   " have been tokenized as a string: "
+                << CEscape(text);
+    return;
+  }
+
+  // Reserve room for new string. The branch is necessary because if
+  // there is already space available the reserve() call might
+  // downsize the output.
+  const size_t new_len = text_size + output->size();
+  if (new_len > output->capacity()) {
+    output->reserve(new_len);
+  }
+
+  // Loop through the string copying characters to "output" and
+  // interpreting escape sequences.  Note that any invalid escape
+  // sequences or other errors were already reported while tokenizing.
+  // In this case we do not need to produce valid results.
+  for (const char* ptr = text.c_str() + 1; *ptr != '\0'; ptr++) {
+    if (*ptr == '\\' && ptr[1] != '\0') {
+      // An escape sequence.
+      ++ptr;
+
+      if (OctalDigit::InClass(*ptr)) {
+        // An octal escape.  May one, two, or three digits.
+        int code = DigitValue(*ptr);
+        if (OctalDigit::InClass(ptr[1])) {
+          ++ptr;
+          code = code * 8 + DigitValue(*ptr);
+        }
+        if (OctalDigit::InClass(ptr[1])) {
+          ++ptr;
+          code = code * 8 + DigitValue(*ptr);
+        }
+        output->push_back(static_cast<char>(code));
+
+      } else if (*ptr == 'x') {
+        // A hex escape.  May zero, one, or two digits.  (The zero case
+        // will have been caught as an error earlier.)
+        int code = 0;
+        if (HexDigit::InClass(ptr[1])) {
+          ++ptr;
+          code = DigitValue(*ptr);
+        }
+        if (HexDigit::InClass(ptr[1])) {
+          ++ptr;
+          code = code * 16 + DigitValue(*ptr);
+        }
+        output->push_back(static_cast<char>(code));
+
+      } else if (*ptr == 'u' || *ptr == 'U') {
+        uint32_t unicode;
+        const char* end = FetchUnicodePoint(ptr, &unicode);
+        if (end == ptr) {
+          // Failure: Just dump out what we saw, don't try to parse it.
+          output->push_back(*ptr);
+        } else {
+          AppendUTF8(unicode, output);
+          ptr = end - 1;  // Because we're about to ++ptr.
+        }
+      } else {
+        // Some other escape code.
+        output->push_back(TranslateEscape(*ptr));
+      }
+
+    } else if (*ptr == text[0] && ptr[1] == '\0') {
+      // Ignore final quote matching the starting quote.
+    } else {
+      output->push_back(*ptr);
+    }
+
+
+// Source: tokenizer.cc
+// Lines 1088-1163

@@ -1,0 +1,48 @@
+static void hmac_drbg_generate(cf_hmac_drbg *ctx,
+                               const void *addnl, size_t naddnl,
+                               void *out, size_t nout)
+{
+  /* 1. If reseed_counter > reseed_interval, then return an indication
+   * that a reseed is required */
+  assert(!cf_hmac_drbg_needs_reseed(ctx));
+
+  /* 2. If additional_input != null, then
+   *    (Key, V) = HMAC_DRBG_Update(additional_input, Key, V)
+   */
+  if (naddnl)
+    hmac_drbg_update(ctx, addnl, naddnl, NULL, 0, NULL, 0);
+
+  /* 3. temp = Null
+   * 4. While (len(temp) < requested_number_of_bits) do:
+   *   4.1. V = HMAC(Key, V)
+   *   4.2. temp = temp || V
+   * 5. returned_bits = leftmost(temp, requested_number_of_bits)
+   *
+   * We write the contents of temp directly into the caller's
+   * out buffer.
+   */
+  uint8_t *bout = out;
+  cf_hmac_ctx local;
+
+  while (nout)
+  {
+    local = ctx->hmac;
+    cf_hmac_update(&local, ctx->V, ctx->hmac.hash->hashsz);
+    cf_hmac_finish(&local, ctx->V);
+
+    size_t take = MIN(ctx->hmac.hash->hashsz, nout);
+    memcpy(bout, ctx->V, take);
+    bout += take;
+    nout -= take;
+  }
+
+  /* 6. (Key, V) = HMAC_DRBG_Update(additional_input, Key, V) */
+  hmac_drbg_update(ctx, addnl, naddnl, NULL, 0, NULL, 0);
+
+  /* 7. reseed_counter = reseed_counter + 1 */
+  ctx->reseed_counter++;
+}
+
+
+// Source: drbg.c
+// Lines 353-396

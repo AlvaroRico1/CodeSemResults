@@ -1,0 +1,98 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'new_ref' at line 9
+2. Pointer 'target_obj' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_tag_create_from_buffer(git_oid *oid, git_repository *repo, const char *buffer, int allow_ref_overwrite)
+{
+	git_tag tag;
+	int error;
+	git_odb *odb;
+	git_odb_stream *stream;
+	git_odb_object *target_obj;
+
+	git_reference *new_ref = NULL;
+	git_str ref_name = GIT_STR_INIT;
+
+	GIT_ASSERT_ARG(oid);
+	GIT_ASSERT_ARG(buffer);
+
+	memset(&tag, 0, sizeof(tag));
+
+	if (git_repository_odb__weakptr(&odb, repo) < 0)
+		return -1;
+
+	/* validate the buffer */
+	if (tag_parse(&tag, buffer, buffer + strlen(buffer)) < 0)
+		return -1;
+
+	/* validate the target */
+	if (git_odb_read(&target_obj, odb, &tag.target) < 0)
+		goto on_error;
+
+	if (tag.type != target_obj->cached.type) {
+		git_error_set(GIT_ERROR_TAG, "the type for the given target is invalid");
+		goto on_error;
+	}
+
+	error = retrieve_tag_reference_oid(oid, &ref_name, repo, tag.tag_name);
+	if (error < 0 && error != GIT_ENOTFOUND)
+		goto on_error;
+
+	/* We don't need these objects after this */
+	git_signature_free(tag.tagger);
+	git__free(tag.tag_name);
+	git__free(tag.message);
+	git_odb_object_free(target_obj);
+
+	/** Ensure the tag name doesn't conflict with an already existing
+	 *	reference unless overwriting has explicitly been requested **/
+	if (error == 0 && !allow_ref_overwrite) {
+		git_error_set(GIT_ERROR_TAG, "tag already exists");
+		return GIT_EEXISTS;
+	}
+
+	/* write the buffer */
+	if ((error = git_odb_open_wstream(
+			&stream, odb, strlen(buffer), GIT_OBJECT_TAG)) < 0)
+		return error;
+
+	if (!(error = git_odb_stream_write(stream, buffer, strlen(buffer))))
+		error = git_odb_stream_finalize_write(oid, stream);
+
+	git_odb_stream_free(stream);
+
+	if (error < 0) {
+		git_str_dispose(&ref_name);
+		return error;
+	}
+
+	error = git_reference_create(
+		&new_ref, repo, ref_name.ptr, oid, allow_ref_overwrite, NULL);
+
+	git_reference_free(new_ref);
+	git_str_dispose(&ref_name);
+
+	return error;
+
+on_error:
+	git_signature_free(tag.tagger);
+	git__free(tag.tag_name);
+	git__free(tag.message);
+	git_odb_object_free(target_obj);
+	return -1;
+}
+
+
+// Source: tag.c
+// Lines 338-416
+
+
+[ANSWER]
+MAY

@@ -1,0 +1,44 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ref' at line 10
+2. Pointer 'identifier_len' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_revparse_ext(
+	git_object **object_out,
+	git_reference **reference_out,
+	git_repository *repo,
+	const char *spec)
+{
+	int error;
+	size_t identifier_len;
+	git_object *obj = NULL;
+	git_reference *ref = NULL;
+
+	if ((error = revparse(&obj, &ref, &identifier_len, repo, spec)) < 0)
+		goto cleanup;
+
+	*object_out = obj;
+	*reference_out = ref;
+	GIT_UNUSED(identifier_len);
+
+	return 0;
+
+cleanup:
+	git_object_free(obj);
+	git_reference_free(ref);
+	return error;
+}
+
+
+// Source: revparse.c
+// Lines 844-868
+
+
+[ANSWER]
+MAY

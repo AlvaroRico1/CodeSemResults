@@ -1,0 +1,1 @@
+ssl_fd,mysql/sql-common/client.cc,38,cert_error,mysql/sql-common/client.cc,40,0

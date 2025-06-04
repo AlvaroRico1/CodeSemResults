@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'field' at line 3\n2. Pointer 'part_info' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int cmp_rec_and_tuple(part_column_list_val *val, uint32 nvals_in_rec) {\n  partition_info *part_info = val->part_info;\n  Field **field = part_info->part_field_array;\n  Field **fields_end = field + nvals_in_rec;\n  int res;\n\n  for (; field != fields_end; field++, val++) {\n    if (val->max_value) return -1;\n    if ((*field)->is_null()) {\n      if (val->null_value) continue;\n      return -1;\n    }\n    if (val->null_value) return +1;\n    res = (*field)->cmp(val->column_value.field_image);\n    if (res) return res;\n  }\n  return 0;\n}\n\n\n// Source: sql_partition.cc\n// Lines 5480-5497\n",
+  "ANSWER": "MUST"
+}

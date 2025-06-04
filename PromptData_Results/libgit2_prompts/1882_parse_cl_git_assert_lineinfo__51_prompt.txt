@@ -1,0 +1,28 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'patch' at line 1
+2. Pointer 'line' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void cl_git_assert_lineinfo_(int old_lineno, int new_lineno, int num_lines, git_patch *patch, size_t hunk_idx, size_t line_idx, const char *file, const char *func, int lineno)
+{
+	const git_diff_line *line;
+
+	cl_git_expect(git_patch_get_line_in_hunk(&line, patch, hunk_idx, line_idx), 0, file, func, lineno);
+	cl_assert_equal_i_src(old_lineno, line->old_lineno, file, func, lineno);
+	cl_assert_equal_i_src(new_lineno, line->new_lineno, file, func, lineno);
+	cl_assert_equal_i_src(num_lines, line->num_lines, file, func, lineno);
+}
+
+
+// Source: parse.c
+// Lines 346-354
+
+
+[ANSWER]
+MUST-NOT

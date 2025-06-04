@@ -1,0 +1,147 @@
+static enum parse_opt_result get_value(struct parse_opt_ctx_t *p,
+				       const struct option *opt,
+				       const struct option *all_opts,
+				       int flags)
+{
+	const char *s, *arg;
+	const int unset = flags & OPT_UNSET;
+	int err;
+
+	if (unset && p->opt)
+		return error(_("%s takes no value"), optname(opt, flags));
+	if (unset && (opt->flags & PARSE_OPT_NONEG))
+		return error(_("%s isn't available"), optname(opt, flags));
+	if (!(flags & OPT_SHORT) && p->opt && (opt->flags & PARSE_OPT_NOARG))
+		return error(_("%s takes no value"), optname(opt, flags));
+
+	/*
+	 * Giving the same mode option twice, although unnecessary,
+	 * is not a grave error, so let it pass.
+	 */
+	if ((opt->flags & PARSE_OPT_CMDMODE) &&
+	    *(int *)opt->value && *(int *)opt->value != opt->defval)
+		return opt_command_mode_error(opt, all_opts, flags);
+
+	switch (opt->type) {
+	case OPTION_LOWLEVEL_CALLBACK:
+		return opt->ll_callback(p, opt, NULL, unset);
+
+	case OPTION_BIT:
+		if (unset)
+			*(int *)opt->value &= ~opt->defval;
+		else
+			*(int *)opt->value |= opt->defval;
+		return 0;
+
+	case OPTION_NEGBIT:
+		if (unset)
+			*(int *)opt->value |= opt->defval;
+		else
+			*(int *)opt->value &= ~opt->defval;
+		return 0;
+
+	case OPTION_BITOP:
+		if (unset)
+			BUG("BITOP can't have unset form");
+		*(int *)opt->value &= ~opt->extra;
+		*(int *)opt->value |= opt->defval;
+		return 0;
+
+	case OPTION_COUNTUP:
+		if (*(int *)opt->value < 0)
+			*(int *)opt->value = 0;
+		*(int *)opt->value = unset ? 0 : *(int *)opt->value + 1;
+		return 0;
+
+	case OPTION_SET_INT:
+		*(int *)opt->value = unset ? 0 : opt->defval;
+		return 0;
+
+	case OPTION_STRING:
+		if (unset)
+			*(const char **)opt->value = NULL;
+		else if (opt->flags & PARSE_OPT_OPTARG && !p->opt)
+			*(const char **)opt->value = (const char *)opt->defval;
+		else
+			return get_arg(p, opt, flags, (const char **)opt->value);
+		return 0;
+
+	case OPTION_FILENAME:
+		err = 0;
+		if (unset)
+			*(const char **)opt->value = NULL;
+		else if (opt->flags & PARSE_OPT_OPTARG && !p->opt)
+			*(const char **)opt->value = (const char *)opt->defval;
+		else
+			err = get_arg(p, opt, flags, (const char **)opt->value);
+
+		if (!err)
+			fix_filename(p->prefix, (const char **)opt->value);
+		return err;
+
+	case OPTION_CALLBACK:
+	{
+		const char *p_arg = NULL;
+		int p_unset;
+
+		if (unset)
+			p_unset = 1;
+		else if (opt->flags & PARSE_OPT_NOARG)
+			p_unset = 0;
+		else if (opt->flags & PARSE_OPT_OPTARG && !p->opt)
+			p_unset = 0;
+		else if (get_arg(p, opt, flags, &arg))
+			return -1;
+		else {
+			p_unset = 0;
+			p_arg = arg;
+		}
+		if (opt->callback)
+			return (*opt->callback)(opt, p_arg, p_unset) ? (-1) : 0;
+		else
+			return (*opt->ll_callback)(p, opt, p_arg, p_unset);
+	}
+	case OPTION_INTEGER:
+		if (unset) {
+			*(int *)opt->value = 0;
+			return 0;
+		}
+		if (opt->flags & PARSE_OPT_OPTARG && !p->opt) {
+			*(int *)opt->value = opt->defval;
+			return 0;
+		}
+		if (get_arg(p, opt, flags, &arg))
+			return -1;
+		if (!*arg)
+			return error(_("%s expects a numerical value"),
+				     optname(opt, flags));
+		*(int *)opt->value = strtol(arg, (char **)&s, 10);
+		if (*s)
+			return error(_("%s expects a numerical value"),
+				     optname(opt, flags));
+		return 0;
+
+	case OPTION_MAGNITUDE:
+		if (unset) {
+			*(unsigned long *)opt->value = 0;
+			return 0;
+		}
+		if (opt->flags & PARSE_OPT_OPTARG && !p->opt) {
+			*(unsigned long *)opt->value = opt->defval;
+			return 0;
+		}
+		if (get_arg(p, opt, flags, &arg))
+			return -1;
+		if (!git_parse_ulong(arg, opt->value))
+			return error(_("%s expects a non-negative integer value"
+				       " with an optional k/m/g suffix"),
+				     optname(opt, flags));
+		return 0;
+
+	default:
+		BUG("opt->type %d should not happen", opt->type);
+	}
+
+
+// Source: parse-options.c
+// Lines 82-224

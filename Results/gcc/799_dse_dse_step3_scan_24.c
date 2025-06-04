@@ -1,0 +1,37 @@
+dse_step3_scan (basic_block bb)
+{
+  bb_info_t bb_info = bb_table[bb->index];
+  insn_info_t insn_info;
+
+  insn_info = find_insn_before_first_wild_read (bb_info);
+
+  /* In the spill case or in the no_spill case if there is no wild
+     read in the block, we will need a kill set.  */
+  if (insn_info == bb_info->last_insn)
+    {
+      if (bb_info->kill)
+	bitmap_clear (bb_info->kill);
+      else
+	bb_info->kill = BITMAP_ALLOC (&dse_bitmap_obstack);
+    }
+  else
+    if (bb_info->kill)
+      BITMAP_FREE (bb_info->kill);
+
+  while (insn_info)
+    {
+      /* There may have been code deleted by the dce pass run before
+	 this phase.  */
+      if (insn_info->insn && INSN_P (insn_info->insn))
+	{
+	  scan_stores (insn_info->store_rec, bb_info->gen, bb_info->kill);
+	  scan_reads (insn_info, bb_info->gen, bb_info->kill);
+	}
+
+      insn_info = insn_info->prev_insn;
+    }
+}
+
+
+// Source: dse.c
+// Lines 3148-3180

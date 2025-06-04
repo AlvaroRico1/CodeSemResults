@@ -1,0 +1,37 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'addr' at line 10
+2. Pointer 'ip' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+char *replicationGetSlaveName(client *c) {
+    static char buf[NET_HOST_PORT_STR_LEN];
+    char ip[NET_IP_STR_LEN];
+
+    ip[0] = '\0';
+    buf[0] = '\0';
+    if (c->slave_addr ||
+        connPeerToString(c->conn,ip,sizeof(ip),NULL) != -1)
+    {
+        char *addr = c->slave_addr ? c->slave_addr : ip;
+        if (c->slave_listening_port)
+            anetFormatAddr(buf,sizeof(buf),addr,c->slave_listening_port);
+        else
+            snprintf(buf,sizeof(buf),"%s:<unknown-replica-port>",addr);
+    } else {
+        snprintf(buf,sizeof(buf),"client id #%llu",
+            (unsigned long long) c->id);
+    }
+
+
+// Source: replication.c
+// Lines 59-76
+
+
+[ANSWER]
+MUST

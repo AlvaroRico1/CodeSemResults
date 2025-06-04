@@ -1,0 +1,89 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 're' at line 24
+2. Pointer 'branch' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static struct string_list *get_renames(struct merge_options *opt,
+				       const char *branch,
+				       struct diff_queue_struct *pairs,
+				       struct hashmap *dir_renames,
+				       struct hashmap *dir_rename_exclusions,
+				       struct tree *tree,
+				       struct tree *o_tree,
+				       struct tree *a_tree,
+				       struct tree *b_tree,
+				       struct string_list *entries,
+				       int *clean_merge)
+{
+	int i;
+	struct hashmap collisions;
+	struct hashmap_iter iter;
+	struct collision_entry *e;
+	struct string_list *renames;
+
+	compute_collisions(&collisions, dir_renames, pairs);
+	CALLOC_ARRAY(renames, 1);
+
+	for (i = 0; i < pairs->nr; ++i) {
+		struct string_list_item *item;
+		struct rename *re;
+		struct diff_filepair *pair = pairs->queue[i];
+		char *new_path; /* non-NULL only with directory renames */
+
+		if (pair->status != 'A' && pair->status != 'R') {
+			diff_free_filepair(pair);
+			continue;
+		}
+		new_path = check_for_directory_rename(opt, pair->two->path, tree,
+						      dir_renames,
+						      dir_rename_exclusions,
+						      &collisions,
+						      clean_merge);
+		if (pair->status != 'R' && !new_path) {
+			diff_free_filepair(pair);
+			continue;
+		}
+
+		re = xmalloc(sizeof(*re));
+		re->processed = 0;
+		re->pair = pair;
+		re->branch = branch;
+		re->dir_rename_original_type = '\0';
+		re->dir_rename_original_dest = NULL;
+		item = string_list_lookup(entries, re->pair->one->path);
+		if (!item)
+			re->src_entry = insert_stage_data(opt->repo,
+					re->pair->one->path,
+					o_tree, a_tree, b_tree, entries);
+		else
+			re->src_entry = item->util;
+
+		item = string_list_lookup(entries, re->pair->two->path);
+		if (!item)
+			re->dst_entry = insert_stage_data(opt->repo,
+					re->pair->two->path,
+					o_tree, a_tree, b_tree, entries);
+		else
+			re->dst_entry = item->util;
+		item = string_list_insert(renames, pair->one->path);
+		item->util = re;
+		if (new_path)
+			apply_directory_rename_modifications(opt, pair, new_path,
+							     re, tree, o_tree,
+							     a_tree, b_tree,
+							     entries);
+	}
+
+
+// Source: merge-recursive.c
+// Lines 2610-2679
+
+
+[ANSWER]
+MUST

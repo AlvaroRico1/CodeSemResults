@@ -1,0 +1,38 @@
+int git_config__normalize_name(const char *in, char **out)
+{
+	char *name, *fdot, *ldot;
+
+	GIT_ASSERT_ARG(in);
+	GIT_ASSERT_ARG(out);
+
+	name = git__strdup(in);
+	GIT_ERROR_CHECK_ALLOC(name);
+
+	fdot = strchr(name, '.');
+	ldot = strrchr(name, '.');
+
+	if (fdot == NULL || fdot == name || ldot == NULL || !ldot[1])
+		goto invalid;
+
+	/* Validate and downcase up to first dot and after last dot */
+	if (normalize_section(name, fdot) < 0 ||
+	    normalize_section(ldot + 1, NULL) < 0)
+		goto invalid;
+
+	/* If there is a middle range, make sure it doesn't have newlines */
+	while (fdot < ldot)
+		if (*fdot++ == '\n')
+			goto invalid;
+
+	*out = name;
+	return 0;
+
+invalid:
+	git__free(name);
+	git_error_set(GIT_ERROR_CONFIG, "invalid config item name '%s'", in);
+	return GIT_EINVALIDSPEC;
+}
+
+
+// Source: config.c
+// Lines 1454-1487

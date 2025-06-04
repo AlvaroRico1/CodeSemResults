@@ -1,0 +1,273 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'opti' at line 14
+2. Pointer 'opti' at line 14
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int collect_merge_info_callback(int n,
+				       unsigned long mask,
+				       unsigned long dirmask,
+				       struct name_entry *names,
+				       struct traverse_info *info)
+{
+	/*
+	 * n is 3.  Always.
+	 * common ancestor (mbase) has mask 1, and stored in index 0 of names
+	 * head of side 1  (side1) has mask 2, and stored in index 1 of names
+	 * head of side 2  (side2) has mask 4, and stored in index 2 of names
+	 */
+	struct merge_options *opt = info->data;
+	struct merge_options_internal *opti = opt->priv;
+	struct rename_info *renames = &opt->priv->renames;
+	struct string_list_item pi;  /* Path Info */
+	struct conflict_info *ci; /* typed alias to pi.util (which is void*) */
+	struct name_entry *p;
+	size_t len;
+	char *fullpath;
+	const char *dirname = opti->current_dir_name;
+	unsigned prev_dir_rename_mask = renames->dir_rename_mask;
+	unsigned filemask = mask & ~dirmask;
+	unsigned match_mask = 0; /* will be updated below */
+	unsigned mbase_null = !(mask & 1);
+	unsigned side1_null = !(mask & 2);
+	unsigned side2_null = !(mask & 4);
+	unsigned side1_matches_mbase = (!side1_null && !mbase_null &&
+					names[0].mode == names[1].mode &&
+					oideq(&names[0].oid, &names[1].oid));
+	unsigned side2_matches_mbase = (!side2_null && !mbase_null &&
+					names[0].mode == names[2].mode &&
+					oideq(&names[0].oid, &names[2].oid));
+	unsigned sides_match = (!side1_null && !side2_null &&
+				names[1].mode == names[2].mode &&
+				oideq(&names[1].oid, &names[2].oid));
+
+	/*
+	 * Note: When a path is a file on one side of history and a directory
+	 * in another, we have a directory/file conflict.  In such cases, if
+	 * the conflict doesn't resolve from renames and deletions, then we
+	 * always leave directories where they are and move files out of the
+	 * way.  Thus, while struct conflict_info has a df_conflict field to
+	 * track such conflicts, we ignore that field for any directories at
+	 * a path and only pay attention to it for files at the given path.
+	 * The fact that we leave directories were they are also means that
+	 * we do not need to worry about getting additional df_conflict
+	 * information propagated from parent directories down to children
+	 * (unlike, say traverse_trees_recursive() in unpack-trees.c, which
+	 * sets a newinfo.df_conflicts field specifically to propagate it).
+	 */
+	unsigned df_conflict = (filemask != 0) && (dirmask != 0);
+
+	/* n = 3 is a fundamental assumption. */
+	if (n != 3)
+		BUG("Called collect_merge_info_callback wrong");
+
+	/*
+	 * A bunch of sanity checks verifying that traverse_trees() calls
+	 * us the way I expect.  Could just remove these at some point,
+	 * though maybe they are helpful to future code readers.
+	 */
+	assert(mbase_null == is_null_oid(&names[0].oid));
+	assert(side1_null == is_null_oid(&names[1].oid));
+	assert(side2_null == is_null_oid(&names[2].oid));
+	assert(!mbase_null || !side1_null || !side2_null);
+	assert(mask > 0 && mask < 8);
+
+	/* Determine match_mask */
+	if (side1_matches_mbase)
+		match_mask = (side2_matches_mbase ? 7 : 3);
+	else if (side2_matches_mbase)
+		match_mask = 5;
+	else if (sides_match)
+		match_mask = 6;
+
+	/*
+	 * Get the name of the relevant filepath, which we'll pass to
+	 * setup_path_info() for tracking.
+	 */
+	p = names;
+	while (!p->mode)
+		p++;
+	len = traverse_path_len(info, p->pathlen);
+
+	/* +1 in both of the following lines to include the NUL byte */
+	fullpath = mem_pool_alloc(&opt->priv->pool, len + 1);
+	make_traverse_path(fullpath, len + 1, info, p->path, p->pathlen);
+
+	/*
+	 * If mbase, side1, and side2 all match, we can resolve early.  Even
+	 * if these are trees, there will be no renames or anything
+	 * underneath.
+	 */
+	if (side1_matches_mbase && side2_matches_mbase) {
+		/* mbase, side1, & side2 all match; use mbase as resolution */
+		setup_path_info(opt, &pi, dirname, info->pathlen, fullpath,
+				names, names+0, mbase_null, 0 /* df_conflict */,
+				filemask, dirmask, 1 /* resolved */);
+		return mask;
+	}
+
+	/*
+	 * If the sides match, and all three paths are present and are
+	 * files, then we can take either as the resolution.  We can't do
+	 * this with trees, because there may be rename sources from the
+	 * merge_base.
+	 */
+	if (sides_match && filemask == 0x07) {
+		/* use side1 (== side2) version as resolution */
+		setup_path_info(opt, &pi, dirname, info->pathlen, fullpath,
+				names, names+1, side1_null, 0,
+				filemask, dirmask, 1);
+		return mask;
+	}
+
+	/*
+	 * If side1 matches mbase and all three paths are present and are
+	 * files, then we can use side2 as the resolution.  We cannot
+	 * necessarily do so this for trees, because there may be rename
+	 * destinations within side2.
+	 */
+	if (side1_matches_mbase && filemask == 0x07) {
+		/* use side2 version as resolution */
+		setup_path_info(opt, &pi, dirname, info->pathlen, fullpath,
+				names, names+2, side2_null, 0,
+				filemask, dirmask, 1);
+		return mask;
+	}
+
+	/* Similar to above but swapping sides 1 and 2 */
+	if (side2_matches_mbase && filemask == 0x07) {
+		/* use side1 version as resolution */
+		setup_path_info(opt, &pi, dirname, info->pathlen, fullpath,
+				names, names+1, side1_null, 0,
+				filemask, dirmask, 1);
+		return mask;
+	}
+
+	/*
+	 * Sometimes we can tell that a source path need not be included in
+	 * rename detection -- namely, whenever either
+	 *    side1_matches_mbase && side2_null
+	 * or
+	 *    side2_matches_mbase && side1_null
+	 * However, we call collect_rename_info() even in those cases,
+	 * because exact renames are cheap and would let us remove both a
+	 * source and destination path.  We'll cull the unneeded sources
+	 * later.
+	 */
+	collect_rename_info(opt, names, dirname, fullpath,
+			    filemask, dirmask, match_mask);
+
+	/*
+	 * None of the special cases above matched, so we have a
+	 * provisional conflict.  (Rename detection might allow us to
+	 * unconflict some more cases, but that comes later so all we can
+	 * do now is record the different non-null file hashes.)
+	 */
+	setup_path_info(opt, &pi, dirname, info->pathlen, fullpath,
+			names, NULL, 0, df_conflict, filemask, dirmask, 0);
+
+	ci = pi.util;
+	VERIFY_CI(ci);
+	ci->match_mask = match_mask;
+
+	/* If dirmask, recurse into subdirectories */
+	if (dirmask) {
+		struct traverse_info newinfo;
+		struct tree_desc t[3];
+		void *buf[3] = {NULL, NULL, NULL};
+		const char *original_dir_name;
+		int i, ret, side;
+
+		/*
+		 * Check for whether we can avoid recursing due to one side
+		 * matching the merge base.  The side that does NOT match is
+		 * the one that might have a rename destination we need.
+		 */
+		assert(!side1_matches_mbase || !side2_matches_mbase);
+		side = side1_matches_mbase ? MERGE_SIDE2 :
+			side2_matches_mbase ? MERGE_SIDE1 : MERGE_BASE;
+		if (filemask == 0 && (dirmask == 2 || dirmask == 4)) {
+			/*
+			 * Also defer recursing into new directories; set up a
+			 * few variables to let us do so.
+			 */
+			ci->match_mask = (7 - dirmask);
+			side = dirmask / 2;
+		}
+		if (renames->dir_rename_mask != 0x07 &&
+		    side != MERGE_BASE &&
+		    renames->deferred[side].trivial_merges_okay &&
+		    !strset_contains(&renames->deferred[side].target_dirs,
+				     pi.string)) {
+			strintmap_set(&renames->deferred[side].possible_trivial_merges,
+				      pi.string, renames->dir_rename_mask);
+			renames->dir_rename_mask = prev_dir_rename_mask;
+			return mask;
+		}
+
+		/* We need to recurse */
+		ci->match_mask &= filemask;
+		newinfo = *info;
+		newinfo.prev = info;
+		newinfo.name = p->path;
+		newinfo.namelen = p->pathlen;
+		newinfo.pathlen = st_add3(newinfo.pathlen, p->pathlen, 1);
+		/*
+		 * If this directory we are about to recurse into cared about
+		 * its parent directory (the current directory) having a D/F
+		 * conflict, then we'd propagate the masks in this way:
+		 *    newinfo.df_conflicts |= (mask & ~dirmask);
+		 * But we don't worry about propagating D/F conflicts.  (See
+		 * comment near setting of local df_conflict variable near
+		 * the beginning of this function).
+		 */
+
+		for (i = MERGE_BASE; i <= MERGE_SIDE2; i++) {
+			if (i == 1 && side1_matches_mbase)
+				t[1] = t[0];
+			else if (i == 2 && side2_matches_mbase)
+				t[2] = t[0];
+			else if (i == 2 && sides_match)
+				t[2] = t[1];
+			else {
+				const struct object_id *oid = NULL;
+				if (dirmask & 1)
+					oid = &names[i].oid;
+				buf[i] = fill_tree_descriptor(opt->repo,
+							      t + i, oid);
+			}
+			dirmask >>= 1;
+		}
+
+		original_dir_name = opti->current_dir_name;
+		opti->current_dir_name = pi.string;
+		if (renames->dir_rename_mask == 0 ||
+		    renames->dir_rename_mask == 0x07)
+			ret = traverse_trees(NULL, 3, t, &newinfo);
+		else
+			ret = traverse_trees_wrapper(NULL, 3, t, &newinfo);
+		opti->current_dir_name = original_dir_name;
+		renames->dir_rename_mask = prev_dir_rename_mask;
+
+		for (i = MERGE_BASE; i <= MERGE_SIDE2; i++)
+			free(buf[i]);
+
+		if (ret < 0)
+			return -1;
+	}
+
+	return mask;
+}
+
+
+// Source: merge-ort.c
+// Lines 1016-1269
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,53 @@
+static int remove_branch_config_related_entries(
+	git_repository *repo,
+	const char *remote_name)
+{
+	int error;
+	git_config *config;
+	git_config_entry *entry;
+	git_config_iterator *iter;
+	git_str buf = GIT_STR_INIT;
+
+	if ((error = git_repository_config__weakptr(&config, repo)) < 0)
+		return error;
+
+	if ((error = git_config_iterator_glob_new(&iter, config, "branch\\..+\\.remote")) < 0)
+		return error;
+
+	/* find any branches with us as upstream and remove that config */
+	while ((error = git_config_next(&entry, iter)) == 0) {
+		const char *branch;
+		size_t branch_len;
+
+		if (strcmp(remote_name, entry->value))
+			continue;
+
+		if ((branch = name_offset(&branch_len, entry->name)) == NULL) {
+			error = -1;
+			break;
+		}
+
+		git_str_clear(&buf);
+		if ((error = git_str_printf(&buf, "branch.%.*s.merge", (int)branch_len, branch)) < 0)
+			break;
+
+		if ((error = git_config_delete_entry(config, git_str_cstr(&buf))) < 0) {
+			if (error != GIT_ENOTFOUND)
+				break;
+			git_error_clear();
+		}
+
+		git_str_clear(&buf);
+		if ((error = git_str_printf(&buf, "branch.%.*s.remote", (int)branch_len, branch)) < 0)
+			break;
+
+		if ((error = git_config_delete_entry(config, git_str_cstr(&buf))) < 0) {
+			if (error != GIT_ENOTFOUND)
+				break;
+			git_error_clear();
+		}
+	}
+
+
+// Source: remote.c
+// Lines 2682-2730

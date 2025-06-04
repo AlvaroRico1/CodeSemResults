@@ -1,0 +1,1 @@
+replacement,linux/arch/x86/kernel/alternative.c,5,instr,linux/arch/x86/kernel/alternative.c,5,0

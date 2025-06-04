@@ -1,0 +1,1 @@
+derived_table,mysql/sql/sql_resolver.cc,3,jlist,mysql/sql/sql_resolver.cc,21,1

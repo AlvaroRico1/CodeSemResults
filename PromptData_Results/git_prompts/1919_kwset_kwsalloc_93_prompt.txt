@@ -1,0 +1,48 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'kwset' at line 3
+2. Pointer 'trans' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+kwsalloc (unsigned char const *trans)
+{
+  struct kwset *kwset;
+
+  kwset = (struct kwset *) xmalloc(sizeof (struct kwset));
+
+  obstack_init(&kwset->obstack);
+  kwset->words = 0;
+  kwset->trie
+    = (struct trie *) obstack_alloc(&kwset->obstack, sizeof (struct trie));
+  if (!kwset->trie)
+    {
+      kwsfree((kwset_t) kwset);
+      return NULL;
+    }
+  kwset->trie->accepting = 0;
+  kwset->trie->links = NULL;
+  kwset->trie->parent = NULL;
+  kwset->trie->next = NULL;
+  kwset->trie->fail = NULL;
+  kwset->trie->depth = 0;
+  kwset->trie->shift = 0;
+  kwset->mind = INT_MAX;
+  kwset->maxd = -1;
+  kwset->target = NULL;
+  kwset->trans = trans;
+
+  return (kwset_t) kwset;
+}
+
+
+// Source: kwset.c
+// Lines 93-121
+
+
+[ANSWER]
+MUST

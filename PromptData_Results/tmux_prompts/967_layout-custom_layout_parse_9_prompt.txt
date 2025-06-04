@@ -1,0 +1,111 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'lc' at line 3
+2. Pointer 'csum' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+layout_parse(struct window *w, const char *layout)
+{
+	struct layout_cell	*lc, *lcchild;
+	struct window_pane	*wp;
+	u_int			 npanes, ncells, sx = 0, sy = 0;
+	u_short			 csum;
+
+	/* Check validity. */
+	if (sscanf(layout, "%hx,", &csum) != 1)
+		return (-1);
+	layout += 5;
+	if (csum != layout_checksum(layout))
+		return (-1);
+
+	/* Build the layout. */
+	lc = layout_construct(NULL, &layout);
+	if (lc == NULL)
+		return (-1);
+	if (*layout != '\0')
+		goto fail;
+
+	/* Check this window will fit into the layout. */
+	for (;;) {
+		npanes = window_count_panes(w);
+		ncells = layout_count_cells(lc);
+		if (npanes > ncells)
+			goto fail;
+		if (npanes == ncells)
+			break;
+
+		/* Fewer panes than cells - close the bottom right. */
+		lcchild = layout_find_bottomright(lc);
+		layout_destroy_cell(w, lcchild, &lc);
+	}
+
+	/*
+	 * It appears older versions of tmux were able to generate layouts with
+	 * an incorrect top cell size - if it is larger than the top child then
+	 * correct that (if this is still wrong the check code will catch it).
+	 */
+	switch (lc->type) {
+	case LAYOUT_WINDOWPANE:
+		break;
+	case LAYOUT_LEFTRIGHT:
+		TAILQ_FOREACH(lcchild, &lc->cells, entry) {
+			sy = lcchild->sy + 1;
+			sx += lcchild->sx + 1;
+		}
+		break;
+	case LAYOUT_TOPBOTTOM:
+		TAILQ_FOREACH(lcchild, &lc->cells, entry) {
+			sx = lcchild->sx + 1;
+			sy += lcchild->sy + 1;
+		}
+		break;
+	}
+	if (lc->type != LAYOUT_WINDOWPANE && (lc->sx != sx || lc->sy != sy)) {
+		log_debug("fix layout %u,%u to %u,%u", lc->sx, lc->sy, sx,sy);
+		layout_print_cell(lc, __func__, 0);
+		lc->sx = sx - 1; lc->sy = sy - 1;
+	}
+
+	/* Check the new layout. */
+	if (!layout_check(lc))
+		return (-1);
+
+	/* Resize to the layout size. */
+	window_resize(w, lc->sx, lc->sy, -1, -1);
+
+	/* Destroy the old layout and swap to the new. */
+	layout_free_cell(w->layout_root);
+	w->layout_root = lc;
+
+	/* Assign the panes into the cells. */
+	wp = TAILQ_FIRST(&w->panes);
+	layout_assign(&wp, lc);
+
+	/* Update pane offsets and sizes. */
+	layout_fix_offsets(w);
+	layout_fix_panes(w, NULL);
+	recalculate_sizes();
+
+	layout_print_cell(lc, __func__, 0);
+
+	notify_window("window-layout-changed", w);
+
+	return (0);
+
+fail:
+	layout_free_cell(lc);
+	return (-1);
+}
+
+
+// Source: layout-custom.c
+// Lines 157-248
+
+
+[ANSWER]
+MAY

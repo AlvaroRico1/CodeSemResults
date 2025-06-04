@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'name' at line 3\n2. Pointer 'argv' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nreplace_extension_spec_func (int argc, const char **argv)\n{\n  char *name;\n  char *p;\n  char *result;\n  int i;\n\n  if (argc != 2)\n    fatal_error (input_location, \"too few arguments to %%:replace-extension\");\n\n  name = xstrdup (argv[0]);\n\n  for (i = strlen (name) - 1; i >= 0; i--)\n    if (IS_DIR_SEPARATOR (name[i]))\n      break;\n\n  p = strrchr (name + i + 1, '.');\n  if (p != NULL)\n      *p = '\\0';\n\n  result = concat (name, argv[1], NULL);\n\n  free (name);\n  return result;\n}\n\n\n// Source: gcc.c\n// Lines 9944-9968\n",
+  "ANSWER": "MAY"
+}

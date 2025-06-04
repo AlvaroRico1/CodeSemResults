@@ -1,0 +1,29 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ca' at line 4
+2. Pointer 'canext' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+Curl_freeaddrinfo(struct Curl_addrinfo *cahead)
+{
+  struct Curl_addrinfo *vqualifier canext;
+  struct Curl_addrinfo *ca;
+
+  for(ca = cahead; ca; ca = canext) {
+    canext = ca->ai_next;
+    free(ca);
+  }
+}
+
+
+// Source: curl_addrinfo.c
+// Lines 81-90
+
+
+[ANSWER]
+MUST

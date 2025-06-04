@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'metadata' at line 5\n2. Pointer 'base' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid UnknownFieldSetSerializer(const uint8_t* base, uint32_t offset,\n                               uint32_t /*tag*/, uint32_t /*has_offset*/,\n                               io::CodedOutputStream* output) {\n  const void* ptr = base + offset;\n  const InternalMetadata* metadata = static_cast<const InternalMetadata*>(ptr);\n  if (metadata->have_unknown_fields()) {\n    metadata->unknown_fields<UnknownFieldSet>(UnknownFieldSet::default_instance)\n        .SerializeToCodedStream(output);\n  }\n}\n\n\n// Source: generated_message_reflection.cc\n// Lines 3099-3108\n",
+  "ANSWER": "MUST"
+}

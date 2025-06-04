@@ -1,0 +1,1 @@
+payload,libgit2/tests/libgit2/clone/transport.c,6,error,libgit2/tests/libgit2/clone/transport.c,8,0

@@ -1,0 +1,51 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'buf_length' at line 5
+2. Pointer 'len' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void net_read_compressed_packet(NET *net, size_t &len) {
+  size_t complen;
+  size_t start_of_packet;
+  size_t first_packet_offset;
+  size_t buf_length;
+  uint multi_byte_packet = 0;
+  assert(net->compress);
+  net_read_init_offsets(net, start_of_packet, first_packet_offset,
+                        multi_byte_packet, buf_length);
+  for (;;) {
+    if (net_read_process_buffer(net, start_of_packet, buf_length,
+                                multi_byte_packet, first_packet_offset))
+      break;
+
+    if ((len = net_read_packet(net, &complen)) == packet_error) return;
+
+    mysql_compress_context *mysql_compress_ctx = compress_context(net);
+    if (my_uncompress(mysql_compress_ctx, net->buff + net->where_b, len,
+                      &complen)) {
+      net->error = NET_ERROR_SOCKET_UNUSABLE; /* caller will close socket */
+      net->last_errno = ER_NET_UNCOMPRESS_ERROR;
+#ifdef MYSQL_SERVER
+      my_error(ER_NET_UNCOMPRESS_ERROR, MYF(0));
+#endif
+      len = packet_error;
+      return;
+    }
+    buf_length += complen;
+  }
+  len = net_read_update_offsets(net, start_of_packet, first_packet_offset,
+                                buf_length, multi_byte_packet);
+}
+
+
+// Source: net_serv.cc
+// Lines 2146-2177
+
+
+[ANSWER]
+MUST-NOT

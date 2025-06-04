@@ -1,0 +1,39 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'sa6' at line 16
+2. Pointer 'ai' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void Curl_printable_address(const struct Curl_addrinfo *ai, char *buf,
+                            size_t bufsize)
+{
+  DEBUGASSERT(bufsize);
+  buf[0] = 0;
+
+  switch(ai->ai_family) {
+  case AF_INET: {
+    const struct sockaddr_in *sa4 = (const void *)ai->ai_addr;
+    const struct in_addr *ipaddr4 = &sa4->sin_addr;
+    (void)Curl_inet_ntop(ai->ai_family, (const void *)ipaddr4, buf, bufsize);
+    break;
+  }
+#ifdef ENABLE_IPV6
+  case AF_INET6: {
+    const struct sockaddr_in6 *sa6 = (const void *)ai->ai_addr;
+    const struct in6_addr *ipaddr6 = &sa6->sin6_addr;
+    (void)Curl_inet_ntop(ai->ai_family, (const void *)ipaddr6, buf, bufsize);
+    break;
+  }
+
+
+// Source: hostip.c
+// Lines 144-163
+
+
+[ANSWER]
+MUST

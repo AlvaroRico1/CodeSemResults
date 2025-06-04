@@ -1,0 +1,51 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'data' at line 5
+2. Pointer 'odb' at line 21
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_commit_write__attach_singleline_signature(void)
+{
+	const char *sig = "magic word: pretty please";
+
+	const char *data =  "tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904\n\
+parent 8496071c1b46c854b31185ea97743be6a8774479\n\
+author Ben Burkert <ben@benburkert.com> 1358451456 -0800\n\
+committer Ben Burkert <ben@benburkert.com> 1358451456 -0800\n\
+\n\
+a simple commit which works\n";
+
+	const char *complete =  "tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904\n\
+parent 8496071c1b46c854b31185ea97743be6a8774479\n\
+author Ben Burkert <ben@benburkert.com> 1358451456 -0800\n\
+committer Ben Burkert <ben@benburkert.com> 1358451456 -0800\n\
+magicsig magic word: pretty please\n\
+\n\
+a simple commit which works\n";
+
+	git_oid id;
+	git_odb *odb;
+	git_odb_object *obj;
+
+	cl_git_pass(git_commit_create_with_signature(&id, g_repo, data, sig, "magicsig"));
+
+	cl_git_pass(git_repository_odb(&odb, g_repo));
+	cl_git_pass(git_odb_read(&obj, odb, &id));
+	cl_assert_equal_s(complete, git_odb_object_data(obj));
+
+	git_odb_object_free(obj);
+	git_odb_free(odb);
+}
+
+
+// Source: write.c
+// Lines 326-357
+
+
+[ANSWER]
+MUST-NOT

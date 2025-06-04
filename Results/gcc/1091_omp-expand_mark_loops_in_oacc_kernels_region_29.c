@@ -1,0 +1,41 @@
+mark_loops_in_oacc_kernels_region (basic_block region_entry,
+				   basic_block region_exit)
+{
+  class loop *outer = region_entry->loop_father;
+  gcc_assert (region_exit == NULL || outer == region_exit->loop_father);
+
+  /* Don't parallelize the kernels region if it contains more than one outer
+     loop.  */
+  unsigned int nr_outer_loops = 0;
+  class loop *single_outer = NULL;
+  for (class loop *loop = outer->inner; loop != NULL; loop = loop->next)
+    {
+      gcc_assert (loop_outer (loop) == outer);
+
+      if (!dominated_by_p (CDI_DOMINATORS, loop->header, region_entry))
+	continue;
+
+      if (region_exit != NULL
+	  && dominated_by_p (CDI_DOMINATORS, loop->header, region_exit))
+	continue;
+
+      nr_outer_loops++;
+      single_outer = loop;
+    }
+  if (nr_outer_loops != 1)
+    return;
+
+  for (class loop *loop = single_outer->inner;
+       loop != NULL;
+       loop = loop->inner)
+    if (loop->next)
+      return;
+
+  /* Mark the loops in the region.  */
+  for (class loop *loop = single_outer; loop != NULL; loop = loop->inner)
+    loop->in_oacc_kernels_region = true;
+}
+
+
+// Source: omp-expand.c
+// Lines 7644-7680

@@ -1,0 +1,1 @@
+new_entries_map,libgit2/src/libgit2/index.c,8,index_iterator,libgit2/src/libgit2/index.c,9,2

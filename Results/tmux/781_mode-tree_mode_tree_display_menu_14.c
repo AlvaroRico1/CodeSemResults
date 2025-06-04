@@ -1,0 +1,46 @@
+mode_tree_display_menu(struct mode_tree_data *mtd, struct client *c, u_int x,
+    u_int y, int outside)
+{
+	struct mode_tree_item	*mti;
+	struct menu		*menu;
+	const struct menu_item	*items;
+	struct mode_tree_menu	*mtm;
+	char			*title;
+	u_int			 line;
+
+	if (mtd->offset + y > mtd->line_size - 1)
+		line = mtd->current;
+	else
+		line = mtd->offset + y;
+	mti = mtd->line_list[line].item;
+
+	if (!outside) {
+		items = mtd->menu;
+		xasprintf(&title, "#[align=centre]%s", mti->name);
+	} else {
+		items = mode_tree_menu_items;
+		title = xstrdup("");
+	}
+	menu = menu_create(title);
+	menu_add_items(menu, items, NULL, NULL, NULL);
+	free(title);
+
+	mtm = xmalloc(sizeof *mtm);
+	mtm->data = mtd;
+	mtm->c = c;
+	mtm->line = line;
+	mtm->itemdata = mti->itemdata;
+	mtd->references++;
+
+	if (x >= (menu->width + 4) / 2)
+		x -= (menu->width + 4) / 2;
+	else
+		x = 0;
+	if (menu_display(menu, 0, NULL, x, y, c, NULL, mode_tree_menu_callback,
+	    mtm) != 0)
+		menu_free(menu);
+}
+
+
+// Source: mode-tree.c
+// Lines 933-974

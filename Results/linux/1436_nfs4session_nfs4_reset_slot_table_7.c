@@ -1,0 +1,25 @@
+static void nfs4_reset_slot_table(struct nfs4_slot_table *tbl,
+		u32 server_highest_slotid,
+		u32 ivalue)
+{
+	struct nfs4_slot **p;
+
+	nfs4_shrink_slot_table(tbl, server_highest_slotid + 1);
+	p = &tbl->slots;
+	while (*p) {
+		(*p)->seq_nr = ivalue;
+		(*p)->seq_nr_highest_sent = ivalue;
+		(*p)->seq_nr_last_acked = ivalue - 1;
+		p = &(*p)->next;
+	}
+	tbl->highest_used_slotid = NFS4_NO_SLOT;
+	tbl->target_highest_slotid = server_highest_slotid;
+	tbl->server_highest_slotid = server_highest_slotid;
+	tbl->d_target_highest_slotid = 0;
+	tbl->d2_target_highest_slotid = 0;
+	tbl->max_slotid = server_highest_slotid;
+}
+
+
+// Source: nfs4session.c
+// Lines 272-292

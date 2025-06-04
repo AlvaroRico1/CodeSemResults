@@ -1,0 +1,1 @@
+bind_gai_errno,mysql/sql-common/client.cc,227,sock,mysql/sql-common/client.cc,111,0

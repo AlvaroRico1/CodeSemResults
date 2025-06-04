@@ -1,0 +1,46 @@
+static ssize_t pci_read_config(struct file *filp, struct kobject *kobj,
+			       struct bin_attribute *bin_attr, char *buf,
+			       loff_t off, size_t count)
+{
+	struct pci_dev *dev = to_pci_dev(kobj_to_dev(kobj));
+	unsigned int size = 64;
+	loff_t init_off = off;
+	u8 *data = (u8 *) buf;
+
+	/* Several chips lock up trying to read undefined config space */
+	if (file_ns_capable(filp, &init_user_ns, CAP_SYS_ADMIN))
+		size = dev->cfg_size;
+	else if (dev->hdr_type == PCI_HEADER_TYPE_CARDBUS)
+		size = 128;
+
+	if (off > size)
+		return 0;
+	if (off + count > size) {
+		size -= off;
+		count = size;
+	} else {
+		size = count;
+	}
+
+	pci_config_pm_runtime_get(dev);
+
+	if ((off & 1) && size) {
+		u8 val;
+		pci_user_read_config_byte(dev, off, &val);
+		data[off - init_off] = val;
+		off++;
+		size--;
+	}
+
+	if ((off & 3) && size > 2) {
+		u16 val;
+		pci_user_read_config_word(dev, off, &val);
+		data[off - init_off] = val & 0xff;
+		data[off - init_off + 1] = (val >> 8) & 0xff;
+		off += 2;
+		size -= 2;
+	}
+
+
+// Source: pci-sysfs.c
+// Lines 825-866

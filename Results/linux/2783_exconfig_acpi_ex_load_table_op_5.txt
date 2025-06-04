@@ -1,0 +1,1 @@
+table_index,linux/drivers/acpi/acpica/exconfig.c,10,parent_node,linux/drivers/acpi/acpica/exconfig.c,6,2

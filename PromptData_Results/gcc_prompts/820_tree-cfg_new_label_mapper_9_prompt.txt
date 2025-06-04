@@ -1,0 +1,42 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'slot' at line 5
+2. Pointer 'm' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+new_label_mapper (tree decl, void *data)
+{
+  htab_t hash = (htab_t) data;
+  struct tree_map *m;
+  void **slot;
+
+  gcc_assert (TREE_CODE (decl) == LABEL_DECL);
+
+  m = XNEW (struct tree_map);
+  m->hash = DECL_UID (decl);
+  m->base.from = decl;
+  m->to = create_artificial_label (UNKNOWN_LOCATION);
+  LABEL_DECL_UID (m->to) = LABEL_DECL_UID (decl);
+  if (LABEL_DECL_UID (m->to) >= cfun->cfg->last_label_uid)
+    cfun->cfg->last_label_uid = LABEL_DECL_UID (m->to) + 1;
+
+  slot = htab_find_slot_with_hash (hash, m, m->hash, INSERT);
+  gcc_assert (*slot == NULL);
+
+  *slot = m;
+
+  return m->to;
+}
+
+
+// Source: tree-cfg.c
+// Lines 7303-7325
+
+
+[ANSWER]
+MUST

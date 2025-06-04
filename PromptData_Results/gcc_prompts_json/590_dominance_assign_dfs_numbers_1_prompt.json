@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'son' at line 3\n2. Pointer 'son' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nassign_dfs_numbers (struct et_node *node, int *num)\n{\n  struct et_node *son;\n\n  node->dfs_num_in = (*num)++;\n\n  if (node->son)\n    {\n      assign_dfs_numbers (node->son, num);\n      for (son = node->son->right; son != node->son; son = son->right)\n\tassign_dfs_numbers (son, num);\n    }\n\n  node->dfs_num_out = (*num)++;\n}\n\n\n// Source: dominance.c\n// Lines 640-654\n",
+  "ANSWER": "MUST"
+}

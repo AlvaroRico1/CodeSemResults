@@ -1,0 +1,1 @@
+scheme,libgit2/src/libgit2/transports/httpclient.c,6,challenge,libgit2/src/libgit2/transports/httpclient.c,7,2

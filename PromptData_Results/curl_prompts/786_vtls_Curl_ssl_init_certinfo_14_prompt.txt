@@ -1,0 +1,37 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ci' at line 3
+2. Pointer 'table' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+CURLcode Curl_ssl_init_certinfo(struct Curl_easy *data, int num)
+{
+  struct curl_certinfo *ci = &data->info.certs;
+  struct curl_slist **table;
+
+  /* Free any previous certificate information structures */
+  Curl_ssl_free_certinfo(data);
+
+  /* Allocate the required certificate information structures */
+  table = calloc((size_t) num, sizeof(struct curl_slist *));
+  if(!table)
+    return CURLE_OUT_OF_MEMORY;
+
+  ci->num_of_certs = num;
+  ci->certinfo = table;
+
+  return CURLE_OK;
+}
+
+
+// Source: vtls.c
+// Lines 786-803
+
+
+[ANSWER]
+MUST

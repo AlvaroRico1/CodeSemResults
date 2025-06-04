@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'L' at line 1\n2. Pointer 'ci' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint luaD_poscall (lua_State *L, StkId firstResult) {\n  StkId res;\n  int wanted, i;\n  CallInfo *ci;\n  if (L->hookmask & LUA_MASKRET)\n    firstResult = callrethooks(L, firstResult);\n  ci = L->ci--;\n  res = ci->func;  /* res == final position of 1st result */\n  wanted = ci->nresults;\n  L->base = (ci - 1)->base;  /* restore base */\n  L->savedpc = (ci - 1)->savedpc;  /* restore savedpc */\n  /* move results to correct place */\n  for (i = wanted; i != 0 && firstResult < L->top; i--)\n    setobjs2s(L, res++, firstResult++);\n  while (i-- > 0)\n    setnilvalue(res++);\n  L->top = res;\n  return (wanted - LUA_MULTRET);  /* 0 iff wanted == LUA_MULTRET */\n}\n\n\n// Source: ldo.c\n// Lines 343-361\n",
+  "ANSWER": "MUST"
+}

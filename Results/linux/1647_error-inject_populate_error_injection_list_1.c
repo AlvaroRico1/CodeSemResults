@@ -1,0 +1,35 @@
+static void populate_error_injection_list(struct error_injection_entry *start,
+					  struct error_injection_entry *end,
+					  void *priv)
+{
+	struct error_injection_entry *iter;
+	struct ei_entry *ent;
+	unsigned long entry, offset = 0, size = 0;
+
+	mutex_lock(&ei_mutex);
+	for (iter = start; iter < end; iter++) {
+		entry = arch_deref_entry_point((void *)iter->addr);
+
+		if (!kernel_text_address(entry) ||
+		    !kallsyms_lookup_size_offset(entry, &size, &offset)) {
+			pr_err("Failed to find error inject entry at %p\n",
+				(void *)entry);
+			continue;
+		}
+
+		ent = kmalloc(sizeof(*ent), GFP_KERNEL);
+		if (!ent)
+			break;
+		ent->start_addr = entry;
+		ent->end_addr = entry + size;
+		ent->etype = iter->etype;
+		ent->priv = priv;
+		INIT_LIST_HEAD(&ent->list);
+		list_add_tail(&ent->list, &error_injection_list);
+	}
+	mutex_unlock(&ei_mutex);
+}
+
+
+// Source: error-inject.c
+// Lines 57-87

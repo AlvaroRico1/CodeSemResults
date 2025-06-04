@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'out' at line 2\n2. Pointer 'str' at line 7\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic inline bool read_string_ascii(\n\tchar **out,\n\tntlm_client *ntlm,\n\tntlm_buf *message,\n\tuint8_t string_len)\n{\n\tchar *str;\n\n\tif ((str = malloc(string_len + 1)) == NULL) {\n\t\tntlm_client_set_errmsg(ntlm, \"out of memory\");\n\t\treturn false;\n\t}\n\n\tmemcpy(str, &message->buf[message->pos], string_len);\n\tstr[string_len] = '\\0';\n\n\tmessage->pos += string_len;\n\n\t*out = str;\n\treturn true;\n}\n\n\n// Source: ntlm.c\n// Lines 507-527\n",
+  "ANSWER": "MUST"
+}

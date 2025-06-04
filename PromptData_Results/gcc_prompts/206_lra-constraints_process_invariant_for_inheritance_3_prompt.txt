@@ -1,0 +1,83 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'insn' at line 4
+2. Pointer 'invariant_ptr' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+process_invariant_for_inheritance (rtx dst_reg, rtx invariant_rtx)
+{
+  invariant_ptr_t invariant_ptr;
+  rtx_insn *insn, *new_insns;
+  rtx insn_set, insn_reg, new_reg;
+  int insn_regno;
+  bool succ_p = false;
+  int dst_regno = REGNO (dst_reg);
+  machine_mode dst_mode = GET_MODE (dst_reg);
+  enum reg_class cl = lra_get_allocno_class (dst_regno), insn_reg_cl;
+
+  invariant_ptr = insert_invariant (invariant_rtx);
+  if ((insn = invariant_ptr->insn) != NULL_RTX)
+    {
+      /* We have a subsequent insn using the invariant.  */
+      insn_set = single_set (insn);
+      lra_assert (insn_set != NULL);
+      insn_reg = SET_DEST (insn_set);
+      lra_assert (REG_P (insn_reg));
+      insn_regno = REGNO (insn_reg);
+      insn_reg_cl = lra_get_allocno_class (insn_regno);
+
+      if (dst_mode == GET_MODE (insn_reg)
+	  /* We should consider only result move reg insns which are
+	     cheap.  */
+	  && targetm.register_move_cost (dst_mode, cl, insn_reg_cl) == 2
+	  && targetm.register_move_cost (dst_mode, cl, cl) == 2)
+	{
+	  if (lra_dump_file != NULL)
+	    fprintf (lra_dump_file,
+		     "    [[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[\n");
+	  new_reg = lra_create_new_reg (dst_mode, dst_reg,
+					cl, "invariant inheritance");
+	  bitmap_set_bit (&lra_inheritance_pseudos, REGNO (new_reg));
+	  bitmap_set_bit (&check_only_regs, REGNO (new_reg));
+	  lra_reg_info[REGNO (new_reg)].restore_rtx = PATTERN (insn);
+	  start_sequence ();
+	  lra_emit_move (new_reg, dst_reg);
+	  new_insns = get_insns ();
+	  end_sequence ();
+	  lra_process_new_insns (curr_insn, NULL, new_insns,
+				 "Add invariant inheritance<-original");
+	  start_sequence ();
+	  lra_emit_move (SET_DEST (insn_set), new_reg);
+	  new_insns = get_insns ();
+	  end_sequence ();
+	  lra_process_new_insns (insn, NULL, new_insns,
+				 "Changing reload<-inheritance");
+	  lra_set_insn_deleted (insn);
+	  succ_p = true;
+	  if (lra_dump_file != NULL)
+	    {
+	      fprintf (lra_dump_file,
+		       "    Invariant inheritance reuse change %d (bb%d):\n",
+		       REGNO (new_reg), BLOCK_FOR_INSN (insn)->index);
+	      dump_insn_slim (lra_dump_file, insn);
+	      fprintf (lra_dump_file,
+		       "	  ]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]\n");
+	    }
+	}
+    }
+  invariant_ptr->insn = curr_insn;
+  return succ_p;
+}
+
+
+// Source: lra-constraints.c
+// Lines 6000-6063
+
+
+[ANSWER]
+MUST

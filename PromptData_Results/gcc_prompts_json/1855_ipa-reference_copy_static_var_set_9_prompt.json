@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'o' at line 7\n2. Pointer 'set' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ncopy_static_var_set (bitmap set, bool for_propagation)\n{\n  if (set == NULL || set == all_module_statics)\n    return set;\n  if (!for_propagation && set == no_module_statics)\n    return set;\n  bitmap_obstack *o = set->obstack;\n  gcc_checking_assert (o);\n  bitmap copy = BITMAP_ALLOC (o);\n  bitmap_copy (copy, set);\n  return copy;\n}\n\n\n// Source: ipa-reference.c\n// Lines 366-377\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,187 @@
+find_dead_or_set_registers (rtx_insn *target, struct resources *res,
+			    rtx *jump_target, int jump_count,
+			    struct resources set, struct resources needed)
+{
+  HARD_REG_SET scratch;
+  rtx_insn *insn;
+  rtx_insn *next_insn;
+  rtx_insn *jump_insn = 0;
+  int i;
+
+  for (insn = target; insn; insn = next_insn)
+    {
+      rtx_insn *this_insn = insn;
+
+      next_insn = NEXT_INSN (insn);
+
+      /* If this instruction can throw an exception, then we don't
+	 know where we might end up next.  That means that we have to
+	 assume that whatever we have already marked as live really is
+	 live.  */
+      if (can_throw_internal (insn))
+	break;
+
+      switch (GET_CODE (insn))
+	{
+	case CODE_LABEL:
+	  /* After a label, any pending dead registers that weren't yet
+	     used can be made dead.  */
+	  pending_dead_regs &= ~needed.regs;
+	  res->regs &= ~pending_dead_regs;
+	  CLEAR_HARD_REG_SET (pending_dead_regs);
+
+	  continue;
+
+	case BARRIER:
+	case NOTE:
+	case DEBUG_INSN:
+	  continue;
+
+	case INSN:
+	  if (GET_CODE (PATTERN (insn)) == USE)
+	    {
+	      /* If INSN is a USE made by update_block, we care about the
+		 underlying insn.  Any registers set by the underlying insn
+		 are live since the insn is being done somewhere else.  */
+	      if (INSN_P (XEXP (PATTERN (insn), 0)))
+		mark_set_resources (XEXP (PATTERN (insn), 0), res, 0,
+				    MARK_SRC_DEST_CALL);
+
+	      /* All other USE insns are to be ignored.  */
+	      continue;
+	    }
+	  else if (GET_CODE (PATTERN (insn)) == CLOBBER)
+	    continue;
+	  else if (rtx_sequence *seq =
+		     dyn_cast <rtx_sequence *> (PATTERN (insn)))
+	    {
+	      /* An unconditional jump can be used to fill the delay slot
+		 of a call, so search for a JUMP_INSN in any position.  */
+	      for (i = 0; i < seq->len (); i++)
+		{
+		  this_insn = seq->insn (i);
+		  if (JUMP_P (this_insn))
+		    break;
+		}
+	    }
+
+	default:
+	  break;
+	}
+
+      if (rtx_jump_insn *this_jump_insn =
+	    dyn_cast <rtx_jump_insn *> (this_insn))
+	{
+	  if (jump_count++ < 10)
+	    {
+	      if (any_uncondjump_p (this_jump_insn)
+		  || ANY_RETURN_P (PATTERN (this_jump_insn)))
+		{
+		  rtx lab_or_return = this_jump_insn->jump_label ();
+		  if (ANY_RETURN_P (lab_or_return))
+		    next_insn = NULL;
+		  else
+		    next_insn = as_a <rtx_insn *> (lab_or_return);
+		  if (jump_insn == 0)
+		    {
+		      jump_insn = insn;
+		      if (jump_target)
+			*jump_target = JUMP_LABEL (this_jump_insn);
+		    }
+		}
+	      else if (any_condjump_p (this_jump_insn))
+		{
+		  struct resources target_set, target_res;
+		  struct resources fallthrough_res;
+
+		  /* We can handle conditional branches here by following
+		     both paths, and then IOR the results of the two paths
+		     together, which will give us registers that are dead
+		     on both paths.  Since this is expensive, we give it
+		     a much higher cost than unconditional branches.  The
+		     cost was chosen so that we will follow at most 1
+		     conditional branch.  */
+
+		  jump_count += 4;
+		  if (jump_count >= 10)
+		    break;
+
+		  mark_referenced_resources (insn, &needed, true);
+
+		  /* For an annulled branch, mark_set_resources ignores slots
+		     filled by instructions from the target.  This is correct
+		     if the branch is not taken.  Since we are following both
+		     paths from the branch, we must also compute correct info
+		     if the branch is taken.  We do this by inverting all of
+		     the INSN_FROM_TARGET_P bits, calling mark_set_resources,
+		     and then inverting the INSN_FROM_TARGET_P bits again.  */
+
+		  if (GET_CODE (PATTERN (insn)) == SEQUENCE
+		      && INSN_ANNULLED_BRANCH_P (this_jump_insn))
+		    {
+		      rtx_sequence *seq = as_a <rtx_sequence *> (PATTERN (insn));
+		      for (i = 1; i < seq->len (); i++)
+			INSN_FROM_TARGET_P (seq->element (i))
+			  = ! INSN_FROM_TARGET_P (seq->element (i));
+
+		      target_set = set;
+		      mark_set_resources (insn, &target_set, 0,
+					  MARK_SRC_DEST_CALL);
+
+		      for (i = 1; i < seq->len (); i++)
+			INSN_FROM_TARGET_P (seq->element (i))
+			  = ! INSN_FROM_TARGET_P (seq->element (i));
+
+		      mark_set_resources (insn, &set, 0, MARK_SRC_DEST_CALL);
+		    }
+		  else
+		    {
+		      mark_set_resources (insn, &set, 0, MARK_SRC_DEST_CALL);
+		      target_set = set;
+		    }
+
+		  target_res = *res;
+		  scratch = target_set.regs & ~needed.regs;
+		  target_res.regs &= ~scratch;
+
+		  fallthrough_res = *res;
+		  scratch = set.regs & ~needed.regs;
+		  fallthrough_res.regs &= ~scratch;
+
+		  if (!ANY_RETURN_P (this_jump_insn->jump_label ()))
+		    find_dead_or_set_registers
+			  (this_jump_insn->jump_target (),
+			   &target_res, 0, jump_count, target_set, needed);
+		  find_dead_or_set_registers (next_insn,
+					      &fallthrough_res, 0, jump_count,
+					      set, needed);
+		  fallthrough_res.regs |= target_res.regs;
+		  res->regs &= fallthrough_res.regs;
+		  break;
+		}
+	      else
+		break;
+	    }
+	  else
+	    {
+	      /* Don't try this optimization if we expired our jump count
+		 above, since that would mean there may be an infinite loop
+		 in the function being compiled.  */
+	      jump_insn = 0;
+	      break;
+	    }
+	}
+
+      mark_referenced_resources (insn, &needed, true);
+      mark_set_resources (insn, &set, 0, MARK_SRC_DEST_CALL);
+
+      scratch = set.regs & ~needed.regs;
+      res->regs &= ~scratch;
+    }
+
+  return jump_insn;
+}
+
+
+// Source: resource.c
+// Lines 419-601

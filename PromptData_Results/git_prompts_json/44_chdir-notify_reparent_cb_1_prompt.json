@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'tmp' at line 7\n2. Pointer 'path' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void reparent_cb(const char *name,\n\t\t\tconst char *old_cwd,\n\t\t\tconst char *new_cwd,\n\t\t\tvoid *data)\n{\n\tchar **path = data;\n\tchar *tmp = *path;\n\n\tif (!tmp)\n\t\treturn;\n\n\t*path = reparent_relative_path(old_cwd, new_cwd, tmp);\n\tfree(tmp);\n\n\tif (name) {\n\t\ttrace_printf_key(&trace_setup_key,\n\t\t\t\t \"setup: reparent %s to '%s'\",\n\t\t\t\t name, *path);\n\t}\n}\n\n\n// Source: chdir-notify.c\n// Lines 25-44\n",
+  "ANSWER": "MAY"
+}

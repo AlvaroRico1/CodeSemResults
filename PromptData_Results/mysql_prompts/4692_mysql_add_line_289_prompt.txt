@@ -1,0 +1,219 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'length' at line 25
+2. Pointer 'ml_comment' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static bool add_line(String &buffer, char *line, size_t line_length,
+                     char *in_string, bool *ml_comment, bool truncated) {
+  uchar inchar;
+  char buff[80], *pos, *out;
+  COMMANDS *com;
+  bool need_space = false;
+  enum { SSC_NONE = 0, SSC_CONDITIONAL, SSC_HINT } ss_comment = SSC_NONE;
+  DBUG_TRACE;
+
+  if (!line[0] && buffer.is_empty()) return false;
+
+  if (status.add_to_history && line[0]) add_filtered_history(line);
+
+  char *end_of_line = line + line_length;
+
+  for (pos = out = line; pos < end_of_line; pos++) {
+    inchar = (uchar)*pos;
+    if (!preserve_comments) {
+      // Skip spaces at the beginning of a statement
+      if (my_isspace(charset_info, inchar) && (out == line) &&
+          buffer.is_empty())
+        continue;
+    }
+    // Accept multi-byte characters as-is
+    int length;
+    if (use_mb(charset_info) &&
+        (length = my_ismbchar(charset_info, pos, end_of_line))) {
+      if (!*ml_comment || preserve_comments) {
+        while (length--) *out++ = *pos++;
+        pos--;
+      } else
+        pos += length - 1;
+      continue;
+    }
+    if (!*ml_comment && inchar == '\\' &&
+        !(*in_string &&
+          (mysql.server_status & SERVER_STATUS_NO_BACKSLASH_ESCAPES))) {
+      // Found possbile one character command like \c
+
+      if (!(inchar = (uchar) * ++pos)) break;  // readline adds one '\'
+      if (*in_string || inchar == 'N')         // \N is short for NULL
+      {                                        // Don't allow commands in string
+        *out++ = '\\';
+        if ((inchar == '`') && (*in_string == inchar))
+          pos--;
+        else
+          *out++ = (char)inchar;
+        continue;
+      }
+      if ((com = find_command((char)inchar))) {
+        // Flush previously accepted characters
+        if (out != line) {
+          buffer.append(line, (uint)(out - line));
+          out = line;
+        }
+
+        if ((*com->func)(&buffer, pos - 1) > 0) return true;  // Quit
+        if (com->takes_params) {
+          if (ss_comment) {
+            /*
+              If a client-side macro appears inside a server-side comment,
+              discard all characters in the comment after the macro (that is,
+              until the end of the comment rather than the next delimiter)
+            */
+            for (pos++; *pos && (*pos != '*' || *(pos + 1) != '/'); pos++)
+              ;
+            pos--;
+          } else {
+            for (pos++; *pos && (*pos != *delimiter ||
+                                 !is_prefix(pos + 1, delimiter + 1));
+                 pos++)
+              ;  // Remove parameters
+            if (!*pos)
+              pos--;
+            else
+              pos += delimiter_length - 1;  // Point at last delim char
+          }
+        }
+      } else {
+        sprintf(buff, "Unknown command '\\%c'.", inchar);
+        if (put_info(buff, INFO_ERROR) > 0) return true;
+        *out++ = '\\';
+        *out++ = (char)inchar;
+        continue;
+      }
+    } else if (!*ml_comment && !*in_string && ss_comment != SSC_HINT &&
+               is_prefix(pos, delimiter)) {
+      // Found a statement. Continue parsing after the delimiter
+      pos += delimiter_length;
+
+      if (preserve_comments) {
+        while (my_isspace(charset_info, *pos)) *out++ = *pos++;
+      }
+      // Flush previously accepted characters
+      if (out != line) {
+        buffer.append(line, (uint32)(out - line));
+        out = line;
+      }
+
+      if (preserve_comments &&
+          ((*pos == '#') || ((*pos == '-') && (pos[1] == '-') &&
+                             my_isspace(charset_info, pos[2])))) {
+        // Add trailing single line comments to this statement
+        buffer.append(pos);
+        pos += strlen(pos);
+      }
+
+      pos--;
+
+      if ((com = find_command(buffer.c_ptr()))) {
+        if ((*com->func)(&buffer, buffer.c_ptr()) > 0) return true;  // Quit
+      } else {
+        if (com_go(&buffer, nullptr) > 0)  // < 0 is not fatal
+          return true;
+      }
+      buffer.length(0);
+    } else if (!*ml_comment &&
+               (!*in_string &&
+                (inchar == '#' ||
+                 (inchar == '-' && pos[1] == '-' &&
+                  /*
+                    The third byte is either whitespace or is the
+                    end of the line -- which would occur only
+                    because of the user sending newline -- which is
+                    itself whitespace and should also match.
+                  */
+                  (my_isspace(charset_info, pos[2]) || !pos[2]))))) {
+      // Flush previously accepted characters
+      if (out != line) {
+        buffer.append(line, (uint32)(out - line));
+        out = line;
+      }
+
+      // comment to end of line
+      if (preserve_comments) {
+        bool started_with_nothing = !buffer.length();
+
+        buffer.append(pos);
+
+        /*
+          A single-line comment by itself gets sent immediately so that
+          client commands (delimiter, status, etc) will be interpreted on
+          the next line.
+        */
+        if (started_with_nothing) {
+          if (com_go(&buffer, nullptr) > 0)  // < 0 is not fatal
+            return true;
+          buffer.length(0);
+        }
+      }
+
+      break;
+    } else if (!*in_string && inchar == '/' && pos[1] == '*' && pos[2] != '!' &&
+               pos[2] != '+' && ss_comment != SSC_HINT) {
+      if (preserve_comments) {
+        *out++ = *pos++;  // copy '/'
+        *out++ = *pos;    // copy '*'
+      } else
+        pos++;
+      *ml_comment = true;
+      if (out != line) {
+        buffer.append(line, (uint)(out - line));
+        out = line;
+      }
+    } else if (*ml_comment && !ss_comment && inchar == '*' &&
+               *(pos + 1) == '/') {
+      if (preserve_comments) {
+        *out++ = *pos++;  // copy '*'
+        *out++ = *pos;    // copy '/'
+      } else
+        pos++;
+      *ml_comment = false;
+      if (out != line) {
+        buffer.append(line, (uint32)(out - line));
+        out = line;
+      }
+      // Consumed a 2 chars or more, and will add 1 at most,
+      // so using the 'line' buffer to edit data in place is ok.
+      need_space = true;
+    } else {  // Add found char to buffer
+      if (!*in_string && inchar == '/' && pos[1] == '*') {
+        if (pos[2] == '!')
+          ss_comment = SSC_CONDITIONAL;
+        else if (pos[2] == '+')
+          ss_comment = SSC_HINT;
+      } else if (!*in_string && ss_comment && inchar == '*' &&
+                 *(pos + 1) == '/')
+        ss_comment = SSC_NONE;
+      if (inchar == *in_string)
+        *in_string = 0;
+      else if (!*ml_comment && !*in_string && ss_comment != SSC_HINT &&
+               (inchar == '\'' || inchar == '"' || inchar == '`'))
+        *in_string = (char)inchar;
+      if (!*ml_comment || preserve_comments) {
+        if (need_space && !my_isspace(charset_info, (char)inchar)) *out++ = ' ';
+        need_space = false;
+        *out++ = (char)inchar;
+      }
+    }
+  }
+
+
+// Source: mysql.cc
+// Lines 2447-2646
+
+
+[ANSWER]
+MUST-NOT

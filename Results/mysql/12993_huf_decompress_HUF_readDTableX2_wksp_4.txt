@@ -1,0 +1,1 @@
+tableLog,mysql/extra/zstd/lib/decompress/huf_decompress.c,5,nbSymbols,mysql/extra/zstd/lib/decompress/huf_decompress.c,5,2

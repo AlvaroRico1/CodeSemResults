@@ -1,0 +1,1 @@
+attrs,libgit2/src/libgit2/attr_file.c,6,entry,libgit2/src/libgit2/attr_file.c,3,1

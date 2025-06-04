@@ -1,0 +1,64 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ts' at line 5
+2. Pointer 'none' at line 10
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+TailoredSet::compareContractions(UChar32 c, const UChar *p, const UChar *q) {
+    // Parallel iteration over suffixes of both tables.
+    UCharsTrie::Iterator suffixes(p, 0, errorCode);
+    UCharsTrie::Iterator baseSuffixes(q, 0, errorCode);
+    const UnicodeString *ts = NULL;  // Tailoring suffix.
+    const UnicodeString *bs = NULL;  // Base suffix.
+    // Use a string with two U+FFFF as the limit sentinel.
+    // U+FFFF is untailorable and will not occur in contractions except maybe
+    // as a single suffix character for a root-collator boundary contraction.
+    UnicodeString none((UChar)0xffff);
+    none.append((UChar)0xffff);
+    for(;;) {
+        if(ts == NULL) {
+            if(suffixes.next(errorCode)) {
+                ts = &suffixes.getString();
+            } else {
+                ts = &none;
+            }
+        }
+        if(bs == NULL) {
+            if(baseSuffixes.next(errorCode)) {
+                bs = &baseSuffixes.getString();
+            } else {
+                bs = &none;
+            }
+        }
+        if(ts == &none && bs == &none) { break; }
+        int32_t cmp = ts->compare(*bs);
+        if(cmp < 0) {
+            // ts occurs in the tailoring but not in the base.
+            addSuffix(c, *ts);
+            ts = NULL;
+        } else if(cmp > 0) {
+            // bs occurs in the base but not in the tailoring.
+            addSuffix(c, *bs);
+            bs = NULL;
+        } else {
+            suffix = ts;
+            compare(c, (uint32_t)suffixes.getValue(), (uint32_t)baseSuffixes.getValue());
+            suffix = NULL;
+            ts = NULL;
+            bs = NULL;
+        }
+    }
+}
+
+
+// Source: collationsets.cpp
+// Lines 262-306
+
+
+[ANSWER]
+MUST

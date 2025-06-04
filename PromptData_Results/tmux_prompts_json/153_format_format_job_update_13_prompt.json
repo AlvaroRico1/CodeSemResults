@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'fj' at line 3\n2. Pointer 'line' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nformat_job_update(struct job *job)\n{\n\tstruct format_job\t*fj = job_get_data(job);\n\tstruct evbuffer\t\t*evb = job_get_event(job)->input;\n\tchar\t\t\t*line = NULL, *next;\n\ttime_t\t\t\t t;\n\n\twhile ((next = evbuffer_readline(evb)) != NULL) {\n\t\tfree(line);\n\t\tline = next;\n\t}\n\tif (line == NULL)\n\t\treturn;\n\tfj->updated = 1;\n\n\tfree(fj->out);\n\tfj->out = line;\n\n\tlog_debug(\"%s: %p %s: %s\", __func__, fj, fj->cmd, fj->out);\n\n\tt = time(NULL);\n\tif (fj->status && fj->last != t) {\n\t\tif (fj->client != NULL)\n\t\t\tserver_status_client(fj->client);\n\t\tfj->last = t;\n\t}\n}\n\n\n// Source: format.c\n// Lines 282-308\n",
+  "ANSWER": "MUST"
+}

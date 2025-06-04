@@ -1,0 +1,1 @@
+changelog,mysql/sql/sql_resolver.cc,4,changes,mysql/sql/sql_resolver.cc,16,1

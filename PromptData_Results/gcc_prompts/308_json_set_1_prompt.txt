@@ -1,0 +1,37 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ptr' at line 6
+2. Pointer 'key' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+object::set (const char *key, value *v)
+{
+  gcc_assert (key);
+  gcc_assert (v);
+
+  value **ptr = m_map.get (key);
+  if (ptr)
+    {
+      /* If the key is already present, delete the existing value
+	 and overwrite it.  */
+      delete *ptr;
+      *ptr = v;
+    }
+  else
+    /* If the key wasn't already present, take a copy of the key,
+       and store the value.  */
+    m_map.put (xstrdup (key), v);
+}
+
+
+// Source: json.cc
+// Lines 83-100
+
+
+[ANSWER]
+MAY

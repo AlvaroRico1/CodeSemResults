@@ -1,0 +1,339 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'subs_query_expression' at line 4
+2. Pointer 'subq' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool Query_block::transform_table_subquery_to_join_with_derived(
+    THD *thd, Item_exists_subselect *subq) {
+  assert(first_execution);
+  Query_expression *const subs_query_expression = subq->unit;
+  Query_block *subs_query_block = subs_query_expression->first_query_block();
+  assert(subs_query_block->first_execution);
+
+  subq->strategy = Subquery_strategy::DERIVED_TABLE;
+
+  const int hidden_fields = CountHiddenFields(subs_query_block->fields);
+  const bool no_aggregates = !subs_query_block->is_grouped() &&
+                             !subs_query_block->with_sum_func &&
+                             subs_query_block->having_cond() == nullptr &&
+                             !subs_query_block->has_windows();
+  const bool decorrelate =
+      no_aggregates &&
+      (subs_query_expression->uncacheable & UNCACHEABLE_DEPENDENT) &&
+      subs_query_block->where_cond() != nullptr &&
+      subs_query_block->where_cond()->is_outer_reference() &&
+      // decorrelation adds to the SELECT list, and hidden fields make it
+      // impossible (search for "hidden" in this function). Hidden fields
+      // usually come from aggregation, which we disallowed just above, but also
+      // if a SELECT list element is a subquery which contains an outer
+      // reference to subs_query_block.
+      hidden_fields == 0;
+
+  // Ensure that all lists are consistent. all_fields should have an optional
+  // prefix and then be fields_list. If no aggregates, base_ref_items should
+  // start with fields_list.
+  assert(hidden_fields >= 0);
+
+  // We're going to build the lists of outer and inner semijoin
+  // expressions:
+  // - they start empty
+  // - first (build_sj_exprs()), if this is IN, we add the left and right
+  // expressions of IN; if this is EXISTS, we do nothing
+  // - second (decorrelate_condition()), we decorrelate comparison operators
+  // in the subquery, and add the resulting left and right expressions.
+
+  mem_root_deque<Item *> sj_outer_exprs(thd->mem_root);
+  mem_root_deque<Item *> sj_inner_exprs(thd->mem_root);
+  Mem_root_array<Item_func::Functype> op_types(thd->mem_root);
+
+  if (subq->substype() == Item_subselect::IN_SUBS) {
+    build_sj_exprs(thd, &sj_outer_exprs, &sj_inner_exprs, subq,
+                   subs_query_block);
+    // All these expressions are compared with '=':
+    op_types.resize(sj_outer_exprs.size(), Item_func::EQ_FUNC);
+  } else {
+    assert(subq->substype() == Item_subselect::EXISTS_SUBS);
+
+    // We must replace of all EXISTS' initial SELECT list with
+    // constants, otherwise they will interfere in DISTINCT, indeed if we didn't
+    // replace,
+    // SELECT ... FROM ot WHERE EXISTS(SELECT c1 FROM it)
+    // would become
+    // SELECT ... FROM ot JOIN (SELECT DISTINCT c1 FROM it) AS dt
+    // and we may get duplicate copies of a row of 'ot', wrongly.
+
+    // Note that in setup_wild() we already do that, but only for "SELECT *",
+    // not for an explicit list "SELECT expr1, expr2", so we still have to do
+    // that here.
+
+    // We cannot do that if the query is aggregated, consider:
+    // EXISTS(SELECT SUM(a) AS x, b as y FROM t GROUP BY y HAVING x>2)
+    // if we replace we get
+    // EXISTS(SELECT 1, 1 FROM t GROUP BY y HAVING x>2)
+    // And as 'x' points to 1, HAVING is "always false".
+    // resolve_subquery() ensures that this assertion holds.
+    assert(no_aggregates);
+    Item::Cleanup_after_removal_context ctx(this);
+    int i = 0;
+    for (auto it = subs_query_block->visible_fields().begin();
+         it != subs_query_block->visible_fields().end(); ++it, ++i) {
+      Item *inner = *it;
+      if (inner->basic_const_item()) continue;  // no need to replace it
+      auto constant = new (thd->mem_root) Item_int(
+          NAME_STRING("Not_used"), (longlong)1, MY_INT64_NUM_DECIMAL_DIGITS);
+      *it = constant;
+      subs_query_block->base_ref_items[i] = constant;
+      // Expressions from the SELECT list will not be used; unlike in the case
+      // of IN, they are not part of sj_inner_exprs.
+      inner->walk(&Item::clean_up_after_removal, enum_walk::SUBQUERY_POSTFIX,
+                  pointer_cast<uchar *>(&ctx));
+    }
+    subs_query_block->select_list_tables = 0;
+  }
+
+  Semijoin_decorrelation sj_decor(
+      &sj_outer_exprs, &sj_inner_exprs,
+      // If antijoin, we can decorrelate '<>', '>=', etc, too (but not '<=>'):
+      // multiple inner rows may match '<>', but they will fail the IS NULL
+      // condition, and if this condition is top-level in WHERE it will
+      // eliminate the rows.
+      (subq->can_do_aj &&
+       subq->outer_condition_context == enum_condition_context::ANDS)
+          ? &op_types
+          : nullptr);
+
+  if (decorrelate) {
+    // We try to decorrelate it, by looking at equalities in its WHERE.
+    // This helps for this common pattern:
+    // EXISTS(SELECT FROM it WHERE it.c=ot.c AND <condition on 'it' only>)
+    const int initial_sj_inner_exprs_count = sj_inner_exprs.size();
+
+    if (subs_query_block->decorrelate_condition(sj_decor, nullptr)) return true;
+
+    // Append inner expressions of decorrelated equalities to the SELECT
+    // list. Correct context info of outer expressions.
+    auto it_outer = sj_outer_exprs.begin() + initial_sj_inner_exprs_count;
+    auto it_inner = sj_inner_exprs.begin() + initial_sj_inner_exprs_count;
+    for (int i = 0; it_outer != sj_outer_exprs.end();
+         ++it_outer, ++it_inner, ++i) {
+      Item *inner = *it_inner;
+      Item *outer = *it_outer;
+      // In setup_base_ref_items() we allocated space for appending this
+      // element.
+      // If there were a hidden element (there is none, see the setting of
+      // 'decorrelate'), we would be appending a *non*-hidden element
+      // (participating in DISTINCT) *after* the hidden element, which would
+      // break the usual layout of base_ref_items which is: "non-hidden then
+      // hidden" (see Query_block::add_hidden_item()). While this layout is not
+      // documented (?), it is safer to not break it.
+      subs_query_block->base_ref_items[subs_query_block->fields.size()] = inner;
+      subs_query_block->fields.push_back(inner);
+
+      // Needed for fix_after_pullout:
+      update_context_to_derived(outer, this);
+      // Decorrelated outer expression will move to ON, so fix it.
+      outer->fix_after_pullout(this, subs_query_block);
+    }
+
+    // Decorrelation identified new outer/inner expression pairs.
+    // Recalculate used_tables() after that (the subquery may have become
+    // uncorrelated). Because there is no aggregation, window functions, ORDER
+    // BY, we only have to collect used_tables bits from the SELECT list, FROM
+    // clause (outer-correlated derived tables and join conditions) and WHERE
+    // clause.
+    for (Item *inner : subs_query_block->visible_fields()) {
+      subs_query_block->select_list_tables |= inner->used_tables();
+    }
+
+    table_map new_used_tables = subs_query_block->select_list_tables;
+    if (subs_query_block->where_cond()) {
+      subs_query_block->where_cond()->update_used_tables();
+      new_used_tables |= subs_query_block->where_cond()->used_tables();
+    }
+    // Walk the FROM clause to gather any outer-correlated derived table or join
+    // condition.
+    walk_join_list(
+        subs_query_block->top_join_list, [&](TABLE_LIST *tr) -> bool {
+          if (tr->join_cond())
+            new_used_tables |= tr->join_cond()->used_tables();
+          if (tr->is_derived() && tr->uses_materialization())
+            new_used_tables |= tr->derived_query_expression()->m_lateral_deps;
+          return false;
+        });
+
+    if (!(new_used_tables & OUTER_REF_TABLE_BIT)) {
+      // there is no outer reference anymore
+      subs_query_block->uncacheable &= ~UNCACHEABLE_DEPENDENT;
+      subs_query_expression->uncacheable &= ~UNCACHEABLE_DEPENDENT;
+      // this must be called only after the change to 'uncacheable' above
+      subq->update_used_tables();
+    }
+  }
+
+  if (!subs_query_block->can_skip_distinct())
+    subs_query_block->add_base_options(SELECT_DISTINCT);
+
+  // As the synthesised ON and WHERE will reference columns of the derived
+  // table, we must have unique names.
+  // A derived table must have unique column names, while a quantified
+  // subquery needn't; so names may not currently be unique and we have to
+  // make them so.
+  {
+    int i = 1;
+    for (Item *inner : subs_query_block->visible_fields()) {
+      if (baptize_item(thd, inner, &i)) return true;
+    }
+  }
+
+  // If the subquery is (still) correlated, we would need to create a LATERAL
+  // derived table, but a certain secondary engine doesn't support it. Error:
+  if ((subq->used_tables() & ~PSEUDO_TABLE_BITS) != 0) {
+    my_error(ER_SUBQUERY_TRANSFORM_REJECTED, MYF(0));
+    return true;
+  }
+
+  // We have added to subs_query_expression->fields;
+  // subs_query_expression->types must always be equal to its visible fields.
+  subs_query_expression->types.clear();
+  for (Item *item : subq->unit->first_query_block()->visible_fields()) {
+    subs_query_expression->types.push_back(item);
+  }
+
+  TABLE_LIST *tl;
+  if (transform_subquery_to_derived(
+          thd, &tl, subs_query_expression, subq,
+          // If subquery is top-level in WHERE, and not negated, use INNER JOIN,
+          // else use LEFT JOIN.
+          // We could use LEFT JOIN unconditionally and let simplify_joins()
+          // convert it to INNER JOIN, but the conversion is not perfect, as
+          // not all effects of propagate_nullability() are undone.
+          /*use_inner_join=*/
+          subq->outer_condition_context == enum_condition_context::ANDS &&
+              !subq->can_do_aj,
+          /*reject_multiple_rows*/ false,
+          /*join_condition=*/nullptr,
+          /*lifted_where_cond*/ nullptr))
+    return true;
+
+  assert(CountVisibleFields(sj_inner_exprs) == sj_inner_exprs.size());
+  const int first_sj_inner_expr_of_subquery =
+      CountVisibleFields(subs_query_block->fields) - sj_inner_exprs.size();
+
+  Item_field *derived_field;
+  // Make the join condition for the derived table:
+  Item *join_cond = nullptr;
+  // Start at first SJ inner expression in SELECT list:
+  int i = first_sj_inner_expr_of_subquery;
+  int j = 0;  // counter of processed SJ inner expressions
+  for (auto it_outer = sj_outer_exprs.begin(); it_outer != sj_outer_exprs.end();
+       ++i, ++j, ++it_outer) {
+    Item *outer = *it_outer;
+    assert(i < (int)tl->table->s->fields);
+    // Using this constructor, instead of the alternative which only takes a
+    // Field pointer, gives a persistent name to the item (sets orig_table_name
+    // etc) which is necessary for prepared statements.
+    derived_field = new (thd->mem_root)
+        Item_field(thd, &this->context, tl, tl->table->field[i]);
+    if (derived_field == nullptr) return true;
+    // The said constructor sets 'fixed' to true, so join_cond->fix_fields()
+    // below ignores 'derived_field', so derived_field->cached_table isn't set,
+    // making a prepared statement fail. Setting cached_table solves it, and
+    // also helps during name resolution because the derived table isn't in the
+    // context's name resolution chain.
+    // derived_field->cached_table = tl;
+    // derived_field->cached_field_index = i;
+    Item_bool_func *comp_item;
+    Item_func::Functype op_type = sj_decor.op_type_at(j);
+    switch (op_type) {
+      case Item_func::EQ_FUNC:
+        comp_item = new (thd->mem_root) Item_func_eq(outer, derived_field);
+        break;
+      case Item_func::NE_FUNC:
+        comp_item = new (thd->mem_root) Item_func_ne(outer, derived_field);
+        break;
+      case Item_func::LT_FUNC:
+        comp_item = new (thd->mem_root) Item_func_lt(outer, derived_field);
+        break;
+      case Item_func::LE_FUNC:
+        comp_item = new (thd->mem_root) Item_func_le(outer, derived_field);
+        break;
+      case Item_func::GT_FUNC:
+        comp_item = new (thd->mem_root) Item_func_gt(outer, derived_field);
+        break;
+      case Item_func::GE_FUNC:
+        comp_item = new (thd->mem_root) Item_func_ge(outer, derived_field);
+        break;
+      default:
+        assert(false);
+        comp_item = nullptr;
+    }
+    if (comp_item == nullptr) return true;
+    // 'outer' moved from the left expression of IN (or from an operator in
+    // WHERE, if decorrelated) to this new equality:
+    // thd->replace_rollback_place(comp_item->arguments());
+    join_cond = and_items(join_cond, comp_item);
+  }
+
+  if (join_cond == nullptr)  // it's EXISTS and we couldn't decorrelate anything
+    join_cond = new (thd->mem_root) Item_func_true();
+
+  join_cond->apply_is_true();
+  if (!join_cond->fixed && join_cond->fix_fields(thd, &join_cond)) return true;
+  tl->set_join_cond(join_cond);
+
+  // Make the IS [NOT] NULL condition:
+  derived_field = new (thd->mem_root)
+      Item_field(thd, &this->context, tl, tl->table->field[0]);
+  if (derived_field == nullptr) return true;
+  // derived_field->cached_table = tl;
+  // derived_field->cached_field_index = 0;
+
+  Item *null_check;
+  if (!tl->outer_join)
+    null_check = new (thd->mem_root) Item_func_true();
+  else if (subq->can_do_aj)
+    null_check = new (thd->mem_root) Item_func_isnull(derived_field);
+  else
+    null_check = new (thd->mem_root) Item_func_isnotnull(derived_field);
+  null_check->apply_is_true();
+  if (null_check->fix_fields(thd, &null_check)) return true;
+
+  // We only need to test the first column for null-ness:
+  // if the NOT NULL test eliminates it, i.e. if it's NULL:
+  // - if it's not NULL-complemented: it's a NULL in the right member of the
+  // LEFT JOIN, thus in the subquery, thus it wouldn't pass the IN
+  // condition,
+  // - if it is NULL-complemented: then one IN sub-equality failed, thus it
+  // wouldn't pass the IN condition.
+  // Reciprocically: if the NOT NULL does not eliminate it: it's not
+  // NULL-complemented, so all IN sub-equalities passed, it would pass the IN
+  // condition.
+  // If the subquery was rather with EXISTS, the SELECT list's first
+  // expression is 1, so if it's NULL it's surely NULL-complemented; if there
+  // were decorrelated equalities one of them failed, or the inner table
+  // was empty.
+
+  // Walk the parent query's WHERE, to find the subquery item, and replace it.
+  if (replace_subcondition(thd, &m_where_cond, subq, null_check, false))
+    return true; /* purecov: inspected */
+
+  // WHERE now references the derived table's column, so used_tables needs an
+  // update; so does not_null_tables (by making it up to date, we allow
+  // simplify_joins() to optimize more).
+  m_where_cond->update_used_tables();
+  return false;
+}
+
+
+// Source: sql_resolver.cc
+// Lines 5219-5538
+
+
+[ANSWER]
+MUST

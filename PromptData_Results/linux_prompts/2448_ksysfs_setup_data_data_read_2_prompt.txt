@@ -1,0 +1,64 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'nr' at line 7
+2. Pointer 'buf' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static ssize_t setup_data_data_read(struct file *fp,
+				    struct kobject *kobj,
+				    struct bin_attribute *bin_attr,
+				    char *buf,
+				    loff_t off, size_t count)
+{
+	int nr, ret = 0;
+	u64 paddr;
+	struct setup_data *data;
+	void *p;
+
+	ret = kobj_to_setup_data_nr(kobj, &nr);
+	if (ret)
+		return ret;
+
+	ret = get_setup_data_paddr(nr, &paddr);
+	if (ret)
+		return ret;
+	data = memremap(paddr, sizeof(*data), MEMREMAP_WB);
+	if (!data)
+		return -ENOMEM;
+
+	if (off > data->len) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (count > data->len - off)
+		count = data->len - off;
+
+	if (!count)
+		goto out;
+
+	ret = count;
+	p = memremap(paddr + sizeof(*data), data->len, MEMREMAP_WB);
+	if (!p) {
+		ret = -ENOMEM;
+		goto out;
+	}
+	memcpy(buf, p + off, count);
+	memunmap(p);
+out:
+	memunmap(data);
+	return ret;
+}
+
+
+// Source: ksysfs.c
+// Lines 138-182
+
+
+[ANSWER]
+MUST-NOT

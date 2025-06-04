@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'pq' at line 1\n2. Pointer 'parent' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void pqueue_down(git_pqueue *pq, size_t el)\n{\n\tvoid *parent = git_vector_get(pq, el), *kid, *rkid;\n\n\twhile (1) {\n\t\tsize_t kid_el = PQUEUE_LCHILD_OF(el);\n\n\t\tif ((kid = git_vector_get(pq, kid_el)) == NULL)\n\t\t\tbreak;\n\n\t\tif ((rkid = git_vector_get(pq, kid_el + 1)) != NULL &&\n\t\t\tpq->_cmp(kid, rkid) > 0) {\n\t\t\tkid    = rkid;\n\t\t\tkid_el += 1;\n\t\t}\n\n\t\tif (pq->_cmp(parent, kid) <= 0)\n\t\t\tbreak;\n\n\t\tpq->contents[el] = kid;\n\t\tel = kid_el;\n\t}\n\n\tpq->contents[el] = parent;\n}\n\n\n// Source: pqueue.c\n// Lines 56-80\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'phdr_ptr' at line 4\n2. Pointer 'ehdr_ptr' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int __init copy_notes_elf64(const Elf64_Ehdr *ehdr_ptr, char *notes_buf)\n{\n\tint i, rc=0;\n\tElf64_Phdr *phdr_ptr;\n\n\tphdr_ptr = (Elf64_Phdr*)(ehdr_ptr + 1);\n\n\tfor (i = 0; i < ehdr_ptr->e_phnum; i++, phdr_ptr++) {\n\t\tu64 offset;\n\t\tif (phdr_ptr->p_type != PT_NOTE)\n\t\t\tcontinue;\n\t\toffset = phdr_ptr->p_offset;\n\t\trc = elfcorehdr_read_notes(notes_buf, phdr_ptr->p_memsz,\n\t\t\t\t\t   &offset);\n\t\tif (rc < 0)\n\t\t\treturn rc;\n\t\tnotes_buf += phdr_ptr->p_memsz;\n\t}\n\n\treturn 0;\n}\n\n\n// Source: vmcore.c\n// Lines 801-821\n",
+  "ANSWER": "MUST"
+}

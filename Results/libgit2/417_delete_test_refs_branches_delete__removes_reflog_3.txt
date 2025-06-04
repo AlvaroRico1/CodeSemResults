@@ -1,0 +1,1 @@
+sig,libgit2/tests/libgit2/refs/branches/delete.c,6,branch,libgit2/tests/libgit2/refs/branches/delete.c,3,2

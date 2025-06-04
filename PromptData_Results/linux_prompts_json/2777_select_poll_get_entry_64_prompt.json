@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'table' at line 3\n2. Pointer 'p' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic struct poll_table_entry *poll_get_entry(struct poll_wqueues *p)\n{\n\tstruct poll_table_page *table = p->table;\n\n\tif (p->inline_index < N_INLINE_POLL_ENTRIES)\n\t\treturn p->inline_entries + p->inline_index++;\n\n\tif (!table || POLL_TABLE_FULL(table)) {\n\t\tstruct poll_table_page *new_table;\n\n\t\tnew_table = (struct poll_table_page *) __get_free_page(GFP_KERNEL);\n\t\tif (!new_table) {\n\t\t\tp->error = -ENOMEM;\n\t\t\treturn NULL;\n\t\t}\n\t\tnew_table->entry = new_table->entries;\n\t\tnew_table->next = table;\n\t\tp->table = new_table;\n\t\ttable = new_table;\n\t}\n\n\treturn table->entry++;\n}\n\n\n// Source: select.c\n// Lines 160-182\n",
+  "ANSWER": "MUST"
+}

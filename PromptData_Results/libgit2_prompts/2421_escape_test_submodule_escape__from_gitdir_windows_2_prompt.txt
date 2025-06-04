@@ -1,0 +1,52 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'sm' at line 4
+2. Pointer 'sm_location' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_submodule_escape__from_gitdir_windows(void)
+{
+	int foundit;
+	git_submodule *sm;
+	git_str buf = GIT_STR_INIT;
+	unsigned int sm_location;
+
+	g_repo = setup_fixture_submodule_simple();
+
+	cl_git_pass(git_str_joinpath(&buf, git_repository_workdir(g_repo), ".gitmodules"));
+	cl_git_rewritefile(buf.ptr,
+			   "[submodule \"" EVIL_SM_NAME_WINDOWS "\"]\n"
+			   "    path = testrepo\n"
+			   "    url = ../testrepo.git\n");
+	git_str_dispose(&buf);
+
+	/* Find it all the different ways we know about it */
+	foundit = 0;
+	cl_git_pass(git_submodule_foreach(g_repo, find_evil, &foundit));
+	cl_assert_equal_i(0, foundit);
+	cl_git_fail_with(GIT_ENOTFOUND, git_submodule_lookup(&sm, g_repo, EVIL_SM_NAME_WINDOWS_UNESC));
+	/*
+	 * We do know about this as it's in the index and HEAD, but the data is
+	 * incomplete as there is no configured data for it (we pretend it
+	 * doesn't exist). This leaves us with an odd situation but it's
+	 * consistent with what we would do if we did add a submodule with no
+	 * configuration.
+	 */
+	cl_git_pass(git_submodule_lookup(&sm, g_repo, "testrepo"));
+	cl_git_pass(git_submodule_location(&sm_location, sm));
+	cl_assert_equal_i(GIT_SUBMODULE_STATUS_IN_INDEX | GIT_SUBMODULE_STATUS_IN_HEAD, sm_location);
+	git_submodule_free(sm);
+}
+
+
+// Source: escape.c
+// Lines 66-98
+
+
+[ANSWER]
+MAY

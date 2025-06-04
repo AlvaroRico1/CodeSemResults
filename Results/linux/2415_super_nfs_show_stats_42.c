@@ -1,0 +1,94 @@
+int nfs_show_stats(struct seq_file *m, struct dentry *root)
+{
+	int i, cpu;
+	struct nfs_server *nfss = NFS_SB(root->d_sb);
+	struct rpc_auth *auth = nfss->client->cl_auth;
+	struct nfs_iostats totals = { };
+
+	seq_printf(m, "statvers=%s", NFS_IOSTAT_VERS);
+
+	/*
+	 * Display all mount option settings
+	 */
+	seq_puts(m, "\n\topts:\t");
+	seq_puts(m, sb_rdonly(root->d_sb) ? "ro" : "rw");
+	seq_puts(m, root->d_sb->s_flags & SB_SYNCHRONOUS ? ",sync" : "");
+	seq_puts(m, root->d_sb->s_flags & SB_NOATIME ? ",noatime" : "");
+	seq_puts(m, root->d_sb->s_flags & SB_NODIRATIME ? ",nodiratime" : "");
+	nfs_show_mount_options(m, nfss, 1);
+
+	seq_printf(m, "\n\tage:\t%lu", (jiffies - nfss->mount_time) / HZ);
+
+	show_implementation_id(m, nfss);
+
+	seq_puts(m, "\n\tcaps:\t");
+	seq_printf(m, "caps=0x%x", nfss->caps);
+	seq_printf(m, ",wtmult=%u", nfss->wtmult);
+	seq_printf(m, ",dtsize=%u", nfss->dtsize);
+	seq_printf(m, ",bsize=%u", nfss->bsize);
+	seq_printf(m, ",namlen=%u", nfss->namelen);
+
+#if IS_ENABLED(CONFIG_NFS_V4)
+	if (nfss->nfs_client->rpc_ops->version == 4) {
+		seq_puts(m, "\n\tnfsv4:\t");
+		seq_printf(m, "bm0=0x%x", nfss->attr_bitmask[0]);
+		seq_printf(m, ",bm1=0x%x", nfss->attr_bitmask[1]);
+		seq_printf(m, ",bm2=0x%x", nfss->attr_bitmask[2]);
+		seq_printf(m, ",acl=0x%x", nfss->acl_bitmask);
+		show_sessions(m, nfss);
+		show_pnfs(m, nfss);
+		show_lease(m, nfss);
+	}
+#endif
+
+	/*
+	 * Display security flavor in effect for this mount
+	 */
+	seq_printf(m, "\n\tsec:\tflavor=%u", auth->au_ops->au_flavor);
+	if (auth->au_flavor)
+		seq_printf(m, ",pseudoflavor=%u", auth->au_flavor);
+
+	/*
+	 * Display superblock I/O counters
+	 */
+	for_each_possible_cpu(cpu) {
+		struct nfs_iostats *stats;
+
+		preempt_disable();
+		stats = per_cpu_ptr(nfss->io_stats, cpu);
+
+		for (i = 0; i < __NFSIOS_COUNTSMAX; i++)
+			totals.events[i] += stats->events[i];
+		for (i = 0; i < __NFSIOS_BYTESMAX; i++)
+			totals.bytes[i] += stats->bytes[i];
+#ifdef CONFIG_NFS_FSCACHE
+		for (i = 0; i < __NFSIOS_FSCACHEMAX; i++)
+			totals.fscache[i] += stats->fscache[i];
+#endif
+
+		preempt_enable();
+	}
+
+	seq_puts(m, "\n\tevents:\t");
+	for (i = 0; i < __NFSIOS_COUNTSMAX; i++)
+		seq_printf(m, "%lu ", totals.events[i]);
+	seq_puts(m, "\n\tbytes:\t");
+	for (i = 0; i < __NFSIOS_BYTESMAX; i++)
+		seq_printf(m, "%Lu ", totals.bytes[i]);
+#ifdef CONFIG_NFS_FSCACHE
+	if (nfss->options & NFS_OPTION_FSCACHE) {
+		seq_puts(m, "\n\tfsc:\t");
+		for (i = 0; i < __NFSIOS_FSCACHEMAX; i++)
+			seq_printf(m, "%Lu ", totals.fscache[i]);
+	}
+#endif
+	seq_putc(m, '\n');
+
+	rpc_clnt_show_stats(m, nfss->client);
+
+	return 0;
+}
+
+
+// Source: super.c
+// Lines 822-911

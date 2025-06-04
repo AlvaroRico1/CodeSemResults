@@ -1,0 +1,1 @@
+rule_idx,libgit2/tests/libgit2/attr/file.c,3,assign,libgit2/tests/libgit2/attr/file.c,11,0

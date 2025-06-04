@@ -1,0 +1,78 @@
+menu_add_item(struct menu *menu, const struct menu_item *item,
+    struct cmdq_item *qitem, struct client *c, struct cmd_find_state *fs)
+{
+	struct menu_item	*new_item;
+	const char		*key = NULL, *cmd, *suffix = "";
+	char			*s, *name;
+	u_int			 width, max_width;
+	int			 line;
+	size_t			 keylen, slen;
+
+	line = (item == NULL || item->name == NULL || *item->name == '\0');
+	if (line && menu->count == 0)
+		return;
+
+	menu->items = xreallocarray(menu->items, menu->count + 1,
+	    sizeof *menu->items);
+	new_item = &menu->items[menu->count++];
+	memset(new_item, 0, sizeof *new_item);
+
+	if (line)
+		return;
+
+	if (fs != NULL)
+		s = format_single_from_state(qitem, item->name, c, fs);
+	else
+		s = format_single(qitem, item->name, c, NULL, NULL, NULL);
+	if (*s == '\0') { /* no item if empty after format expanded */
+		menu->count--;
+		return;
+	}
+	max_width = c->tty.sx - 4;
+
+	slen = strlen(s);
+	if (*s != '-' && item->key != KEYC_UNKNOWN && item->key != KEYC_NONE) {
+		key = key_string_lookup_key(item->key, 0);
+		keylen = strlen(key) + 3; /* 3 = space and two brackets */
+
+		/*
+		 * Only add the key if there is space for the entire item text
+		 * and the key.
+		 */
+		if (keylen >= max_width || slen >= max_width - keylen)
+			key = NULL;
+	}
+
+	if (key != NULL)
+		xasprintf(&name, "%s#[default] #[align=right](%s)", s, key);
+	else {
+		if (slen > max_width) {
+			max_width--;
+			suffix = ">";
+		}
+		xasprintf(&name, "%.*s%s", (int)max_width, s, suffix);
+	}
+	new_item->name = name;
+	free(s);
+
+	cmd = item->command;
+	if (cmd != NULL) {
+		if (fs != NULL)
+			s = format_single_from_state(qitem, cmd, c, fs);
+		else
+			s = format_single(qitem, cmd, c, NULL, NULL, NULL);
+	} else
+		s = NULL;
+	new_item->command = s;
+	new_item->key = item->key;
+
+	width = format_width(new_item->name);
+	if (*new_item->name == '-')
+		width--;
+	if (width > menu->width)
+		menu->width = width;
+}
+
+
+// Source: menu.c
+// Lines 54-127

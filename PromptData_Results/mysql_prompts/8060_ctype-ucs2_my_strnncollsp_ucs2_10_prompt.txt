@@ -1,0 +1,194 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'slen' at line 2
+2. Pointer 'tlen' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int my_strnncollsp_ucs2(const CHARSET_INFO *cs, const uchar *s,
+                               size_t slen, const uchar *t, size_t tlen) {
+  const uchar *se, *te;
+  size_t minlen;
+  const MY_UNICASE_INFO *uni_plane = cs->caseinfo;
+
+  /* extra safety to make sure the lengths are even numbers */
+  slen &= ~1;
+  tlen &= ~1;
+
+  se = s + slen;
+  te = t + tlen;
+
+  for (minlen = std::min(slen, tlen); minlen; minlen -= 2) {
+    int s_wc = uni_plane->page[s[0]] ? (int)uni_plane->page[s[0]][s[1]].sort
+                                     : (((int)s[0]) << 8) + (int)s[1];
+
+    int t_wc = uni_plane->page[t[0]] ? (int)uni_plane->page[t[0]][t[1]].sort
+                                     : (((int)t[0]) << 8) + (int)t[1];
+    if (s_wc != t_wc) return s_wc > t_wc ? 1 : -1;
+
+    s += 2;
+    t += 2;
+  }
+
+  if (slen != tlen) {
+    int swap = 1;
+    if (slen < tlen) {
+      s = t;
+      se = te;
+      swap = -1;
+    }
+
+    for (; s < se; s += 2) {
+      if (s[0] || s[1] != ' ') return (s[0] == 0 && s[1] < ' ') ? -swap : swap;
+    }
+  }
+  return 0;
+}
+
+static uint my_ismbchar_ucs2(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
+                             const char *b MY_ATTRIBUTE((unused)),
+                             const char *e MY_ATTRIBUTE((unused))) {
+  return 2;
+}
+
+static uint my_mbcharlen_ucs2(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
+                              uint c MY_ATTRIBUTE((unused))) {
+  return 2;
+}
+
+static size_t my_numchars_ucs2(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
+                               const char *b, const char *e) {
+  return (size_t)(e - b) / 2;
+}
+
+static size_t my_charpos_ucs2(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
+                              const char *b, const char *e, size_t pos) {
+  size_t string_length = (size_t)(e - b);
+  return pos > string_length ? string_length + 2 : pos * 2;
+}
+
+static size_t my_well_formed_len_ucs2(
+    const CHARSET_INFO *cs MY_ATTRIBUTE((unused)), const char *b, const char *e,
+    size_t nchars, int *error) {
+  /* Ensure string length is dividable with 2 */
+  size_t nbytes = ((size_t)(e - b)) & ~(size_t)1;
+  *error = 0;
+  nchars *= 2;
+  return std::min(nbytes, nchars);
+}
+
+static int my_wildcmp_ucs2_ci(const CHARSET_INFO *cs, const char *str,
+                              const char *str_end, const char *wildstr,
+                              const char *wildend, int escape, int w_one,
+                              int w_many) {
+  const MY_UNICASE_INFO *uni_plane = cs->caseinfo;
+  return my_wildcmp_unicode(cs, str, str_end, wildstr, wildend, escape, w_one,
+                            w_many, uni_plane);
+}
+
+static int my_wildcmp_ucs2_bin(const CHARSET_INFO *cs, const char *str,
+                               const char *str_end, const char *wildstr,
+                               const char *wildend, int escape, int w_one,
+                               int w_many) {
+  return my_wildcmp_unicode(cs, str, str_end, wildstr, wildend, escape, w_one,
+                            w_many, nullptr);
+}
+
+static int my_strnncoll_ucs2_bin(const CHARSET_INFO *cs, const uchar *s,
+                                 size_t slen, const uchar *t, size_t tlen,
+                                 bool t_is_prefix) {
+  int s_res, t_res;
+  my_wc_t s_wc = 0, t_wc = 0;
+  const uchar *se = s + slen;
+  const uchar *te = t + tlen;
+
+  while (s < se && t < te) {
+    s_res = my_ucs2_uni(cs, &s_wc, s, se);
+    t_res = my_ucs2_uni(cs, &t_wc, t, te);
+
+    if (s_res <= 0 || t_res <= 0) {
+      /* Incorrect string, compare by char value */
+      return ((int)s[0] - (int)t[0]);
+    }
+    if (s_wc != t_wc) {
+      return s_wc > t_wc ? 1 : -1;
+    }
+
+    s += s_res;
+    t += t_res;
+  }
+  return (int)(t_is_prefix ? t - te : ((se - s) - (te - t)));
+}
+
+static int my_strnncollsp_ucs2_bin(
+    const CHARSET_INFO *cs MY_ATTRIBUTE((unused)), const uchar *s, size_t slen,
+    const uchar *t, size_t tlen) {
+  const uchar *se, *te;
+  size_t minlen;
+
+  /* extra safety to make sure the lengths are even numbers */
+  slen = (slen >> 1) << 1;
+  tlen = (tlen >> 1) << 1;
+
+  se = s + slen;
+  te = t + tlen;
+
+  for (minlen = std::min(slen, tlen); minlen; minlen -= 2) {
+    int s_wc = s[0] * 256 + s[1];
+    int t_wc = t[0] * 256 + t[1];
+    if (s_wc != t_wc) return s_wc > t_wc ? 1 : -1;
+
+    s += 2;
+    t += 2;
+  }
+
+  if (slen != tlen) {
+    int swap = 1;
+    if (slen < tlen) {
+      s = t;
+      se = te;
+      swap = -1;
+    }
+
+    for (; s < se; s += 2) {
+      if (s[0] || s[1] != ' ') return (s[0] == 0 && s[1] < ' ') ? -swap : swap;
+    }
+  }
+  return 0;
+}
+
+static void my_hash_sort_ucs2_bin(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
+                                  const uchar *key, size_t len, uint64 *nr1,
+                                  uint64 *nr2) {
+  const uchar *pos = key;
+  uint64 tmp1;
+  uint64 tmp2;
+
+  key += len;
+
+  while (key > pos + 1 && key[-1] == ' ' && key[-2] == '\0') key -= 2;
+
+  tmp1 = *nr1;
+  tmp2 = *nr2;
+
+  for (; pos < key; pos++) {
+    tmp1 ^= (uint64)((((uint)tmp1 & 63) + tmp2) * ((uint)*pos)) + (tmp1 << 8);
+    tmp2 += 3;
+  }
+
+  *nr1 = tmp1;
+  *nr2 = tmp2;
+}
+}  // extern "C"
+
+
+// Source: ctype-ucs2.cc
+// Lines 2639-2813
+
+
+[ANSWER]
+MAY

@@ -1,0 +1,1 @@
+dst,tmux/cmd-move-window.c,8,target,tmux/cmd-move-window.c,5,1

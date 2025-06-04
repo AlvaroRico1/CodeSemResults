@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'acl' at line 3\n2. Pointer 'default_acl' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\next4_init_acl(handle_t *handle, struct inode *inode, struct inode *dir)\n{\n\tstruct posix_acl *default_acl, *acl;\n\tint error;\n\n\terror = posix_acl_create(dir, &inode->i_mode, &default_acl, &acl);\n\tif (error)\n\t\treturn error;\n\n\tif (default_acl) {\n\t\terror = __ext4_set_acl(handle, inode, ACL_TYPE_DEFAULT,\n\t\t\t\t       default_acl, XATTR_CREATE);\n\t\tposix_acl_release(default_acl);\n\t} else {\n\t\tinode->i_default_acl = NULL;\n\t}\n\tif (acl) {\n\t\tif (!error)\n\t\t\terror = __ext4_set_acl(handle, inode, ACL_TYPE_ACCESS,\n\t\t\t\t\t       acl, XATTR_CREATE);\n\t\tposix_acl_release(acl);\n\t} else {\n\t\tinode->i_acl = NULL;\n\t}\n\treturn error;\n}\n\n\n// Source: acl.c\n// Lines 275-300\n",
+  "ANSWER": "MAY"
+}

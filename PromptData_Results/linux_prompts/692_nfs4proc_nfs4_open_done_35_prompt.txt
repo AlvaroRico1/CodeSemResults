@@ -1,0 +1,49 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'data' at line 3
+2. Pointer 'calldata' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void nfs4_open_done(struct rpc_task *task, void *calldata)
+{
+	struct nfs4_opendata *data = calldata;
+
+	data->rpc_status = task->tk_status;
+
+	if (!nfs4_sequence_process(task, &data->o_res.seq_res))
+		return;
+
+	if (task->tk_status == 0) {
+		if (data->o_res.f_attr->valid & NFS_ATTR_FATTR_TYPE) {
+			switch (data->o_res.f_attr->mode & S_IFMT) {
+			case S_IFREG:
+				break;
+			case S_IFLNK:
+				data->rpc_status = -ELOOP;
+				break;
+			case S_IFDIR:
+				data->rpc_status = -EISDIR;
+				break;
+			default:
+				data->rpc_status = -ENOTDIR;
+			}
+		}
+		renew_lease(data->o_res.server, data->timestamp);
+		if (!(data->o_res.rflags & NFS4_OPEN_RESULT_CONFIRM))
+			nfs_confirm_seqid(&data->owner->so_seqid, 0);
+	}
+	data->rpc_done = true;
+}
+
+
+// Source: nfs4proc.c
+// Lines 2413-2442
+
+
+[ANSWER]
+MUST

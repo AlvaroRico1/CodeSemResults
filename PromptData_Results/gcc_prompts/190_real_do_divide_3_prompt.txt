@@ -1,0 +1,121 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'rr' at line 5
+2. Pointer 't' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+do_divide (REAL_VALUE_TYPE *r, const REAL_VALUE_TYPE *a,
+	   const REAL_VALUE_TYPE *b)
+{
+  int exp, sign = a->sign ^ b->sign;
+  REAL_VALUE_TYPE t, *rr;
+  bool inexact;
+
+  switch (CLASS2 (a->cl, b->cl))
+    {
+    case CLASS2 (rvc_zero, rvc_zero):
+      /* 0 / 0 = NaN.  */
+    case CLASS2 (rvc_inf, rvc_inf):
+      /* Inf / Inf = NaN.  */
+      get_canonical_qnan (r, sign);
+      return false;
+
+    case CLASS2 (rvc_zero, rvc_normal):
+    case CLASS2 (rvc_zero, rvc_inf):
+      /* 0 / ANY = 0.  */
+    case CLASS2 (rvc_normal, rvc_inf):
+      /* R / Inf = 0.  */
+      get_zero (r, sign);
+      return false;
+
+    case CLASS2 (rvc_normal, rvc_zero):
+      /* R / 0 = Inf.  */
+    case CLASS2 (rvc_inf, rvc_zero):
+      /* Inf / 0 = Inf.  */
+      get_inf (r, sign);
+      return false;
+
+    case CLASS2 (rvc_zero, rvc_nan):
+    case CLASS2 (rvc_normal, rvc_nan):
+    case CLASS2 (rvc_inf, rvc_nan):
+    case CLASS2 (rvc_nan, rvc_nan):
+      /* ANY / NaN = NaN.  */
+      *r = *b;
+      /* Make resulting NaN value to be qNaN. The caller has the
+         responsibility to avoid the operation if flag_signaling_nans
+         is on.  */
+      r->signalling = 0;
+      r->sign = sign;
+      return false;
+
+    case CLASS2 (rvc_nan, rvc_zero):
+    case CLASS2 (rvc_nan, rvc_normal):
+    case CLASS2 (rvc_nan, rvc_inf):
+      /* NaN / ANY = NaN.  */
+      *r = *a;
+      /* Make resulting NaN value to be qNaN. The caller has the
+         responsibility to avoid the operation if flag_signaling_nans
+         is on.  */
+      r->signalling = 0;
+      r->sign = sign;
+      return false;
+
+    case CLASS2 (rvc_inf, rvc_normal):
+      /* Inf / R = Inf.  */
+      get_inf (r, sign);
+      return false;
+
+    case CLASS2 (rvc_normal, rvc_normal):
+      break;
+
+    default:
+      gcc_unreachable ();
+    }
+
+  if (r == a || r == b)
+    rr = &t;
+  else
+    rr = r;
+
+  /* Make sure all fields in the result are initialized.  */
+  get_zero (rr, 0);
+  rr->cl = rvc_normal;
+  rr->sign = sign;
+
+  exp = REAL_EXP (a) - REAL_EXP (b) + 1;
+  if (exp > MAX_EXP)
+    {
+      get_inf (r, sign);
+      return true;
+    }
+  if (exp < -MAX_EXP)
+    {
+      get_zero (r, sign);
+      return true;
+    }
+  SET_REAL_EXP (rr, exp);
+
+  inexact = div_significands (rr, a, b);
+
+  /* Re-normalize the result.  */
+  normalize (rr);
+  rr->sig[0] |= inexact;
+
+  if (rr != r)
+    *r = t;
+
+  return inexact;
+}
+
+
+// Source: real.c
+// Lines 811-912
+
+
+[ANSWER]
+MUST

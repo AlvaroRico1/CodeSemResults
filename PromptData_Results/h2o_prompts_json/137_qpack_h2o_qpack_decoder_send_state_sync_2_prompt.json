@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'dst' at line 6\n2. Pointer 'outbuf' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nsize_t h2o_qpack_decoder_send_state_sync(h2o_qpack_decoder_t *qpack, uint8_t *outbuf)\n{\n    if (qpack->insert_count == 0)\n        return 0;\n\n    uint8_t *dst = outbuf;\n    *dst = 0;\n    dst = h2o_hpack_encode_int(dst, qpack->insert_count, 6);\n    qpack->insert_count = 0;\n\n    return dst - outbuf;\n}\n\n\n// Source: qpack.c\n// Lines 520-531\n",
+  "ANSWER": "MUST"
+}

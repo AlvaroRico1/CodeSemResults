@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'nfsi' at line 3\n2. Pointer 'foo' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void init_once(void *foo)\n{\n\tstruct nfs_inode *nfsi = (struct nfs_inode *) foo;\n\n\tinode_init_once(&nfsi->vfs_inode);\n\tINIT_LIST_HEAD(&nfsi->open_files);\n\tINIT_LIST_HEAD(&nfsi->access_cache_entry_lru);\n\tINIT_LIST_HEAD(&nfsi->access_cache_inode_lru);\n\tINIT_LIST_HEAD(&nfsi->commit_info.list);\n\tatomic_long_set(&nfsi->nrequests, 0);\n\tatomic_long_set(&nfsi->commit_info.ncommit, 0);\n\tatomic_set(&nfsi->commit_info.rpcs_out, 0);\n\tinit_rwsem(&nfsi->rmdir_sem);\n\tmutex_init(&nfsi->commit_mutex);\n\tnfs4_init_once(nfsi);\n}\n\n\n// Source: inode.c\n// Lines 2096-2111\n",
+  "ANSWER": "MUST"
+}

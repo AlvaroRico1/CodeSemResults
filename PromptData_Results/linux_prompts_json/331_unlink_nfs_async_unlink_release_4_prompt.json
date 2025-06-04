@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'sb' at line 5\n2. Pointer 'dentry' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void nfs_async_unlink_release(void *calldata)\n{\n\tstruct nfs_unlinkdata\t*data = calldata;\n\tstruct dentry *dentry = data->dentry;\n\tstruct super_block *sb = dentry->d_sb;\n\n\tup_read_non_owner(&NFS_I(d_inode(dentry->d_parent))->rmdir_sem);\n\td_lookup_done(dentry);\n\tnfs_free_unlinkdata(data);\n\tdput(dentry);\n\tnfs_sb_deactive(sb);\n}\n\n\n// Source: unlink.c\n// Lines 63-74\n",
+  "ANSWER": "MUST"
+}

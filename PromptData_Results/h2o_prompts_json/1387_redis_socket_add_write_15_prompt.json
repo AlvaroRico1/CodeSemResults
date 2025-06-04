@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'p' at line 3\n2. Pointer 'privdata' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void socket_add_write(void *privdata)\n{\n    struct st_redis_socket_data_t *p = (struct st_redis_socket_data_t *)privdata;\n    if (!h2o_socket_is_writing(p->socket)) {\n        h2o_socket_notify_write(p->socket, on_write);\n    }\n}\n\n\n// Source: redis.c\n// Lines 374-380\n",
+  "ANSWER": "MUST"
+}

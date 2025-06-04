@@ -1,0 +1,1 @@
+ed,tmux/window-buffer.c,3,arg,tmux/window-buffer.c,1,1

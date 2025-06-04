@@ -1,0 +1,30 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'indent' at line 2
+2. Pointer 'indt' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int clar_summary_close_tag(
+    struct clar_summary *summary, const char *tag, int indent)
+{
+	const char *indt;
+
+	if (indent == 0) indt = "";
+	else if (indent == 1) indt = "\t";
+	else indt = "\t\t";
+
+	return fprintf(summary->fp, "%s</%s>\n", indt, tag);
+}
+
+
+// Source: summary.h
+// Lines 5-15
+
+
+[ANSWER]
+MUST-NOT

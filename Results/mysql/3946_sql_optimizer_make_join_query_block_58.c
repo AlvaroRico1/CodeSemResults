@@ -1,0 +1,412 @@
+static bool make_join_query_block(JOIN *join, Item *cond) {
+  assert(cond == nullptr || cond->is_bool_func());
+  THD *thd = join->thd;
+  Opt_trace_context *const trace = &thd->opt_trace;
+  DBUG_TRACE;
+  ASSERT_BEST_REF_IN_JOIN_ORDER(join);
+
+  // Add IS NOT NULL conditions to table conditions:
+  if (add_not_null_conds(join)) return true;
+
+  /*
+    Extract constant conditions that are part of the WHERE clause.
+    Constant parts of join conditions from outer joins are attached to
+    the appropriate table condition in JOIN::attach_join_conditions().
+  */
+  if (cond) /* Because of QUICK_GROUP_MIN_MAX_SELECT */
+  {         /* there may be a select without a cond. */
+    if (join->primary_tables > 1)
+      cond->update_used_tables();  // Table number may have changed
+    if (join->plan_is_const() &&
+        join->query_block->master_query_expression() ==
+            thd->lex->unit)  // The outer-most query block
+      join->const_table_map |= RAND_TABLE_BIT;
+  }
+  /*
+    Extract conditions that depend on constant tables.
+    The const part of the query's WHERE clause can be checked immediately
+    and if it is not satisfied then the join has empty result
+  */
+  Item *const_cond = nullptr;
+  if (cond)
+    const_cond = make_cond_for_table(thd, cond, join->const_table_map,
+                                     table_map(0), true);
+
+  // Add conditions added by add_not_null_conds()
+  for (uint i = 0; i < join->const_tables; i++) {
+    if (and_conditions(&const_cond, join->best_ref[i]->condition()))
+      return true;
+  }
+  DBUG_EXECUTE("where",
+               print_where(thd, const_cond, "constants", QT_ORDINARY););
+  if (const_cond != nullptr &&
+      evaluate_during_optimization(const_cond, join->query_block)) {
+    const bool const_cond_result = const_cond->val_int() != 0;
+    if (thd->is_error()) return true;
+
+    Opt_trace_object trace_const_cond(trace);
+    trace_const_cond.add("condition_on_constant_tables", const_cond)
+        .add("condition_value", const_cond_result);
+    if (const_cond_result) {
+      /*
+        If all the tables referred by the condition are const tables and
+        if the condition is not expensive, we can remove the where condition
+        as it will always evaluate to "true".
+      */
+      if (join->plan_is_const() &&
+          !(cond->used_tables() & ~join->const_table_map) &&
+          !cond->is_expensive()) {
+        DBUG_PRINT("info", ("Found always true WHERE condition"));
+        join->where_cond = nullptr;
+      }
+    } else {
+      DBUG_PRINT("info", ("Found impossible WHERE condition"));
+      return true;
+    }
+  }
+
+  /*
+    Extract remaining conditions from WHERE clause and join conditions,
+    and attach them to the most appropriate table condition. This means that
+    a condition will be evaluated as soon as all fields it depends on are
+    available. For outer join conditions, the additional criterion is that
+    we must have determined whether outer-joined rows are available, or
+    have been NULL-extended, see JOIN::attach_join_conditions() for details.
+  */
+  {
+    Opt_trace_object trace_wrapper(trace);
+    Opt_trace_object trace_conditions(trace, "attaching_conditions_to_tables");
+    trace_conditions.add("original_condition", cond);
+    Opt_trace_array trace_attached_comp(trace,
+                                        "attached_conditions_computation");
+
+    for (uint i = join->const_tables; i < join->tables; i++) {
+      JOIN_TAB *const tab = join->best_ref[i];
+
+      if (!tab->position()) continue;
+      /*
+        first_inner is the X in queries like:
+        SELECT * FROM t1 LEFT OUTER JOIN (t2 JOIN t3) ON X
+      */
+      const plan_idx first_inner = tab->first_inner();
+      const table_map used_tables = tab->prefix_tables();
+      const table_map current_map = tab->added_tables();
+      Item *tmp = nullptr;
+
+      if (cond)
+        tmp = make_cond_for_table(thd, cond, used_tables, current_map, false);
+      /* Add conditions added by add_not_null_conds(). */
+      if (and_conditions(&tmp, tab->condition())) return true;
+
+      if (cond && !tmp && tab->quick()) {  // Outer join
+        assert(tab->type() == JT_RANGE || tab->type() == JT_INDEX_MERGE);
+        /*
+          Hack to handle the case where we only refer to a table
+          in the ON part of an OUTER JOIN. In this case we want the code
+          below to check if we should use 'quick' instead.
+        */
+        DBUG_PRINT("info", ("Item_func_true"));
+        tmp = new Item_func_true();  // Always true
+      }
+      if (tmp || !cond || tab->type() == JT_REF ||
+          tab->type() == JT_REF_OR_NULL || tab->type() == JT_EQ_REF ||
+          first_inner != NO_PLAN_IDX) {
+        DBUG_EXECUTE("where",
+                     print_where(thd, tmp, tab->table()->alias, QT_ORDINARY););
+        /*
+          If tab is an inner table of an outer join operation,
+          add a match guard to the pushed down predicate.
+          The guard will turn the predicate on only after
+          the first match for outer tables is encountered.
+        */
+        if (cond && tmp) {
+          /*
+            Because of QUICK_GROUP_MIN_MAX_SELECT there may be a select without
+            a cond, so neutralize the hack above.
+          */
+          if (!(tmp = add_found_match_trig_cond(join, first_inner, tmp,
+                                                NO_PLAN_IDX)))
+            return true;
+          tab->set_condition(tmp);
+        } else {
+          tab->set_condition(nullptr);
+        }
+
+        DBUG_EXECUTE("where",
+                     print_where(thd, tmp, tab->table()->alias, QT_ORDINARY););
+
+        if (tab->quick()) {
+          if (tab->needed_reg.is_clear_all() && tab->type() != JT_CONST) {
+            /*
+              We keep (for now) the QUICK AM calculated in
+              get_quick_record_count().
+            */
+            assert(tab->quick()->is_valid());
+          } else {
+            delete tab->quick();
+            tab->set_quick(nullptr);
+          }
+        }
+
+        if ((tab->type() == JT_ALL || tab->type() == JT_RANGE ||
+             tab->type() == JT_INDEX_MERGE || tab->type() == JT_INDEX_SCAN) &&
+            tab->use_quick != QS_RANGE) {
+          /*
+            We plan to scan (table/index/range scan).
+            Check again if we should use an index. We can use an index if:
+
+            1a) There is a condition that range optimizer can work on, and
+            1b) There are non-constant conditions on one or more keys, and
+            1c) Some of the non-constant fields may have been read
+                already. This may be the case if this is not the first
+                table in the join OR this is a subselect with
+                non-constant conditions referring to an outer table
+                (dependent subquery)
+                or,
+            2a) There are conditions only relying on constants
+            2b) This is the first non-constant table
+            2c) There is a limit of rows to read that is lower than
+                the fanout for this table, predicate filters included
+                (i.e., the estimated number of rows that will be
+                produced for this table per row combination of
+                previous tables)
+            2d) The query is NOT run with FOUND_ROWS() (because in that
+                case we have to scan through all rows to count them anyway)
+          */
+          enum {
+            DONT_RECHECK,
+            NOT_FIRST_TABLE,
+            LOW_LIMIT
+          } recheck_reason = DONT_RECHECK;
+
+          assert(tab->const_keys.is_subset(tab->keys()));
+
+          const join_type orig_join_type = tab->type();
+          const QUICK_SELECT_I *const orig_quick = tab->quick();
+
+          if (cond &&                              // 1a
+              (tab->keys() != tab->const_keys) &&  // 1b
+              (i > 0 ||                            // 1c
+               (join->query_block->master_query_expression()->item &&
+                cond->is_outer_reference())))
+            recheck_reason = NOT_FIRST_TABLE;
+          else if (!tab->const_keys.is_clear_all() &&  // 2a
+                   i == join->const_tables &&          // 2b
+                   (join->query_expression()->select_limit_cnt <
+                    (tab->position()->rows_fetched *
+                     tab->position()->filter_effect)) &&  // 2c
+                   !join->calc_found_rows)                // 2d
+            recheck_reason = LOW_LIMIT;
+
+          // Don't recheck if the storage engine does not support index access.
+          if ((tab->table()->file->ha_table_flags() & HA_NO_INDEX_ACCESS) != 0)
+            recheck_reason = DONT_RECHECK;
+
+          if (tab->position()->sj_strategy == SJ_OPT_LOOSE_SCAN) {
+            /*
+              Semijoin loose scan has settled for a certain index-based access
+              method with suitable characteristics, don't substitute it.
+            */
+            recheck_reason = DONT_RECHECK;
+          }
+
+          if (recheck_reason != DONT_RECHECK) {
+            Opt_trace_object trace_one_table(trace);
+            trace_one_table.add_utf8_table(tab->table_ref);
+            Opt_trace_object trace_table(trace, "rechecking_index_usage");
+            if (recheck_reason == NOT_FIRST_TABLE)
+              trace_table.add_alnum("recheck_reason", "not_first_table");
+            else
+              trace_table.add_alnum("recheck_reason", "low_limit")
+                  .add("limit", join->query_expression()->select_limit_cnt)
+                  .add("row_estimate", tab->position()->rows_fetched *
+                                           tab->position()->filter_effect);
+
+            /* Join with outer join condition */
+            Item *orig_cond = tab->condition();
+            tab->and_with_condition(tab->join_cond());
+
+            /*
+              We can't call sel->cond->fix_fields,
+              as it will break tab->join_cond() if it's AND condition
+              (fix_fields currently removes extra AND/OR levels).
+              Yet attributes of the just built condition are not needed.
+              Thus we call sel->cond->quick_fix_field for safety.
+            */
+            if (tab->condition() && !tab->condition()->fixed)
+              tab->condition()->quick_fix_field();
+
+            Key_map usable_keys = tab->keys();
+            enum_order interesting_order = ORDER_NOT_RELEVANT;
+
+            if (recheck_reason == LOW_LIMIT) {
+              int read_direction = 0;
+
+              /*
+                If the current plan is to use range, then check if the
+                already selected index provides the order dictated by the
+                ORDER BY clause.
+              */
+              if (tab->quick() && tab->quick()->index != MAX_KEY) {
+                const uint ref_key = tab->quick()->index;
+                bool skip_quick;
+                read_direction = test_if_order_by_key(
+                    &join->order, tab->table(), ref_key, nullptr, &skip_quick);
+                if (skip_quick) read_direction = 0;
+                /*
+                  If the index provides order there is no need to recheck
+                  index usage; we already know from the former call to
+                  test_quick_select() that a range scan on the chosen
+                  index is cheapest. Note that previous calls to
+                  test_quick_select() did not take order direction
+                  (ASC/DESC) into account, so in case of DESC ordering
+                  we still need to recheck.
+                */
+                if ((read_direction == 1) ||
+                    (read_direction == -1 && tab->quick()->reverse_sorted())) {
+                  recheck_reason = DONT_RECHECK;
+                }
+              }
+              // We do a cost based search for an ordering index here. Do this
+              // only if prefer_ordering_index switch is on or an index is
+              // forced for order by
+              if (recheck_reason != DONT_RECHECK &&
+                  (tab->table()->force_index_order ||
+                   thd->optimizer_switch_flag(
+                       OPTIMIZER_SWITCH_PREFER_ORDERING_INDEX))) {
+                int best_key = -1;
+                ha_rows select_limit =
+                    join->query_expression()->select_limit_cnt;
+
+                /* Use index specified in FORCE INDEX FOR ORDER BY, if any. */
+                if (tab->table()->force_index_order)
+                  usable_keys.intersect(tab->table()->keys_in_use_for_order_by);
+
+                // Do a cost based search on the indexes that give sort order.
+                test_if_cheaper_ordering(
+                    tab, &join->order, tab->table(), usable_keys, -1,
+                    select_limit, &best_key, &read_direction, &select_limit);
+                if (best_key < 0)
+                  recheck_reason = DONT_RECHECK;  // No usable keys
+                else {
+                  // Only usable_key is the best_key chosen
+                  usable_keys.clear_all();
+                  usable_keys.set_bit(best_key);
+                  interesting_order =
+                      (read_direction == -1 ? ORDER_DESC : ORDER_ASC);
+                }
+              }
+            }
+
+            bool search_if_impossible = recheck_reason != DONT_RECHECK;
+            if (search_if_impossible) {
+              if (tab->quick()) {
+                delete tab->quick();
+                tab->set_type(JT_ALL);
+              }
+              QUICK_SELECT_I *qck;
+              search_if_impossible =
+                  test_quick_select(
+                      thd, usable_keys, used_tables & ~tab->table_ref->map(),
+                      join->calc_found_rows
+                          ? HA_POS_ERROR
+                          : join->query_expression()->select_limit_cnt,
+                      false,  // don't force quick range
+                      interesting_order, tab, tab->condition(),
+                      &tab->needed_reg, &qck, tab->table()->force_index,
+                      join->query_block) < 0;
+              tab->set_quick(qck);
+            }
+            tab->set_condition(orig_cond);
+            if (search_if_impossible) {
+              /*
+                Before reporting "Impossible WHERE" for the whole query
+                we have to check isn't it only "impossible ON" instead
+              */
+              if (!tab->join_cond())
+                return true;  // No ON, so it's really "impossible WHERE"
+              Opt_trace_object trace_without_on(trace, "without_ON_clause");
+              if (tab->quick()) {
+                delete tab->quick();
+                tab->set_type(JT_ALL);
+              }
+              QUICK_SELECT_I *qck;
+              const bool impossible_where =
+                  test_quick_select(
+                      thd, tab->keys(), used_tables & ~tab->table_ref->map(),
+                      join->calc_found_rows
+                          ? HA_POS_ERROR
+                          : join->query_expression()->select_limit_cnt,
+                      false,  // don't force quick range
+                      ORDER_NOT_RELEVANT, tab, tab->condition(),
+                      &tab->needed_reg, &qck, tab->table()->force_index,
+                      join->query_block) < 0;
+              tab->set_quick(qck);
+              if (impossible_where) return true;  // Impossible WHERE
+            }
+
+            /*
+              Access method changed. This is after deciding join order
+              and access method for all other tables so the info
+              updated below will not have any effect on the execution
+              plan.
+            */
+            if (tab->quick())
+              tab->set_type(calc_join_type(tab->quick()->get_type()));
+
+          }  // end of "if (recheck_reason != DONT_RECHECK)"
+
+          if (!tab->table()->quick_keys.is_subset(tab->checked_keys) ||
+              !tab->needed_reg.is_subset(tab->checked_keys)) {
+            tab->keys().merge(tab->table()->quick_keys);
+            tab->keys().merge(tab->needed_reg);
+
+            /*
+              The logic below for assigning tab->use_quick is strange.
+              It bases the decision of which access method to use
+              (dynamic range, range, scan) based on seemingly
+              unrelated information like the presense of another index
+              with too bad selectivity to be used.
+
+              Consider the following scenario:
+
+              The join optimizer has decided to use join order
+              (t1,t2), and 'tab' is currently t2. Further, assume that
+              there is a join condition between t1 and t2 using some
+              range operator (e.g. "t1.x < t2.y").
+
+              It has been decided that a table scan is best for t2.
+              make_join_query_block() then reran the range optimizer a few
+              lines up because there is an index 't2.good_idx'
+              covering the t2.y column. If 'good_idx' is the only
+              index in t2, the decision below will be to use dynamic
+              range. However, if t2 also has another index 't2.other'
+              which the range access method can be used on but
+              selectivity is bad (#rows estimate is high), then table
+              scan is chosen instead.
+
+              Thus, the choice of DYNAMIC RANGE vs SCAN depends on the
+              presense of an index that has so bad selectivity that it
+              will not be used anyway.
+            */
+            if (!tab->needed_reg.is_clear_all() &&
+                (tab->table()->quick_keys.is_clear_all() ||
+                 (tab->quick() && (tab->quick()->records >= 100L)))) {
+              tab->use_quick = QS_DYNAMIC_RANGE;
+              tab->set_type(JT_ALL);
+            } else
+              tab->use_quick = QS_RANGE;
+          }
+
+          if (tab->type() != orig_join_type ||
+              tab->quick() != orig_quick)  // Access method changed
+            tab->position()->filter_effect = COND_FILTER_STALE;
+        }
+      }
+
+      if (join->attach_join_conditions(i)) return true;
+    }
+
+
+// Source: sql_optimizer.cc
+// Lines 9138-9545

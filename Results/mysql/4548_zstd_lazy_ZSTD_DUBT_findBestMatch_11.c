@@ -1,0 +1,130 @@
+ZSTD_DUBT_findBestMatch(ZSTD_matchState_t* ms,
+                        const BYTE* const ip, const BYTE* const iend,
+                        size_t* offsetPtr,
+                        U32 const mls,
+                        const ZSTD_dictMode_e dictMode)
+SUPPRESS_UBSAN_CLANG10
+{
+    const ZSTD_compressionParameters* const cParams = &ms->cParams;
+    U32*   const hashTable = ms->hashTable;
+    U32    const hashLog = cParams->hashLog;
+    size_t const h  = ZSTD_hashPtr(ip, hashLog, mls);
+    U32          matchIndex  = hashTable[h];
+
+    const BYTE* const base = ms->window.base;
+    U32    const current = (U32)(ip-base);
+    U32    const windowLow = ZSTD_getLowestMatchIndex(ms, current, cParams->windowLog);
+
+    U32*   const bt = ms->chainTable;
+    U32    const btLog  = cParams->chainLog - 1;
+    U32    const btMask = (1 << btLog) - 1;
+    U32    const btLow = (btMask >= current) ? 0 : current - btMask;
+    U32    const unsortLimit = MAX(btLow, windowLow);
+
+    U32*         nextCandidate = bt + 2*(matchIndex&btMask);
+    U32*         unsortedMark = bt + 2*(matchIndex&btMask) + 1;
+    U32          nbCompares = 1U << cParams->searchLog;
+    U32          nbCandidates = nbCompares;
+    U32          previousCandidate = 0;
+
+    DEBUGLOG(7, "ZSTD_DUBT_findBestMatch (%u) ", current);
+    assert(ip <= iend-8);   /* required for h calculation */
+
+    /* reach end of unsorted candidates list */
+    while ( (matchIndex > unsortLimit)
+         && (*unsortedMark == ZSTD_DUBT_UNSORTED_MARK)
+         && (nbCandidates > 1) ) {
+        DEBUGLOG(8, "ZSTD_DUBT_findBestMatch: candidate %u is unsorted",
+                    matchIndex);
+        *unsortedMark = previousCandidate;  /* the unsortedMark becomes a reversed chain, to move up back to original position */
+        previousCandidate = matchIndex;
+        matchIndex = *nextCandidate;
+        nextCandidate = bt + 2*(matchIndex&btMask);
+        unsortedMark = bt + 2*(matchIndex&btMask) + 1;
+        nbCandidates --;
+    }
+
+    /* nullify last candidate if it's still unsorted
+     * simplification, detrimental to compression ratio, beneficial for speed */
+    if ( (matchIndex > unsortLimit)
+      && (*unsortedMark==ZSTD_DUBT_UNSORTED_MARK) ) {
+        DEBUGLOG(7, "ZSTD_DUBT_findBestMatch: nullify last unsorted candidate %u",
+                    matchIndex);
+        *nextCandidate = *unsortedMark = 0;
+    }
+
+    /* batch sort stacked candidates */
+    matchIndex = previousCandidate;
+    while (matchIndex) {  /* will end on matchIndex == 0 */
+        U32* const nextCandidateIdxPtr = bt + 2*(matchIndex&btMask) + 1;
+        U32 const nextCandidateIdx = *nextCandidateIdxPtr;
+        ZSTD_insertDUBT1(ms, matchIndex, iend,
+                         nbCandidates, unsortLimit, dictMode);
+        matchIndex = nextCandidateIdx;
+        nbCandidates++;
+    }
+
+    /* find longest match */
+    {   size_t commonLengthSmaller = 0, commonLengthLarger = 0;
+        const BYTE* const dictBase = ms->window.dictBase;
+        const U32 dictLimit = ms->window.dictLimit;
+        const BYTE* const dictEnd = dictBase + dictLimit;
+        const BYTE* const prefixStart = base + dictLimit;
+        U32* smallerPtr = bt + 2*(current&btMask);
+        U32* largerPtr  = bt + 2*(current&btMask) + 1;
+        U32 matchEndIdx = current + 8 + 1;
+        U32 dummy32;   /* to be nullified at the end */
+        size_t bestLength = 0;
+
+        matchIndex  = hashTable[h];
+        hashTable[h] = current;   /* Update Hash Table */
+
+        while (nbCompares-- && (matchIndex > windowLow)) {
+            U32* const nextPtr = bt + 2*(matchIndex & btMask);
+            size_t matchLength = MIN(commonLengthSmaller, commonLengthLarger);   /* guaranteed minimum nb of common bytes */
+            const BYTE* match;
+
+            if ((dictMode != ZSTD_extDict) || (matchIndex+matchLength >= dictLimit)) {
+                match = base + matchIndex;
+                matchLength += ZSTD_count(ip+matchLength, match+matchLength, iend);
+            } else {
+                match = dictBase + matchIndex;
+                matchLength += ZSTD_count_2segments(ip+matchLength, match+matchLength, iend, dictEnd, prefixStart);
+                if (matchIndex+matchLength >= dictLimit)
+                    match = base + matchIndex;   /* to prepare for next usage of match[matchLength] */
+            }
+
+            if (matchLength > bestLength) {
+                if (matchLength > matchEndIdx - matchIndex)
+                    matchEndIdx = matchIndex + (U32)matchLength;
+                if ( (4*(int)(matchLength-bestLength)) > (int)(ZSTD_highbit32(current-matchIndex+1) - ZSTD_highbit32((U32)offsetPtr[0]+1)) )
+                    bestLength = matchLength, *offsetPtr = ZSTD_REP_MOVE + current - matchIndex;
+                if (ip+matchLength == iend) {   /* equal : no way to know if inf or sup */
+                    if (dictMode == ZSTD_dictMatchState) {
+                        nbCompares = 0; /* in addition to avoiding checking any
+                                         * further in this loop, make sure we
+                                         * skip checking in the dictionary. */
+                    }
+                    break;   /* drop, to guarantee consistency (miss a little bit of compression) */
+                }
+            }
+
+            if (match[matchLength] < ip[matchLength]) {
+                /* match is smaller than current */
+                *smallerPtr = matchIndex;             /* update smaller idx */
+                commonLengthSmaller = matchLength;    /* all smaller will now have at least this guaranteed common length */
+                if (matchIndex <= btLow) { smallerPtr=&dummy32; break; }   /* beyond tree size, stop the search */
+                smallerPtr = nextPtr+1;               /* new "smaller" => larger of match */
+                matchIndex = nextPtr[1];              /* new matchIndex larger than previous (closer to current) */
+            } else {
+                /* match is larger than current */
+                *largerPtr = matchIndex;
+                commonLengthLarger = matchLength;
+                if (matchIndex <= btLow) { largerPtr=&dummy32; break; }   /* beyond tree size, stop the search */
+                largerPtr = nextPtr;
+                matchIndex = nextPtr[0];
+        }   }
+
+
+// Source: zstd_lazy.c
+// Lines 233-358

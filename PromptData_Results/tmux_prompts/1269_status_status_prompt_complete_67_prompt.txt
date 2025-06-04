@@ -1,0 +1,107 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'session' at line 3
+2. Pointer 'c' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+status_prompt_complete(struct client *c, const char *word, u_int offset)
+{
+	struct session	 *session;
+	const char	 *s, *colon;
+	char		**list = NULL, *copy = NULL, *out = NULL;
+	char		  flag = '\0';
+	u_int		  size = 0, i;
+
+	if (*word == '\0' &&
+	    c->prompt_type != PROMPT_TYPE_TARGET &&
+	    c->prompt_type != PROMPT_TYPE_WINDOW_TARGET)
+		return (NULL);
+
+	if (c->prompt_type != PROMPT_TYPE_TARGET &&
+	    c->prompt_type != PROMPT_TYPE_WINDOW_TARGET &&
+	    strncmp(word, "-t", 2) != 0 &&
+	    strncmp(word, "-s", 2) != 0) {
+		list = status_prompt_complete_list(&size, word, offset == 0);
+		if (size == 0)
+			out = NULL;
+		else if (size == 1)
+			xasprintf(&out, "%s ", list[0]);
+		else
+			out = status_prompt_complete_prefix(list, size);
+		goto found;
+	}
+
+	if (c->prompt_type == PROMPT_TYPE_TARGET ||
+	    c->prompt_type == PROMPT_TYPE_WINDOW_TARGET) {
+		s = word;
+		flag = '\0';
+	} else {
+		s = word + 2;
+		flag = word[1];
+		offset += 2;
+	}
+
+	/* If this is a window completion, open the window menu. */
+	if (c->prompt_type == PROMPT_TYPE_WINDOW_TARGET) {
+		out = status_prompt_complete_window_menu(c, c->session, s,
+		    offset, '\0');
+		goto found;
+	}
+	colon = strchr(s, ':');
+
+	/* If there is no colon, complete as a session. */
+	if (colon == NULL) {
+		out = status_prompt_complete_session(&list, &size, s, flag);
+		goto found;
+	}
+
+	/* If there is a colon but no period, find session and show a menu. */
+	if (strchr(colon + 1, '.') == NULL) {
+		if (*s == ':')
+			session = c->session;
+		else {
+			copy = xstrdup(s);
+			*strchr(copy, ':') = '\0';
+			session = session_find(copy);
+			free(copy);
+			if (session == NULL)
+				goto found;
+		}
+		out = status_prompt_complete_window_menu(c, session, colon + 1,
+		    offset, flag);
+		if (out == NULL)
+			return (NULL);
+	}
+
+found:
+	if (size != 0) {
+		qsort(list, size, sizeof *list, status_prompt_complete_sort);
+		for (i = 0; i < size; i++)
+			log_debug("complete %u: %s", i, list[i]);
+	}
+
+	if (out != NULL && strcmp(word, out) == 0) {
+		free(out);
+		out = NULL;
+	}
+	if (out != NULL ||
+	    !status_prompt_complete_list_menu(c, list, size, offset, flag)) {
+		for (i = 0; i < size; i++)
+			free(list[i]);
+		free(list);
+	}
+	return (out);
+}
+
+
+// Source: status.c
+// Lines 1875-1962
+
+
+[ANSWER]
+MUST

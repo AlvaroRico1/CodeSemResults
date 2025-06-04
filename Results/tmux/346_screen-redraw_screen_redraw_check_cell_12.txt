@@ -1,0 +1,1 @@
+active,tmux/screen-redraw.c,5,wp,tmux/screen-redraw.c,5,1

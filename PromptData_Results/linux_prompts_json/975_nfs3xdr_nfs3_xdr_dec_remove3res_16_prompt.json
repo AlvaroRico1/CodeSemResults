@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'result' at line 5\n2. Pointer 'data' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int nfs3_xdr_dec_remove3res(struct rpc_rqst *req,\n\t\t\t\t   struct xdr_stream *xdr,\n\t\t\t\t   void *data)\n{\n\tstruct nfs_removeres *result = data;\n\tenum nfs_stat status;\n\tint error;\n\n\terror = decode_nfsstat3(xdr, &status);\n\tif (unlikely(error))\n\t\tgoto out;\n\terror = decode_wcc_data(xdr, result->dir_attr, rpc_rqst_userns(req));\n\tif (unlikely(error))\n\t\tgoto out;\n\tif (status != NFS3_OK)\n\t\tgoto out_status;\nout:\n\treturn error;\nout_status:\n\treturn nfs3_stat_to_errno(status);\n}\n\n\n// Source: nfs3xdr.c\n// Lines 1818-1838\n",
+  "ANSWER": "MUST"
+}

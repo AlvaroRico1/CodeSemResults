@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'envconf' at line 3
+2. Pointer '_envconf' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void on_dispose_envconf(void *_envconf)
+{
+    h2o_envconf_t *envconf = _envconf;
+    size_t i;
+
+    if (envconf->parent != NULL)
+        h2o_mem_release_shared(envconf->parent);
+
+    for (i = 0; i != envconf->unsets.size; ++i)
+        h2o_mem_release_shared(envconf->unsets.entries[i].base);
+    free(envconf->unsets.entries);
+    for (i = 0; i != envconf->sets.size; ++i)
+        h2o_mem_release_shared(envconf->sets.entries[i].base);
+    free(envconf->sets.entries);
+}
+
+
+// Source: config.c
+// Lines 66-80
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,29 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ext' at line 6
+2. Pointer 'properties' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int push_additional_extensions(ptls_handshake_properties_t *properties, ptls_buffer_t *sendbuf)
+{
+    int ret;
+
+    if (properties != NULL && properties->additional_extensions != NULL) {
+        ptls_raw_extension_t *ext;
+        for (ext = properties->additional_extensions; ext->type != UINT16_MAX; ++ext) {
+            buffer_push_extension(sendbuf, ext->type, { ptls_buffer_pushv(sendbuf, ext->data.base, ext->data.len); });
+        }
+    }
+
+
+// Source: picotls.c
+// Lines 1507-1516
+
+
+[ANSWER]
+MUST

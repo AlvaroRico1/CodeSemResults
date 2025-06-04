@@ -1,0 +1,36 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'buf' at line 3
+2. Pointer 's' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+char *strbuf_free_to_string(strbuf_t *s, int *len)
+{
+    char *buf;
+
+    debug_stats(s);
+
+    strbuf_ensure_null(s);
+
+    buf = s->buf;
+    if (len)
+        *len = s->length;
+
+    if (s->dynamic)
+        free(s);
+
+    return buf;
+}
+
+
+// Source: strbuf.c
+// Lines 116-132
+
+
+[ANSWER]
+MUST

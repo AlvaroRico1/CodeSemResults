@@ -1,0 +1,1 @@
+entry,libgit2/src/libgit2/pathspec.c,9,index,libgit2/src/libgit2/pathspec.c,15,2

@@ -1,0 +1,1 @@
+s,tmux/status.c,1,allocated,tmux/status.c,3,1

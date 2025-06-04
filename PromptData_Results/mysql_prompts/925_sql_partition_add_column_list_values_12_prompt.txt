@@ -1,0 +1,55 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'item_expr' at line 19
+2. Pointer 'col_val' at line 11
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int add_column_list_values(File fptr, partition_info *part_info,
+                                  part_elem_value *list_value) {
+  int err = 0;
+  uint i;
+  uint num_elements = part_info->part_field_list.elements;
+  bool use_parenthesis = (part_info->part_type == partition_type::LIST &&
+                          part_info->num_columns > 1U);
+
+  if (use_parenthesis) err += add_begin_parenthesis(fptr);
+  for (i = 0; i < num_elements; i++) {
+    part_column_list_val *col_val = &list_value->col_val_array[i];
+    if (col_val->max_value)
+      err += add_string(fptr, partition_keywords[PKW_MAXVALUE].str);
+    else if (col_val->null_value)
+      err += add_string(fptr, "NULL");
+    else {
+      char buffer[MAX_KEY_LENGTH];
+      String str(buffer, sizeof(buffer), &my_charset_bin);
+      Item *item_expr = col_val->item_expression;
+      if (!item_expr) {
+        /*
+          The values are not from the parser, but from the
+          dd::Partition_values table. See fill_partitioning_from_dd().
+        */
+        assert(col_val->column_value.value_str);
+        err += add_string(fptr, col_val->column_value.value_str);
+      } else if (item_expr->null_value) {
+        err += add_string(fptr, "NULL");
+      } else {
+        String val_conv;
+        err +=
+            expr_to_string(&val_conv, item_expr, part_info->part_field_array[i],
+                           nullptr, nullptr, nullptr);
+        err += add_string_object(fptr, &val_conv);
+      }
+    }
+
+
+// Source: sql_partition.cc
+// Lines 2082-2117
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,57 @@
+static int index_entry_init(
+	git_index_entry **entry_out,
+	git_index *index,
+	const char *rel_path)
+{
+	int error = 0;
+	git_index_entry *entry = NULL;
+	git_str path = GIT_STR_INIT;
+	struct stat st;
+	git_oid oid;
+	git_repository *repo;
+
+	if (INDEX_OWNER(index) == NULL)
+		return create_index_error(-1,
+			"could not initialize index entry. "
+			"Index is not backed up by an existing repository.");
+
+	/*
+	 * FIXME: this is duplicated with the work in
+	 * git_blob__create_from_paths. It should accept an optional stat
+	 * structure so we can pass in the one we have to do here.
+	 */
+	repo = INDEX_OWNER(index);
+	if (git_repository__ensure_not_bare(repo, "create blob from file") < 0)
+		return GIT_EBAREREPO;
+
+	if (git_repository_workdir_path(&path, repo, rel_path) < 0)
+		return -1;
+
+	error = git_fs_path_lstat(path.ptr, &st);
+	git_str_dispose(&path);
+
+	if (error < 0)
+		return error;
+
+	if (index_entry_create(&entry, INDEX_OWNER(index), rel_path, &st, true) < 0)
+		return -1;
+
+	/* write the blob to disk and get the oid and stat info */
+	error = git_blob__create_from_paths(
+		&oid, &st, INDEX_OWNER(index), NULL, rel_path, 0, true);
+
+	if (error < 0) {
+		index_entry_free(entry);
+		return error;
+	}
+
+	entry->id = oid;
+	git_index_entry__init_from_stat(entry, &st, !index->distrust_filemode);
+
+	*entry_out = (git_index_entry *)entry;
+	return 0;
+}
+
+
+// Source: index.c
+// Lines 958-1010

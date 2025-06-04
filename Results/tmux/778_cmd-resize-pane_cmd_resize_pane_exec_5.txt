@@ -1,0 +1,1 @@
+wp,tmux/cmd-resize-pane.c,6,target,tmux/cmd-resize-pane.c,4,1

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'conn' at line 3\n2. Pointer '_conn' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic socklen_t get_sockname(h2o_conn_t *_conn, struct sockaddr *sa)\n{\n    h2o_http2_conn_t *conn = (void *)_conn;\n    return h2o_socket_getsockname(conn->sock, sa);\n}\n\n\n// Source: connection.c\n// Lines 1548-1552\n",
+  "ANSWER": "MUST"
+}

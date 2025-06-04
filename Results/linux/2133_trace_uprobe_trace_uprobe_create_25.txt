@@ -1,0 +1,1 @@
+offset,linux/kernel/trace/trace_uprobe.c,8,event,linux/kernel/trace/trace_uprobe.c,4,2

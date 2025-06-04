@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'sb' at line 4\n2. Pointer 'ctx' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void __put_nfs_open_context(struct nfs_open_context *ctx, int is_sync)\n{\n\tstruct inode *inode = d_inode(ctx->dentry);\n\tstruct super_block *sb = ctx->dentry->d_sb;\n\n\tif (!refcount_dec_and_test(&ctx->lock_context.count))\n\t\treturn;\n\tif (!list_empty(&ctx->list)) {\n\t\tspin_lock(&inode->i_lock);\n\t\tlist_del_rcu(&ctx->list);\n\t\tspin_unlock(&inode->i_lock);\n\t}\n\tif (inode != NULL)\n\t\tNFS_PROTO(inode)->close_context(ctx, is_sync);\n\tput_cred(ctx->cred);\n\tdput(ctx->dentry);\n\tnfs_sb_deactive(sb);\n\tput_rpccred(ctx->ll_cred);\n\tkfree(ctx->mdsthreshold);\n\tkfree_rcu(ctx, rcu_head);\n}\n\n\n// Source: inode.c\n// Lines 994-1014\n",
+  "ANSWER": "MUST"
+}

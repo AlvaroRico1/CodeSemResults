@@ -1,0 +1,1 @@
+encoded_size,h2o/deps/brotli/c/enc/encode.c,3,next_in,h2o/deps/brotli/c/enc/encode.c,37,2

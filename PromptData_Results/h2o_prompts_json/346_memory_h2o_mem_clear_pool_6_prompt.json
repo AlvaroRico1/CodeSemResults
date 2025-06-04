@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ref' at line 5\n2. Pointer 'pool' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid h2o_mem_clear_pool(h2o_mem_pool_t *pool)\n{\n    /* release the refcounted chunks */\n    if (pool->shared_refs != NULL) {\n        struct st_h2o_mem_pool_shared_ref_t *ref = pool->shared_refs;\n        do {\n            h2o_mem_release_shared(ref->entry->bytes);\n        } while ((ref = ref->next) != NULL);\n        pool->shared_refs = NULL;\n    }\n\n\n// Source: memory.c\n// Lines 151-160\n",
+  "ANSWER": "MUST"
+}

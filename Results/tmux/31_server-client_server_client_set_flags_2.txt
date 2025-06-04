@@ -1,0 +1,1 @@
+s,tmux/server-client.c,3,copy,tmux/server-client.c,3,1

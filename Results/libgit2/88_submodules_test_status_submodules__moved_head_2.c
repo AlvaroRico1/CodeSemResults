@@ -1,0 +1,62 @@
+void test_status_submodules__moved_head(void)
+{
+	git_submodule *sm;
+	git_repository *smrepo;
+	git_oid oid;
+	git_status_options opts = GIT_STATUS_OPTIONS_INIT;
+	status_entry_counts counts;
+	static const char *expected_files_with_sub[] = {
+		".gitmodules",
+		"added",
+		"deleted",
+		"ignored",
+		"modified",
+		"testrepo",
+		"untracked"
+	};
+	static unsigned int expected_status_with_sub[] = {
+		GIT_STATUS_WT_MODIFIED,
+		GIT_STATUS_INDEX_NEW,
+		GIT_STATUS_INDEX_DELETED,
+		GIT_STATUS_IGNORED,
+		GIT_STATUS_WT_MODIFIED,
+		GIT_STATUS_WT_MODIFIED,
+		GIT_STATUS_WT_NEW
+	};
+
+	g_repo = setup_fixture_submodules();
+
+	cl_git_pass(git_submodule_lookup(&sm, g_repo, "testrepo"));
+	cl_git_pass(git_submodule_open(&smrepo, sm));
+	git_submodule_free(sm);
+
+	/* move submodule HEAD to c47800c7266a2be04c571c04d5a6614691ea99bd */
+	cl_git_pass(
+		git_oid_fromstr(&oid, "c47800c7266a2be04c571c04d5a6614691ea99bd"));
+	cl_git_pass(git_repository_set_head_detached(smrepo, &oid));
+
+	/* first do a normal status, which should now include the submodule */
+
+	opts.flags = GIT_STATUS_OPT_DEFAULTS;
+
+	status_counts_init(
+		counts, expected_files_with_sub, expected_status_with_sub);
+	cl_git_pass(
+		git_status_foreach_ext(g_repo, &opts, cb_status__match, &counts));
+	cl_assert_equal_i(7, counts.entry_count);
+
+	/* try again with EXCLUDE_SUBMODULES which should skip it */
+
+	opts.flags = GIT_STATUS_OPT_DEFAULTS | GIT_STATUS_OPT_EXCLUDE_SUBMODULES;
+
+	status_counts_init(counts, expected_files, expected_status);
+	cl_git_pass(
+		git_status_foreach_ext(g_repo, &opts, cb_status__match, &counts));
+	cl_assert_equal_i(6, counts.entry_count);
+
+	git_repository_free(smrepo);
+}
+
+
+// Source: submodules.c
+// Lines 111-168

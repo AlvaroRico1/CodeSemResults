@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'dst' at line 2\n2. Pointer 'tmp' at line 11\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic ssize_t count_run(\n\tvoid **dst, ssize_t start, ssize_t size, struct tsort_store *store)\n{\n\tssize_t curr = start + 2;\n\n\tif (size - start == 1)\n\t\treturn 1;\n\n\tif (start >= size - 2) {\n\t\tif (store->cmp(dst[size - 2], dst[size - 1], store->payload) > 0) {\n\t\t\tvoid *tmp = dst[size - 1];\n\t\t\tdst[size - 1] = dst[size - 2];\n\t\t\tdst[size - 2] = tmp;\n\t\t}\n\n\n// Source: tsort.c\n// Lines 120-133\n",
+  "ANSWER": "MUST"
+}

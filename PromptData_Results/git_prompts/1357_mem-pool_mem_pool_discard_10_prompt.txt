@@ -1,0 +1,38 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'block_to_free' at line 3
+2. Pointer 'block' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void mem_pool_discard(struct mem_pool *pool, int invalidate_memory)
+{
+	struct mp_block *block, *block_to_free;
+
+	block = pool->mp_block;
+	while (block)
+	{
+		block_to_free = block;
+		block = block->next_block;
+
+		if (invalidate_memory)
+			memset(block_to_free->space, 0xDD, ((char *)block_to_free->end) - ((char *)block_to_free->space));
+
+		free(block_to_free);
+	}
+
+	pool->mp_block = NULL;
+	pool->pool_alloc = 0;
+}
+
+
+// Source: mem-pool.c
+// Lines 47-65
+
+
+[ANSWER]
+MUST

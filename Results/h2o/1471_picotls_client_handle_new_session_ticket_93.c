@@ -1,0 +1,45 @@
+static int client_handle_new_session_ticket(ptls_t *tls, ptls_iovec_t message)
+{
+    const uint8_t *src = message.base + PTLS_HANDSHAKE_HEADER_SIZE, *const end = message.base + message.len;
+    ptls_iovec_t ticket_nonce;
+    int ret;
+
+    { /* verify the format */
+        uint32_t ticket_lifetime, ticket_age_add, max_early_data_size;
+        ptls_iovec_t ticket;
+        if ((ret = decode_new_session_ticket(tls, &ticket_lifetime, &ticket_age_add, &ticket_nonce, &ticket, &max_early_data_size,
+                                             src, end)) != 0)
+            return ret;
+    }
+
+    /* do nothing if use of session ticket is disabled */
+    if (tls->ctx->save_ticket == NULL)
+        return 0;
+
+    /* save the extension, along with the key of myself */
+    ptls_buffer_t ticket_buf;
+    ptls_buffer_init(&ticket_buf, "", 0);
+    ptls_buffer_push64(&ticket_buf, tls->ctx->get_time->cb(tls->ctx->get_time));
+    ptls_buffer_push16(&ticket_buf, tls->key_share->id);
+    ptls_buffer_push16(&ticket_buf, tls->cipher_suite->id);
+    ptls_buffer_push_block(&ticket_buf, 3, { ptls_buffer_pushv(&ticket_buf, src, end - src); });
+    ptls_buffer_push_block(&ticket_buf, 2, {
+        if ((ret = ptls_buffer_reserve(&ticket_buf, tls->key_schedule->hashes[0].algo->digest_size)) != 0)
+            goto Exit;
+        if ((ret = derive_resumption_secret(tls->key_schedule, ticket_buf.base + ticket_buf.off, ticket_nonce)) != 0)
+            goto Exit;
+        ticket_buf.off += tls->key_schedule->hashes[0].algo->digest_size;
+    });
+
+    if ((ret = tls->ctx->save_ticket->cb(tls->ctx->save_ticket, tls, ptls_iovec_init(ticket_buf.base, ticket_buf.off))) != 0)
+        goto Exit;
+
+    ret = 0;
+Exit:
+    ptls_buffer_dispose(&ticket_buf);
+    return ret;
+}
+
+
+// Source: picotls.c
+// Lines 2987-3027

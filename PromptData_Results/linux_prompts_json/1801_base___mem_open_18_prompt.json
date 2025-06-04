@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'file' at line 1\n2. Pointer 'mm' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int __mem_open(struct inode *inode, struct file *file, unsigned int mode)\n{\n\tstruct mm_struct *mm = proc_mem_open(inode, mode);\n\n\tif (IS_ERR(mm))\n\t\treturn PTR_ERR(mm);\n\n\tfile->private_data = mm;\n\treturn 0;\n}\n\n\n// Source: base.c\n// Lines 795-804\n",
+  "ANSWER": "MUST"
+}

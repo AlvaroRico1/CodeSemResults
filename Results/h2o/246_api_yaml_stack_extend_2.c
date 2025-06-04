@@ -1,0 +1,21 @@
+yaml_stack_extend(void **start, void **top, void **end)
+{
+    void *new_start;
+
+    if ((char *)*end - (char *)*start >= INT_MAX / 2)
+	return 0;
+
+    new_start = yaml_realloc(*start, ((char *)*end - (char *)*start)*2);
+
+    if (!new_start) return 0;
+
+    *top = (char *)new_start + ((char *)*top - (char *)*start);
+    *end = (char *)new_start + ((char *)*end - (char *)*start)*2;
+    *start = new_start;
+
+    return 1;
+}
+
+
+// Source: api.c
+// Lines 119-135

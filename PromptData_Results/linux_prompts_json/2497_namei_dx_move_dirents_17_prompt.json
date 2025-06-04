@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'de' at line 7\n2. Pointer 'to' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ndx_move_dirents(char *from, char *to, struct dx_map_entry *map, int count,\n\t\tunsigned blocksize)\n{\n\tunsigned rec_len = 0;\n\n\twhile (count--) {\n\t\tstruct ext4_dir_entry_2 *de = (struct ext4_dir_entry_2 *)\n\t\t\t\t\t\t(from + (map->offs<<2));\n\t\trec_len = EXT4_DIR_REC_LEN(de->name_len);\n\t\tmemcpy (to, de, rec_len);\n\t\t((struct ext4_dir_entry_2 *) to)->rec_len =\n\t\t\t\text4_rec_len_to_disk(rec_len, blocksize);\n\t\tde->inode = 0;\n\t\tmap++;\n\t\tto += rec_len;\n\t}\n\n\n// Source: namei.c\n// Lines 1761-1776\n",
+  "ANSWER": "MAY"
+}

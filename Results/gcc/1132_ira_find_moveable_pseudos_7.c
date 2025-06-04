@@ -1,0 +1,167 @@
+find_moveable_pseudos (void)
+{
+  unsigned i;
+  int max_regs = max_reg_num ();
+  int max_uid = get_max_uid ();
+  basic_block bb;
+  int *uid_luid = XNEWVEC (int, max_uid);
+  rtx_insn **closest_uses = XNEWVEC (rtx_insn *, max_regs);
+  /* A set of registers which are live but not modified throughout a block.  */
+  bitmap_head *bb_transp_live = XNEWVEC (bitmap_head,
+					 last_basic_block_for_fn (cfun));
+  /* A set of registers which only exist in a given basic block.  */
+  bitmap_head *bb_local = XNEWVEC (bitmap_head,
+				   last_basic_block_for_fn (cfun));
+  /* A set of registers which are set once, in an instruction that can be
+     moved freely downwards, but are otherwise transparent to a block.  */
+  bitmap_head *bb_moveable_reg_sets = XNEWVEC (bitmap_head,
+					       last_basic_block_for_fn (cfun));
+  auto_bitmap live, used, set, interesting, unusable_as_input;
+  bitmap_iterator bi;
+
+  first_moveable_pseudo = max_regs;
+  pseudo_replaced_reg.release ();
+  pseudo_replaced_reg.safe_grow_cleared (max_regs);
+
+  df_analyze ();
+  calculate_dominance_info (CDI_DOMINATORS);
+
+  i = 0;
+  FOR_EACH_BB_FN (bb, cfun)
+    {
+      rtx_insn *insn;
+      bitmap transp = bb_transp_live + bb->index;
+      bitmap moveable = bb_moveable_reg_sets + bb->index;
+      bitmap local = bb_local + bb->index;
+
+      bitmap_initialize (local, 0);
+      bitmap_initialize (transp, 0);
+      bitmap_initialize (moveable, 0);
+      bitmap_copy (live, df_get_live_out (bb));
+      bitmap_and_into (live, df_get_live_in (bb));
+      bitmap_copy (transp, live);
+      bitmap_clear (moveable);
+      bitmap_clear (live);
+      bitmap_clear (used);
+      bitmap_clear (set);
+      FOR_BB_INSNS (bb, insn)
+	if (NONDEBUG_INSN_P (insn))
+	  {
+	    df_insn_info *insn_info = DF_INSN_INFO_GET (insn);
+	    df_ref def, use;
+
+	    uid_luid[INSN_UID (insn)] = i++;
+	    
+	    def = df_single_def (insn_info);
+	    use = df_single_use (insn_info);
+	    if (use
+		&& def
+		&& DF_REF_REGNO (use) == DF_REF_REGNO (def)
+		&& !bitmap_bit_p (set, DF_REF_REGNO (use))
+		&& rtx_moveable_p (&PATTERN (insn), OP_IN))
+	      {
+		unsigned regno = DF_REF_REGNO (use);
+		bitmap_set_bit (moveable, regno);
+		bitmap_set_bit (set, regno);
+		bitmap_set_bit (used, regno);
+		bitmap_clear_bit (transp, regno);
+		continue;
+	      }
+	    FOR_EACH_INSN_INFO_USE (use, insn_info)
+	      {
+		unsigned regno = DF_REF_REGNO (use);
+		bitmap_set_bit (used, regno);
+		if (bitmap_clear_bit (moveable, regno))
+		  bitmap_clear_bit (transp, regno);
+	      }
+
+	    FOR_EACH_INSN_INFO_DEF (def, insn_info)
+	      {
+		unsigned regno = DF_REF_REGNO (def);
+		bitmap_set_bit (set, regno);
+		bitmap_clear_bit (transp, regno);
+		bitmap_clear_bit (moveable, regno);
+	      }
+	  }
+    }
+
+  FOR_EACH_BB_FN (bb, cfun)
+    {
+      bitmap local = bb_local + bb->index;
+      rtx_insn *insn;
+
+      FOR_BB_INSNS (bb, insn)
+	if (NONDEBUG_INSN_P (insn))
+	  {
+	    df_insn_info *insn_info = DF_INSN_INFO_GET (insn);
+	    rtx_insn *def_insn;
+	    rtx closest_use, note;
+	    df_ref def, use;
+	    unsigned regno;
+	    bool all_dominated, all_local;
+	    machine_mode mode;
+
+	    def = df_single_def (insn_info);
+	    /* There must be exactly one def in this insn.  */
+	    if (!def || !single_set (insn))
+	      continue;
+	    /* This must be the only definition of the reg.  We also limit
+	       which modes we deal with so that we can assume we can generate
+	       move instructions.  */
+	    regno = DF_REF_REGNO (def);
+	    mode = GET_MODE (DF_REF_REG (def));
+	    if (DF_REG_DEF_COUNT (regno) != 1
+		|| !DF_REF_INSN_INFO (def)
+		|| HARD_REGISTER_NUM_P (regno)
+		|| DF_REG_EQ_USE_COUNT (regno) > 0
+		|| (!INTEGRAL_MODE_P (mode) && !FLOAT_MODE_P (mode)))
+	      continue;
+	    def_insn = DF_REF_INSN (def);
+
+	    for (note = REG_NOTES (def_insn); note; note = XEXP (note, 1))
+	      if (REG_NOTE_KIND (note) == REG_EQUIV && MEM_P (XEXP (note, 0)))
+		break;
+		
+	    if (note)
+	      {
+		if (dump_file)
+		  fprintf (dump_file, "Ignoring reg %d, has equiv memory\n",
+			   regno);
+		bitmap_set_bit (unusable_as_input, regno);
+		continue;
+	      }
+
+	    use = DF_REG_USE_CHAIN (regno);
+	    all_dominated = true;
+	    all_local = true;
+	    closest_use = NULL_RTX;
+	    for (; use; use = DF_REF_NEXT_REG (use))
+	      {
+		rtx_insn *insn;
+		if (!DF_REF_INSN_INFO (use))
+		  {
+		    all_dominated = false;
+		    all_local = false;
+		    break;
+		  }
+		insn = DF_REF_INSN (use);
+		if (DEBUG_INSN_P (insn))
+		  continue;
+		if (BLOCK_FOR_INSN (insn) != BLOCK_FOR_INSN (def_insn))
+		  all_local = false;
+		if (!insn_dominated_by_p (insn, def_insn, uid_luid))
+		  all_dominated = false;
+		if (closest_use != insn && closest_use != const0_rtx)
+		  {
+		    if (closest_use == NULL_RTX)
+		      closest_use = insn;
+		    else if (insn_dominated_by_p (closest_use, insn, uid_luid))
+		      closest_use = insn;
+		    else if (!insn_dominated_by_p (insn, closest_use, uid_luid))
+		      closest_use = const0_rtx;
+		  }
+	      }
+
+
+// Source: ira.c
+// Lines 4548-4710

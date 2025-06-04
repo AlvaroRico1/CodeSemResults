@@ -1,0 +1,27 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'mid' at line 2
+2. Pointer 'x' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+  constexpr int operator()(T x) const {
+    constexpr int mid = (MinDigits + MaxDigits) / 2;
+    constexpr T pivot = pow10(mid);
+    if (x < pivot)
+      return DigitCounter<T, MinDigits, mid>()(x);
+    else
+      return DigitCounter<T, mid + 1, MaxDigits>()(x);
+  }
+
+
+// Source: integer_digits.h
+// Lines 92-99
+
+
+[ANSWER]
+MUST-NOT

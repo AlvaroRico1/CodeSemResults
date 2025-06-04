@@ -1,0 +1,85 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'fld' at line 54
+2. Pointer 'field' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static bool update_ref_and_keys(THD *thd, Key_use_array *keyuse,
+                                JOIN_TAB *join_tab, uint tables, Item *cond,
+                                table_map normal_tables,
+                                Query_block *query_block,
+                                SARGABLE_PARAM **sargables) {
+  assert(cond == nullptr || cond->is_bool_func());
+  uint and_level, i, found_eq_constant;
+  Key_field *key_fields, *end, *field;
+  size_t sz;
+  uint m = max(query_block->max_equal_elems, 1U);
+  JOIN *const join = query_block->join;
+  /*
+    We use the same piece of memory to store both  Key_field
+    and SARGABLE_PARAM structure.
+    Key_field values are placed at the beginning this memory
+    while  SARGABLE_PARAM values are put at the end.
+    All predicates that are used to fill arrays of Key_field
+    and SARGABLE_PARAM structures have at most 2 arguments
+    except BETWEEN predicates that have 3 arguments and
+    IN predicates.
+    This any predicate if it's not BETWEEN/IN can be used
+    directly to fill at most 2 array elements, either of Key_field
+    or SARGABLE_PARAM type. For a BETWEEN predicate 3 elements
+    can be filled as this predicate is considered as
+    saragable with respect to each of its argument.
+    An IN predicate can require at most 1 element as currently
+    it is considered as sargable only for its first argument.
+    Multiple equality can add  elements that are filled after
+    substitution of field arguments by equal fields. There
+    can be not more than query_block->max_equal_elems such
+    substitutions.
+  */
+  sz = max(sizeof(Key_field), sizeof(SARGABLE_PARAM)) *
+       (((query_block->cond_count + 1) * 2 + query_block->between_count) * m +
+        1);
+  if (!(key_fields = (Key_field *)thd->alloc(sz)))
+    return true; /* purecov: inspected */
+  and_level = 0;
+  field = end = key_fields;
+  *sargables = (SARGABLE_PARAM *)key_fields +
+               (sz - sizeof((*sargables)[0].field)) / sizeof(SARGABLE_PARAM);
+  /* set a barrier for the array of SARGABLE_PARAM */
+  (*sargables)[0].field = nullptr;
+
+  if (cond) {
+    if (add_key_fields(thd, join, &end, &and_level, cond, normal_tables,
+                       sargables))
+      return true;
+
+    // The relevant secondary engines don't support antijoin, so don't enable
+    // this optimization for them.
+    if (thd->secondary_engine_optimization() !=
+        Secondary_engine_optimization::SECONDARY) {
+      for (Key_field *fld = field; fld != end; fld++) {
+        /* Mark that we can optimize LEFT JOIN */
+        if (fld->val->type() == Item::NULL_ITEM &&
+            !fld->item_field->field->is_nullable()) {
+          /*
+            Example:
+            SELECT * FROM t1 LEFT JOIN t2 ON t1.a=t2.a WHERE t2.a IS NULL;
+            this just wants rows of t1 where t1.a does not exist in t2.
+          */
+          fld->item_field->field->table->reginfo.not_exists_optimize = true;
+        }
+      }
+    }
+
+
+// Source: sql_optimizer.cc
+// Lines 7910-7975
+
+
+[ANSWER]
+MUST

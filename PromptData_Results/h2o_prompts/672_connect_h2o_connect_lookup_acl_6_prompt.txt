@@ -1,0 +1,70 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'entry' at line 20
+2. Pointer 'acl_entries' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int h2o_connect_lookup_acl(h2o_connect_acl_entry_t *acl_entries, size_t num_acl_entries, struct sockaddr *target)
+{
+    uint32_t target_v4addr = 0;
+    uint16_t target_port;
+
+    /* reject anything other than v4/v6, as well as converting the values to native format */
+    switch (target->sa_family) {
+    case AF_INET: {
+        struct sockaddr_in *sin = (void *)target;
+        target_v4addr = ntohl(sin->sin_addr.s_addr);
+        target_port = ntohs(sin->sin_port);
+    } break;
+    case AF_INET6:
+        target_port = htons(((struct sockaddr_in6 *)target)->sin6_port);
+        break;
+    default:
+        return 0;
+    }
+
+    /* check each ACL entry */
+    for (size_t i = 0; i != num_acl_entries; ++i) {
+        h2o_connect_acl_entry_t *entry = acl_entries + i;
+        /* check port */
+        if (entry->port != 0 && entry->port != target_port)
+            goto Next;
+        /* check address */
+        switch (entry->addr_family) {
+        case H2O_CONNECT_ACL_ADDRESS_ANY:
+            break;
+        case H2O_CONNECT_ACL_ADDRESS_V4: {
+            if (target->sa_family != AF_INET)
+                goto Next;
+            if (entry->addr.v4 != (target_v4addr & TO_BITMASK(uint32_t, entry->addr_mask)))
+                goto Next;
+        } break;
+        case H2O_CONNECT_ACL_ADDRESS_V6: {
+            if (target->sa_family != AF_INET6)
+                continue;
+            uint8_t *target_v6addr = ((struct sockaddr_in6 *)target)->sin6_addr.s6_addr;
+            size_t i;
+            for (i = 0; i < entry->addr_mask / 8; ++i)
+                if (entry->addr.v6[i] != target_v6addr[i])
+                    goto Next;
+            if (entry->addr_mask % 8 != 0 && entry->addr.v6[i] != (target_v6addr[i] & TO_BITMASK(uint8_t, entry->addr_mask % 8)))
+                goto Next;
+        } break;
+        }
+        /* match */
+        return entry->allow_;
+    Next:;
+    }
+
+
+// Source: connect.c
+// Lines 977-1027
+
+
+[ANSWER]
+MUST

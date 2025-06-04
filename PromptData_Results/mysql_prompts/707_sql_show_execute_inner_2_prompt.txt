@@ -1,0 +1,86 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'lex' at line 3
+2. Pointer 'thd' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool Sql_cmd_show_create_table::execute_inner(THD *thd) {
+  // Prepare a local LEX object for expansion of table/view
+  LEX *old_lex = thd->lex;
+  LEX local_lex;
+
+  Pushed_lex_guard lex_guard(thd, &local_lex);
+
+  LEX *lex = thd->lex;
+
+  lex->only_view = m_is_view;
+  lex->sql_command = old_lex->sql_command;
+
+  // Disable constant subquery evaluation as we won't be locking tables.
+  lex->context_analysis_only = CONTEXT_ANALYSIS_ONLY_VIEW;
+
+  if (lex->query_block->add_table_to_list(thd, m_table_ident, nullptr, 0) ==
+      nullptr)
+    return true;
+  TABLE_LIST *tbl = lex->query_tables;
+
+  /*
+    Access check:
+    SHOW CREATE TABLE require any privileges on the table level (ie
+    effecting all columns in the table).
+    SHOW CREATE VIEW require the SHOW_VIEW and SELECT ACLs on the table level.
+    NOTE: SHOW_VIEW ACL is checked when the view is created.
+  */
+  DBUG_PRINT("debug", ("lex->only_view: %d, table: %s.%s", lex->only_view,
+                       tbl->db, tbl->table_name));
+  if (lex->only_view) {
+    if (check_table_access(thd, SELECT_ACL, tbl, false, 1, false)) {
+      DBUG_PRINT("debug", ("check_table_access failed"));
+      my_error(ER_TABLEACCESS_DENIED_ERROR, MYF(0), "SHOW",
+               thd->security_context()->priv_user().str,
+               thd->security_context()->host_or_ip().str, tbl->alias);
+      return true;
+    }
+    DBUG_PRINT("debug", ("check_table_access succeeded"));
+
+    // Ignore temporary tables if this is "SHOW CREATE VIEW"
+    tbl->open_type = OT_BASE_ONLY;
+  } else {
+    /*
+      Temporary tables should be opened for SHOW CREATE TABLE, but not
+      for SHOW CREATE VIEW.
+    */
+    if (open_temporary_tables(thd, tbl)) return true;
+
+    /*
+      The fact that check_some_access() returned false does not mean that
+      access is granted. We need to check if first_table->grant.privilege
+      contains any table-specific privilege.
+    */
+    DBUG_PRINT("debug", ("tbl->grant.privilege: %lx", tbl->grant.privilege));
+    if (check_some_access(thd, TABLE_OP_ACLS, tbl) ||
+        (tbl->grant.privilege & TABLE_OP_ACLS) == 0) {
+      my_error(ER_TABLEACCESS_DENIED_ERROR, MYF(0), "SHOW",
+               thd->security_context()->priv_user().str,
+               thd->security_context()->host_or_ip().str, tbl->alias);
+      return true;
+    }
+  }
+
+  if (mysqld_show_create(thd, tbl)) return true;
+
+  return false;
+}
+
+
+// Source: sql_show.cc
+// Lines 344-410
+
+
+[ANSWER]
+MUST

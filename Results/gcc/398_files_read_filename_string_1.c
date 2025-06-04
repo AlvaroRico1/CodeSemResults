@@ -1,0 +1,29 @@
+read_filename_string (int ch, FILE *f)
+{
+  char *alloc, *set;
+  int len;
+
+  len = 20;
+  set = alloc = XNEWVEC (char, len + 1);
+  if (! is_space (ch))
+    {
+      *set++ = ch;
+      while ((ch = getc (f)) != EOF && ! is_space (ch))
+	{
+	  if (set - alloc == len)
+	    {
+	      len *= 2;
+	      alloc = XRESIZEVEC (char, alloc, len + 1);
+	      set = alloc + len / 2;
+	    }
+	  *set++ = ch;
+	}
+    }
+  *set = '\0';
+  ungetc (ch, f);
+  return alloc;
+}
+
+
+// Source: files.c
+// Lines 1579-1603

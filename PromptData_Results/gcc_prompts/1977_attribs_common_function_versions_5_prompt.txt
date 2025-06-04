@@ -1,0 +1,76 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'target2' at line 4
+2. Pointer 'target1' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+common_function_versions (tree fn1, tree fn2)
+{
+  tree attr1, attr2;
+  char *target1, *target2;
+  bool result;
+
+  if (TREE_CODE (fn1) != FUNCTION_DECL
+      || TREE_CODE (fn2) != FUNCTION_DECL)
+    return false;
+
+  attr1 = lookup_attribute ("target", DECL_ATTRIBUTES (fn1));
+  attr2 = lookup_attribute ("target", DECL_ATTRIBUTES (fn2));
+
+  /* At least one function decl should have the target attribute specified.  */
+  if (attr1 == NULL_TREE && attr2 == NULL_TREE)
+    return false;
+
+  /* Diagnose missing target attribute if one of the decls is already
+     multi-versioned.  */
+  if (attr1 == NULL_TREE || attr2 == NULL_TREE)
+    {
+      if (DECL_FUNCTION_VERSIONED (fn1) || DECL_FUNCTION_VERSIONED (fn2))
+	{
+	  if (attr2 != NULL_TREE)
+	    {
+	      std::swap (fn1, fn2);
+	      attr1 = attr2;
+	    }
+	  error_at (DECL_SOURCE_LOCATION (fn2),
+		    "missing %<target%> attribute for multi-versioned %qD",
+		    fn2);
+	  inform (DECL_SOURCE_LOCATION (fn1),
+		  "previous declaration of %qD", fn1);
+	  /* Prevent diagnosing of the same error multiple times.  */
+	  DECL_ATTRIBUTES (fn2)
+	    = tree_cons (get_identifier ("target"),
+			 copy_node (TREE_VALUE (attr1)),
+			 DECL_ATTRIBUTES (fn2));
+	}
+      return false;
+    }
+
+  target1 = sorted_attr_string (TREE_VALUE (attr1));
+  target2 = sorted_attr_string (TREE_VALUE (attr2));
+
+  /* The sorted target strings must be different for fn1 and fn2
+     to be versions.  */
+  if (strcmp (target1, target2) == 0)
+    result = false;
+  else
+    result = true;
+
+  XDELETEVEC (target1);
+  XDELETEVEC (target2);
+
+  return result;
+}
+
+
+// Source: attribs.c
+// Lines 966-1022
+
+
+[ANSWER]
+MUST-NOT

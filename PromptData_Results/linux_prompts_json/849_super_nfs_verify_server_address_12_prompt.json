@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'sa' at line 5\n2. Pointer 'addr' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int nfs_verify_server_address(struct sockaddr *addr)\n{\n\tswitch (addr->sa_family) {\n\tcase AF_INET: {\n\t\tstruct sockaddr_in *sa = (struct sockaddr_in *)addr;\n\t\treturn sa->sin_addr.s_addr != htonl(INADDR_ANY);\n\t}\n\n\n// Source: super.c\n// Lines 977-983\n",
+  "ANSWER": "MUST"
+}

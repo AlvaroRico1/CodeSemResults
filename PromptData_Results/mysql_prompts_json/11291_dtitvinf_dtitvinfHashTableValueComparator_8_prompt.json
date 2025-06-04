@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'pattern2' at line 3\n2. Pointer 'val2' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nU_CALLCONV dtitvinfHashTableValueComparator(UHashTok val1, UHashTok val2) {\n    const UnicodeString* pattern1 = (UnicodeString*)val1.pointer;\n    const UnicodeString* pattern2 = (UnicodeString*)val2.pointer;\n    UBool ret = TRUE;\n    int8_t i;\n    for ( i = 0; i < DateIntervalInfo::kMaxIntervalPatternIndex && ret == TRUE; ++i ) {\n        ret = (pattern1[i] == pattern2[i]);\n    }\n    return ret;\n}\n\n\n// Source: dtitvinf.cpp\n// Lines 728-737\n",
+  "ANSWER": "MUST"
+}

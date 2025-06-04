@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'h' at line 3
+2. Pointer 'handle' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int continent_read_column_value(PSI_table_handle *handle, PSI_field *field,
+                                unsigned int index) {
+  Continent_Table_Handle *h = (Continent_Table_Handle *)handle;
+
+  switch (index) {
+    case 0: /* NAME */
+      mysql_service_pfs_plugin_table->set_field_char_utf8(
+          field, h->current_row.name, h->current_row.name_length);
+      break;
+    default: /* We should never reach here */
+      assert(0);
+      break;
+  }
+
+  return 0;
+}
+
+
+// Source: pfs_example_continent.cc
+// Lines 193-208
+
+
+[ANSWER]
+MUST

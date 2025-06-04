@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ctrl' at line 4\n2. Pointer 'cap' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int pci_quirk_intel_spt_pch_acs(struct pci_dev *dev, u16 acs_flags)\n{\n\tint pos;\n\tu32 cap, ctrl;\n\n\tif (!pci_quirk_intel_spt_pch_acs_match(dev))\n\t\treturn -ENOTTY;\n\n\tpos = pci_find_ext_capability(dev, PCI_EXT_CAP_ID_ACS);\n\tif (!pos)\n\t\treturn -ENOTTY;\n\n\t/* see pci_acs_flags_enabled() */\n\tpci_read_config_dword(dev, pos + PCI_ACS_CAP, &cap);\n\tacs_flags &= (cap | PCI_ACS_EC);\n\n\tpci_read_config_dword(dev, pos + INTEL_SPT_ACS_CTRL, &ctrl);\n\n\treturn acs_flags & ~ctrl ? 0 : 1;\n}\n\n\n// Source: quirks.c\n// Lines 4431-4450\n",
+  "ANSWER": "MAY"
+}

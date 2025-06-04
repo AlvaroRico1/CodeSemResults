@@ -1,0 +1,1 @@
+pt,h2o/lib/core/logconf.c,4,fmt,h2o/lib/core/logconf.c,1,1

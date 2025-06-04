@@ -1,0 +1,1 @@
+copy,tmux/input.c,3,s,tmux/input.c,3,1

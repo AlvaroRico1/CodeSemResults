@@ -1,0 +1,45 @@
+void FieldDescriptor::InternalTypeOnceInit() const {
+  GOOGLE_CHECK(file()->finished_building_ == true);
+  const EnumDescriptor* enum_type = nullptr;
+  const char* lazy_type_name = reinterpret_cast<const char*>(type_once_ + 1);
+  const char* lazy_default_value_enum_name =
+      lazy_type_name + strlen(lazy_type_name) + 1;
+  Symbol result = file()->pool()->CrossLinkOnDemandHelper(
+      lazy_type_name, type_ == FieldDescriptor::TYPE_ENUM);
+  if (result.type() == Symbol::MESSAGE) {
+    type_ = FieldDescriptor::TYPE_MESSAGE;
+    type_descriptor_.message_type = result.descriptor();
+  } else if (result.type() == Symbol::ENUM) {
+    type_ = FieldDescriptor::TYPE_ENUM;
+    enum_type = type_descriptor_.enum_type = result.enum_descriptor();
+  }
+
+  if (enum_type) {
+    if (lazy_default_value_enum_name[0] != '\0') {
+      // Have to build the full name now instead of at CrossLink time,
+      // because enum_type may not be known at the time.
+      std::string name = enum_type->full_name();
+      // Enum values reside in the same scope as the enum type.
+      std::string::size_type last_dot = name.find_last_of('.');
+      if (last_dot != std::string::npos) {
+        name = name.substr(0, last_dot) + "." + lazy_default_value_enum_name;
+      } else {
+        name = lazy_default_value_enum_name;
+      }
+      Symbol result = file()->pool()->CrossLinkOnDemandHelper(name, true);
+      default_value_enum_ = result.enum_value_descriptor();
+    } else {
+      default_value_enum_ = nullptr;
+    }
+    if (!default_value_enum_) {
+      // We use the first defined value as the default
+      // if a default is not explicitly defined.
+      GOOGLE_CHECK(enum_type->value_count());
+      default_value_enum_ = enum_type->value(0);
+    }
+  }
+}
+
+
+// Source: descriptor.cc
+// Lines 8060-8100

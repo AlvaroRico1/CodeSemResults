@@ -1,0 +1,1 @@
+empty_ours,libgit2/src/libgit2/merge.c,10,resolved,libgit2/src/libgit2/merge.c,59,2

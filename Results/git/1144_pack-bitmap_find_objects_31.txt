@@ -1,0 +1,1 @@
+roots,git/pack-bitmap.c,3,not_mapped,git/pack-bitmap.c,10,1

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'filter_options' at line 2\n2. Pointer 'sub_array' at line 9\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void transform_to_combine_type(\n\tstruct list_objects_filter_options *filter_options)\n{\n\tassert(filter_options->choice);\n\tif (filter_options->choice == LOFC_COMBINE)\n\t\treturn;\n\t{\n\t\tconst int initial_sub_alloc = 2;\n\t\tstruct list_objects_filter_options *sub_array =\n\t\t\txcalloc(initial_sub_alloc, sizeof(*sub_array));\n\t\tsub_array[0] = *filter_options;\n\t\tmemset(filter_options, 0, sizeof(*filter_options));\n\t\tfilter_options->sub = sub_array;\n\t\tfilter_options->sub_alloc = initial_sub_alloc;\n\t}\n\n\n// Source: list-objects-filter-options.c\n// Lines 232-246\n",
+  "ANSWER": "MUST"
+}

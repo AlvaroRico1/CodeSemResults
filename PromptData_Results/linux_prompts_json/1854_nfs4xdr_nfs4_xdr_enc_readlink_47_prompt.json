@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'args' at line 4\n2. Pointer 'data' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void nfs4_xdr_enc_readlink(struct rpc_rqst *req, struct xdr_stream *xdr,\n\t\t\t\t  const void *data)\n{\n\tconst struct nfs4_readlink *args = data;\n\tstruct compound_hdr hdr = {\n\t\t.minorversion = nfs4_xdr_minorversion(&args->seq_args),\n\t};\n\n\tencode_compound_hdr(xdr, req, &hdr);\n\tencode_sequence(xdr, &args->seq_args, &hdr);\n\tencode_putfh(xdr, args->fh, &hdr);\n\tencode_readlink(xdr, args, req, &hdr);\n\n\trpc_prepare_reply_pages(req, args->pages, args->pgbase,\n\t\t\t\targs->pglen, hdr.replen);\n\tencode_nops(&hdr);\n}\n\n\n// Source: nfs4xdr.c\n// Lines 2491-2507\n",
+  "ANSWER": "MUST"
+}

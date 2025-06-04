@@ -1,0 +1,26 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'generator' at line 3
+2. Pointer 'sock' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void on_send_complete(h2o_socket_t *sock, const char *err)
+{
+    struct st_fcgi_generator_t *generator = sock->data;
+
+    set_timeout(generator, generator->handler->config.io_timeout, on_rw_timeout);
+    /* do nothing else!  all the rest is handled by the on_read */
+}
+
+
+// Source: fastcgi.c
+// Lines 727-733
+
+
+[ANSWER]
+MUST

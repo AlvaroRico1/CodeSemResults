@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'cf' at line 3
+2. Pointer 'arg' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+file_write_callback(__unused struct bufferevent *bev, void *arg)
+{
+	struct client_file	*cf = arg;
+
+	log_debug("write check file %d", cf->stream);
+
+	if (cf->cb != NULL)
+		cf->cb(NULL, NULL, 0, -1, NULL, cf->data);
+
+	if (cf->closed && EVBUFFER_LENGTH(cf->event->output) == 0) {
+		bufferevent_free(cf->event);
+		close(cf->fd);
+		RB_REMOVE(client_files, cf->tree, cf);
+		file_free(cf);
+	}
+}
+
+
+// Source: file.c
+// Lines 518-533
+
+
+[ANSWER]
+MUST

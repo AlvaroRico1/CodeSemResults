@@ -1,0 +1,53 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'scan' at line 20
+2. Pointer 'in' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void decode_header(struct mailinfo *mi, struct strbuf *it)
+{
+	char *in, *ep, *cp;
+	struct strbuf outbuf = STRBUF_INIT, *dec;
+	struct strbuf charset_q = STRBUF_INIT, piecebuf = STRBUF_INIT;
+	int found_error = 1; /* pessimism */
+
+	in = it->buf;
+	while (in - it->buf <= it->len && (ep = strstr(in, "=?")) != NULL) {
+		int encoding;
+		strbuf_reset(&charset_q);
+		strbuf_reset(&piecebuf);
+
+		if (in != ep) {
+			/*
+			 * We are about to process an encoded-word
+			 * that begins at ep, but there is something
+			 * before the encoded word.
+			 */
+			char *scan;
+			for (scan = in; scan < ep; scan++)
+				if (!isspace(*scan))
+					break;
+
+			if (scan != ep || in == it->buf) {
+				/*
+				 * We should not lose that "something",
+				 * unless we have just processed an
+				 * encoded-word, and there is only LWS
+				 * before the one we are about to process.
+				 */
+				strbuf_add(&outbuf, in, ep - in);
+			}
+		}
+
+
+// Source: mailinfo.c
+// Lines 468-501
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,1 @@
+sc,tmux/cmd-respawn-pane.c,5,wl,tmux/cmd-respawn-pane.c,7,1

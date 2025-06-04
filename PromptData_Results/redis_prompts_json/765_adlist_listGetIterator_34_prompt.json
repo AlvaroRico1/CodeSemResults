@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'iter' at line 3\n2. Pointer 'list' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nlistIter *listGetIterator(list *list, int direction)\n{\n    listIter *iter;\n\n    if ((iter = zmalloc(sizeof(*iter))) == NULL) return NULL;\n    if (direction == AL_START_HEAD)\n        iter->next = list->head;\n    else\n        iter->next = list->tail;\n    iter->direction = direction;\n    return iter;\n}\n\n\n// Source: adlist.c\n// Lines 187-198\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'file' at line 1\n2. Pointer 'error' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void run_test_cases(git_attr_file *file, struct attr_expected *cases, int force_dir)\n{\n\tgit_attr_path path;\n\tconst char *value = NULL;\n\tstruct attr_expected *c;\n\tint error;\n\n\tfor (c = cases; c->path != NULL; c++) {\n\t\tcl_git_pass(git_attr_path__init(&path, c->path, NULL, GIT_DIR_FLAG_UNKNOWN));\n\n\t\tif (force_dir)\n\t\t\tpath.is_dir = 1;\n\n\t\terror = git_attr_file__lookup_one(file,&path,c->attr,&value);\n\t\tcl_git_pass(error);\n\n\t\tattr_check_expected(c->expected, c->expected_str, c->attr, value);\n\n\t\tgit_attr_path__free(&path);\n\t}\n}\n\n\n// Source: lookup.c\n// Lines 31-51\n",
+  "ANSWER": "MUST-NOT"
+}

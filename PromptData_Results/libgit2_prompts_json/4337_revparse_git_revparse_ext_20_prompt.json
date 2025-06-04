@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ref' at line 10\n2. Pointer 'identifier_len' at line 8\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint git_revparse_ext(\n\tgit_object **object_out,\n\tgit_reference **reference_out,\n\tgit_repository *repo,\n\tconst char *spec)\n{\n\tint error;\n\tsize_t identifier_len;\n\tgit_object *obj = NULL;\n\tgit_reference *ref = NULL;\n\n\tif ((error = revparse(&obj, &ref, &identifier_len, repo, spec)) < 0)\n\t\tgoto cleanup;\n\n\t*object_out = obj;\n\t*reference_out = ref;\n\tGIT_UNUSED(identifier_len);\n\n\treturn 0;\n\ncleanup:\n\tgit_object_free(obj);\n\tgit_reference_free(ref);\n\treturn error;\n}\n\n\n// Source: revparse.c\n// Lines 844-868\n",
+  "ANSWER": "MAY"
+}

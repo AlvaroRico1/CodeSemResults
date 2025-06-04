@@ -1,0 +1,1 @@
+err,libgit2/tests/clar/main.c,13,at_exit_cmd,libgit2/tests/clar/main.c,7,0

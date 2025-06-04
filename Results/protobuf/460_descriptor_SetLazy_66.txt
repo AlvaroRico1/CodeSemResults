@@ -1,0 +1,1 @@
+lazy_name,protobuf/src/google/protobuf/descriptor.cc,11,name,protobuf/src/google/protobuf/descriptor.cc,1,2

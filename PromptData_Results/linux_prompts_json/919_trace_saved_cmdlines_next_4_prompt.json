@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ptr' at line 3\n2. Pointer 'pos' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void *saved_cmdlines_next(struct seq_file *m, void *v, loff_t *pos)\n{\n\tunsigned int *ptr = v;\n\n\tif (*pos || m->count)\n\t\tptr++;\n\n\t(*pos)++;\n\n\tfor (; ptr < &savedcmd->map_cmdline_to_pid[savedcmd->cmdline_num];\n\t     ptr++) {\n\t\tif (*ptr == -1 || *ptr == NO_CMDLINE_MAP)\n\t\t\tcontinue;\n\n\t\treturn ptr;\n\t}\n\n\treturn NULL;\n}\n\n\n// Source: trace.c\n// Lines 5055-5073\n",
+  "ANSWER": "MAY"
+}

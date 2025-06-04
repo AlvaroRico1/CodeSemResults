@@ -1,0 +1,1 @@
+w_curs,libgit2/src/libgit2/pack.c,6,stack_size,libgit2/src/libgit2/pack.c,13,2

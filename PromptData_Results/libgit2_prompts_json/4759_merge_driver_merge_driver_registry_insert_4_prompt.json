@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'entry' at line 4\n2. Pointer 'driver' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int merge_driver_registry_insert(\n\tconst char *name, git_merge_driver *driver)\n{\n\tgit_merge_driver_entry *entry;\n\n\tentry = git__calloc(1, sizeof(git_merge_driver_entry) + strlen(name) + 1);\n\tGIT_ERROR_CHECK_ALLOC(entry);\n\n\tstrcpy(entry->name, name);\n\tentry->driver = driver;\n\n\treturn git_vector_insert_sorted(\n\t\t&merge_driver_registry.drivers, entry, NULL);\n}\n\n\n// Source: merge_driver.c\n// Lines 183-196\n",
+  "ANSWER": "MUST"
+}

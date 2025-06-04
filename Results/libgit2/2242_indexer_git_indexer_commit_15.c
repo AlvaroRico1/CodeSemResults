@@ -1,0 +1,217 @@
+int git_indexer_commit(git_indexer *idx, git_indexer_progress *stats)
+{
+	git_mwindow *w = NULL;
+	unsigned int i, long_offsets = 0, left;
+	int error;
+	struct git_pack_idx_header hdr;
+	git_str filename = GIT_STR_INIT;
+	struct entry *entry;
+	unsigned char checksum[GIT_HASH_SHA1_SIZE];
+	git_filebuf index_file = {0};
+	void *packfile_trailer;
+	size_t checksum_size = GIT_HASH_SHA1_SIZE;
+	bool mismatch;
+
+	if (!idx->parsed_header) {
+		git_error_set(GIT_ERROR_INDEXER, "incomplete pack header");
+		return -1;
+	}
+
+	/* Test for this before resolve_deltas(), as it plays with idx->off */
+	if (idx->off + (ssize_t)checksum_size < idx->pack->mwf.size) {
+		git_error_set(GIT_ERROR_INDEXER, "unexpected data at the end of the pack");
+		return -1;
+	}
+	if (idx->off + (ssize_t)checksum_size > idx->pack->mwf.size) {
+		git_error_set(GIT_ERROR_INDEXER, "missing trailer at the end of the pack");
+		return -1;
+	}
+
+	packfile_trailer = git_mwindow_open(&idx->pack->mwf, &w, idx->pack->mwf.size - checksum_size, checksum_size, &left);
+	if (packfile_trailer == NULL) {
+		git_mwindow_close(&w);
+		goto on_error;
+	}
+
+	/* Compare the packfile trailer as it was sent to us and what we calculated */
+	git_hash_final(checksum, &idx->trailer);
+	mismatch = !!memcmp(checksum, packfile_trailer, checksum_size);
+	git_mwindow_close(&w);
+
+	if (mismatch) {
+		git_error_set(GIT_ERROR_INDEXER, "packfile trailer mismatch");
+		return -1;
+	}
+
+	/* Freeze the number of deltas */
+	stats->total_deltas = stats->total_objects - stats->indexed_objects;
+
+	if ((error = resolve_deltas(idx, stats)) < 0)
+		return error;
+
+	if (stats->indexed_objects != stats->total_objects) {
+		git_error_set(GIT_ERROR_INDEXER, "early EOF");
+		return -1;
+	}
+
+	if (stats->local_objects > 0) {
+		if (update_header_and_rehash(idx, stats) < 0)
+			return -1;
+
+		git_hash_final(checksum, &idx->trailer);
+		write_at(idx, checksum, idx->pack->mwf.size - checksum_size, checksum_size);
+	}
+
+	/*
+	 * Is the resulting graph fully connected or are we still
+	 * missing some objects? In the second case, we can
+	 * bail out due to an incomplete and thus corrupt
+	 * packfile.
+	 */
+	if (git_oidmap_size(idx->expected_oids) > 0) {
+		git_error_set(GIT_ERROR_INDEXER, "packfile is missing %"PRIuZ" objects",
+			git_oidmap_size(idx->expected_oids));
+		return -1;
+	}
+
+	git_vector_sort(&idx->objects);
+
+	/* Use the trailer hash as the pack file name to ensure
+	 * files with different contents have different names */
+	memcpy(idx->checksum, checksum, checksum_size);
+	if (git_hash_fmt(idx->name, checksum, checksum_size) < 0)
+		return -1;
+
+	git_str_sets(&filename, idx->pack->pack_name);
+	git_str_shorten(&filename, strlen("pack"));
+	git_str_puts(&filename, "idx");
+	if (git_str_oom(&filename))
+		return -1;
+
+	if (git_filebuf_open(&index_file, filename.ptr,
+		GIT_FILEBUF_HASH_CONTENTS |
+		(idx->do_fsync ? GIT_FILEBUF_FSYNC : 0),
+		idx->mode) < 0)
+		goto on_error;
+
+	/* Write out the header */
+	hdr.idx_signature = htonl(PACK_IDX_SIGNATURE);
+	hdr.idx_version = htonl(2);
+	git_filebuf_write(&index_file, &hdr, sizeof(hdr));
+
+	/* Write out the fanout table */
+	for (i = 0; i < 256; ++i) {
+		uint32_t n = htonl(idx->fanout[i]);
+		git_filebuf_write(&index_file, &n, sizeof(n));
+	}
+
+	/* Write out the object names (SHA-1 hashes) */
+	git_vector_foreach(&idx->objects, i, entry) {
+		git_filebuf_write(&index_file, &entry->oid, sizeof(git_oid));
+	}
+
+	/* Write out the CRC32 values */
+	git_vector_foreach(&idx->objects, i, entry) {
+		git_filebuf_write(&index_file, &entry->crc, sizeof(uint32_t));
+	}
+
+	/* Write out the offsets */
+	git_vector_foreach(&idx->objects, i, entry) {
+		uint32_t n;
+
+		if (entry->offset == UINT32_MAX)
+			n = htonl(0x80000000 | long_offsets++);
+		else
+			n = htonl(entry->offset);
+
+		git_filebuf_write(&index_file, &n, sizeof(uint32_t));
+	}
+
+	/* Write out the long offsets */
+	git_vector_foreach(&idx->objects, i, entry) {
+		uint32_t split[2];
+
+		if (entry->offset != UINT32_MAX)
+			continue;
+
+		split[0] = htonl(entry->offset_long >> 32);
+		split[1] = htonl(entry->offset_long & 0xffffffff);
+
+		git_filebuf_write(&index_file, &split, sizeof(uint32_t) * 2);
+	}
+
+	/* Write out the packfile trailer to the index */
+	if (git_filebuf_write(&index_file, checksum, checksum_size) < 0)
+		goto on_error;
+
+	/* Write out the hash of the idx */
+	if (git_filebuf_hash(checksum, &index_file) < 0)
+		goto on_error;
+
+	git_filebuf_write(&index_file, checksum, checksum_size);
+
+	/* Figure out what the final name should be */
+	if (index_path(&filename, idx, ".idx") < 0)
+		goto on_error;
+
+	/* Commit file */
+	if (git_filebuf_commit_at(&index_file, filename.ptr) < 0)
+		goto on_error;
+
+	if (git_mwindow_free_all(&idx->pack->mwf) < 0)
+		goto on_error;
+
+#if !defined(NO_MMAP) && defined(GIT_WIN32)
+	/*
+	 * Some non-Windows remote filesystems fail when truncating files if the
+	 * file permissions change after opening the file (done by p_mkstemp).
+	 *
+	 * Truncation is only needed when mmap is used to undo rounding up to next
+	 * page_size in append_to_pack.
+	 */
+	if (p_ftruncate(idx->pack->mwf.fd, idx->pack->mwf.size) < 0) {
+		git_error_set(GIT_ERROR_OS, "failed to truncate pack file '%s'", idx->pack->pack_name);
+		return -1;
+	}
+#endif
+
+	if (idx->do_fsync && p_fsync(idx->pack->mwf.fd) < 0) {
+		git_error_set(GIT_ERROR_OS, "failed to fsync packfile");
+		goto on_error;
+	}
+
+	/* We need to close the descriptor here so Windows doesn't choke on commit_at */
+	if (p_close(idx->pack->mwf.fd) < 0) {
+		git_error_set(GIT_ERROR_OS, "failed to close packfile");
+		goto on_error;
+	}
+
+	idx->pack->mwf.fd = -1;
+
+	if (index_path(&filename, idx, ".pack") < 0)
+		goto on_error;
+
+	/* And don't forget to rename the packfile to its new place. */
+	if (p_rename(idx->pack->pack_name, git_str_cstr(&filename)) < 0)
+		goto on_error;
+
+	/* And fsync the parent directory if we're asked to. */
+	if (idx->do_fsync &&
+		git_futils_fsync_parent(git_str_cstr(&filename)) < 0)
+		goto on_error;
+
+	idx->pack_committed = 1;
+
+	git_str_dispose(&filename);
+	return 0;
+
+on_error:
+	git_mwindow_free_all(&idx->pack->mwf);
+	git_filebuf_cleanup(&index_file);
+	git_str_dispose(&filename);
+	return -1;
+}
+
+
+// Source: indexer.c
+// Lines 1163-1375

@@ -1,0 +1,1 @@
+power_ten,mysql/extra/icu/source/i18n/double-conversion-bignum-dtoa.cpp,10,numerator,mysql/extra/icu/source/i18n/double-conversion-bignum-dtoa.cpp,4,1

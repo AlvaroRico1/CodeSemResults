@@ -1,0 +1,106 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'symbol2' at line 13
+2. Pointer 'edge' at line 59
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+propagate_comdat_group (struct symtab_node *symbol,
+			tree newgroup, hash_map<symtab_node *, tree> &map)
+{
+  int i;
+  struct ipa_ref *ref;
+
+  /* Walk all references to SYMBOL, recursively dive into aliases.  */
+
+  for (i = 0;
+       symbol->iterate_referring (i, ref)
+       && newgroup != error_mark_node; i++)
+    {
+      struct symtab_node *symbol2 = ref->referring;
+
+      if (ref->use == IPA_REF_ALIAS)
+	{
+	  newgroup = propagate_comdat_group (symbol2, newgroup, map);
+	  continue;
+	}
+
+      /* One COMDAT group cannot hold both variables and functions at
+	 a same time.  For now we just go to BOTTOM, in future we may
+	 invent special comdat groups for this case.  */
+
+      if (symbol->type != symbol2->type)
+	{
+	  newgroup = error_mark_node;
+	  break;
+	}
+
+      /* If we see inline clone, its comdat group actually
+	 corresponds to the comdat group of the function it is inlined
+	 to.  */
+
+      if (cgraph_node * cn = dyn_cast <cgraph_node *> (symbol2))
+	{
+	  if (cn->inlined_to)
+	    symbol2 = cn->inlined_to;
+	}
+
+      /* The actual merge operation.  */
+
+      tree *val2 = map.get (symbol2);
+
+      if (val2 && *val2 != newgroup)
+	{
+	  if (!newgroup)
+	    newgroup = *val2;
+	  else
+	    newgroup = error_mark_node;
+	}
+    }
+
+  /* If we analyze function, walk also callers.  */
+
+  cgraph_node *cnode = dyn_cast <cgraph_node *> (symbol);
+
+  if (cnode)
+    for (struct cgraph_edge * edge = cnode->callers;
+	 edge && newgroup != error_mark_node; edge = edge->next_caller)
+      {
+	struct symtab_node *symbol2 = edge->caller;
+
+	if (cgraph_node * cn = dyn_cast <cgraph_node *> (symbol2))
+	  {
+	    /* Thunks cannot call across section boundary.  */
+	    if (cn->thunk.thunk_p)
+	      newgroup = propagate_comdat_group (symbol2, newgroup, map);
+	    /* If we see inline clone, its comdat group actually
+	       corresponds to the comdat group of the function it
+	       is inlined to.  */
+	    if (cn->inlined_to)
+	      symbol2 = cn->inlined_to;
+	  }
+
+        /* The actual merge operation.  */
+
+	tree *val2 = map.get (symbol2);
+
+	if (val2 && *val2 != newgroup)
+	  {
+	    if (!newgroup)
+	      newgroup = *val2;
+	    else
+	      newgroup = error_mark_node;
+	  }
+      }
+
+
+// Source: ipa-comdats.c
+// Lines 65-151
+
+
+[ANSWER]
+MUST

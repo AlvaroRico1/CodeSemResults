@@ -1,0 +1,1 @@
+argv,h2o/lib/handler/configurator/fastcgi.c,7,dirname,h2o/lib/handler/configurator/fastcgi.c,6,1

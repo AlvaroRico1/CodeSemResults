@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'end' at line 8
+2. Pointer 'logger' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void h2o_dispose_request(h2o_req_t *req)
+{
+    close_generator_and_filters(req);
+
+    h2o_timer_unlink(&req->_timeout_entry);
+
+    if (req->pathconf != NULL) {
+        h2o_logger_t **logger = req->loggers, **end = logger + req->num_loggers;
+        for (; logger != end; ++logger) {
+            (*logger)->log_access((*logger), req);
+        }
+    }
+
+
+// Source: request.c
+// Lines 324-335
+
+
+[ANSWER]
+MUST

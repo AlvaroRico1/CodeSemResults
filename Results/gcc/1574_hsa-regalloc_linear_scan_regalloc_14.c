@@ -1,0 +1,43 @@
+linear_scan_regalloc (struct m_reg_class_desc *classes)
+{
+  /* Compute liveness.  */
+  bool changed;
+  int i, n;
+  int insn_order;
+  int *bbs = XNEWVEC (int, n_basic_blocks_for_fn (cfun));
+  bitmap work = BITMAP_ALLOC (NULL);
+  vec<hsa_op_reg*> ind2reg = vNULL;
+  vec<hsa_op_reg*> active[4] = {vNULL, vNULL, vNULL, vNULL};
+  hsa_insn_basic *m_last_insn;
+
+  /* We will need the reverse post order for linearization,
+     and the post order for liveness analysis, which is the same
+     backward.  */
+  n = pre_and_rev_post_order_compute (NULL, bbs, true);
+  ind2reg.safe_grow_cleared (hsa_cfun->m_reg_count);
+
+  /* Give all instructions a linearized number, at the same time
+     build a mapping from register index to register.  */
+  insn_order = 1;
+  for (i = 0; i < n; i++)
+    {
+      basic_block bb = BASIC_BLOCK_FOR_FN (cfun, bbs[i]);
+      hsa_bb *hbb = hsa_bb_for_bb (bb);
+      hsa_insn_basic *insn;
+      for (insn = hbb->m_first_insn; insn; insn = insn->m_next)
+	{
+	  unsigned opi;
+	  insn->m_number = insn_order++;
+	  for (opi = 0; opi < insn->operand_count (); opi++)
+	    {
+	      gcc_checking_assert (insn->get_op (opi));
+	      hsa_op_reg **regaddr = insn_reg_addr (insn, opi);
+	      if (regaddr)
+		ind2reg[(*regaddr)->m_order] = *regaddr;
+	    }
+	}
+    }
+
+
+// Source: hsa-regalloc.c
+// Lines 415-453

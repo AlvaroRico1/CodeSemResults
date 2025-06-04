@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'dctx' at line 4\n2. Pointer 'flags' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int des_setkey(struct crypto_tfm *tfm, const u8 *key,\n\t\t      unsigned int keylen)\n{\n\tstruct des_ctx *dctx = crypto_tfm_ctx(tfm);\n\tu32 *flags = &tfm->crt_flags;\n\tu32 tmp[DES_EXPKEY_WORDS];\n\tint ret;\n\n\t/* Expand to tmp */\n\tret = des_ekey(tmp, key);\n\n\tif (unlikely(ret == 0) && (*flags & CRYPTO_TFM_REQ_FORBID_WEAK_KEYS)) {\n\t\t*flags |= CRYPTO_TFM_RES_WEAK_KEY;\n\t\treturn -EINVAL;\n\t}\n\n\t/* Copy to output */\n\tmemcpy(dctx->expkey, tmp, sizeof(dctx->expkey));\n\n\treturn 0;\n}\n\n\n// Source: des_generic.c\n// Lines 776-796\n",
+  "ANSWER": "MAY"
+}

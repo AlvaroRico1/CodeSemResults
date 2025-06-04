@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'o' at line 1\n2. Pointer 'value' at line None\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nsize_t stringObjectLen(robj *o) {\n    serverAssertWithInfo(NULL,o,o->type == OBJ_STRING);\n    if (sdsEncodedObject(o)) {\n        return sdslen(o->ptr);\n    } else {\n        return sdigits10((long)o->ptr);\n    }\n\n\n// Source: object.c\n// Lines 605-611\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,38 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'when' at line 5
+2. Pointer 'days' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_config_get_expiry_in_days(const char *key, timestamp_t *expiry, timestamp_t now)
+{
+	const char *expiry_string;
+	intmax_t days;
+	timestamp_t when;
+
+	if (git_config_get_string_tmp(key, &expiry_string))
+		return 1; /* no such thing */
+
+	if (git_parse_signed(expiry_string, &days, maximum_signed_value_of_type(int))) {
+		const int scale = 86400;
+		*expiry = now - days * scale;
+		return 0;
+	}
+
+	if (!parse_expiry_date(expiry_string, &when)) {
+		*expiry = when;
+		return 0;
+	}
+
+
+// Source: config.c
+// Lines 2458-2476
+
+
+[ANSWER]
+MAY

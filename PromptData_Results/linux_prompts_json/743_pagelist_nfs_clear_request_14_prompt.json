@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'l_ctx' at line 4\n2. Pointer 'req' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void nfs_clear_request(struct nfs_page *req)\n{\n\tstruct page *page = req->wb_page;\n\tstruct nfs_lock_context *l_ctx = req->wb_lock_context;\n\tstruct nfs_open_context *ctx;\n\n\tif (page != NULL) {\n\t\tput_page(page);\n\t\treq->wb_page = NULL;\n\t}\n\tif (l_ctx != NULL) {\n\t\tif (atomic_dec_and_test(&l_ctx->io_count)) {\n\t\t\twake_up_var(&l_ctx->io_count);\n\t\t\tctx = l_ctx->open_context;\n\t\t\tif (test_bit(NFS_CONTEXT_UNLOCK, &ctx->flags))\n\t\t\t\trpc_wake_up(&NFS_SERVER(d_inode(ctx->dentry))->uoc_rpcwaitq);\n\t\t}\n\t\tnfs_put_lock_context(l_ctx);\n\t\treq->wb_lock_context = NULL;\n\t}\n}\n\n\n// Source: pagelist.c\n// Lines 414-434\n",
+  "ANSWER": "MUST"
+}

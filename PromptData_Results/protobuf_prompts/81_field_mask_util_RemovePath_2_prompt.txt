@@ -1,0 +1,77 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'new_branch_node' at line 16
+2. Pointer 'node' at line 14
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void FieldMaskTree::RemovePath(const std::string& path,
+                               const Descriptor* descriptor) {
+  if (root_.children.empty()) {
+    // Nothing to be removed from an empty tree. We shortcut it here so an empty
+    // tree won't be interpreted as a field mask containing all fields by the
+    // code below.
+    return;
+  }
+  std::vector<std::string> parts = Split(path, ".");
+  if (parts.empty()) {
+    return;
+  }
+  std::vector<Node*> nodes(parts.size());
+  Node* node = &root_;
+  const Descriptor* current_descriptor = descriptor;
+  Node* new_branch_node = nullptr;
+  for (int i = 0; i < parts.size(); ++i) {
+    nodes[i] = node;
+    const FieldDescriptor* field_descriptor =
+        current_descriptor->FindFieldByName(parts[i]);
+    if (field_descriptor == nullptr ||
+        (field_descriptor->cpp_type() != FieldDescriptor::CPPTYPE_MESSAGE &&
+         i != parts.size() - 1)) {
+      // Invalid path.
+      if (new_branch_node != nullptr) {
+        // If add any new nodes, cleanup.
+        new_branch_node->ClearChildren();
+      }
+      return;
+    }
+
+    if (node->children.empty()) {
+      if (new_branch_node == nullptr) {
+        new_branch_node = node;
+      }
+      for (int j = 0; j < current_descriptor->field_count(); ++j) {
+        node->children[current_descriptor->field(j)->name()] = new Node();
+      }
+    }
+    if (ContainsKey(node->children, parts[i])) {
+      node = node->children[parts[i]];
+      if (field_descriptor->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
+        current_descriptor = field_descriptor->message_type();
+      }
+    } else {
+      // Path does not exist.
+      return;
+    }
+  }
+  // Remove path.
+  for (int i = parts.size() - 1; i >= 0; i--) {
+    delete nodes[i]->children[parts[i]];
+    nodes[i]->children.erase(parts[i]);
+    if (!nodes[i]->children.empty()) {
+      break;
+    }
+  }
+}
+
+
+// Source: field_mask_util.cc
+// Lines 353-410
+
+
+[ANSWER]
+MUST

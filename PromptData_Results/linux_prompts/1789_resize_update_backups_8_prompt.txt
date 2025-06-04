@@ -1,0 +1,118 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'seven' at line 9
+2. Pointer 'five' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void update_backups(struct super_block *sb, sector_t blk_off, char *data,
+			   int size, int meta_bg)
+{
+	struct ext4_sb_info *sbi = EXT4_SB(sb);
+	ext4_group_t last;
+	const int bpg = EXT4_BLOCKS_PER_GROUP(sb);
+	unsigned three = 1;
+	unsigned five = 5;
+	unsigned seven = 7;
+	ext4_group_t group = 0;
+	int rest = sb->s_blocksize - size;
+	handle_t *handle;
+	int err = 0, err2;
+
+	handle = ext4_journal_start_sb(sb, EXT4_HT_RESIZE, EXT4_MAX_TRANS_DATA);
+	if (IS_ERR(handle)) {
+		group = 1;
+		err = PTR_ERR(handle);
+		goto exit_err;
+	}
+
+	if (meta_bg == 0) {
+		group = ext4_list_backups(sb, &three, &five, &seven);
+		last = sbi->s_groups_count;
+	} else {
+		group = ext4_get_group_number(sb, blk_off) + 1;
+		last = (ext4_group_t)(group + EXT4_DESC_PER_BLOCK(sb) - 2);
+	}
+
+	while (group < sbi->s_groups_count) {
+		struct buffer_head *bh;
+		ext4_fsblk_t backup_block;
+
+		/* Out of journal space, and can't get more - abort - so sad */
+		if (ext4_handle_valid(handle) &&
+		    handle->h_buffer_credits == 0 &&
+		    ext4_journal_extend(handle, EXT4_MAX_TRANS_DATA) &&
+		    (err = ext4_journal_restart(handle, EXT4_MAX_TRANS_DATA)))
+			break;
+
+		if (meta_bg == 0)
+			backup_block = ((ext4_fsblk_t)group) * bpg + blk_off;
+		else
+			backup_block = (ext4_group_first_block_no(sb, group) +
+					ext4_bg_has_super(sb, group));
+
+		bh = sb_getblk(sb, backup_block);
+		if (unlikely(!bh)) {
+			err = -ENOMEM;
+			break;
+		}
+		ext4_debug("update metadata backup %llu(+%llu)\n",
+			   backup_block, backup_block -
+			   ext4_group_first_block_no(sb, group));
+		BUFFER_TRACE(bh, "get_write_access");
+		if ((err = ext4_journal_get_write_access(handle, bh))) {
+			brelse(bh);
+			break;
+		}
+		lock_buffer(bh);
+		memcpy(bh->b_data, data, size);
+		if (rest)
+			memset(bh->b_data + size, 0, rest);
+		set_buffer_uptodate(bh);
+		unlock_buffer(bh);
+		err = ext4_handle_dirty_metadata(handle, NULL, bh);
+		if (unlikely(err))
+			ext4_std_error(sb, err);
+		brelse(bh);
+
+		if (meta_bg == 0)
+			group = ext4_list_backups(sb, &three, &five, &seven);
+		else if (group == last)
+			break;
+		else
+			group = last;
+	}
+	if ((err2 = ext4_journal_stop(handle)) && !err)
+		err = err2;
+
+	/*
+	 * Ugh! Need to have e2fsck write the backup copies.  It is too
+	 * late to revert the resize, we shouldn't fail just because of
+	 * the backup copies (they are only needed in case of corruption).
+	 *
+	 * However, if we got here we have a journal problem too, so we
+	 * can't really start a transaction to mark the superblock.
+	 * Chicken out and just set the flag on the hope it will be written
+	 * to disk, and if not - we will simply wait until next fsck.
+	 */
+exit_err:
+	if (err) {
+		ext4_warning(sb, "can't update backup for group %u (err %d), "
+			     "forcing fsck on next reboot", group, err);
+		sbi->s_mount_state &= ~EXT4_VALID_FS;
+		sbi->s_es->s_state &= cpu_to_le16(~EXT4_VALID_FS);
+		mark_buffer_dirty(sbi->s_sbh);
+	}
+}
+
+
+// Source: resize.c
+// Lines 1078-1176
+
+
+[ANSWER]
+MAY

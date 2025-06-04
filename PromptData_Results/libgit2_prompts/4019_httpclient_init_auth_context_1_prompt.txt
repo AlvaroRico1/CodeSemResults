@@ -1,0 +1,42 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'scheme' at line 6
+2. Pointer 'challenge' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static const char *init_auth_context(
+	git_http_server *server,
+	git_vector *challenges,
+	git_credential *credentials)
+{
+	git_http_auth_scheme *scheme;
+	const char *challenge;
+	int error;
+
+	if (!best_scheme_and_challenge(&scheme, &challenge, challenges, credentials)) {
+		git_error_set(GIT_ERROR_HTTP, "could not find appropriate mechanism for credentials");
+		return NULL;
+	}
+
+	error = scheme->init_context(&server->auth_context, &server->url);
+
+	if (error == GIT_PASSTHROUGH) {
+		git_error_set(GIT_ERROR_HTTP, "'%s' authentication is not supported", scheme->name);
+		return NULL;
+	}
+
+	return challenge;
+}
+
+
+// Source: httpclient.c
+// Lines 515-537
+
+
+[ANSWER]
+MAY

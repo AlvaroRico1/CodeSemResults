@@ -1,0 +1,31 @@
+screen_redraw_set_context(struct client *c, struct screen_redraw_ctx *ctx)
+{
+	struct session	*s = c->session;
+	struct options	*oo = s->options;
+	struct window	*w = s->curw->window;
+	struct options	*wo = w->options;
+	u_int		 lines;
+
+	memset(ctx, 0, sizeof *ctx);
+	ctx->c = c;
+
+	lines = status_line_size(c);
+	if (c->message_string != NULL || c->prompt_string != NULL)
+		lines = (lines == 0) ? 1 : lines;
+	if (lines != 0 && options_get_number(oo, "status-position") == 0)
+		ctx->statustop = 1;
+	ctx->statuslines = lines;
+
+	ctx->pane_status = options_get_number(wo, "pane-border-status");
+	ctx->pane_lines = options_get_number(wo, "pane-border-lines");
+
+	tty_window_offset(&c->tty, &ctx->ox, &ctx->oy, &ctx->sx, &ctx->sy);
+
+	log_debug("%s: %s @%u ox=%u oy=%u sx=%u sy=%u %u/%d", __func__, c->name,
+	    w->id, ctx->ox, ctx->oy, ctx->sx, ctx->sy, ctx->statuslines,
+	    ctx->statustop);
+}
+
+
+// Source: screen-redraw.c
+// Lines 517-543

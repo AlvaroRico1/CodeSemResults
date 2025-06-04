@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'err' at line 2\n2. Pointer 'path' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nmext_check_coverage(struct inode *inode, ext4_lblk_t from, ext4_lblk_t count,\n\t\t    int unwritten, int *err)\n{\n\tstruct ext4_ext_path *path = NULL;\n\tstruct ext4_extent *ext;\n\tint ret = 0;\n\text4_lblk_t last = from + count;\n\twhile (from < last) {\n\t\t*err = get_ext_path(inode, from, &path);\n\t\tif (*err)\n\t\t\tgoto out;\n\t\text = path[ext_depth(inode)].p_ext;\n\t\tif (unwritten != ext4_ext_is_unwritten(ext))\n\t\t\tgoto out;\n\t\tfrom += ext4_ext_get_actual_len(ext);\n\t\text4_ext_drop_refs(path);\n\t}\n\tret = 1;\nout:\n\text4_ext_drop_refs(path);\n\tkfree(path);\n\treturn ret;\n}\n\n\n// Source: move_extent.c\n// Lines 90-112\n",
+  "ANSWER": "MAY"
+}

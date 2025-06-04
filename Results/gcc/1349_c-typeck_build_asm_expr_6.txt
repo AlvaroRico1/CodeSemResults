@@ -1,0 +1,1 @@
+allows_reg,gcc/gcc/c/c-typeck.c,9,constraint,gcc/gcc/c/c-typeck.c,7,0

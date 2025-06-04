@@ -1,0 +1,1 @@
+search_dirname,libgit2/tests/libgit2/checkout/icase.c,3,search_filename,libgit2/tests/libgit2/checkout/icase.c,3,0

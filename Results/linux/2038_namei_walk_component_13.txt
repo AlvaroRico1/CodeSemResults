@@ -1,0 +1,1 @@
+seq,linux/fs/namei.c,5,inode,linux/fs/namei.c,4,2

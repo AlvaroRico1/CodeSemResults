@@ -1,0 +1,27 @@
+screen_redraw_draw_borders_style(struct screen_redraw_ctx *ctx, u_int x,
+    u_int y, struct window_pane *wp)
+{
+	struct client		*c = ctx->c;
+	struct session		*s = c->session;
+	struct window		*w = s->curw->window;
+	struct window_pane	*active = server_client_get_pane(c);
+	struct options		*oo = w->options;
+	struct format_tree	*ft;
+
+	if (wp->border_gc_set)
+		return (&wp->border_gc);
+	wp->border_gc_set = 1;
+
+	ft = format_create_defaults(NULL, c, s, s->curw, wp);
+	if (screen_redraw_check_is(x, y, ctx->pane_status, active))
+		style_apply(&wp->border_gc, oo, "pane-active-border-style", ft);
+	else
+		style_apply(&wp->border_gc, oo, "pane-border-style", ft);
+	format_free(ft);
+
+	return (&wp->border_gc);
+}
+
+
+// Source: screen-redraw.c
+// Lines 606-628

@@ -1,0 +1,21 @@
+void test_diff_binary__delta(void)
+{
+	git_index *index;
+	git_str contents = GIT_STR_INIT;
+	size_t i;
+	git_diff_options opts = GIT_DIFF_OPTIONS_INIT;
+	const char *expected =
+		"diff --git a/songof7cities.txt b/songof7cities.txt\n" \
+		"index 4210ffd5c390b21dd5483375e75288dea9ede512..cc84ec183351c9944ed90a619ca08911924055b5 100644\n" \
+		"GIT binary patch\n" \
+		"delta 198\n" \
+		"zc$}LmI8{(0BqLQJI6p64AwNwaIJGP_Pa)Ye#M3o+qJ$<Jl;sX*mF<MGCYv&*L7AHu\n" \
+		"zGA1*^gt?gYVN82wTbPO_W)+x<&1+cP;HrPHR>PQ;Y(X&QMK*C5^Br3bjG4d=XI^5@\n" \
+		"JfH567LIG)KJdFSV\n" \
+		"\n" \
+		"delta 198\n" \
+		"zc$}LmI8{(0BqLQJI6p64AwNwaIJGP_Pr*5}Br~;mqJ$<Jl;sX*mF<MGCYv&*L7AHu\n" \
+
+
+// Source: binary.c
+// Lines 196-212

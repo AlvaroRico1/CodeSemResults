@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'odb' at line 4\n2. Pointer 'r' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int quick_has_loose(struct repository *r,\n\t\t\t   const struct object_id *oid)\n{\n\tstruct object_directory *odb;\n\n\tprepare_alt_odb(r);\n\tfor (odb = r->objects->odb; odb; odb = odb->next) {\n\t\tif (oidtree_contains(odb_loose_cache(odb, oid), oid))\n\t\t\treturn 1;\n\t}\n\treturn 0;\n}\n\n\n// Source: object-file.c\n// Lines 1137-1148\n",
+  "ANSWER": "MUST"
+}

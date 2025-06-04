@@ -1,0 +1,28 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'c' at line 5
+2. Pointer 'hc' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+hostcache_timestamp_remove(void *datap, void *hc)
+{
+  struct hostcache_prune_data *data =
+    (struct hostcache_prune_data *) datap;
+  struct Curl_dns_entry *c = (struct Curl_dns_entry *) hc;
+
+  return (0 != c->timestamp)
+    && (data->now - c->timestamp >= data->cache_timeout);
+}
+
+
+// Source: hostip.c
+// Lines 199-207
+
+
+[ANSWER]
+MUST

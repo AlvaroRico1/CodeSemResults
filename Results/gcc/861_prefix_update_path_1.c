@@ -1,0 +1,102 @@
+update_path (const char *path, const char *key)
+{
+  char *result, *p;
+  const int len = strlen (std_prefix);
+
+  if (! filename_ncmp (path, std_prefix, len)
+      && (IS_DIR_SEPARATOR (path[len])
+          || path[len] == '\0')
+      && key != 0)
+    {
+      bool free_key = false;
+
+      if (key[0] != '$')
+	{
+	  key = concat ("@", key, NULL);
+	  free_key = true;
+	}
+
+      result = concat (key, &path[len], NULL);
+      if (free_key)
+	free (CONST_CAST (char *, key));
+      result = translate_name (result);
+    }
+  else
+    result = xstrdup (path);
+
+  p = result;
+  while (1)
+    {
+      char *src, *dest;
+
+      p = strchr (p, '.');
+      if (p == NULL)
+	break;
+      /* Look for `/../'  */
+      if (p[1] == '.'
+	  && IS_DIR_SEPARATOR (p[2])
+	  && (p != result && IS_DIR_SEPARATOR (p[-1])))
+	{
+	  *p = 0;
+	  if (!targetm_common.always_strip_dotdot
+	      && access (result, X_OK) == 0)
+	    {
+	      *p = '.';
+	      break;
+	    }
+	  else
+	    {
+	      /* We can't access the dir, so we won't be able to
+		 access dir/.. either.  Strip out `dir/../'.  If `dir'
+		 turns out to be `.', strip one more path component.  */
+	      dest = p;
+	      do
+		{
+		  --dest;
+		  while (dest != result && IS_DIR_SEPARATOR (*dest))
+		    --dest;
+		  while (dest != result && !IS_DIR_SEPARATOR (dest[-1]))
+		    --dest;
+		}
+	      while (dest != result && *dest == '.');
+	      /* If we have something like `./..' or `/..', don't
+		 strip anything more.  */
+	      if (*dest == '.' || IS_DIR_SEPARATOR (*dest))
+		{
+		  *p = '.';
+		  break;
+		}
+	      src = p + 3;
+	      while (IS_DIR_SEPARATOR (*src))
+		++src;
+	      p = dest;
+	      while ((*dest++ = *src++) != 0)
+		;
+	    }
+	}
+      else
+	++p;
+    }
+
+#ifdef UPDATE_PATH_HOST_CANONICALIZE
+  /* Perform host dependent canonicalization when needed.  */
+  UPDATE_PATH_HOST_CANONICALIZE (result);
+#endif
+
+#ifdef DIR_SEPARATOR_2
+  /* Convert DIR_SEPARATOR_2 to DIR_SEPARATOR.  */
+  if (DIR_SEPARATOR_2 != DIR_SEPARATOR)
+    tr (result, DIR_SEPARATOR_2, DIR_SEPARATOR);
+#endif
+
+#if defined (DIR_SEPARATOR) && !defined (DIR_SEPARATOR_2)
+  if (DIR_SEPARATOR != '/')
+    tr (result, '/', DIR_SEPARATOR);
+#endif
+
+  return result;
+}
+
+
+// Source: prefix.c
+// Lines 247-344

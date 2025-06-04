@@ -1,0 +1,83 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'buf' at line 1
+2. Pointer 'i' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_str_quote(git_str *buf)
+{
+	const char whitespace[] = { 'a', 'b', 't', 'n', 'v', 'f', 'r' };
+	git_str quoted = GIT_STR_INIT;
+	size_t i = 0;
+	bool quote = false;
+	int error = 0;
+
+	/* walk to the first char that needs quoting */
+	if (buf->size && buf->ptr[0] == '!')
+		quote = true;
+
+	for (i = 0; !quote && i < buf->size; i++) {
+		if (buf->ptr[i] == '"' || buf->ptr[i] == '\\' ||
+			buf->ptr[i] < ' ' || buf->ptr[i] > '~') {
+			quote = true;
+			break;
+		}
+	}
+
+	if (!quote)
+		goto done;
+
+	git_str_putc(&quoted, '"');
+	git_str_put(&quoted, buf->ptr, i);
+
+	for (; i < buf->size; i++) {
+		/* whitespace - use the map above, which is ordered by ascii value */
+		if (buf->ptr[i] >= '\a' && buf->ptr[i] <= '\r') {
+			git_str_putc(&quoted, '\\');
+			git_str_putc(&quoted, whitespace[buf->ptr[i] - '\a']);
+		}
+
+		/* double quote and backslash must be escaped */
+		else if (buf->ptr[i] == '"' || buf->ptr[i] == '\\') {
+			git_str_putc(&quoted, '\\');
+			git_str_putc(&quoted, buf->ptr[i]);
+		}
+
+		/* escape anything unprintable as octal */
+		else if (buf->ptr[i] != ' ' &&
+				(buf->ptr[i] < '!' || buf->ptr[i] > '~')) {
+			git_str_printf(&quoted, "\\%03o", (unsigned char)buf->ptr[i]);
+		}
+
+		/* yay, printable! */
+		else {
+			git_str_putc(&quoted, buf->ptr[i]);
+		}
+	}
+
+	git_str_putc(&quoted, '"');
+
+	if (git_str_oom(&quoted)) {
+		error = -1;
+		goto done;
+	}
+
+	git_str_swap(&quoted, buf);
+
+done:
+	git_str_dispose(&quoted);
+	return error;
+}
+
+
+// Source: str.c
+// Lines 924-987
+
+
+[ANSWER]
+MAY

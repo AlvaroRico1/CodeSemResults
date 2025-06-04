@@ -1,0 +1,40 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'desc' at line 3
+2. Pointer 'data' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int nfs_readdir_filler(void *data, struct page* page)
+{
+	nfs_readdir_descriptor_t *desc = data;
+	struct inode	*inode = file_inode(desc->file);
+	int ret;
+
+	ret = nfs_readdir_xdr_to_array(desc, page, inode);
+	if (ret < 0)
+		goto error;
+	SetPageUptodate(page);
+
+	if (invalidate_inode_pages2_range(inode->i_mapping, page->index + 1, -1) < 0) {
+		/* Should never happen */
+		nfs_zap_mapping(inode, inode->i_mapping);
+	}
+	unlock_page(page);
+	return 0;
+ error:
+	unlock_page(page);
+	return ret;
+}
+
+
+// Source: dir.c
+// Lines 667-687
+
+
+[ANSWER]
+MUST

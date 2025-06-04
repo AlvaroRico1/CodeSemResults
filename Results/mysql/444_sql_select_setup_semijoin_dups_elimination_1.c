@@ -1,0 +1,219 @@
+static bool setup_semijoin_dups_elimination(JOIN *join, uint no_jbuf_after) {
+  uint tableno;
+  THD *thd = join->thd;
+  DBUG_TRACE;
+  ASSERT_BEST_REF_IN_JOIN_ORDER(join);
+
+  if (join->query_block->sj_nests.empty()) return false;
+
+  QEP_TAB *const qep_array = join->qep_tab;
+  for (tableno = join->const_tables; tableno < join->primary_tables;) {
+#ifndef NDEBUG
+    const bool tab_in_sj_nest = join->best_ref[tableno]->emb_sj_nest != nullptr;
+#endif
+    QEP_TAB *const tab = &qep_array[tableno];
+    POSITION *const pos = tab->position();
+
+    if (pos->sj_strategy == SJ_OPT_NONE) {
+      tableno++;  // nothing to do
+      continue;
+    }
+    QEP_TAB *last_sj_tab = tab + pos->n_sj_tables - 1;
+    switch (pos->sj_strategy) {
+      case SJ_OPT_MATERIALIZE_LOOKUP:
+      case SJ_OPT_MATERIALIZE_SCAN:
+        assert(false);  // Should not occur among "primary" tables
+        // Do nothing
+        tableno += pos->n_sj_tables;
+        break;
+      case SJ_OPT_LOOSE_SCAN: {
+        assert(tab_in_sj_nest);  // First table must be inner
+        /* We jump from the last table to the first one */
+        tab->match_tab = last_sj_tab->idx();
+
+        /* For LooseScan, duplicate elimination is based on rows being sorted
+           on key. We need to make sure that range select keeps the sorted index
+           order. (When using MRR it may not.)
+
+           Note: need_sorted_output() implementations for range select classes
+           that do not support sorted output, will trigger an assert. This
+           should not happen since LooseScan strategy is only picked if sorted
+           output is supported.
+        */
+        if (tab->quick()) {
+          assert(tab->quick()->index == pos->loosescan_key);
+          tab->quick()->need_sorted_output();
+        }
+
+        const uint keyno = pos->loosescan_key;
+        assert(tab->keys().is_set(keyno));
+        tab->set_index(keyno);
+
+        /* Calculate key length */
+        uint keylen = 0;
+        for (uint kp = 0; kp < pos->loosescan_parts; kp++)
+          keylen += tab->table()->key_info[keyno].key_part[kp].store_length;
+        tab->loosescan_key_len = keylen;
+
+        if (pos->n_sj_tables > 1) {
+          last_sj_tab->firstmatch_return = tab->idx();
+          last_sj_tab->match_tab = last_sj_tab->idx();
+        }
+        tableno += pos->n_sj_tables;
+        break;
+      }
+      case SJ_OPT_DUPS_WEEDOUT: {
+        assert(tab_in_sj_nest);  // First table must be inner
+        /*
+          Consider a semijoin of one outer and one inner table, both
+          with two rows. The inner table is assumed to be confluent
+          (See sj_opt_materialize_lookup)
+
+          If normal nested loop execution is used, we do not need to
+          include semi-join outer table rowids in the duplicate
+          weedout temp table since NL guarantees that outer table rows
+          are encountered only consecutively and because all rows in
+          the temp table are deleted for every new outer table
+          combination (example is with a confluent inner table):
+
+            ot1.row1|it1.row1
+                 '-> temp table's have_confluent_row == false
+                   |-> output ot1.row1
+                   '-> set have_confluent_row= true
+            ot1.row1|it1.row2
+                 |-> temp table's have_confluent_row == true
+                 | '-> do not output ot1.row1
+                 '-> no more join matches - set have_confluent_row= false
+            ot1.row2|it1.row1
+                 '-> temp table's have_confluent_row == false
+                   |-> output ot1.row2
+                   '-> set have_confluent_row= true
+              ...
+
+          Note: not having outer table rowids in the temp table and
+          then emptying the temp table when a new outer table row
+          combinition is encountered is an optimization. Including
+          outer table rowids in the temp table is not harmful but
+          wastes memory.
+
+          Now consider the join buffering algorithms (BNL/BKA). These
+          algorithms join each inner row with outer rows in "reverse"
+          order compared to NL. Effectively, this means that outer
+          table rows may be encountered multiple times in a
+          non-consecutive manner:
+
+            NL:                 BNL/BKA:
+            ot1.row1|it1.row1   ot1.row1|it1.row1
+            ot1.row1|it1.row2   ot1.row2|it1.row1
+            ot1.row2|it1.row1   ot1.row1|it1.row2
+            ot1.row2|it1.row2   ot1.row2|it1.row2
+
+          It is clear from the above that there is no place we can
+          empty the temp table like we do in NL to avoid storing outer
+          table rowids.
+
+          Below we check if join buffering might be used. If so, set
+          first_table to the first non-constant table so that outer
+          table rowids are included in the temp table. Do not destroy
+          other duplicate elimination methods.
+        */
+        uint first_table = tableno;
+        for (uint sj_tableno = tableno; sj_tableno < tableno + pos->n_sj_tables;
+             sj_tableno++) {
+          if (join->best_ref[sj_tableno]->use_join_cache() &&
+              sj_tableno <= no_jbuf_after) {
+            /* Join buffering will probably be used */
+            first_table = join->const_tables;
+            break;
+          }
+        }
+
+        QEP_TAB *const first_sj_tab = qep_array + first_table;
+        if (last_sj_tab->first_inner() != NO_PLAN_IDX &&
+            first_sj_tab->first_inner() != last_sj_tab->first_inner()) {
+          /*
+            The first duplicate weedout table is an outer table of an outer join
+            and the last duplicate weedout table is one of the inner tables of
+            the outer join.
+            In this case, we must assure that all the inner tables of the
+            outer join are part of the duplicate weedout operation.
+            This is to assure that NULL-extension for inner tables of an
+            outer join is performed before duplicate elimination is performed,
+            otherwise we will have extra NULL-extended rows being output, which
+            should have been eliminated as duplicates.
+          */
+          QEP_TAB *tab2 = &qep_array[last_sj_tab->first_inner()];
+          /*
+            First, locate the table that is the first inner table of the
+            outer join operation that first_sj_tab is outer for.
+          */
+          while (tab2->first_upper() != NO_PLAN_IDX &&
+                 tab2->first_upper() != first_sj_tab->first_inner())
+            tab2 = qep_array + tab2->first_upper();
+          // Then, extend the range with all inner tables of the join nest:
+          if (qep_array[tab2->first_inner()].last_inner() > last_sj_tab->idx())
+            last_sj_tab =
+                &qep_array[qep_array[tab2->first_inner()].last_inner()];
+        }
+
+        SJ_TMP_TABLE_TAB sjtabs[MAX_TABLES];
+        SJ_TMP_TABLE_TAB *last_tab = sjtabs;
+        /*
+          Walk through the range and remember
+           - tables that need their rowids to be put into temptable
+           - the last outer table
+        */
+        for (QEP_TAB *tab_in_range = qep_array + first_table;
+             tab_in_range <= last_sj_tab; tab_in_range++) {
+          if (sj_table_is_included(join, join->best_ref[tab_in_range->idx()])) {
+            last_tab->qep_tab = tab_in_range;
+            ++last_tab;
+          }
+        }
+
+        SJ_TMP_TABLE *sjtbl = create_sj_tmp_table(thd, join, sjtabs, last_tab);
+        if (sjtbl == nullptr) {
+          return true;
+        }
+
+        qep_array[first_table].flush_weedout_table = sjtbl;
+        last_sj_tab->check_weed_out_table = sjtbl;
+
+        tableno += pos->n_sj_tables;
+        break;
+      }
+      case SJ_OPT_FIRST_MATCH: {
+        /*
+          Setup a "jump" from the last table in the range of inner tables
+          to the last outer table before the inner tables.
+        */
+        plan_idx jump_to = tab->idx() - 1;
+        assert(tab_in_sj_nest);  // First table must be inner
+        for (QEP_TAB *tab_in_range = tab; tab_in_range <= last_sj_tab;
+             tab_in_range++) {
+          if (!join->best_ref[tab_in_range->idx()]->emb_sj_nest) {
+            /*
+              Let last non-correlated table be jump target for
+              subsequent inner tables.
+            */
+            assert(false);  // no "split jump" should exist.
+            jump_to = tab_in_range->idx();
+          } else {
+            /*
+              Assign jump target for last table in a consecutive range of
+              inner tables.
+            */
+            if (tab_in_range == last_sj_tab ||
+                !join->best_ref[tab_in_range->idx() + 1]->emb_sj_nest) {
+              tab_in_range->firstmatch_return = jump_to;
+              tab_in_range->match_tab = last_sj_tab->idx();
+            }
+          }
+        }
+        tableno += pos->n_sj_tables;
+        break;
+      }
+
+
+// Source: sql_select.cc
+// Lines 1334-1548

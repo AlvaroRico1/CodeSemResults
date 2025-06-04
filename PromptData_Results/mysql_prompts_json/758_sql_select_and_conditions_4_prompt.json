@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'e1' at line 1\n2. Pointer 'res' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nbool and_conditions(Item **e1, Item *e2) {\n  assert(!(*e1) || (*e1)->fixed);\n  assert(!e2 || e2->fixed);\n  if (*e1) {\n    if (!e2) return false;\n    Item *res = new Item_cond_and(*e1, e2);\n    if (unlikely(!res)) return true;\n\n    *e1 = res;\n    res->quick_fix_field();\n    res->update_used_tables();\n\n  } else\n\n\n// Source: sql_select.cc\n// Lines 2590-2602\n",
+  "ANSWER": "MUST"
+}

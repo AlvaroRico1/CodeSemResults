@@ -1,0 +1,17 @@
+static void filter_trees_depth__init(
+	struct list_objects_filter_options *filter_options,
+	struct filter *filter)
+{
+	struct filter_trees_depth_data *d = xcalloc(1, sizeof(*d));
+	oidmap_init(&d->seen_at_depth, 0);
+	d->exclude_depth = filter_options->tree_exclude_depth;
+	d->current_depth = 0;
+
+	filter->filter_data = d;
+	filter->filter_object_fn = filter_trees_depth;
+	filter->free_fn = filter_trees_free;
+}
+
+
+// Source: list-objects-filter.c
+// Lines 251-263

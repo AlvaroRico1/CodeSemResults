@@ -1,0 +1,37 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'result' at line 14
+2. Pointer 'tlsdata' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_threads_tlsdata__threads(void)
+{
+#ifdef GIT_THREADS
+	git_thread thread[THREAD_COUNT];
+	git_tlsdata_key tlsdata;
+	int i;
+
+	cl_git_pass(git_tlsdata_init(&tlsdata, NULL));
+
+	for (i = 0; i < THREAD_COUNT; i++)
+		cl_git_pass(git_thread_create(&thread[i], set_and_get, &tlsdata));
+
+	for (i = 0; i < THREAD_COUNT; i++) {
+		void *result;
+
+		cl_git_pass(git_thread_join(&thread[i], &result));
+		cl_assert_equal_sz(1, (size_t)result);
+	}
+
+
+// Source: tlsdata.c
+// Lines 44-61
+
+
+[ANSWER]
+MAY

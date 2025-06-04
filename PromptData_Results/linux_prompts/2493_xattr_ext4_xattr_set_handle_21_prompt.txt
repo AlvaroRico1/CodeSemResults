@@ -1,0 +1,77 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'value' at line 2
+2. Pointer 'raw_inode' at line 55
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+ext4_xattr_set_handle(handle_t *handle, struct inode *inode, int name_index,
+		      const char *name, const void *value, size_t value_len,
+		      int flags)
+{
+	struct ext4_xattr_info i = {
+		.name_index = name_index,
+		.name = name,
+		.value = value,
+		.value_len = value_len,
+		.in_inode = 0,
+	};
+	struct ext4_xattr_ibody_find is = {
+		.s = { .not_found = -ENODATA, },
+	};
+	struct ext4_xattr_block_find bs = {
+		.s = { .not_found = -ENODATA, },
+	};
+	int no_expand;
+	int error;
+
+	if (!name)
+		return -EINVAL;
+	if (strlen(name) > 255)
+		return -ERANGE;
+
+	ext4_write_lock_xattr(inode, &no_expand);
+
+	/* Check journal credits under write lock. */
+	if (ext4_handle_valid(handle)) {
+		struct buffer_head *bh;
+		int credits;
+
+		bh = ext4_xattr_get_block(inode);
+		if (IS_ERR(bh)) {
+			error = PTR_ERR(bh);
+			goto cleanup;
+		}
+
+		credits = __ext4_xattr_set_credits(inode->i_sb, inode, bh,
+						   value_len,
+						   flags & XATTR_CREATE);
+		brelse(bh);
+
+		if (!ext4_handle_has_enough_credits(handle, credits)) {
+			error = -ENOSPC;
+			goto cleanup;
+		}
+	}
+
+	error = ext4_reserve_inode_write(handle, inode, &is.iloc);
+	if (error)
+		goto cleanup;
+
+	if (ext4_test_inode_state(inode, EXT4_STATE_NEW)) {
+		struct ext4_inode *raw_inode = ext4_raw_inode(&is.iloc);
+		memset(raw_inode, 0, EXT4_SB(inode->i_sb)->s_inode_size);
+		ext4_clear_inode_state(inode, EXT4_STATE_NEW);
+	}
+
+
+// Source: xattr.c
+// Lines 2295-2352
+
+
+[ANSWER]
+MAY

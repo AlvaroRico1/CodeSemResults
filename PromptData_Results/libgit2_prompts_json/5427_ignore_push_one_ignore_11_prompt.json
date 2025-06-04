@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ign' at line 3\n2. Pointer 'payload' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int push_one_ignore(void *payload, const char *path)\n{\n\tgit_ignores *ign = payload;\n\tign->depth++;\n\treturn push_ignore_file(ign, &ign->ign_path, path, GIT_IGNORE_FILE);\n}\n\n\n// Source: ignore.c\n// Lines 268-273\n",
+  "ANSWER": "MUST"
+}

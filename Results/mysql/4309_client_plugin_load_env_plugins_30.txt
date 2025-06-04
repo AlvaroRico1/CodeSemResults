@@ -1,0 +1,1 @@
+enable_cleartext_plugin,mysql/sql-common/client_plugin.cc,3,mysql,mysql/sql-common/client_plugin.cc,1,0

@@ -1,0 +1,67 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 's' at line 4
+2. Pointer 'oo' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+session_create(const char *prefix, const char *name, const char *cwd,
+    struct environ *env, struct options *oo, struct termios *tio)
+{
+	struct session	*s;
+
+	s = xcalloc(1, sizeof *s);
+	s->references = 1;
+	s->flags = 0;
+
+	s->cwd = xstrdup(cwd);
+
+	TAILQ_INIT(&s->lastw);
+	RB_INIT(&s->windows);
+
+	s->environ = env;
+	s->options = oo;
+
+	status_update_cache(s);
+
+	s->tio = NULL;
+	if (tio != NULL) {
+		s->tio = xmalloc(sizeof *s->tio);
+		memcpy(s->tio, tio, sizeof *s->tio);
+	}
+
+	if (name != NULL) {
+		s->name = xstrdup(name);
+		s->id = next_session_id++;
+	} else {
+		do {
+			s->id = next_session_id++;
+			free(s->name);
+			if (prefix != NULL)
+				xasprintf(&s->name, "%s-%u", prefix, s->id);
+			else
+				xasprintf(&s->name, "%u", s->id);
+		} while (RB_FIND(sessions, &sessions, s) != NULL);
+	}
+	RB_INSERT(sessions, &sessions, s);
+
+	log_debug("new session %s $%u", s->name, s->id);
+
+	if (gettimeofday(&s->creation_time, NULL) != 0)
+		fatal("gettimeofday failed");
+	session_update_activity(s, &s->creation_time);
+
+	return (s);
+}
+
+
+// Source: session.c
+// Lines 114-161
+
+
+[ANSWER]
+MUST

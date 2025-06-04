@@ -1,0 +1,40 @@
+window_copy_search_back_overlap(struct grid *gd, regex_t *preg, u_int *ppx,
+    u_int *psx, u_int *ppy, u_int endline)
+{
+	u_int	endx, endy, oldendx, oldendy, px, py, sx;
+	int	found = 1;
+
+	oldendx = *ppx + *psx;
+	oldendy = *ppy - 1;
+	while (oldendx > gd->sx - 1) {
+		oldendx -= gd->sx;
+		oldendy++;
+	}
+	endx = oldendx;
+	endy = oldendy;
+	px = *ppx;
+	py = *ppy;
+	while (found && px == 0 && py - 1 > endline &&
+	       grid_get_line(gd, py - 2)->flags & GRID_LINE_WRAPPED &&
+	       endx == oldendx && endy == oldendy) {
+		py--;
+		found = window_copy_search_rl_regex(gd, &px, &sx, py - 1, 0,
+		    gd->sx, preg);
+		if (found) {
+			endx = px + sx;
+			endy = py - 1;
+			while (endx > gd->sx - 1) {
+				endx -= gd->sx;
+				endy++;
+			}
+			if (endx == oldendx && endy == oldendy) {
+				*ppx = px;
+				*ppy = py;
+			}
+		}
+	}
+}
+
+
+// Source: window-copy.c
+// Lines 3388-3423

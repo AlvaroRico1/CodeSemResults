@@ -1,0 +1,67 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'length_at' at line 14
+2. Pointer 'dst' at line 14
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+size_t quicly_send_close_invalid_token(quicly_context_t *ctx, uint32_t protocol_version, ptls_iovec_t dest_cid,
+                                       ptls_iovec_t src_cid, const char *err_desc, void *datagram)
+{
+    struct st_quicly_cipher_context_t egress = {};
+    const struct st_ptls_salt_t *salt;
+
+    /* setup keys */
+    if ((salt = get_salt(protocol_version)) == NULL)
+        return SIZE_MAX;
+    if (setup_initial_encryption(get_aes128gcmsha256(ctx), NULL, &egress, src_cid, 0,
+                                 ptls_iovec_init(salt->initial, sizeof(salt->initial)), NULL) != 0)
+        return SIZE_MAX;
+
+    uint8_t *dst = datagram, *length_at;
+
+    /* build packet */
+    PTLS_BUILD_ASSERT(QUICLY_SEND_PN_SIZE == 2);
+    *dst++ = QUICLY_PACKET_TYPE_INITIAL | 0x1 /* 2-byte PN */;
+    dst = quicly_encode32(dst, protocol_version);
+    *dst++ = dest_cid.len;
+    memcpy(dst, dest_cid.base, dest_cid.len);
+    dst += dest_cid.len;
+    *dst++ = src_cid.len;
+    memcpy(dst, src_cid.base, src_cid.len);
+    dst += src_cid.len;
+    *dst++ = 0;        /* token_length = 0 */
+    length_at = dst++; /* length_at to be filled in later as 1-byte varint */
+    *dst++ = 0;        /* PN = 0 */
+    *dst++ = 0;        /* ditto */
+    uint8_t *payload_from = dst;
+    dst = quicly_encode_close_frame(dst, QUICLY_ERROR_GET_ERROR_CODE(QUICLY_TRANSPORT_ERROR_INVALID_TOKEN),
+                                    QUICLY_FRAME_TYPE_PADDING, err_desc);
+
+    /* determine the size of the packet, make adjustments */
+    dst += egress.aead->algo->tag_size;
+    assert(dst - (uint8_t *)datagram <= QUICLY_MIN_CLIENT_INITIAL_SIZE);
+    assert(dst - length_at - 1 < 64);
+    *length_at = dst - length_at - 1;
+    size_t datagram_len = dst - (uint8_t *)datagram;
+
+    /* encrypt packet */
+    quicly_default_crypto_engine.encrypt_packet(&quicly_default_crypto_engine, NULL, egress.header_protection, egress.aead,
+                                                ptls_iovec_init(datagram, datagram_len), 0, payload_from - (uint8_t *)datagram, 0,
+                                                0);
+
+    dispose_cipher(&egress);
+    return datagram_len;
+}
+
+
+// Source: quicly.c
+// Lines 4639-4686
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,101 @@
+move_stmt_r (gimple_stmt_iterator *gsi_p, bool *handled_ops_p,
+	     struct walk_stmt_info *wi)
+{
+  struct move_stmt_d *p = (struct move_stmt_d *) wi->info;
+  gimple *stmt = gsi_stmt (*gsi_p);
+  tree block = gimple_block (stmt);
+
+  if (block == p->orig_block
+      || (p->orig_block == NULL_TREE
+	  && block != NULL_TREE))
+    gimple_set_block (stmt, p->new_block);
+
+  switch (gimple_code (stmt))
+    {
+    case GIMPLE_CALL:
+      /* Remap the region numbers for __builtin_eh_{pointer,filter}.  */
+      {
+	tree r, fndecl = gimple_call_fndecl (stmt);
+	if (fndecl && fndecl_built_in_p (fndecl, BUILT_IN_NORMAL))
+	  switch (DECL_FUNCTION_CODE (fndecl))
+	    {
+	    case BUILT_IN_EH_COPY_VALUES:
+	      r = gimple_call_arg (stmt, 1);
+	      r = move_stmt_eh_region_tree_nr (r, p);
+	      gimple_call_set_arg (stmt, 1, r);
+	      /* FALLTHRU */
+
+	    case BUILT_IN_EH_POINTER:
+	    case BUILT_IN_EH_FILTER:
+	      r = gimple_call_arg (stmt, 0);
+	      r = move_stmt_eh_region_tree_nr (r, p);
+	      gimple_call_set_arg (stmt, 0, r);
+	      break;
+
+	    default:
+	      break;
+	    }
+      }
+      break;
+
+    case GIMPLE_RESX:
+      {
+	gresx *resx_stmt = as_a <gresx *> (stmt);
+	int r = gimple_resx_region (resx_stmt);
+	r = move_stmt_eh_region_nr (r, p);
+	gimple_resx_set_region (resx_stmt, r);
+      }
+      break;
+
+    case GIMPLE_EH_DISPATCH:
+      {
+	geh_dispatch *eh_dispatch_stmt = as_a <geh_dispatch *> (stmt);
+	int r = gimple_eh_dispatch_region (eh_dispatch_stmt);
+	r = move_stmt_eh_region_nr (r, p);
+	gimple_eh_dispatch_set_region (eh_dispatch_stmt, r);
+      }
+      break;
+
+    case GIMPLE_OMP_RETURN:
+    case GIMPLE_OMP_CONTINUE:
+      break;
+
+    case GIMPLE_LABEL:
+      {
+	/* For FORCED_LABEL, move_stmt_op doesn't adjust DECL_CONTEXT,
+	   so that such labels can be referenced from other regions.
+	   Make sure to update it when seeing a GIMPLE_LABEL though,
+	   that is the owner of the label.  */
+	walk_gimple_op (stmt, move_stmt_op, wi);
+	*handled_ops_p = true;
+	tree label = gimple_label_label (as_a <glabel *> (stmt));
+	if (FORCED_LABEL (label) || DECL_NONLOCAL (label))
+	  DECL_CONTEXT (label) = p->to_context;
+      }
+      break;
+
+    default:
+      if (is_gimple_omp (stmt))
+	{
+	  /* Do not remap variables inside OMP directives.  Variables
+	     referenced in clauses and directive header belong to the
+	     parent function and should not be moved into the child
+	     function.  */
+	  bool save_remap_decls_p = p->remap_decls_p;
+	  p->remap_decls_p = false;
+	  *handled_ops_p = true;
+
+	  walk_gimple_seq_mod (gimple_omp_body_ptr (stmt), move_stmt_r,
+			       move_stmt_op, wi);
+
+	  p->remap_decls_p = save_remap_decls_p;
+	}
+      break;
+    }
+
+  return NULL_TREE;
+}
+
+
+// Source: tree-cfg.c
+// Lines 6994-7090

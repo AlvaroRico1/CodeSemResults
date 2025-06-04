@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'cp' at line 4\n2. Pointer 'walk' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int clear_refs_test_walk(unsigned long start, unsigned long end,\n\t\t\t\tstruct mm_walk *walk)\n{\n\tstruct clear_refs_private *cp = walk->private;\n\tstruct vm_area_struct *vma = walk->vma;\n\n\tif (vma->vm_flags & VM_PFNMAP)\n\t\treturn 1;\n\n\t/*\n\t * Writing 1 to /proc/pid/clear_refs affects all pages.\n\t * Writing 2 to /proc/pid/clear_refs only affects anonymous pages.\n\t * Writing 3 to /proc/pid/clear_refs only affects file mapped pages.\n\t * Writing 4 to /proc/pid/clear_refs affects all pages.\n\t */\n\tif (cp->type == CLEAR_REFS_ANON && vma->vm_file)\n\t\treturn 1;\n\tif (cp->type == CLEAR_REFS_MAPPED && !vma->vm_file)\n\t\treturn 1;\n\treturn 0;\n}\n\n\n// Source: task_mmu.c\n// Lines 1099-1119\n",
+  "ANSWER": "MUST"
+}

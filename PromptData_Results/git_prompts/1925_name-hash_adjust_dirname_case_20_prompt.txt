@@ -1,0 +1,42 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'startPtr' at line 3
+2. Pointer 'name' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void adjust_dirname_case(struct index_state *istate, char *name)
+{
+	const char *startPtr = name;
+	const char *ptr = startPtr;
+
+	lazy_init_name_hash(istate);
+	expand_to_path(istate, name, strlen(name), 0);
+	while (*ptr) {
+		while (*ptr && *ptr != '/')
+			ptr++;
+
+		if (*ptr == '/') {
+			struct dir_entry *dir;
+
+			dir = find_dir_entry(istate, name, ptr - name);
+			if (dir) {
+				memcpy((void *)startPtr, dir->name + (startPtr - name), ptr - startPtr);
+				startPtr = ptr + 1;
+			}
+			ptr++;
+		}
+	}
+}
+
+
+// Source: name-hash.c
+// Lines 692-714
+
+
+[ANSWER]
+MUST

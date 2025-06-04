@@ -1,0 +1,1 @@
+b_commit,libgit2/tests/libgit2/diff/pathspec.c,4,path,libgit2/tests/libgit2/diff/pathspec.c,10,0

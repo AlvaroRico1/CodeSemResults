@@ -1,0 +1,1 @@
+gd,tmux/screen.c,3,s,tmux/screen.c,1,1

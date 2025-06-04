@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'c' at line 3\n2. Pointer 'data' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nserver_client_click_timer(__unused int fd, __unused short events, void *data)\n{\n\tstruct client\t\t*c = data;\n\tstruct key_event\t*event;\n\n\tlog_debug(\"click timer expired\");\n\n\tif (c->flags & CLIENT_TRIPLECLICK) {\n\t\t/*\n\t\t * Waiting for a third click that hasn't happened, so this must\n\t\t * have been a double click.\n\t\t */\n\t\tevent = xmalloc(sizeof *event);\n\t\tevent->key = KEYC_DOUBLECLICK;\n\t\tmemcpy(&event->m, &c->click_event, sizeof event->m);\n\t\tif (!server_client_handle_key(c, event))\n\t\t\tfree(event);\n\t}\n\tc->flags &= ~(CLIENT_DOUBLECLICK|CLIENT_TRIPLECLICK);\n}\n\n\n// Source: server-client.c\n// Lines 1797-1816\n",
+  "ANSWER": "MUST"
+}

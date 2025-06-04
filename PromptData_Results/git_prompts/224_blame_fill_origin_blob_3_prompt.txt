@@ -1,0 +1,43 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'file_size' at line 7
+2. Pointer 'num_read_blob' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void fill_origin_blob(struct diff_options *opt,
+			     struct blame_origin *o, mmfile_t *file,
+			     int *num_read_blob, int fill_fingerprints)
+{
+	if (!o->file.ptr) {
+		enum object_type type;
+		unsigned long file_size;
+
+		(*num_read_blob)++;
+		if (opt->flags.allow_textconv &&
+		    textconv_object(opt->repo, o->path, o->mode,
+				    &o->blob_oid, 1, &file->ptr, &file_size))
+			;
+		else
+			file->ptr = read_object_file(&o->blob_oid, &type,
+						     &file_size);
+		file->size = file_size;
+
+		if (!file->ptr)
+			die("Cannot read blob %s for path %s",
+			    oid_to_hex(&o->blob_oid),
+			    o->path);
+		o->file = *file;
+	}
+
+
+// Source: blame.c
+// Lines 1017-1040
+
+
+[ANSWER]
+MAY

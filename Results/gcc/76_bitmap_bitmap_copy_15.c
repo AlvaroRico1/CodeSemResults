@@ -1,0 +1,39 @@
+bitmap_copy (bitmap to, const_bitmap from)
+{
+  const bitmap_element *from_ptr;
+  bitmap_element *to_ptr = 0;
+
+  gcc_checking_assert (!to->tree_form && !from->tree_form);
+
+  bitmap_clear (to);
+
+  /* Copy elements in forward direction one at a time.  */
+  for (from_ptr = from->first; from_ptr; from_ptr = from_ptr->next)
+    {
+      bitmap_element *to_elt = bitmap_element_allocate (to);
+
+      to_elt->indx = from_ptr->indx;
+      memcpy (to_elt->bits, from_ptr->bits, sizeof (to_elt->bits));
+
+      /* Here we have a special case of bitmap_list_link_element,
+         for the case where we know the links are being entered
+	 in sequence.  */
+      if (to_ptr == 0)
+	{
+	  to->first = to->current = to_elt;
+	  to->indx = from_ptr->indx;
+	  to_elt->next = to_elt->prev = 0;
+	}
+      else
+	{
+	  to_elt->prev = to_ptr;
+	  to_elt->next = 0;
+	  to_ptr->next = to_elt;
+	}
+
+      to_ptr = to_elt;
+    }
+
+
+// Source: bitmap.c
+// Lines 848-882

@@ -1,0 +1,28 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'str' at line 3
+2. Pointer 'str' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void ReplaceCharacters(std::string *s, const char *remove, char replacewith) {
+  const char *str_start = s->c_str();
+  const char *str = str_start;
+  for (str = strpbrk(str, remove);
+       str != nullptr;
+       str = strpbrk(str + 1, remove)) {
+    (*s)[str - str_start] = replacewith;
+  }
+}
+
+
+// Source: strutil.cc
+// Lines 87-95
+
+
+[ANSWER]
+MUST

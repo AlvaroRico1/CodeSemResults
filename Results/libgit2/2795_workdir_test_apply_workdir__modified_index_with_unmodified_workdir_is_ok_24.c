@@ -1,0 +1,53 @@
+void test_apply_workdir__modified_index_with_unmodified_workdir_is_ok(void)
+{
+	git_index *index;
+	git_index_entry idx_entry = {{0}};
+	git_diff *diff;
+
+	const char *diff_file = DIFF_MODIFY_TWO_FILES;
+
+	struct merge_index_entry index_expected[] = {
+		{ 0100644, "68f6182f4c85d39e1309d97c7e456156dc9c0096", 0, "beef.txt" },
+		{ 0100644, "4b7c5650008b2e747fe1809eeb5a1dde0e80850a", 0, "bouilli.txt" },
+		{ 0100644, "c4e6cca3ec6ae0148ed231f97257df8c311e015f", 0, "gravy.txt" },
+		{ 0100644, "68af1fc7407fd9addf1701a87eb1c95c7494c598", 0, "oyster.txt" },
+		{ 0100644, "ffb36e513f5fdf8a6ba850a20142676a2ac4807d", 0, "veal.txt" }
+	};
+	size_t index_expected_cnt = sizeof(index_expected) /
+		sizeof(struct merge_index_entry);
+
+	struct merge_index_entry workdir_expected[] = {
+		{ 0100644, "ffb36e513f5fdf8a6ba850a20142676a2ac4807d", 0, "asparagus.txt" },
+		{ 0100644, "68f6182f4c85d39e1309d97c7e456156dc9c0096", 0, "beef.txt" },
+		{ 0100644, "4b7c5650008b2e747fe1809eeb5a1dde0e80850a", 0, "bouilli.txt" },
+		{ 0100644, "c4e6cca3ec6ae0148ed231f97257df8c311e015f", 0, "gravy.txt" },
+		{ 0100644, "68af1fc7407fd9addf1701a87eb1c95c7494c598", 0, "oyster.txt" },
+		{ 0100644, "a7b066537e6be7109abfe4ff97b675d4e077da20", 0, "veal.txt" },
+	};
+	size_t workdir_expected_cnt = sizeof(workdir_expected) /
+		sizeof(struct merge_index_entry);
+
+	/* mutate the index and leave the workdir matching HEAD */
+	cl_git_pass(git_repository_index(&index, repo));
+
+	idx_entry.mode = 0100644;
+	idx_entry.path = "veal.txt";
+	cl_git_pass(git_oid_fromstr(&idx_entry.id, "ffb36e513f5fdf8a6ba850a20142676a2ac4807d"));
+
+	cl_git_pass(git_index_add(index, &idx_entry));
+	cl_git_pass(git_index_remove(index, "asparagus.txt", 0));
+	cl_git_pass(git_index_write(index));
+
+	cl_git_pass(git_diff_from_buffer(&diff, diff_file, strlen(diff_file)));
+	cl_git_pass(git_apply(repo, diff, GIT_APPLY_LOCATION_WORKDIR, NULL));
+
+	validate_apply_index(repo, index_expected, index_expected_cnt);
+	validate_apply_workdir(repo, workdir_expected, workdir_expected_cnt);
+
+	git_index_free(index);
+	git_diff_free(diff);
+}
+
+
+// Source: workdir.c
+// Lines 140-188

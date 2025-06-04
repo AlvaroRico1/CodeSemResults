@@ -1,0 +1,191 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'mti' at line 6
+2. Pointer 'line' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+mode_tree_draw(struct mode_tree_data *mtd)
+{
+	struct window_pane	*wp = mtd->wp;
+	struct screen		*s = &mtd->screen;
+	struct mode_tree_line	*line;
+	struct mode_tree_item	*mti;
+	struct options		*oo = wp->window->options;
+	struct screen_write_ctx	 ctx;
+	struct grid_cell	 gc0, gc;
+	u_int			 w, h, i, j, sy, box_x, box_y, width;
+	char			*text, *start, *key;
+	const char		*tag, *symbol;
+	size_t			 size, n;
+	int			 keylen, pad;
+
+	if (mtd->line_size == 0)
+		return;
+
+	memcpy(&gc0, &grid_default_cell, sizeof gc0);
+	memcpy(&gc, &grid_default_cell, sizeof gc);
+	style_apply(&gc, oo, "mode-style", NULL);
+
+	w = mtd->width;
+	h = mtd->height;
+
+	screen_write_start(&ctx, s);
+	screen_write_clearscreen(&ctx, 8);
+
+	keylen = 0;
+	for (i = 0; i < mtd->line_size; i++) {
+		mti = mtd->line_list[i].item;
+		if (mti->key == KEYC_NONE)
+			continue;
+		if ((int)mti->keylen + 3 > keylen)
+			keylen = mti->keylen + 3;
+	}
+
+	for (i = 0; i < mtd->line_size; i++) {
+		if (i < mtd->offset)
+			continue;
+		if (i > mtd->offset + h - 1)
+			break;
+		line = &mtd->line_list[i];
+		mti = line->item;
+
+		screen_write_cursormove(&ctx, 0, i - mtd->offset, 0);
+
+		pad = keylen - 2 - mti->keylen;
+		if (mti->key != KEYC_NONE)
+			xasprintf(&key, "(%s)%*s", mti->keystr, pad, "");
+		else
+			key = xstrdup("");
+
+		if (line->flat)
+			symbol = "";
+		else if (TAILQ_EMPTY(&mti->children))
+			symbol = "  ";
+		else if (mti->expanded)
+			symbol = "- ";
+		else
+			symbol = "+ ";
+
+		if (line->depth == 0)
+			start = xstrdup(symbol);
+		else {
+			size = (4 * line->depth) + 32;
+
+			start = xcalloc(1, size);
+			for (j = 1; j < line->depth; j++) {
+				if (mti->parent != NULL &&
+				    mtd->line_list[mti->parent->line].last)
+					strlcat(start, "    ", size);
+				else
+					strlcat(start, "\001x\001   ", size);
+			}
+			if (line->last)
+				strlcat(start, "\001mq\001> ", size);
+			else
+				strlcat(start, "\001tq\001> ", size);
+			strlcat(start, symbol, size);
+		}
+
+		if (mti->tagged)
+			tag = "*";
+		else
+			tag = "";
+		xasprintf(&text, "%-*s%s%s%s%s", keylen, key, start, mti->name,
+		    tag, (mti->text != NULL) ? ": " : "" );
+		width = utf8_cstrwidth(text);
+		if (width > w)
+			width = w;
+		free(start);
+
+		if (mti->tagged) {
+			gc.attr ^= GRID_ATTR_BRIGHT;
+			gc0.attr ^= GRID_ATTR_BRIGHT;
+		}
+
+		if (i != mtd->current) {
+			screen_write_clearendofline(&ctx, 8);
+			screen_write_nputs(&ctx, w, &gc0, "%s", text);
+			if (mti->text != NULL) {
+				format_draw(&ctx, &gc0, w - width, mti->text,
+				    NULL);
+			}
+		} else {
+			screen_write_clearendofline(&ctx, gc.bg);
+			screen_write_nputs(&ctx, w, &gc, "%s", text);
+			if (mti->text != NULL) {
+				format_draw(&ctx, &gc, w - width, mti->text,
+				    NULL);
+			}
+		}
+		free(text);
+		free(key);
+
+		if (mti->tagged) {
+			gc.attr ^= GRID_ATTR_BRIGHT;
+			gc0.attr ^= GRID_ATTR_BRIGHT;
+		}
+	}
+
+	sy = screen_size_y(s);
+	if (!mtd->preview || sy <= 4 || h <= 4 || sy - h <= 4 || w <= 4) {
+		screen_write_stop(&ctx);
+		return;
+	}
+
+	line = &mtd->line_list[mtd->current];
+	mti = line->item;
+	if (mti->draw_as_parent)
+		mti = mti->parent;
+
+	screen_write_cursormove(&ctx, 0, h, 0);
+	screen_write_box(&ctx, w, sy - h, BOX_LINES_DEFAULT, NULL, NULL);
+
+	if (mtd->sort_list != NULL) {
+		xasprintf(&text, " %s (sort: %s%s)", mti->name,
+		    mtd->sort_list[mtd->sort_crit.field],
+		    mtd->sort_crit.reversed ? ", reversed" : "");
+	} else
+		xasprintf(&text, " %s", mti->name);
+	if (w - 2 >= strlen(text)) {
+		screen_write_cursormove(&ctx, 1, h, 0);
+		screen_write_puts(&ctx, &gc0, "%s", text);
+
+		if (mtd->no_matches)
+			n = (sizeof "no matches") - 1;
+		else
+			n = (sizeof "active") - 1;
+		if (mtd->filter != NULL && w - 2 >= strlen(text) + 10 + n + 2) {
+			screen_write_puts(&ctx, &gc0, " (filter: ");
+			if (mtd->no_matches)
+				screen_write_puts(&ctx, &gc, "no matches");
+			else
+				screen_write_puts(&ctx, &gc0, "active");
+			screen_write_puts(&ctx, &gc0, ") ");
+		} else
+			screen_write_puts(&ctx, &gc0, " ");
+	}
+	free(text);
+
+	box_x = w - 4;
+	box_y = sy - h - 2;
+
+	if (box_x != 0 && box_y != 0) {
+		screen_write_cursormove(&ctx, 2, h + 1, 0);
+		mtd->drawcb(mtd->modedata, mti->itemdata, &ctx, box_x, box_y);
+	}
+
+	screen_write_stop(&ctx);
+}
+
+
+// Source: mode-tree.c
+// Lines 616-787
+
+
+[ANSWER]
+MUST

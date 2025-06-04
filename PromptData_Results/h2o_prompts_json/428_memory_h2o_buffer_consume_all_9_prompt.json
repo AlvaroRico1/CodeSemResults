@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'inbuf' at line 1\n2. Pointer 'newp' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid h2o_buffer_consume_all(h2o_buffer_t **inbuf, int record_capacity)\n{\n    if ((*inbuf)->size != 0) {\n        if (record_capacity) {\n            h2o_buffer_t *newp = h2o_mem_alloc_recycle(&buffer_recycle_bins.zero_sized, sizeof(*newp));\n            buffer_init(newp, 0, NULL, (*inbuf)->capacity, (*inbuf)->_prototype, -1);\n            h2o_buffer__do_free(*inbuf);\n            *inbuf = newp;\n        } else {\n            h2o_buffer_t *prototype_buf = &(*inbuf)->_prototype->_initial_buf;\n            h2o_buffer__do_free(*inbuf);\n            *inbuf = prototype_buf;\n        }\n\n\n// Source: memory.c\n// Lines 485-497\n",
+  "ANSWER": "MUST"
+}

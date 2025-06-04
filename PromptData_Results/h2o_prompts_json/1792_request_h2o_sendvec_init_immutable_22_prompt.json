@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'vec' at line 1\n2. Pointer 'callbacks' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid h2o_sendvec_init_immutable(h2o_sendvec_t *vec, const void *base, size_t len)\n{\n    static const h2o_sendvec_callbacks_t callbacks = {h2o_sendvec_flatten_raw, sendvec_immutable_update_refcnt};\n    vec->callbacks = &callbacks;\n    vec->raw = (char *)base;\n    vec->len = len;\n}\n\n\n// Source: request.c\n// Lines 538-544\n",
+  "ANSWER": "MUST"
+}

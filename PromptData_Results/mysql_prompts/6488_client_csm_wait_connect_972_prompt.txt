@@ -1,0 +1,83 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'net' at line 2
+2. Pointer 'optlen' at line 35
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static mysql_state_machine_status csm_wait_connect(mysql_async_connect *ctx) {
+  NET *net = &(ctx->mysql->net);
+  MYSQL_VIO vio = net->vio;
+  int timeout_ms = 1;  // this is 1ms: the smallest non-zero timeout we can use
+  int ret;
+
+  DBUG_TRACE;
+
+  DBUG_PRINT(
+      "enter",
+      ("host: %s  db: %s  user: %s (client)", ctx->host ? ctx->host : "(Null)",
+       ctx->db ? ctx->db : "(Null)", ctx->user ? ctx->user : "(Null)"));
+
+  if (!net->vio) {
+    DBUG_PRINT("error", ("Unknown protocol %d", ctx->mysql->options.protocol));
+    set_mysql_error(ctx->mysql, CR_CONN_UNKNOW_PROTOCOL, unknown_sqlstate);
+    return STATE_MACHINE_FAILED;
+  }
+
+  /*
+    The connect() is in progress. The vio_io_wait() with the smallest non-zero
+    timeout possible can be used to peek if connect() completed.
+
+    If vio_io_wait() returns 0,
+    the socket never became writable and we'll return to caller.
+    Otherwise, if vio_io_wait() returns 1, then one of two conditions
+    exist:
+
+    1. An error occurred. Use getsockopt() to check for this.
+    2. The connection was set up successfully: getsockopt() will
+       return 0 as an error.
+  */
+  if (vio_io_wait(vio, VIO_IO_EVENT_CONNECT, timeout_ms) == 1) {
+    int error;
+    IF_WIN(int, socklen_t) optlen = sizeof(error);
+    IF_WIN(char, void) *optval = (IF_WIN(char, void) *)&error;
+
+    /*
+      At this point, we know that something happened on the socket.
+      But this does not means that everything is alright. The connect
+      might have failed. We need to retrieve the error code from the
+      socket layer. We must return success only if we are sure that
+      it was really a success. Otherwise we might prevent the caller
+      from trying another address to connect to.
+    */
+    DBUG_PRINT("info", ("Connect to '%s' completed", ctx->host));
+    ctx->state_function = csm_complete_connect;
+    if (!(ret = mysql_socket_getsockopt(vio->mysql_socket, SOL_SOCKET, SO_ERROR,
+                                        optval, &optlen))) {
+#ifdef _WIN32
+      WSASetLastError(error);
+#else
+      errno = error;
+#endif
+      if (error != 0) {
+        DBUG_PRINT("error",
+                   ("Got error %d on connect to '%s'", error, ctx->host));
+        set_mysql_extended_error(
+            ctx->mysql, CR_CONN_HOST_ERROR, unknown_sqlstate,
+            ER_CLIENT(CR_CONN_HOST_ERROR), ctx->host, ctx->port, error);
+        return STATE_MACHINE_FAILED;
+      }
+    }
+  }
+
+
+// Source: client.cc
+// Lines 6122-6185
+
+
+[ANSWER]
+MUST-NOT

@@ -1,0 +1,29 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'conflict' at line 3
+2. Pointer 'conflicts' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int merge_diff_empty(const git_vector *conflicts, size_t idx, void *p)
+{
+	git_merge_diff *conflict = conflicts->contents[idx];
+
+	GIT_UNUSED(p);
+
+	return (!GIT_MERGE_INDEX_ENTRY_EXISTS(conflict->ancestor_entry) &&
+		!GIT_MERGE_INDEX_ENTRY_EXISTS(conflict->our_entry) &&
+		!GIT_MERGE_INDEX_ENTRY_EXISTS(conflict->their_entry));
+}
+
+
+// Source: merge.c
+// Lines 1505-1514
+
+
+[ANSWER]
+MUST

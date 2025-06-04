@@ -1,0 +1,31 @@
+size_t ZSTD_compressBlock_btultra2(
+        ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
+        const void* src, size_t srcSize)
+{
+    U32 const current = (U32)((const BYTE*)src - ms->window.base);
+    DEBUGLOG(5, "ZSTD_compressBlock_btultra2 (srcSize=%zu)", srcSize);
+
+    /* 2-pass strategy:
+     * this strategy makes a first pass over first block to collect statistics
+     * and seed next round's statistics with it.
+     * After 1st pass, function forgets everything, and starts a new block.
+     * Consequently, this can only work if no data has been previously loaded in tables,
+     * aka, no dictionary, no prefix, no ldm preprocessing.
+     * The compression ratio gain is generally small (~0.5% on first block),
+     * the cost is 2x cpu time on first block. */
+    assert(srcSize <= ZSTD_BLOCKSIZE_MAX);
+    if ( (ms->opt.litLengthSum==0)   /* first block */
+      && (seqStore->sequences == seqStore->sequencesStart)  /* no ldm */
+      && (ms->window.dictLimit == ms->window.lowLimit)   /* no dictionary */
+      && (current == ms->window.dictLimit)   /* start of frame, nothing already loaded nor skipped */
+      && (srcSize > ZSTD_PREDEF_THRESHOLD)
+      ) {
+        ZSTD_initStats_ultra(ms, seqStore, rep, src, srcSize);
+    }
+
+    return ZSTD_compressBlock_opt_generic(ms, seqStore, rep, src, srcSize, 2 /*optLevel*/, ZSTD_noDict);
+}
+
+
+// Source: zstd_opt.c
+// Lines 1191-1217

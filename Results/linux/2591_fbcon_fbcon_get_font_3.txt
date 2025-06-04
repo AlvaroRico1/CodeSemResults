@@ -1,0 +1,1 @@
+fontdata,linux/drivers/video/fbdev/core/fbcon.c,3,data,linux/drivers/video/fbdev/core/fbcon.c,3,2

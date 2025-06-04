@@ -1,0 +1,69 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'cs' at line 1
+2. Pointer 'cand' at line 29
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int decode_stored_session_ticket(ptls_t *tls, ptls_key_exchange_algorithm_t **key_share, ptls_cipher_suite_t **cs,
+                                        ptls_iovec_t *secret, uint32_t *obfuscated_ticket_age, ptls_iovec_t *ticket,
+                                        uint32_t *max_early_data_size, const uint8_t *src, const uint8_t *const end)
+{
+    uint16_t kxid, csid;
+    uint32_t lifetime, age_add;
+    uint64_t obtained_at, now;
+    ptls_iovec_t nonce;
+    int ret;
+
+    /* decode */
+    if ((ret = ptls_decode64(&obtained_at, &src, end)) != 0)
+        goto Exit;
+    if ((ret = ptls_decode16(&kxid, &src, end)) != 0)
+        goto Exit;
+    if ((ret = ptls_decode16(&csid, &src, end)) != 0)
+        goto Exit;
+    ptls_decode_open_block(src, end, 3, {
+        if ((ret = decode_new_session_ticket(tls, &lifetime, &age_add, &nonce, ticket, max_early_data_size, src, end)) != 0)
+            goto Exit;
+        src = end;
+    });
+    ptls_decode_block(src, end, 2, {
+        *secret = ptls_iovec_init(src, end - src);
+        src = end;
+    });
+
+    { /* determine the key-exchange */
+        ptls_key_exchange_algorithm_t **cand;
+        for (cand = tls->ctx->key_exchanges; *cand != NULL; ++cand)
+            if ((*cand)->id == kxid)
+                break;
+        if (*cand == NULL) {
+            ret = PTLS_ERROR_LIBRARY;
+            goto Exit;
+        }
+        *key_share = *cand;
+    }
+
+    { /* determine the cipher-suite */
+        ptls_cipher_suite_t **cand;
+        for (cand = tls->ctx->cipher_suites; *cand != NULL; ++cand)
+            if ((*cand)->id == csid)
+                break;
+        if (*cand == NULL) {
+            ret = PTLS_ERROR_LIBRARY;
+            goto Exit;
+        }
+        *cs = *cand;
+    }
+
+
+// Source: picotls.c
+// Lines 1127-1176
+
+
+[ANSWER]
+MUST

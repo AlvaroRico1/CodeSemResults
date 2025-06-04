@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'g' at line 2\n2. Pointer 'o' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid luaC_link (lua_State *L, GCObject *o, lu_byte tt) {\n  global_State *g = G(L);\n  o->gch.next = g->rootgc;\n  g->rootgc = o;\n  o->gch.marked = luaC_white(g);\n  o->gch.tt = tt;\n}\n\n\n// Source: lgc.c\n// Lines 685-691\n",
+  "ANSWER": "MUST"
+}

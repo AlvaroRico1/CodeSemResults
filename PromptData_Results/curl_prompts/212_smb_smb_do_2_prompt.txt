@@ -1,0 +1,30 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'conn' at line 3
+2. Pointer 'data' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static CURLcode smb_do(struct Curl_easy *data, bool *done)
+{
+  struct connectdata *conn = data->conn;
+  struct smb_conn *smbc = &conn->proto.smbc;
+
+  *done = FALSE;
+  if(smbc->share) {
+    return CURLE_OK;
+  }
+  return CURLE_URL_MALFORMAT;
+}
+
+
+// Source: smb.c
+// Lines 971-981
+
+
+[ANSWER]
+MUST

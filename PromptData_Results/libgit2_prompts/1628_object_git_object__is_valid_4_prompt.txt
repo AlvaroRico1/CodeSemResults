@@ -1,0 +1,42 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'odb' at line 4
+2. Pointer 'actual_type' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool git_object__is_valid(
+	git_repository *repo, const git_oid *id, git_object_t expected_type)
+{
+	git_odb *odb;
+	git_object_t actual_type;
+	size_t len;
+	int error;
+
+	if (!git_object__strict_input_validation)
+		return true;
+
+	if ((error = git_repository_odb__weakptr(&odb, repo)) < 0 ||
+		(error = git_odb_read_header(&len, &actual_type, odb, id)) < 0)
+		return false;
+
+	if (expected_type != GIT_OBJECT_ANY && expected_type != actual_type) {
+		git_error_set(GIT_ERROR_INVALID,
+			"the requested type does not match the type in the ODB");
+		return false;
+	}
+
+	return true;
+}
+
+
+// Source: object.c
+// Lines 548-570
+
+
+[ANSWER]
+MAY

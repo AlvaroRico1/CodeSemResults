@@ -1,0 +1,29 @@
+static int handle_input_expect_headers_process_connect(struct st_h2o_http3_server_stream_t *stream,
+                                                       h2o_iovec_t *datagram_flow_id_field, const char **err_desc)
+{
+    if (stream->req.content_length != SIZE_MAX)
+        return handle_input_expect_headers_send_http_error(stream, h2o_send_error_400, "Invalid Request",
+                                                           "CONNECT request cannot have request body", err_desc);
+
+    uint64_t datagram_flow_id = UINT64_MAX;
+    if (datagram_flow_id_field != NULL) {
+        /* CONNECT-UDP */
+        if (datagram_flow_id_field->base != NULL) {
+            /* check if it can be used */
+            if (!h2o_http3_can_use_h3_datagram(&get_conn(stream)->h3)) {
+                *err_desc = "unexpected h3 datagram";
+                return H2O_HTTP3_ERROR_GENERAL_PROTOCOL;
+            }
+            /* TODO implement proper parsing */
+            datagram_flow_id = 0;
+            for (const char *p = datagram_flow_id_field->base; p != datagram_flow_id_field->base + datagram_flow_id_field->len;
+                 ++p) {
+                if (!('0' <= *p && *p <= '9'))
+                    break;
+                datagram_flow_id = datagram_flow_id * 10 + *p - '0';
+            }
+        }
+
+
+// Source: server.c
+// Lines 1147-1171

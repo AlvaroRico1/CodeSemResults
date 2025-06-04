@@ -1,0 +1,39 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'progress' at line 3
+2. Pointer 'diff_data' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int file_cb(
+	const git_diff_delta *delta,
+	float progress,
+	void *payload)
+{
+	struct diff_data *diff_data = payload;
+
+	GIT_UNUSED(progress);
+
+	if (delta->old_file.path)
+		diff_data->old_path = git__strdup(delta->old_file.path);
+
+	if (delta->new_file.path)
+		diff_data->new_path = git__strdup(delta->new_file.path);
+
+	git_oid_cpy(&diff_data->old_id, &delta->old_file.id);
+	git_oid_cpy(&diff_data->new_id, &delta->new_file.id);
+
+	return 0;
+}
+
+
+// Source: binary.c
+// Lines 424-443
+
+
+[ANSWER]
+MUST-NOT

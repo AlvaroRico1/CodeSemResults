@@ -1,0 +1,28 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'sin' at line 5
+2. Pointer 'sa' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+size_t h2o_socket_getnumerichost(const struct sockaddr *sa, socklen_t salen, char *buf)
+{
+    if (sa->sa_family == AF_INET) {
+        /* fast path for IPv4 addresses */
+        struct sockaddr_in *sin = (void *)sa;
+        uint32_t addr;
+        addr = htonl(sin->sin_addr.s_addr);
+        return sprintf(buf, "%d.%d.%d.%d", addr >> 24, (addr >> 16) & 255, (addr >> 8) & 255, addr & 255);
+    }
+
+
+// Source: socket.c
+// Lines 1136-1144
+
+
+[ANSWER]
+MUST

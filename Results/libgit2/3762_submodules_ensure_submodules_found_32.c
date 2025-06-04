@@ -1,0 +1,35 @@
+static void ensure_submodules_found(
+	git_repository *repo,
+	const char **paths,
+	size_t cnt)
+{
+	git_diff *diff = NULL;
+	git_diff_options opts = GIT_DIFF_OPTIONS_INIT;
+	const git_diff_delta *delta;
+	size_t i, pathlen;
+
+	opts.pathspec.strings = (char **)paths;
+	opts.pathspec.count = cnt;
+
+	git_diff_index_to_workdir(&diff, repo, NULL, &opts);
+
+	cl_assert_equal_i(cnt, git_diff_num_deltas(diff));
+
+	for (i = 0; i < cnt; i++) {
+		delta = git_diff_get_delta(diff, i);
+
+		/* ensure that the given path is returned w/o trailing slashes. */
+		pathlen = strlen(opts.pathspec.strings[i]);
+
+		while (pathlen && opts.pathspec.strings[i][pathlen - 1] == '/')
+			pathlen--;
+
+		cl_assert_equal_strn(opts.pathspec.strings[i], delta->new_file.path, pathlen);
+	}
+
+	git_diff_free(diff);
+}
+
+
+// Source: submodules.c
+// Lines 498-528

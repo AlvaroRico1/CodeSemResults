@@ -1,0 +1,21 @@
+static int client_handle_certificate_request(ptls_t *tls, ptls_iovec_t message, ptls_handshake_properties_t *properties)
+{
+    const uint8_t *src = message.base + PTLS_HANDSHAKE_HEADER_SIZE, *const end = message.base + message.len;
+    int ret = 0;
+
+    if ((ret = decode_certificate_request(tls, &tls->client.certificate_request, src, end)) != 0)
+        return ret;
+
+    /* This field SHALL be zero length unless used for the post-handshake authentication exchanges (section 4.3.2) */
+    if (tls->client.certificate_request.context.len != 0)
+        return PTLS_ALERT_ILLEGAL_PARAMETER;
+
+    tls->state = PTLS_STATE_CLIENT_EXPECT_CERTIFICATE;
+    ptls__key_schedule_update_hash(tls->key_schedule, message.base, message.len);
+
+    return PTLS_ERROR_IN_PROGRESS;
+}
+
+
+// Source: picotls.c
+// Lines 2718-2734

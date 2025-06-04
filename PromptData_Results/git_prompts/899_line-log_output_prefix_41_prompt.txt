@@ -1,0 +1,27 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'prefix' at line 3
+2. Pointer 'sb' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static char *output_prefix(struct diff_options *opt)
+{
+	char *prefix = "";
+
+	if (opt->output_prefix) {
+		struct strbuf *sb = opt->output_prefix(opt, opt->output_prefix_data);
+		prefix = sb->buf;
+	}
+
+
+// Source: line-log.c
+// Lines 899-906
+
+
+[ANSWER]
+MUST

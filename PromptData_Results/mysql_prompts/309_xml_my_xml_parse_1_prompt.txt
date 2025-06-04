@@ -1,0 +1,143 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'p' at line 1
+2. Pointer 'lex' at line 11
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int my_xml_parse(MY_XML_PARSER *p, const char *str, size_t len) {
+  my_xml_attr_rewind(p);
+
+  p->beg = str;
+  p->cur = str;
+  p->end = str + len;
+
+  while (p->cur < p->end) {
+    MY_XML_ATTR a;
+    if (p->cur[0] == '<') {
+      int lex;
+      int question = 0;
+      int exclam = 0;
+
+      lex = my_xml_scan(p, &a);
+
+      if (MY_XML_COMMENT == lex) continue;
+
+      if (lex == MY_XML_CDATA) {
+        a.beg += 9;
+        a.end -= 3;
+        my_xml_value(p, a.beg, (size_t)(a.end - a.beg));
+        continue;
+      }
+
+      lex = my_xml_scan(p, &a);
+
+      if (MY_XML_SLASH == lex) {
+        if (MY_XML_IDENT != (lex = my_xml_scan(p, &a))) {
+          sprintf(p->errstr, "%s unexpected (ident wanted)", lex2str(lex));
+          return MY_XML_ERROR;
+        }
+        if (MY_XML_OK != my_xml_leave(p, a.beg, (size_t)(a.end - a.beg)))
+          return MY_XML_ERROR;
+        lex = my_xml_scan(p, &a);
+        goto gt;
+      }
+
+      if (MY_XML_EXCLAM == lex) {
+        lex = my_xml_scan(p, &a);
+        exclam = 1;
+      } else if (MY_XML_QUESTION == lex) {
+        lex = my_xml_scan(p, &a);
+        question = 1;
+      }
+
+      if (MY_XML_IDENT == lex) {
+        p->current_node_type = MY_XML_NODE_TAG;
+        if (MY_XML_OK != my_xml_enter(p, a.beg, (size_t)(a.end - a.beg)))
+          return MY_XML_ERROR;
+      } else {
+        sprintf(p->errstr, "%s unexpected (ident or '/' wanted)", lex2str(lex));
+        return MY_XML_ERROR;
+      }
+
+      while ((MY_XML_IDENT == (lex = my_xml_scan(p, &a))) ||
+             ((MY_XML_STRING == lex && exclam))) {
+        MY_XML_ATTR b;
+        if (MY_XML_EQ == (lex = my_xml_scan(p, &b))) {
+          lex = my_xml_scan(p, &b);
+          if ((lex == MY_XML_IDENT) || (lex == MY_XML_STRING)) {
+            p->current_node_type = MY_XML_NODE_ATTR;
+            if ((MY_XML_OK !=
+                 my_xml_enter(p, a.beg, (size_t)(a.end - a.beg))) ||
+                (MY_XML_OK !=
+                 my_xml_value(p, b.beg, (size_t)(b.end - b.beg))) ||
+                (MY_XML_OK != my_xml_leave(p, a.beg, (size_t)(a.end - a.beg))))
+              return MY_XML_ERROR;
+          } else {
+            sprintf(p->errstr, "%s unexpected (ident or string wanted)",
+                    lex2str(lex));
+            return MY_XML_ERROR;
+          }
+        } else if (MY_XML_IDENT == lex) {
+          p->current_node_type = MY_XML_NODE_ATTR;
+          if ((MY_XML_OK != my_xml_enter(p, a.beg, (size_t)(a.end - a.beg))) ||
+              (MY_XML_OK != my_xml_leave(p, a.beg, (size_t)(a.end - a.beg))))
+            return MY_XML_ERROR;
+        } else if ((MY_XML_STRING == lex) && exclam) {
+          /*
+            We are in <!DOCTYPE>, e.g.
+            <!DOCTYPE name SYSTEM "SystemLiteral">
+            <!DOCTYPE name PUBLIC "PublidLiteral" "SystemLiteral">
+            Just skip "SystemLiteral" and "PublicidLiteral"
+          */
+        } else
+          break;
+      }
+
+      if (lex == MY_XML_SLASH) {
+        if (MY_XML_OK != my_xml_leave(p, nullptr, 0)) return MY_XML_ERROR;
+        lex = my_xml_scan(p, &a);
+      }
+
+    gt:
+      if (question) {
+        if (lex != MY_XML_QUESTION) {
+          sprintf(p->errstr, "%s unexpected ('?' wanted)", lex2str(lex));
+          return MY_XML_ERROR;
+        }
+        if (MY_XML_OK != my_xml_leave(p, nullptr, 0)) return MY_XML_ERROR;
+        lex = my_xml_scan(p, &a);
+      }
+
+      if (exclam) {
+        if (MY_XML_OK != my_xml_leave(p, nullptr, 0)) return MY_XML_ERROR;
+      }
+
+      if (lex != MY_XML_GT) {
+        sprintf(p->errstr, "%s unexpected ('>' wanted)", lex2str(lex));
+        return MY_XML_ERROR;
+      }
+    } else {
+      a.beg = p->cur;
+      for (; (p->cur < p->end) && (p->cur[0] != '<'); p->cur++)
+        ;
+      a.end = p->cur;
+
+      if (!(p->flags & MY_XML_FLAG_SKIP_TEXT_NORMALIZATION))
+        my_xml_norm_text(&a);
+      if (a.beg != a.end) {
+        my_xml_value(p, a.beg, (size_t)(a.end - a.beg));
+      }
+    }
+
+
+// Source: xml.cc
+// Lines 325-448
+
+
+[ANSWER]
+MAY

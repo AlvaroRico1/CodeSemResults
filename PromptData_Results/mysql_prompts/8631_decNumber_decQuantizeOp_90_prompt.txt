@@ -1,0 +1,161 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'inrhs' at line 8
+2. Pointer 'rhs' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static decNumber * decQuantizeOp(decNumber *res, const decNumber *lhs,
+                                 const decNumber *rhs, decContext *set,
+                                 Flag quant, uInt *status) {
+  #if DECSUBSET
+  decNumber *alloclhs=NULL;        /* non-NULL if rounded lhs allocated  */
+  decNumber *allocrhs=NULL;        /* .., rhs  */
+  #endif
+  const decNumber *inrhs=rhs;      /* save original rhs  */
+  Int   reqdigits=set->digits;     /* requested DIGITS  */
+  Int   reqexp;                    /* requested exponent [-scale]  */
+  Int   residue=0;                 /* rounding residue  */
+  Int   etiny=set->emin-(reqdigits-1);
+
+  #if DECCHECK
+  if (decCheckOperands(res, lhs, rhs, set)) return res;
+  #endif
+
+  do {                             /* protect allocated storage  */
+    #if DECSUBSET
+    if (!set->extended) {
+      /* reduce operands and set lostDigits status, as needed  */
+      if (lhs->digits>reqdigits) {
+        alloclhs=decRoundOperand(lhs, set, status);
+        if (alloclhs==NULL) break;
+        lhs=alloclhs;
+        }
+      if (rhs->digits>reqdigits) { /* [this only checks lostDigits]  */
+        allocrhs=decRoundOperand(rhs, set, status);
+        if (allocrhs==NULL) break;
+        rhs=allocrhs;
+        }
+      }
+    #endif
+    /* [following code does not require input rounding]  */
+
+    /* Handle special values  */
+    if (SPECIALARGS) {
+      /* NaNs get usual processing  */
+      if (SPECIALARGS & (DECSNAN | DECNAN))
+        decNaNs(res, lhs, rhs, set, status);
+      /* one infinity but not both is bad  */
+      else if ((lhs->bits ^ rhs->bits) & DECINF)
+        *status|=DEC_Invalid_operation;
+      /* both infinity: return lhs  */
+      else uprv_decNumberCopy(res, lhs);          /* [nop if in place]  */
+      break;
+      }
+
+    /* set requested exponent  */
+    if (quant) reqexp=inrhs->exponent;  /* quantize -- match exponents  */
+     else {                             /* rescale -- use value of rhs  */
+      /* Original rhs must be an integer that fits and is in range,  */
+      /* which could be from -1999999997 to +999999999, thanks to  */
+      /* subnormals  */
+      reqexp=decGetInt(inrhs);               /* [cannot fail]  */
+      }
+
+    #if DECSUBSET
+    if (!set->extended) etiny=set->emin;     /* no subnormals  */
+    #endif
+
+    if (reqexp==BADINT                       /* bad (rescale only) or ..  */
+     || reqexp==BIGODD || reqexp==BIGEVEN    /* very big (ditto) or ..  */
+     || (reqexp<etiny)                       /* < lowest  */
+     || (reqexp>set->emax)) {                /* > emax  */
+      *status|=DEC_Invalid_operation;
+      break;}
+
+    /* the RHS has been processed, so it can be overwritten now if necessary  */
+    if (ISZERO(lhs)) {                       /* zero coefficient unchanged  */
+      uprv_decNumberCopy(res, lhs);               /* [nop if in place]  */
+      res->exponent=reqexp;                  /* .. just set exponent  */
+      #if DECSUBSET
+      if (!set->extended) res->bits=0;       /* subset specification; no -0  */
+      #endif
+      }
+     else {                                  /* non-zero lhs  */
+      Int adjust=reqexp-lhs->exponent;       /* digit adjustment needed  */
+      /* if adjusted coefficient will definitely not fit, give up now  */
+      if ((lhs->digits-adjust)>reqdigits) {
+        *status|=DEC_Invalid_operation;
+        break;
+        }
+
+      if (adjust>0) {                        /* increasing exponent  */
+        /* this will decrease the length of the coefficient by adjust  */
+        /* digits, and must round as it does so  */
+        decContext workset;                  /* work  */
+        workset=*set;                        /* clone rounding, etc.  */
+        workset.digits=lhs->digits-adjust;   /* set requested length  */
+        /* [note that the latter can be <1, here]  */
+        decCopyFit(res, lhs, &workset, &residue, status); /* fit to result  */
+        decApplyRound(res, &workset, residue, status);    /* .. and round  */
+        residue=0;                                        /* [used]  */
+        /* If just rounded a 999s case, exponent will be off by one;  */
+        /* adjust back (after checking space), if so.  */
+        if (res->exponent>reqexp) {
+          /* re-check needed, e.g., for quantize(0.9999, 0.001) under  */
+          /* set->digits==3  */
+          if (res->digits==reqdigits) {      /* cannot shift by 1  */
+            *status&=~(DEC_Inexact | DEC_Rounded); /* [clean these]  */
+            *status|=DEC_Invalid_operation;
+            break;
+            }
+          res->digits=decShiftToMost(res->lsu, res->digits, 1); /* shift  */
+          res->exponent--;                   /* (re)adjust the exponent.  */
+          }
+        #if DECSUBSET
+        if (ISZERO(res) && !set->extended) res->bits=0; /* subset; no -0  */
+        #endif
+        } /* increase  */
+       else /* adjust<=0 */ {                /* decreasing or = exponent  */
+        /* this will increase the length of the coefficient by -adjust  */
+        /* digits, by adding zero or more trailing zeros; this is  */
+        /* already checked for fit, above  */
+        uprv_decNumberCopy(res, lhs);             /* [it will fit]  */
+        /* if padding needed (adjust<0), add it now...  */
+        if (adjust<0) {
+          res->digits=decShiftToMost(res->lsu, res->digits, -adjust);
+          res->exponent+=adjust;             /* adjust the exponent  */
+          }
+        } /* decrease  */
+      } /* non-zero  */
+
+    /* Check for overflow [do not use Finalize in this case, as an  */
+    /* overflow here is a "don't fit" situation]  */
+    if (res->exponent>set->emax-res->digits+1) {  /* too big  */
+      *status|=DEC_Invalid_operation;
+      break;
+      }
+     else {
+      decFinalize(res, set, &residue, status);    /* set subnormal flags  */
+      *status&=~DEC_Underflow;          /* suppress Underflow [as per 754]  */
+      }
+    } while(0);                         /* end protected  */
+
+  #if DECSUBSET
+  if (allocrhs!=NULL) free(allocrhs);   /* drop any storage used  */
+  if (alloclhs!=NULL) free(alloclhs);   /* ..  */
+  #endif
+  return res;
+  } /* decQuantizeOp  */
+
+
+// Source: decNumber.cpp
+// Lines 5877-6018
+
+
+[ANSWER]
+MUST

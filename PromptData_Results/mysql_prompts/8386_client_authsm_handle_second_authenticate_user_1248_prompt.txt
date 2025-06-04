@@ -1,0 +1,53 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'mysql' at line 4
+2. Pointer 'ctx' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static mysql_state_machine_status authsm_handle_second_authenticate_user(
+    mysql_async_auth *ctx) {
+  DBUG_TRACE;
+  MYSQL *mysql = ctx->mysql;
+  DBUG_PRINT("info",
+             ("second authenticate_user returned %s",
+              ctx->res == CR_OK
+                  ? "CR_OK"
+                  : ctx->res == CR_ERROR ? "CR_ERROR"
+                                         : ctx->res == CR_OK_HANDSHAKE_COMPLETE
+                                               ? "CR_OK_HANDSHAKE_COMPLETE"
+                                               : "error"));
+  if (ctx->res > CR_OK) {
+    if (ctx->res > CR_ERROR)
+      set_mysql_error(mysql, ctx->res, unknown_sqlstate);
+    else if (!mysql->net.last_errno)
+      set_mysql_error(mysql, CR_UNKNOWN_ERROR, unknown_sqlstate);
+    return STATE_MACHINE_FAILED;
+  }
+
+  if (ctx->res != CR_OK_HANDSHAKE_COMPLETE) {
+    /* Read what server thinks about out new auth message report */
+    if (cli_safe_read(mysql, nullptr) == packet_error) {
+      if (mysql->net.last_errno == CR_SERVER_LOST)
+        set_mysql_extended_error(mysql, CR_SERVER_LOST, unknown_sqlstate,
+                                 ER_CLIENT(CR_SERVER_LOST_EXTENDED),
+                                 "reading final connect information", errno);
+      return STATE_MACHINE_FAILED;
+    }
+  }
+
+  ctx->state_function = authsm_finish_auth;
+  return STATE_MACHINE_CONTINUE;
+}
+
+
+// Source: client.cc
+// Lines 5532-5565
+
+
+[ANSWER]
+MUST-NOT

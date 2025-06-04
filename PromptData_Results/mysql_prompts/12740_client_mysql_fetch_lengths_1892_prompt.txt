@@ -1,0 +1,27 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'column' at line 2
+2. Pointer 'res' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+ulong *STDCALL mysql_fetch_lengths(MYSQL_RES *res) {
+  MYSQL_ROW column;
+
+  if (!(column = res->current_row)) return nullptr; /* Something is wrong */
+  if (res->data)
+    (*res->methods->fetch_lengths)(res->lengths, column, res->field_count);
+  return res->lengths;
+}
+
+
+// Source: client.cc
+// Lines 7839-7846
+
+
+[ANSWER]
+MUST-NOT

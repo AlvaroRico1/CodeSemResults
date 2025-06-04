@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'data' at line 4\n2. Pointer 'modedata' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nwindow_client_do_detach(void *modedata, void *itemdata,\n    __unused struct client *c, key_code key)\n{\n\tstruct window_client_modedata\t*data = modedata;\n\tstruct window_client_itemdata\t*item = itemdata;\n\n\tif (item == mode_tree_get_current(data->data))\n\t\tmode_tree_down(data->data, 0);\n\tif (key == 'd' || key == 'D')\n\t\tserver_client_detach(item->c, MSG_DETACH);\n\telse if (key == 'x' || key == 'X')\n\t\tserver_client_detach(item->c, MSG_DETACHKILL);\n\telse if (key == 'z' || key == 'Z')\n\t\tserver_client_suspend(item->c);\n}\n\n\n// Source: window-client.c\n// Lines 364-378\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,238 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'hton' at line 7
+2. Pointer 'first_table' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool Sql_cmd_alter_table_truncate_partition::execute(THD *thd) {
+  int error;
+  ulong timeout = thd->variables.lock_wait_timeout;
+  TABLE_LIST *first_table = thd->lex->query_block->table_list.first;
+  uint table_counter;
+  Partition_handler *part_handler = nullptr;
+  handlerton *hton;
+  DBUG_TRACE;
+  assert((m_alter_info->flags & (Alter_info::ALTER_ADMIN_PARTITION |
+                                 Alter_info::ALTER_TRUNCATE_PARTITION)) ==
+         (Alter_info::ALTER_ADMIN_PARTITION |
+          Alter_info::ALTER_TRUNCATE_PARTITION));
+
+  /* Fix the lock types (not the same as ordinary ALTER TABLE). */
+  first_table->set_lock({TL_WRITE, THR_DEFAULT});
+  first_table->mdl_request.set_type(MDL_EXCLUSIVE);
+
+  /*
+    Check table permissions and open it with a exclusive lock.
+    Ensure it is a partitioned table and finally, upcast the
+    handler and invoke the partition truncate method. Lastly,
+    write the statement to the binary log if necessary.
+  */
+
+  if (check_one_table_access(thd, DROP_ACL, first_table)) return true;
+
+  if (open_tables(thd, &first_table, &table_counter, 0)) return true;
+
+  if (!first_table->table || first_table->is_view() ||
+      !first_table->table->file->ht->partition_flags ||
+      !(part_handler = first_table->table->file->get_partition_handler())) {
+    my_error(ER_PARTITION_MGMT_ON_NONPARTITIONED, MYF(0));
+    return true;
+  }
+
+  hton = first_table->table->file->ht;
+
+  /*
+    Prune all, but named partitions. SE can use partitions bitmap
+    to understand what partitions need to be truncated. This also
+    allows to avoid excessive calls to external_lock().
+  */
+  first_table->partition_names = &m_alter_info->partition_names;
+  if (first_table->table->part_info->set_partition_bitmaps(first_table))
+    return true;
+
+  /*
+    Under locked table modes we still don't have an exclusive lock.
+    Hence, upgrade the lock since the handler truncate method mandates
+    an exclusive metadata lock. Don't forget to downgrade the lock
+    before leaving this method.
+  */
+  auto downgrade_mdl_lambda = [](MDL_ticket *ticket) {
+    ticket->downgrade_lock(MDL_SHARED_NO_READ_WRITE);
+  };
+  std::unique_ptr<MDL_ticket, decltype(downgrade_mdl_lambda)>
+      downgrade_mdl_guard(nullptr, downgrade_mdl_lambda);
+
+  if (thd->locked_tables_mode) {
+    MDL_ticket *ticket = first_table->table->mdl_ticket;
+    if (thd->mdl_context.upgrade_shared_lock(ticket, MDL_EXCLUSIVE, timeout))
+      return true;
+    downgrade_mdl_guard.reset(ticket);
+  }
+
+  dd::cache::Dictionary_client::Auto_releaser releaser(thd->dd_client());
+  dd::Table *table_def = nullptr;
+
+  if (thd->dd_client()->acquire_for_modification<dd::Table>(
+          first_table->db, first_table->table_name, &table_def))
+    return true;
+
+  /* Table was successfully opened above. */
+  assert(table_def != nullptr);
+
+  if (table_def->options().exists("secondary_engine")) {
+    /* Truncate operation is not allowed for tables with secondary engine
+     * since it's not currently supported by change propagation
+     */
+    my_error(ER_SECONDARY_ENGINE_DDL, MYF(0));
+    return true;
+  }
+
+  if (hton->partition_flags() & HA_TRUNCATE_PARTITION_PRECLOSE) {
+    /*
+      Storage engine requires closing all open table instances before
+      calling Partition_handler::truncate_partition().
+    */
+    char path[FN_REFLEN + 1];
+    TABLE_SHARE share;
+    TABLE table;
+
+    /*
+      Save information about which partitions need to be truncated
+      before destroying partitions bitmaps along with open table
+      instance.
+    */
+    MY_BITMAP saved_parts_map;
+    if (first_table->table->part_info->init_partition_bitmap(&saved_parts_map,
+                                                             thd->mem_root))
+      return true;
+    bitmap_copy(&saved_parts_map,
+                &first_table->table->part_info->read_partitions);
+
+    close_all_tables_for_name(thd, first_table->table->s, false, nullptr);
+
+    /*
+      Construct artificial TABLE/TABLE_SHARE and handler instances for
+      calling Partition_handler::truncate_partition().
+    */
+    build_table_filename(path, sizeof(path) - 1, first_table->db,
+                         first_table->table_name, "", 0);
+
+    init_tmp_table_share(thd, &share, first_table->db, 0,
+                         first_table->table_name, path, nullptr);
+
+    auto free_share_lambda = [](TABLE_SHARE *share_arg) {
+      free_table_share(share_arg);
+    };
+    std::unique_ptr<TABLE_SHARE, decltype(free_share_lambda)> free_share_guard(
+        &share, free_share_lambda);
+
+    error = open_table_def(thd, &share, *table_def);
+
+    if (!error) {
+      /*
+        When db_stat is 0, we can pass nullptr as dd::Table since it
+        won't be used.
+      */
+      destroy(&table);
+      error = open_table_from_share(thd, &share, "", 0, (uint)READ_ALL, 0,
+                                    &table, true, nullptr);
+
+      if (!error) {
+        auto closefrm_lambda = [](TABLE *t) { (void)closefrm(t, false); };
+        std::unique_ptr<TABLE, decltype(closefrm_lambda)> closefrm_guard(
+            &table, closefrm_lambda);
+
+        bitmap_copy(&table.part_info->read_partitions, &saved_parts_map);
+
+        part_handler = table.file->get_partition_handler();
+        // We succeeded obtaining Partition_hanlder earlier.
+        assert(part_handler != nullptr);
+
+        if (!error && (error = part_handler->truncate_partition(table_def))) {
+          table.file->print_error(error, MYF(0));
+        }
+      }
+    }
+  } else {
+    if (lock_tables(thd, first_table, table_counter, 0)) return true;
+
+    tdc_remove_table(thd, TDC_RT_REMOVE_NOT_OWN, first_table->db,
+                     first_table->table_name, false);
+
+    /* Invoke the handler method responsible for truncating the partition. */
+    if ((error = part_handler->truncate_partition(table_def))) {
+      first_table->table->file->print_error(error, MYF(0));
+    }
+
+    /*
+      Since we about to update table definition in the data-dictionary below
+      we need to remove its TABLE/TABLE_SHARE from TDC now.
+    */
+    close_all_tables_for_name(thd, first_table->table->s, false, nullptr);
+  }
+
+  if (hton->flags & HTON_SUPPORTS_ATOMIC_DDL) {
+    /*
+      Storage engine supporting atomic DDL can fully rollback truncate
+      if any problem occurs. This will happen during statement rollback.
+
+      In case of success we need to save dd::Table object which might
+      have been updated by SE. If this step or subsequent write to binary
+      log fail then statement rollback will also restore status quo ante.
+
+      Note that Table Definition and Table Caches were invalidated above.
+    */
+    if (!error) {
+      if (thd->dd_client()->update<dd::Table>(table_def) ||
+          write_bin_log(thd, true, thd->query().str, thd->query().length, true))
+        error = 1;
+    }
+  } else {
+    /*
+      For engines which don't support atomic DDL all effects of a
+      truncate operation are committed even if the operation fails.
+      Thus, the query must be written to the binary log.
+      The exception is a unimplemented truncate method or failure
+      before any call to handler::truncate() is done.
+      Also, it is logged in statement format, regardless of the binlog format.
+    */
+    if (error != HA_ERR_WRONG_COMMAND) {
+      error |=
+          write_bin_log(thd, !error, thd->query().str, thd->query().length);
+    }
+  }
+
+  if (!error) error = (trans_commit_stmt(thd) || trans_commit_implicit(thd));
+
+  if (error) {
+    trans_rollback_stmt(thd);
+    /*
+      Full rollback in case we have THD::transaction_rollback_request
+      and to synchronize DD state in cache and on disk (as statement
+      rollback doesn't clear DD cache of modified uncommitted objects).
+    */
+    trans_rollback(thd);
+  }
+
+  if ((hton->flags & HTON_SUPPORTS_ATOMIC_DDL) && hton->post_ddl)
+    hton->post_ddl(thd);
+
+  (void)thd->locked_tables_list.reopen_tables(thd);
+
+  if (!error) my_ok(thd);
+
+  return error;
+}
+
+
+// Source: sql_partition_admin.cc
+// Lines 584-802
+
+
+[ANSWER]
+MUST

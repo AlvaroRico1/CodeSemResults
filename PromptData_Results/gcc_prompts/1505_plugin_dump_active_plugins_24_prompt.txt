@@ -1,0 +1,39 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ci' at line 12
+2. Pointer 'ci' at line 12
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+dump_active_plugins (FILE *file)
+{
+  int event;
+
+  if (!plugins_active_p ())
+    return;
+
+  fprintf (file, FMT_FOR_PLUGIN_EVENT " | %s\n", _("Event"), _("Plugins"));
+  for (event = PLUGIN_PASS_MANAGER_SETUP; event < event_last; event++)
+    if (plugin_callbacks[event])
+      {
+	struct callback_info *ci;
+
+	fprintf (file, FMT_FOR_PLUGIN_EVENT " |", plugin_event_name[event]);
+
+	for (ci = plugin_callbacks[event]; ci; ci = ci->next)
+	  fprintf (file, " %s", ci->plugin_name);
+
+	putc ('\n', file);
+      }
+
+
+// Source: plugin.c
+// Lines 917-936
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,122 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'mc' at line 6
+2. Pointer 'cmd' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+clusterNode *getNodeByQuery(client *c, struct redisCommand *cmd, robj **argv, int argc, int *hashslot, int *error_code) {
+    clusterNode *n = NULL;
+    robj *firstkey = NULL;
+    int multiple_keys = 0;
+    multiState *ms, _ms;
+    multiCmd mc;
+    int i, slot = 0, migrating_slot = 0, importing_slot = 0, missing_keys = 0;
+
+    /* Allow any key to be set if a module disabled cluster redirections. */
+    if (server.cluster_module_flags & CLUSTER_MODULE_FLAG_NO_REDIRECTION)
+        return myself;
+
+    /* Set error code optimistically for the base case. */
+    if (error_code) *error_code = CLUSTER_REDIR_NONE;
+
+    /* Modules can turn off Redis Cluster redirection: this is useful
+     * when writing a module that implements a completely different
+     * distributed system. */
+
+    /* We handle all the cases as if they were EXEC commands, so we have
+     * a common code path for everything */
+    if (cmd->proc == execCommand) {
+        /* If CLIENT_MULTI flag is not set EXEC is just going to return an
+         * error. */
+        if (!(c->flags & CLIENT_MULTI)) return myself;
+        ms = &c->mstate;
+    } else {
+        /* In order to have a single codepath create a fake Multi State
+         * structure if the client is not in MULTI/EXEC state, this way
+         * we have a single codepath below. */
+        ms = &_ms;
+        _ms.commands = &mc;
+        _ms.count = 1;
+        mc.argv = argv;
+        mc.argc = argc;
+        mc.cmd = cmd;
+    }
+
+    /* Check that all the keys are in the same hash slot, and obtain this
+     * slot and the node associated. */
+    for (i = 0; i < ms->count; i++) {
+        struct redisCommand *mcmd;
+        robj **margv;
+        int margc, *keyindex, numkeys, j;
+
+        mcmd = ms->commands[i].cmd;
+        margc = ms->commands[i].argc;
+        margv = ms->commands[i].argv;
+
+        getKeysResult result = GETKEYS_RESULT_INIT;
+        numkeys = getKeysFromCommand(mcmd,margv,margc,&result);
+        keyindex = result.keys;
+
+        for (j = 0; j < numkeys; j++) {
+            robj *thiskey = margv[keyindex[j]];
+            int thisslot = keyHashSlot((char*)thiskey->ptr,
+                                       sdslen(thiskey->ptr));
+
+            if (firstkey == NULL) {
+                /* This is the first key we see. Check what is the slot
+                 * and node. */
+                firstkey = thiskey;
+                slot = thisslot;
+                n = server.cluster->slots[slot];
+
+                /* Error: If a slot is not served, we are in "cluster down"
+                 * state. However the state is yet to be updated, so this was
+                 * not trapped earlier in processCommand(). Report the same
+                 * error to the client. */
+                if (n == NULL) {
+                    getKeysFreeResult(&result);
+                    if (error_code)
+                        *error_code = CLUSTER_REDIR_DOWN_UNBOUND;
+                    return NULL;
+                }
+
+                /* If we are migrating or importing this slot, we need to check
+                 * if we have all the keys in the request (the only way we
+                 * can safely serve the request, otherwise we return a TRYAGAIN
+                 * error). To do so we set the importing/migrating state and
+                 * increment a counter for every missing key. */
+                if (n == myself &&
+                    server.cluster->migrating_slots_to[slot] != NULL)
+                {
+                    migrating_slot = 1;
+                } else if (server.cluster->importing_slots_from[slot] != NULL) {
+                    importing_slot = 1;
+                }
+            } else {
+                /* If it is not the first key, make sure it is exactly
+                 * the same key as the first we saw. */
+                if (!equalStringObjects(firstkey,thiskey)) {
+                    if (slot != thisslot) {
+                        /* Error: multiple keys from different slots. */
+                        getKeysFreeResult(&result);
+                        if (error_code)
+                            *error_code = CLUSTER_REDIR_CROSS_SLOT;
+                        return NULL;
+                    } else {
+                        /* Flag this request as one with multiple different
+                         * keys. */
+                        multiple_keys = 1;
+                    }
+
+
+// Source: cluster.c
+// Lines 5740-5842
+
+
+[ANSWER]
+MUST

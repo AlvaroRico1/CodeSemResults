@@ -1,0 +1,82 @@
+int get_delta_base(
+		off64_t *delta_base_out,
+		struct git_pack_file *p,
+		git_mwindow **w_curs,
+		off64_t *curpos,
+		git_object_t type,
+		off64_t delta_obj_offset)
+{
+	unsigned int left = 0;
+	unsigned char *base_info;
+	off64_t base_offset;
+	git_oid unused;
+
+	GIT_ASSERT_ARG(delta_base_out);
+
+	base_info = pack_window_open(p, w_curs, *curpos, &left);
+	/* Assumption: the only reason this would fail is because the file is too small */
+	if (base_info == NULL)
+		return GIT_EBUFS;
+	/* pack_window_open() assured us we have [base_info, base_info + 20)
+	 * as a range that we can look at without walking off the
+	 * end of the mapped window. Its actually the hash size
+	 * that is assured. An OFS_DELTA longer than the hash size
+	 * is stupid, as then a REF_DELTA would be smaller to store.
+	 */
+	if (type == GIT_OBJECT_OFS_DELTA) {
+		unsigned used = 0;
+		unsigned char c = base_info[used++];
+		size_t unsigned_base_offset = c & 127;
+		while (c & 128) {
+			if (left <= used)
+				return GIT_EBUFS;
+			unsigned_base_offset += 1;
+			if (!unsigned_base_offset || MSB(unsigned_base_offset, 7))
+				return packfile_error("overflow");
+			c = base_info[used++];
+			unsigned_base_offset = (unsigned_base_offset << 7) + (c & 127);
+		}
+		if (unsigned_base_offset == 0 || (size_t)delta_obj_offset <= unsigned_base_offset)
+			return packfile_error("out of bounds");
+		base_offset = delta_obj_offset - unsigned_base_offset;
+		*curpos += used;
+	} else if (type == GIT_OBJECT_REF_DELTA) {
+		/* If we have the cooperative cache, search in it first */
+		if (p->has_cache) {
+			struct git_pack_entry *entry;
+			git_oid oid;
+
+			git_oid_fromraw(&oid, base_info);
+			if ((entry = git_oidmap_get(p->idx_cache, &oid)) != NULL) {
+				if (entry->offset == 0)
+					return packfile_error("delta offset is zero");
+
+				*curpos += 20;
+				*delta_base_out = entry->offset;
+				return 0;
+			} else {
+				/* If we're building an index, don't try to find the pack
+				 * entry; we just haven't seen it yet.  We'll make
+				 * progress again in the next loop.
+				 */
+				return GIT_PASSTHROUGH;
+			}
+		}
+
+		/* The base entry _must_ be in the same pack */
+		if (pack_entry_find_offset(&base_offset, &unused, p, (git_oid *)base_info, GIT_OID_HEXSZ) < 0)
+			return packfile_error("base entry delta is not in the same pack");
+		*curpos += 20;
+	} else
+		return packfile_error("unknown object type");
+
+	if (base_offset == 0)
+		return packfile_error("delta offset is zero");
+
+	*delta_base_out = base_offset;
+	return 0;
+}
+
+
+// Source: pack.c
+// Lines 961-1038

@@ -1,0 +1,1 @@
+name_part,git/line-log.c,12,begin,git/line-log.c,15,2

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'pages' at line 2\n2. Pointer 'newpage' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int buf_to_pages_noslab(const void *buf, size_t buflen,\n\t\tstruct page **pages)\n{\n\tstruct page *newpage, **spages;\n\tint rc = 0;\n\tsize_t len;\n\tspages = pages;\n\n\tdo {\n\t\tlen = min_t(size_t, PAGE_SIZE, buflen);\n\t\tnewpage = alloc_page(GFP_KERNEL);\n\n\t\tif (newpage == NULL)\n\t\t\tgoto unwind;\n\t\tmemcpy(page_address(newpage), buf, len);\n\t\tbuf += len;\n\t\tbuflen -= len;\n\t\t*pages++ = newpage;\n\t\trc++;\n\t} while (buflen != 0);\n\n\treturn rc;\n\nunwind:\n\tfor(; rc > 0; rc--)\n\t\t__free_page(spages[rc-1]);\n\treturn -ENOMEM;\n}\n\n\n// Source: nfs4proc.c\n// Lines 5417-5444\n",
+  "ANSWER": "MUST"
+}

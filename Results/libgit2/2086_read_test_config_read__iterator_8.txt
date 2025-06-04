@@ -1,0 +1,1 @@
+count,libgit2/tests/libgit2/config/read.c,15,ret,libgit2/tests/libgit2/config/read.c,15,0

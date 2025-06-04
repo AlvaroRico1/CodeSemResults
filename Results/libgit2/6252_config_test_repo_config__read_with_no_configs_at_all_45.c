@@ -1,0 +1,127 @@
+void test_repo_config__read_with_no_configs_at_all(void)
+{
+	git_repository *repo;
+	int val;
+
+	cl_git_pass(git_libgit2_opts(
+		GIT_OPT_SET_SEARCH_PATH, GIT_CONFIG_LEVEL_GLOBAL, path.ptr));
+	cl_git_pass(git_libgit2_opts(
+		GIT_OPT_SET_SEARCH_PATH, GIT_CONFIG_LEVEL_SYSTEM, path.ptr));
+	cl_git_pass(git_libgit2_opts(
+		GIT_OPT_SET_SEARCH_PATH, GIT_CONFIG_LEVEL_XDG, path.ptr));
+
+	/* with none */
+
+	cl_must_pass(p_unlink("empty_standard_repo/.git/config"));
+	cl_assert(!git_fs_path_isfile("empty_standard_repo/.git/config"));
+
+	cl_git_pass(git_repository_open(&repo, "empty_standard_repo"));
+	git_repository__configmap_lookup_cache_clear(repo);
+	val = -1;
+	cl_git_pass(git_repository__configmap_lookup(&val, repo, GIT_CONFIGMAP_ABBREV));
+	cl_assert_equal_i(GIT_ABBREV_DEFAULT, val);
+	git_repository_free(repo);
+
+	/* with no local config, just system */
+
+	cl_sandbox_set_search_path_defaults();
+
+	cl_must_pass(p_mkdir("alternate/1", 0777));
+	cl_git_pass(git_str_joinpath(&path, path.ptr, "1"));
+	cl_git_rewritefile("alternate/1/gitconfig", "[core]\n\tabbrev = 10\n");
+	cl_git_pass(git_libgit2_opts(
+		GIT_OPT_SET_SEARCH_PATH, GIT_CONFIG_LEVEL_SYSTEM, path.ptr));
+
+	cl_git_pass(git_repository_open(&repo, "empty_standard_repo"));
+	git_repository__configmap_lookup_cache_clear(repo);
+	val = -1;
+	cl_git_pass(git_repository__configmap_lookup(&val, repo, GIT_CONFIGMAP_ABBREV));
+	cl_assert_equal_i(10, val);
+	git_repository_free(repo);
+
+	/* with just xdg + system */
+
+	cl_must_pass(p_mkdir("alternate/2", 0777));
+	path.ptr[path.size - 1] = '2';
+	cl_git_rewritefile("alternate/2/config", "[core]\n\tabbrev = 20\n");
+	cl_git_pass(git_libgit2_opts(
+		GIT_OPT_SET_SEARCH_PATH, GIT_CONFIG_LEVEL_XDG, path.ptr));
+
+	cl_git_pass(git_repository_open(&repo, "empty_standard_repo"));
+	git_repository__configmap_lookup_cache_clear(repo);
+	val = -1;
+	cl_git_pass(git_repository__configmap_lookup(&val, repo, GIT_CONFIGMAP_ABBREV));
+	cl_assert_equal_i(20, val);
+	git_repository_free(repo);
+
+	/* with global + xdg + system */
+
+	cl_must_pass(p_mkdir("alternate/3", 0777));
+	path.ptr[path.size - 1] = '3';
+	cl_git_rewritefile("alternate/3/.gitconfig", "[core]\n\tabbrev = 30\n");
+	cl_git_pass(git_libgit2_opts(
+		GIT_OPT_SET_SEARCH_PATH, GIT_CONFIG_LEVEL_GLOBAL, path.ptr));
+
+	cl_git_pass(git_repository_open(&repo, "empty_standard_repo"));
+	git_repository__configmap_lookup_cache_clear(repo);
+	val = -1;
+	cl_git_pass(git_repository__configmap_lookup(&val, repo, GIT_CONFIGMAP_ABBREV));
+	cl_assert_equal_i(30, val);
+	git_repository_free(repo);
+
+	/* with all configs */
+
+	cl_git_rewritefile("empty_standard_repo/.git/config", "[core]\n\tabbrev = 40\n");
+
+	cl_git_pass(git_repository_open(&repo, "empty_standard_repo"));
+	git_repository__configmap_lookup_cache_clear(repo);
+	val = -1;
+	cl_git_pass(git_repository__configmap_lookup(&val, repo, GIT_CONFIGMAP_ABBREV));
+	cl_assert_equal_i(40, val);
+	git_repository_free(repo);
+
+	/* with all configs but delete the files ? */
+
+	cl_git_pass(git_repository_open(&repo, "empty_standard_repo"));
+	git_repository__configmap_lookup_cache_clear(repo);
+	val = -1;
+	cl_git_pass(git_repository__configmap_lookup(&val, repo, GIT_CONFIGMAP_ABBREV));
+	cl_assert_equal_i(40, val);
+
+	cl_must_pass(p_unlink("empty_standard_repo/.git/config"));
+	cl_assert(!git_fs_path_isfile("empty_standard_repo/.git/config"));
+
+	cl_must_pass(p_unlink("alternate/1/gitconfig"));
+	cl_assert(!git_fs_path_isfile("alternate/1/gitconfig"));
+
+	cl_must_pass(p_unlink("alternate/2/config"));
+	cl_assert(!git_fs_path_isfile("alternate/2/config"));
+
+	cl_must_pass(p_unlink("alternate/3/.gitconfig"));
+	cl_assert(!git_fs_path_isfile("alternate/3/.gitconfig"));
+
+	git_repository__configmap_lookup_cache_clear(repo);
+	val = -1;
+	cl_git_pass(git_repository__configmap_lookup(&val, repo, GIT_CONFIGMAP_ABBREV));
+	cl_assert_equal_i(40, val);
+	git_repository_free(repo);
+
+	/* reopen */
+
+	cl_assert(!git_fs_path_isfile("empty_standard_repo/.git/config"));
+	cl_assert(!git_fs_path_isfile("alternate/3/.gitconfig"));
+
+	cl_git_pass(git_repository_open(&repo, "empty_standard_repo"));
+	git_repository__configmap_lookup_cache_clear(repo);
+	val = -1;
+	cl_git_pass(git_repository__configmap_lookup(&val, repo, GIT_CONFIGMAP_ABBREV));
+	cl_assert_equal_i(7, val);
+	git_repository_free(repo);
+
+	cl_assert(!git_fs_path_exists("empty_standard_repo/.git/config"));
+	cl_assert(!git_fs_path_exists("alternate/3/.gitconfig"));
+}
+
+
+// Source: config.c
+// Lines 89-211

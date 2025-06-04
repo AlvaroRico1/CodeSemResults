@@ -1,0 +1,32 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'entry' at line 1
+2. Pointer 'commit' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static struct entry *rev_list_push(struct data *data, struct commit *commit, int mark)
+{
+	struct entry *entry;
+	commit->object.flags |= mark | SEEN;
+
+	CALLOC_ARRAY(entry, 1);
+	entry->commit = commit;
+	prio_queue_put(&data->rev_list, entry);
+
+	if (!(mark & COMMON))
+		data->non_common_revs++;
+	return entry;
+}
+
+
+// Source: skipping.c
+// Lines 60-72
+
+
+[ANSWER]
+MUST

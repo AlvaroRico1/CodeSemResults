@@ -1,0 +1,110 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'oo' at line 9
+2. Pointer 's' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+cmdq_insert_hook(struct session *s, struct cmdq_item *item,
+    struct cmd_find_state *current, const char *fmt, ...)
+{
+	struct cmdq_state		*state = item->state;
+	struct cmd			*cmd = item->cmd;
+	struct args			*args = cmd_get_args(cmd);
+	struct args_entry		*ae;
+	struct args_value		*av;
+	struct options			*oo;
+	va_list				 ap;
+	char				*name, tmp[32], flag, *arguments;
+	u_int				 i;
+	const char			*value;
+	struct cmdq_item		*new_item;
+	struct cmdq_state		*new_state;
+	struct options_entry		*o;
+	struct options_array_item	*a;
+	struct cmd_list			*cmdlist;
+
+	if (item->state->flags & CMDQ_STATE_NOHOOKS)
+		return;
+	if (s == NULL)
+		oo = global_s_options;
+	else
+		oo = s->options;
+
+	va_start(ap, fmt);
+	xvasprintf(&name, fmt, ap);
+	va_end(ap);
+
+	o = options_get(oo, name);
+	if (o == NULL) {
+		free(name);
+		return;
+	}
+	log_debug("running hook %s (parent %p)", name, item);
+
+	/*
+	 * The hooks get a new state because they should not update the current
+	 * target or formats for any subsequent commands.
+	 */
+	new_state = cmdq_new_state(current, &state->event, CMDQ_STATE_NOHOOKS);
+	cmdq_add_format(new_state, "hook", "%s", name);
+
+	arguments = args_print(args);
+	cmdq_add_format(new_state, "hook_arguments", "%s", arguments);
+	free(arguments);
+
+	for (i = 0; i < args_count(args); i++) {
+		xsnprintf(tmp, sizeof tmp, "hook_argument_%d", i);
+		cmdq_add_format(new_state, tmp, "%s", args_string(args, i));
+	}
+	flag = args_first(args, &ae);
+	while (flag != 0) {
+		value = args_get(args, flag);
+		if (value == NULL) {
+			xsnprintf(tmp, sizeof tmp, "hook_flag_%c", flag);
+			cmdq_add_format(new_state, tmp, "1");
+		} else {
+			xsnprintf(tmp, sizeof tmp, "hook_flag_%c", flag);
+			cmdq_add_format(new_state, tmp, "%s", value);
+		}
+
+		i = 0;
+		av = args_first_value(args, flag);
+		while (av != NULL) {
+			xsnprintf(tmp, sizeof tmp, "hook_flag_%c_%d", flag, i);
+			cmdq_add_format(new_state, tmp, "%s", av->string);
+			i++;
+			av = args_next_value(av);
+		}
+
+		flag = args_next(&ae);
+	}
+
+	a = options_array_first(o);
+	while (a != NULL) {
+		cmdlist = options_array_item_value(a)->cmdlist;
+		if (cmdlist != NULL) {
+			new_item = cmdq_get_command(cmdlist, new_state);
+			if (item != NULL)
+				item = cmdq_insert_after(item, new_item);
+			else
+				item = cmdq_append(NULL, new_item);
+		}
+		a = options_array_next(a);
+	}
+
+	cmdq_free_state(new_state);
+	free(name);
+}
+
+
+// Source: cmd-queue.c
+// Lines 349-439
+
+
+[ANSWER]
+MUST

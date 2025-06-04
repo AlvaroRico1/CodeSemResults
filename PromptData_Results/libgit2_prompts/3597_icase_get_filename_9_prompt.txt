@@ -1,0 +1,47 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'filename' at line 3
+2. Pointer 'de' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static char *get_filename(const char *in)
+{
+	char *search_dirname, *search_filename, *filename = NULL;
+	git_str out = GIT_STR_INIT;
+	DIR *dir;
+	struct dirent *de;
+
+	cl_assert(search_dirname = git_fs_path_dirname(in));
+	cl_assert(search_filename = git_fs_path_basename(in));
+
+	cl_assert(dir = opendir(search_dirname));
+
+	while ((de = readdir(dir))) {
+		if (strcasecmp(de->d_name, search_filename) == 0) {
+			git_str_join(&out, '/', search_dirname, de->d_name);
+			filename = git_str_detach(&out);
+			break;
+		}
+	}
+
+	closedir(dir);
+
+	git__free(search_dirname);
+	git__free(search_filename);
+	git_str_dispose(&out);
+
+	return filename;
+}
+
+
+// Source: icase.c
+// Lines 46-73
+
+
+[ANSWER]
+MUST-NOT

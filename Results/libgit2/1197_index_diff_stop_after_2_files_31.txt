@@ -1,0 +1,1 @@
+delta,libgit2/tests/libgit2/diff/index.c,2,e,libgit2/tests/libgit2/diff/index.c,6,0

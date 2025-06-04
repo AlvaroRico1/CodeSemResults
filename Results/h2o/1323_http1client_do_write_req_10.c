@@ -1,0 +1,27 @@
+static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end_stream)
+{
+    struct st_h2o_http1client_t *client = (struct st_h2o_http1client_t *)_client;
+
+    assert(chunk.len != 0 || is_end_stream);
+    assert(!h2o_socket_is_writing(client->sock));
+    assert(client->body_buf.buf->size == 0);
+
+    /* store given content to buffer */
+    if (chunk.len != 0) {
+        if (!h2o_buffer_try_append(&client->body_buf.buf, chunk.base, chunk.len))
+            return -1;
+    }
+    client->body_buf.is_end_stream = is_end_stream;
+
+    /* check if the connection has to be closed for correct framing */
+    if (client->state.res == STREAM_STATE_CLOSED)
+        client->_do_keepalive = 0;
+
+    req_body_send(client);
+
+    return 0;
+}
+
+
+// Source: http1client.c
+// Lines 583-605

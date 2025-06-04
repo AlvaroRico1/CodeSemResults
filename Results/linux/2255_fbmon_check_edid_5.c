@@ -1,0 +1,65 @@
+static int check_edid(unsigned char *edid)
+{
+	unsigned char *block = edid + ID_MANUFACTURER_NAME, manufacturer[4];
+	unsigned char *b;
+	u32 model;
+	int i, fix = 0, ret = 0;
+
+	manufacturer[0] = ((block[0] & 0x7c) >> 2) + '@';
+	manufacturer[1] = ((block[0] & 0x03) << 3) +
+		((block[1] & 0xe0) >> 5) + '@';
+	manufacturer[2] = (block[1] & 0x1f) + '@';
+	manufacturer[3] = 0;
+	model = block[2] + (block[3] << 8);
+
+	for (i = 0; i < ARRAY_SIZE(brokendb); i++) {
+		if (!strncmp(manufacturer, brokendb[i].manufacturer, 4) &&
+			brokendb[i].model == model) {
+			fix = brokendb[i].fix;
+			break;
+		}
+	}
+
+	switch (fix) {
+	case FBMON_FIX_HEADER:
+		for (i = 0; i < 8; i++) {
+			if (edid[i] != edid_v1_header[i]) {
+				ret = fix;
+				break;
+			}
+		}
+		break;
+	case FBMON_FIX_INPUT:
+		b = edid + EDID_STRUCT_DISPLAY;
+		/* Only if display is GTF capable will
+		   the input type be reset to analog */
+		if (b[4] & 0x01 && b[0] & 0x80)
+			ret = fix;
+		break;
+	case FBMON_FIX_TIMINGS:
+		b = edid + DETAILED_TIMING_DESCRIPTIONS_START;
+		ret = fix;
+
+		for (i = 0; i < 4; i++) {
+			if (edid_is_limits_block(b)) {
+				ret = 0;
+				break;
+			}
+
+			b += DETAILED_TIMING_DESCRIPTION_SIZE;
+		}
+
+		break;
+	}
+
+	if (ret)
+		printk("fbmon: The EDID Block of "
+		       "Manufacturer: %s Model: 0x%x is known to "
+		       "be broken,\n",  manufacturer, model);
+
+	return ret;
+}
+
+
+// Source: fbmon.c
+// Lines 145-205

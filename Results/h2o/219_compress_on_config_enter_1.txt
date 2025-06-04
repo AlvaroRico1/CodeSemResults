@@ -1,0 +1,1 @@
+self,h2o/lib/handler/configurator/compress.c,3,configurator,h2o/lib/handler/configurator/compress.c,1,1

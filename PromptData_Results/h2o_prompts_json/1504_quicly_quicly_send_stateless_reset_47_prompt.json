@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'base' at line 3\n2. Pointer 'payload' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nsize_t quicly_send_stateless_reset(quicly_context_t *ctx, const void *src_cid, void *payload)\n{\n    uint8_t *base = payload;\n\n    /* build stateless reset packet */\n    ctx->tls->random_bytes(base, QUICLY_STATELESS_RESET_PACKET_MIN_LEN - QUICLY_STATELESS_RESET_TOKEN_LEN);\n    base[0] = (base[0] & ~QUICLY_LONG_HEADER_BIT) | QUICLY_QUIC_BIT;\n    if (!ctx->cid_encryptor->generate_stateless_reset_token(\n            ctx->cid_encryptor, base + QUICLY_STATELESS_RESET_PACKET_MIN_LEN - QUICLY_STATELESS_RESET_TOKEN_LEN, src_cid))\n        return SIZE_MAX;\n\n    return QUICLY_STATELESS_RESET_PACKET_MIN_LEN;\n}\n\n\n// Source: quicly.c\n// Lines 4688-4700\n",
+  "ANSWER": "MUST"
+}

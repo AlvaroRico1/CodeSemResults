@@ -1,0 +1,73 @@
+void DefaultValueObjectWriter::Node::PopulateChildren(
+    const TypeInfo* typeinfo) {
+  // Ignores well known types that don't require automatically populating their
+  // primitive children. For type "Any", we only populate its children when the
+  // "@type" field is set.
+  // TODO(tsun): remove "kStructValueType" from the list. It's being checked
+  //     now because of a bug in the tool-chain that causes the "oneof_index"
+  //     of kStructValueType to not be set correctly.
+  if (type_ == nullptr || type_->name() == kAnyType ||
+      type_->name() == kStructType || type_->name() == kTimestampType ||
+      type_->name() == kDurationType || type_->name() == kStructValueType) {
+    return;
+  }
+  std::vector<Node*> new_children;
+  std::unordered_map<std::string, int> orig_children_map;
+
+  // Creates a map of child nodes to speed up lookup.
+  for (int i = 0; i < children_.size(); ++i) {
+    InsertIfNotPresent(&orig_children_map, children_[i]->name_, i);
+  }
+
+  for (int i = 0; i < type_->fields_size(); ++i) {
+    const google::protobuf::Field& field = type_->fields(i);
+
+    // This code is checking if the field to be added to the tree should be
+    // scrubbed or not by calling the field_scrub_callback_ callback function.
+    std::vector<std::string> path;
+    if (!path_.empty()) {
+      path.insert(path.begin(), path_.begin(), path_.end());
+    }
+    path.push_back(field.name());
+    if (field_scrub_callback_ && field_scrub_callback_(path, &field)) {
+      continue;
+    }
+
+    std::unordered_map<std::string, int>::iterator found =
+        orig_children_map.find(field.name());
+    // If the child field has already been set, we just add it to the new list
+    // of children.
+    if (found != orig_children_map.end()) {
+      new_children.push_back(children_[found->second]);
+      children_[found->second] = nullptr;
+      continue;
+    }
+
+    const google::protobuf::Type* field_type = nullptr;
+    bool is_map = false;
+    NodeKind kind = PRIMITIVE;
+
+    if (field.kind() == google::protobuf::Field::TYPE_MESSAGE) {
+      kind = OBJECT;
+      util::StatusOr<const google::protobuf::Type*> found_result =
+          typeinfo->ResolveTypeUrl(field.type_url());
+      if (!found_result.ok()) {
+        // "field" is of an unknown type.
+        GOOGLE_LOG(WARNING) << "Cannot resolve type '" << field.type_url() << "'.";
+      } else {
+        const google::protobuf::Type* found_type = found_result.value();
+        is_map = IsMap(field, *found_type);
+
+        if (!is_map) {
+          field_type = found_type;
+        } else {
+          // If this field is a map, we should use the type of its "Value" as
+          // the type of the child node.
+          field_type = GetMapValueType(*found_type, typeinfo);
+          kind = MAP;
+        }
+      }
+
+
+// Source: default_value_objectwriter.cc
+// Lines 298-366

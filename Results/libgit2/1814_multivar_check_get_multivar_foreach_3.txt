@@ -1,0 +1,1 @@
+expected_patterned,libgit2/tests/libgit2/config/multivar.c,2,n,libgit2/tests/libgit2/config/multivar.c,4,0

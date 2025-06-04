@@ -1,0 +1,55 @@
+static int reflog_parse(git_reflog *log, const char *buf, size_t buf_size)
+{
+	git_parse_ctx parser = GIT_PARSE_CTX_INIT;
+
+	if ((git_parse_ctx_init(&parser, buf, buf_size)) < 0)
+		return -1;
+
+	for (; parser.remain_len; git_parse_advance_line(&parser)) {
+		git_reflog_entry *entry;
+		const char *sig;
+		char c;
+
+		entry = git__calloc(1, sizeof(*entry));
+		GIT_ERROR_CHECK_ALLOC(entry);
+		entry->committer = git__calloc(1, sizeof(*entry->committer));
+		GIT_ERROR_CHECK_ALLOC(entry->committer);
+
+		if (git_parse_advance_oid(&entry->oid_old, &parser) < 0 ||
+		    git_parse_advance_expected(&parser, " ", 1) < 0 ||
+		    git_parse_advance_oid(&entry->oid_cur, &parser) < 0)
+			goto next;
+
+		sig = parser.line;
+		while (git_parse_peek(&c, &parser, 0) == 0 && c != '\t' && c != '\n')
+			git_parse_advance_chars(&parser, 1);
+
+		if (git_signature__parse(entry->committer, &sig, parser.line, NULL, 0) < 0)
+			goto next;
+
+		if (c == '\t') {
+			size_t len;
+			git_parse_advance_chars(&parser, 1);
+
+			len = parser.line_len;
+			if (parser.line[len - 1] == '\n')
+				len--;
+
+			entry->msg = git__strndup(parser.line, len);
+			GIT_ERROR_CHECK_ALLOC(entry->msg);
+		}
+
+		if ((git_vector_insert(&log->entries, entry)) < 0) {
+			git_reflog_entry__free(entry);
+			return -1;
+		}
+
+		continue;
+
+next:
+		git_reflog_entry__free(entry);
+	}
+
+
+// Source: refdb_fs.c
+// Lines 1917-1967

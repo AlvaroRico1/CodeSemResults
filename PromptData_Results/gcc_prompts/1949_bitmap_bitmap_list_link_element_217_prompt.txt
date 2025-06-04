@@ -1,0 +1,72 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ptr' at line 4
+2. Pointer 'head' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bitmap_list_link_element (bitmap head, bitmap_element *element)
+{
+  unsigned int indx = element->indx;
+  bitmap_element *ptr;
+
+  gcc_checking_assert (!head->tree_form);
+
+  /* If this is the first and only element, set it in.  */
+  if (head->first == 0)
+    {
+      element->next = element->prev = 0;
+      head->first = element;
+    }
+
+  /* If this index is less than that of the current element, it goes someplace
+     before the current element.  */
+  else if (indx < head->indx)
+    {
+      for (ptr = head->current;
+	   ptr->prev != 0 && ptr->prev->indx > indx;
+	   ptr = ptr->prev)
+	;
+
+      if (ptr->prev)
+	ptr->prev->next = element;
+      else
+	head->first = element;
+
+      element->prev = ptr->prev;
+      element->next = ptr;
+      ptr->prev = element;
+    }
+
+  /* Otherwise, it must go someplace after the current element.  */
+  else
+    {
+      for (ptr = head->current;
+	   ptr->next != 0 && ptr->next->indx < indx;
+	   ptr = ptr->next)
+	;
+
+      if (ptr->next)
+	ptr->next->prev = element;
+
+      element->next = ptr->next;
+      element->prev = ptr;
+      ptr->next = element;
+    }
+
+  /* Set up so this is the first element searched.  */
+  head->current = element;
+  head->indx = indx;
+}
+
+
+// Source: bitmap.c
+// Lines 212-264
+
+
+[ANSWER]
+MUST

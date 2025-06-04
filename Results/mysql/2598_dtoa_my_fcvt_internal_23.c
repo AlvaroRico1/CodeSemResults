@@ -1,0 +1,51 @@
+static size_t my_fcvt_internal(double x, int precision, bool shorten, char *to,
+                               bool *error) {
+  int decpt, sign, len, i;
+  char *res, *src, *end, *dst = to;
+  char buf[DTOA_BUFF_SIZE];
+  assert(precision >= 0 && precision < DECIMAL_NOT_SPECIFIED && to != nullptr);
+
+  res = dtoa(x, 5, precision, &decpt, &sign, &end, buf, sizeof(buf));
+
+  if (decpt == DTOA_OVERFLOW) {
+    dtoa_free(res, buf, sizeof(buf));
+    *to++ = '0';
+    *to = '\0';
+    if (error != nullptr) *error = true;
+    return 1;
+  }
+
+  src = res;
+  len = (int)(end - src);
+
+  if (sign) *dst++ = '-';
+
+  if (decpt <= 0) {
+    *dst++ = '0';
+    *dst++ = '.';
+    for (i = decpt; i < 0; i++) *dst++ = '0';
+  }
+
+  for (i = 1; i <= len; i++) {
+    *dst++ = *src++;
+    if (i == decpt && i < len) *dst++ = '.';
+  }
+  while (i++ <= decpt) *dst++ = '0';
+
+  if (precision > 0 && !shorten) {
+    if (len <= decpt) *dst++ = '.';
+
+    for (i = precision - std::max(0, (len - decpt)); i > 0; i--) *dst++ = '0';
+  }
+
+  *dst = '\0';
+  if (error != nullptr) *error = false;
+
+  dtoa_free(res, buf, sizeof(buf));
+
+  return dst - to;
+}
+
+
+// Source: dtoa.cc
+// Lines 124-170

@@ -1,0 +1,44 @@
+longlong longlong_from_datetime_packed(enum enum_field_types type,
+                                       longlong packed_value) {
+  MYSQL_TIME ltime;
+  switch (type) {
+    case MYSQL_TYPE_TIME:
+      TIME_from_longlong_time_packed(&ltime, packed_value);
+      return TIME_to_ulonglong_time(ltime);
+    case MYSQL_TYPE_DATE:
+      TIME_from_longlong_date_packed(&ltime, packed_value);
+      return TIME_to_ulonglong_date(ltime);
+    case MYSQL_TYPE_DATETIME:
+    case MYSQL_TYPE_TIMESTAMP:
+      TIME_from_longlong_datetime_packed(&ltime, packed_value);
+      return TIME_to_ulonglong_datetime(ltime);
+    default:
+      assert(false);
+      return 0;
+  }
+}
+
+/**
+  Convert packed numeric temporal representation to unpacked numeric
+  representation.
+
+  @param type           MySQL field type.
+  @param packed_value   Numeric packed temporal representation.
+  @return               A double value in on of the following formats,
+                        depending  on type:
+                        YYYYMMDD, hhmmss.ffffff or YYMMDDhhmmss.ffffff.
+*/
+double double_from_datetime_packed(enum enum_field_types type,
+                                   longlong packed_value) {
+  longlong result = longlong_from_datetime_packed(type, packed_value);
+  return result +
+         (static_cast<double>(my_packed_time_get_frac_part(packed_value))) /
+             1000000;
+}
+
+/**
+   @} (end of defgroup MY_TIME)
+
+
+// Source: my_time.cc
+// Lines 2861-2900

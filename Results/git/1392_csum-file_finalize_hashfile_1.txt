@@ -1,0 +1,1 @@
+discard,git/csum-file.c,20,result,git/csum-file.c,1,2

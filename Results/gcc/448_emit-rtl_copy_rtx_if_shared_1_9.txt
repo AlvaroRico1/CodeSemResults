@@ -1,0 +1,1 @@
+orig1,gcc/gcc/emit-rtl.c,1,last_ptr,gcc/gcc/emit-rtl.c,6,1

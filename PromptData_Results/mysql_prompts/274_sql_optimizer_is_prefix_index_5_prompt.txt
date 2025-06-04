@@ -1,0 +1,38 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'key_info' at line 2
+2. Pointer 'table' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool is_prefix_index(TABLE *table, uint idx) {
+  if (!table || !table->key_info) {
+    return false;
+  }
+
+  KEY *key_info = table->key_info;
+  uint key_parts = key_info[idx].user_defined_key_parts;
+  KEY_PART_INFO *key_part = key_info[idx].key_part;
+
+  for (uint i = 0; i < key_parts; i++, key_part++) {
+    if (key_part->field &&
+        !(table->field[key_part->fieldnr - 1]
+              ->part_of_prefixkey.is_clear_all()) &&
+        !(key_info->flags & (HA_FULLTEXT | HA_SPATIAL))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+
+// Source: sql_optimizer.cc
+// Lines 1556-1574
+
+
+[ANSWER]
+MUST

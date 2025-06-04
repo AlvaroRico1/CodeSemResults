@@ -1,0 +1,1 @@
+not,libgit2/tests/libgit2/diff/parse.c,4,not_with_trailing,libgit2/tests/libgit2/diff/parse.c,6,0

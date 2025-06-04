@@ -1,0 +1,1 @@
+my_bind,mysql/libmysql/libmysql.cc,2,bit,mysql/libmysql/libmysql.cc,4,0

@@ -1,0 +1,26 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'count' at line 3
+2. Pointer 'category' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void init_client_psi_keys(void) {
+  const char *category = "client";
+  int count;
+
+  count = static_cast<int>(array_elements(all_client_memory));
+  mysql_memory_register(category, all_client_memory, count);
+}
+
+
+// Source: client.cc
+// Lines 186-192
+
+
+[ANSWER]
+MUST-NOT

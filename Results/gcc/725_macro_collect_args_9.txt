@@ -1,0 +1,1 @@
+num_args,gcc/libcpp/macro.c,2,virt_loc,gcc/libcpp/macro.c,9,2

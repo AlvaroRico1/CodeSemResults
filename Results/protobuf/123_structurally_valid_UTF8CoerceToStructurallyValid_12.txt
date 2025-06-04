@@ -1,0 +1,1 @@
+srclimit,protobuf/src/google/protobuf/stubs/structurally_valid.cc,10,isrc,protobuf/src/google/protobuf/stubs/structurally_valid.cc,3,1

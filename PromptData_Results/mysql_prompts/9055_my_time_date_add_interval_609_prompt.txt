@@ -1,0 +1,78 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'days' at line 22
+2. Pointer 'ltime' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool date_add_interval(MYSQL_TIME *ltime, interval_type int_type,
+                       Interval interval, int *warnings) {
+  ltime->neg = false;
+
+  long long sign = (interval.neg ? -1 : 1);
+
+  switch (int_type) {
+    case INTERVAL_SECOND:
+    case INTERVAL_SECOND_MICROSECOND:
+    case INTERVAL_MICROSECOND:
+    case INTERVAL_MINUTE:
+    case INTERVAL_HOUR:
+    case INTERVAL_MINUTE_MICROSECOND:
+    case INTERVAL_MINUTE_SECOND:
+    case INTERVAL_HOUR_MICROSECOND:
+    case INTERVAL_HOUR_SECOND:
+    case INTERVAL_HOUR_MINUTE:
+    case INTERVAL_DAY_MICROSECOND:
+    case INTERVAL_DAY_SECOND:
+    case INTERVAL_DAY_MINUTE:
+    case INTERVAL_DAY_HOUR: {
+      longlong sec, days, daynr, microseconds, extra_sec;
+      ltime->time_type = MYSQL_TIMESTAMP_DATETIME;  // Return full date
+      microseconds = ltime->second_part + sign * interval.second_part;
+      extra_sec = microseconds / 1000000L;
+      microseconds = microseconds % 1000000L;
+
+      if (interval.day > MAX_DAY_NUMBER) goto invalid_date;
+      if (interval.hour > MAX_DAY_NUMBER * 24ULL) goto invalid_date;
+      if (interval.minute > MAX_DAY_NUMBER * 24ULL * 60ULL) goto invalid_date;
+      if (interval.second > MAX_DAY_NUMBER * 24ULL * 60ULL * 60ULL)
+        goto invalid_date;
+      sec =
+          ((ltime->day - 1) * 3600LL * 24LL + ltime->hour * 3600LL +
+           ltime->minute * 60LL + ltime->second +
+           sign * static_cast<longlong>(
+                      interval.day * 3600ULL * 24ULL + interval.hour * 3600ULL +
+                      interval.minute * 60ULL + interval.second)) +
+          extra_sec;
+      if (microseconds < 0) {
+        microseconds += 1000000LL;
+        sec--;
+      }
+      days = sec / (3600 * 24LL);
+      sec -= days * 3600 * 24LL;
+      if (sec < 0) {
+        days--;
+        sec += 3600 * 24LL;
+      }
+      ltime->second_part = static_cast<uint>(microseconds);
+      ltime->second = static_cast<uint>(sec % 60);
+      ltime->minute = static_cast<uint>(sec / 60 % 60);
+      ltime->hour = static_cast<uint>(sec / 3600);
+      daynr = calc_daynr(ltime->year, ltime->month, 1) + days;
+      /* Day number from year 0 to 9999-12-31 */
+      if (daynr < 0 || daynr > MAX_DAY_NUMBER) goto invalid_date;
+      get_date_from_daynr(daynr, &ltime->year, &ltime->month, &ltime->day);
+      break;
+    }
+
+
+// Source: my_time.cc
+// Lines 2287-2345
+
+
+[ANSWER]
+MUST-NOT

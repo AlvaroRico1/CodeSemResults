@@ -1,0 +1,54 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'init' at line 6
+2. Pointer 'head_len' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int loose_backend__readstream_standard(
+	obj_hdr *hdr,
+	loose_readstream *stream)
+{
+	unsigned char head[MAX_HEADER_LEN];
+	size_t init, head_len;
+	int error;
+
+	if ((error = git_zstream_set_input(&stream->zstream,
+			stream->map.data, stream->map.len)) < 0)
+		return error;
+
+	init = sizeof(head);
+
+	/*
+	 * inflate the initial part of the compressed buffer in order to
+	 * parse the header; read the largest header possible, then store
+	 * it in the `start` field of the stream object.
+	 */
+	if ((error = git_zstream_get_output(head, &init, &stream->zstream)) < 0 ||
+		(error = parse_header(hdr, &head_len, head, init)) < 0)
+		return error;
+
+	if (!git_object_typeisloose(hdr->type)) {
+		git_error_set(GIT_ERROR_ODB, "failed to inflate disk object");
+		return -1;
+	}
+
+	if (init > head_len) {
+		stream->start_len = init - head_len;
+		memcpy(stream->start, head + head_len, init - head_len);
+	}
+
+	return 0;
+}
+
+
+// Source: odb_loose.c
+// Lines 953-987
+
+
+[ANSWER]
+MAY

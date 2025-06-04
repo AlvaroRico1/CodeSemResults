@@ -1,0 +1,230 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ovf' at line 153
+2. Pointer 'op2_maybe_const' at line 163
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+build_conditional_expr (location_t colon_loc, tree ifexp, bool ifexp_bcp,
+			tree op1, tree op1_original_type, location_t op1_loc,
+			tree op2, tree op2_original_type, location_t op2_loc)
+{
+  tree type1;
+  tree type2;
+  enum tree_code code1;
+  enum tree_code code2;
+  tree result_type = NULL;
+  tree semantic_result_type = NULL;
+  tree orig_op1 = op1, orig_op2 = op2;
+  bool int_const, op1_int_operands, op2_int_operands, int_operands;
+  bool ifexp_int_operands;
+  tree ret;
+
+  op1_int_operands = EXPR_INT_CONST_OPERANDS (orig_op1);
+  if (op1_int_operands)
+    op1 = remove_c_maybe_const_expr (op1);
+  op2_int_operands = EXPR_INT_CONST_OPERANDS (orig_op2);
+  if (op2_int_operands)
+    op2 = remove_c_maybe_const_expr (op2);
+  ifexp_int_operands = EXPR_INT_CONST_OPERANDS (ifexp);
+  if (ifexp_int_operands)
+    ifexp = remove_c_maybe_const_expr (ifexp);
+
+  /* Promote both alternatives.  */
+
+  if (TREE_CODE (TREE_TYPE (op1)) != VOID_TYPE)
+    op1 = default_conversion (op1);
+  if (TREE_CODE (TREE_TYPE (op2)) != VOID_TYPE)
+    op2 = default_conversion (op2);
+
+  if (TREE_CODE (ifexp) == ERROR_MARK
+      || TREE_CODE (TREE_TYPE (op1)) == ERROR_MARK
+      || TREE_CODE (TREE_TYPE (op2)) == ERROR_MARK)
+    return error_mark_node;
+
+  tree bltin1 = NULL_TREE;
+  tree bltin2 = NULL_TREE;
+  type1 = type_or_builtin_type (op1, &bltin1);
+  code1 = TREE_CODE (type1);
+  type2 = type_or_builtin_type (op2, &bltin2);
+  code2 = TREE_CODE (type2);
+
+  if (code1 == POINTER_TYPE && reject_gcc_builtin (op1))
+    return error_mark_node;
+
+  if (code2 == POINTER_TYPE && reject_gcc_builtin (op2))
+    return error_mark_node;
+
+  /* C90 does not permit non-lvalue arrays in conditional expressions.
+     In C99 they will be pointers by now.  */
+  if (code1 == ARRAY_TYPE || code2 == ARRAY_TYPE)
+    {
+      error_at (colon_loc, "non-lvalue array in conditional expression");
+      return error_mark_node;
+    }
+
+  if ((TREE_CODE (op1) == EXCESS_PRECISION_EXPR
+       || TREE_CODE (op2) == EXCESS_PRECISION_EXPR)
+      && (code1 == INTEGER_TYPE || code1 == REAL_TYPE
+	  || code1 == COMPLEX_TYPE)
+      && (code2 == INTEGER_TYPE || code2 == REAL_TYPE
+	  || code2 == COMPLEX_TYPE))
+    {
+      semantic_result_type = c_common_type (type1, type2);
+      if (TREE_CODE (op1) == EXCESS_PRECISION_EXPR)
+	{
+	  op1 = TREE_OPERAND (op1, 0);
+	  type1 = TREE_TYPE (op1);
+	  gcc_assert (TREE_CODE (type1) == code1);
+	}
+      if (TREE_CODE (op2) == EXCESS_PRECISION_EXPR)
+	{
+	  op2 = TREE_OPERAND (op2, 0);
+	  type2 = TREE_TYPE (op2);
+	  gcc_assert (TREE_CODE (type2) == code2);
+	}
+    }
+
+  if (warn_cxx_compat)
+    {
+      tree t1 = op1_original_type ? op1_original_type : TREE_TYPE (orig_op1);
+      tree t2 = op2_original_type ? op2_original_type : TREE_TYPE (orig_op2);
+
+      if (TREE_CODE (t1) == ENUMERAL_TYPE
+	  && TREE_CODE (t2) == ENUMERAL_TYPE
+	  && TYPE_MAIN_VARIANT (t1) != TYPE_MAIN_VARIANT (t2))
+	warning_at (colon_loc, OPT_Wc___compat,
+		    ("different enum types in conditional is "
+		     "invalid in C++: %qT vs %qT"),
+		    t1, t2);
+    }
+
+  /* Quickly detect the usual case where op1 and op2 have the same type
+     after promotion.  */
+  if (TYPE_MAIN_VARIANT (type1) == TYPE_MAIN_VARIANT (type2))
+    {
+      if (type1 == type2)
+	result_type = type1;
+      else
+	result_type = TYPE_MAIN_VARIANT (type1);
+    }
+  else if ((code1 == INTEGER_TYPE || code1 == REAL_TYPE
+	    || code1 == COMPLEX_TYPE)
+	   && (code2 == INTEGER_TYPE || code2 == REAL_TYPE
+	       || code2 == COMPLEX_TYPE))
+    {
+      /* In C11, a conditional expression between a floating-point
+	 type and an integer type should convert the integer type to
+	 the evaluation format of the floating-point type, with
+	 possible excess precision.  */
+      tree eptype1 = type1;
+      tree eptype2 = type2;
+      if (flag_isoc11)
+	{
+	  tree eptype;
+	  if (ANY_INTEGRAL_TYPE_P (type1)
+	      && (eptype = excess_precision_type (type2)) != NULL_TREE)
+	    {
+	      eptype2 = eptype;
+	      if (!semantic_result_type)
+		semantic_result_type = c_common_type (type1, type2);
+	    }
+	  else if (ANY_INTEGRAL_TYPE_P (type2)
+		   && (eptype = excess_precision_type (type1)) != NULL_TREE)
+	    {
+	      eptype1 = eptype;
+	      if (!semantic_result_type)
+		semantic_result_type = c_common_type (type1, type2);
+	    }
+	}
+      result_type = c_common_type (eptype1, eptype2);
+      if (result_type == error_mark_node)
+	return error_mark_node;
+      do_warn_double_promotion (result_type, type1, type2,
+				"implicit conversion from %qT to %qT to "
+				"match other result of conditional",
+				colon_loc);
+
+      /* If -Wsign-compare, warn here if type1 and type2 have
+	 different signedness.  We'll promote the signed to unsigned
+	 and later code won't know it used to be different.
+	 Do this check on the original types, so that explicit casts
+	 will be considered, but default promotions won't.  */
+      if (c_inhibit_evaluation_warnings == 0)
+	{
+	  int unsigned_op1 = TYPE_UNSIGNED (TREE_TYPE (orig_op1));
+	  int unsigned_op2 = TYPE_UNSIGNED (TREE_TYPE (orig_op2));
+
+	  if (unsigned_op1 ^ unsigned_op2)
+	    {
+	      bool ovf;
+
+	      /* Do not warn if the result type is signed, since the
+		 signed type will only be chosen if it can represent
+		 all the values of the unsigned type.  */
+	      if (!TYPE_UNSIGNED (result_type))
+		/* OK */;
+	      else
+		{
+		  bool op1_maybe_const = true;
+		  bool op2_maybe_const = true;
+
+		  /* Do not warn if the signed quantity is an
+		     unsuffixed integer literal (or some static
+		     constant expression involving such literals) and
+		     it is non-negative.  This warning requires the
+		     operands to be folded for best results, so do
+		     that folding in this case even without
+		     warn_sign_compare to avoid warning options
+		     possibly affecting code generation.  */
+		  c_inhibit_evaluation_warnings
+		    += (ifexp == truthvalue_false_node);
+		  op1 = c_fully_fold (op1, require_constant_value,
+				      &op1_maybe_const);
+		  c_inhibit_evaluation_warnings
+		    -= (ifexp == truthvalue_false_node);
+
+		  c_inhibit_evaluation_warnings
+		    += (ifexp == truthvalue_true_node);
+		  op2 = c_fully_fold (op2, require_constant_value,
+				      &op2_maybe_const);
+		  c_inhibit_evaluation_warnings
+		    -= (ifexp == truthvalue_true_node);
+
+		  if (warn_sign_compare)
+		    {
+		      if ((unsigned_op2
+			   && tree_expr_nonnegative_warnv_p (op1, &ovf))
+			  || (unsigned_op1
+			      && tree_expr_nonnegative_warnv_p (op2, &ovf)))
+			/* OK */;
+		      else if (unsigned_op2)
+			warning_at (op1_loc, OPT_Wsign_compare,
+				    "operand of %<?:%> changes signedness from "
+				    "%qT to %qT due to unsignedness of other "
+				    "operand", TREE_TYPE (orig_op1),
+				    TREE_TYPE (orig_op2));
+		      else
+			warning_at (op2_loc, OPT_Wsign_compare,
+				    "operand of %<?:%> changes signedness from "
+				    "%qT to %qT due to unsignedness of other "
+				    "operand", TREE_TYPE (orig_op2),
+				    TREE_TYPE (orig_op1));
+		    }
+		  if (!op1_maybe_const || TREE_CODE (op1) != INTEGER_CST)
+		    op1 = c_wrap_maybe_const (op1, !op1_maybe_const);
+		  if (!op2_maybe_const || TREE_CODE (op2) != INTEGER_CST)
+		    op2 = c_wrap_maybe_const (op2, !op2_maybe_const);
+		}
+
+
+// Source: c-typeck.c
+// Lines 5143-5353
+
+
+[ANSWER]
+MUST-NOT

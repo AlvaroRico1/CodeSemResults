@@ -1,0 +1,1 @@
+dst_w,tmux/cmd-join-pane.c,9,dst_wl,tmux/cmd-join-pane.c,8,1

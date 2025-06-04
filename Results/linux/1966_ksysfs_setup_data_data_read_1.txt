@@ -1,0 +1,1 @@
+buf,linux/arch/x86/kernel/ksysfs.c,4,nr,linux/arch/x86/kernel/ksysfs.c,7,2

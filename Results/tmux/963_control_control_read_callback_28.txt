@@ -1,0 +1,1 @@
+c,tmux/control.c,3,data,tmux/control.c,1,1

@@ -1,0 +1,108 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'subq' at line 78
+2. Pointer 'subquery' at line 50
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+          [&](Item **expr_p) mutable -> bool {
+            subqueries.m_location =
+                Item::Collect_scalar_subquery_info::L_JOIN_COND;
+            if ((*expr_p)->has_subquery() &&
+                (*expr_p)->walk(&Item::collect_scalar_subqueries,
+                                enum_walk::PREFIX | enum_walk::POSTFIX,
+                                pointer_cast<uchar *>(&subqueries)))
+              return true; /* purecov: inspected */
+            return false;
+          },
+          &subqueries))
+    return true; /* purecov: inspected */
+
+  subqueries.m_location = Item::Collect_scalar_subquery_info::L_WHERE;
+
+  Item **where_expr_p = &m_where_cond;
+  if (*where_expr_p != nullptr && (*where_expr_p)->has_subquery()) {
+    if ((*where_expr_p)
+            ->walk(&Item::collect_scalar_subqueries,
+                   enum_walk::PREFIX | enum_walk::POSTFIX,
+                   pointer_cast<uchar *>(&subqueries)))
+      return true; /* purecov: inspected */
+  }
+
+  subqueries.m_location =
+      Item_singlerow_subselect::Collect_scalar_subquery_info::L_SELECT;
+  for (Item *select_expr : visible_fields()) {
+    if (select_expr->has_subquery() &&
+        select_expr->walk(&Item::collect_scalar_subqueries,
+                          enum_walk::PREFIX | enum_walk::POSTFIX,
+                          pointer_cast<uchar *>(&subqueries)))
+      return true; /* purecov: inspected */
+  }
+
+  subqueries.m_location = Item::Collect_scalar_subquery_info::L_HAVING;
+  Item **having_expr_p = &m_having_cond;
+  if (*having_expr_p != nullptr && (*having_expr_p)->has_subquery()) {
+    if ((*having_expr_p)
+            ->walk(&Item::collect_scalar_subqueries,
+                   enum_walk::PREFIX | enum_walk::POSTFIX,
+                   pointer_cast<uchar *>(&subqueries)))
+      return true; /* purecov: inspected */
+  }
+
+  /*
+    Loop through eligible subqueries and see if we need the extra transform of
+    implicit grouping into a separate derived table before we can
+    transform the scalar subqueries to more derived tables.  But we
+    cannot do this if we have a HAVING expression which references or contains
+    a subquery.
+    In that case, we throw in the towel and don't do any transformations. E.g.
+
+    1. SELECT SUM(a), (SELECT SUM(b) FROM t3) scalar
+       FROM t1
+       HAVING SUM(a) > scalar;
+
+    2. SELECT MAX(a)
+       FROM t1
+       WHERE FALSE
+       HAVING (SELECT MIN(a) FROM t1) > 0;
+
+   TODO: we could solve this by not moving the HAVING condition into the derived
+   table, but instead letting it remain in the transformed block as a WHERE
+   predicate, e.g. in the case of example 1:
+
+     SELECT derived0.summ, derived1.scalar
+     FROM (SELECT SUM(a) AS summ FROM t1) AS derived0
+           LEFT JOIN
+           (SELECT SUM(b) AS scalar FROM t3) AS derived1
+           ON TRUE
+     WHERE derived0.sum > derived1.scalar;
+
+   but this is not yet done.
+  */
+  if (is_implicitly_grouped()) {
+    bool need_new_outer = false;
+    for (auto subquery : subqueries.m_list) {
+      auto *subq = subquery.item;
+      if (!query_block_contains_subquery(this, subq->unit)) continue;
+
+      // Possibly contradicting requirements
+      // (1) Subquery is in SELECT list: new_outer
+      // (2) No new outer possible if HAVING contains subquery
+      if (subquery.m_location & Item::Collect_scalar_subquery_info::L_SELECT) {
+        need_new_outer = true;
+      }
+      if (subquery.m_location & Item::Collect_scalar_subquery_info::L_HAVING)
+        return false;
+    }
+
+
+// Source: sql_resolver.cc
+// Lines 7244-7332
+
+
+[ANSWER]
+MUST

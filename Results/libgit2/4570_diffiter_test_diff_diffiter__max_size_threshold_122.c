@@ -1,0 +1,36 @@
+void test_diff_diffiter__max_size_threshold(void)
+{
+	git_repository *repo = cl_git_sandbox_init("status");
+	git_diff_options opts = GIT_DIFF_OPTIONS_INIT;
+	git_diff *diff = NULL;
+	int file_count = 0, binary_count = 0, hunk_count = 0;
+	size_t d, num_d;
+
+	opts.context_lines = 3;
+	opts.interhunk_lines = 1;
+	opts.flags |= GIT_DIFF_INCLUDE_IGNORED | GIT_DIFF_INCLUDE_UNTRACKED;
+
+	cl_git_pass(git_diff_index_to_workdir(&diff, repo, NULL, &opts));
+	num_d = git_diff_num_deltas(diff);
+
+	for (d = 0; d < num_d; ++d) {
+		git_patch *patch;
+		const git_diff_delta *delta;
+
+		cl_git_pass(git_patch_from_diff(&patch, diff, d));
+		cl_assert(patch);
+		delta = git_patch_get_delta(patch);
+		cl_assert(delta);
+
+		file_count++;
+		hunk_count += (int)git_patch_num_hunks(patch);
+
+		assert((delta->flags & (GIT_DIFF_FLAG_BINARY|GIT_DIFF_FLAG_NOT_BINARY)) != 0);
+		binary_count += ((delta->flags & GIT_DIFF_FLAG_BINARY) != 0);
+
+		git_patch_free(patch);
+	}
+
+
+// Source: diffiter.c
+// Lines 121-152

@@ -1,0 +1,1 @@
+entry_out,libgit2/src/libgit2/index.c,2,entry,libgit2/src/libgit2/index.c,7,1

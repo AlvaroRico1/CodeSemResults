@@ -1,0 +1,1 @@
+match,linux/kernel/trace/trace_events.c,3,buf,linux/kernel/trace/trace_events.c,1,2

@@ -1,0 +1,41 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'wc' at line 5
+2. Pointer 'nc' at line 12
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+fat_short2lower_uni(struct nls_table *t, unsigned char *c,
+		    int clen, wchar_t *uni)
+{
+	int charlen;
+	wchar_t wc;
+
+	charlen = t->char2uni(c, clen, &wc);
+	if (charlen < 0) {
+		*uni = 0x003f;	/* a question mark */
+		charlen = 1;
+	} else if (charlen <= 1) {
+		unsigned char nc = t->charset2lower[*c];
+
+		if (!nc)
+			nc = *c;
+
+		charlen = t->char2uni(&nc, 1, uni);
+		if (charlen < 0) {
+			*uni = 0x003f;	/* a question mark */
+			charlen = 1;
+		}
+	} else
+
+
+// Source: dir.c
+// Lines 208-229
+
+
+[ANSWER]
+MAY

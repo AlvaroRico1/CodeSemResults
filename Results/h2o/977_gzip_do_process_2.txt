@@ -1,0 +1,1 @@
+self,h2o/lib/handler/compress/gzip.c,4,_self,h2o/lib/handler/compress/gzip.c,1,1

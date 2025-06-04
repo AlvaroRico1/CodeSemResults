@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'arg' at line 4\n2. Pointer 'end' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvconcat_copy (char *dst, const char *first, va_list args)\n{\n  char *end = dst;\n  const char *arg;\n\n  for (arg = first; arg ; arg = va_arg (args, const char *))\n    {\n      unsigned long length = strlen (arg);\n      memcpy (end, arg, length);\n      end += length;\n    }\n  *end = '\\000';\n\n  return dst;\n}\n\n\n// Source: concat.c\n// Lines 71-85\n",
+  "ANSWER": "MUST-NOT"
+}

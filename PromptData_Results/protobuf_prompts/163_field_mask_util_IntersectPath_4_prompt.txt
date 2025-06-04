@@ -1,0 +1,39 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'node' at line 6
+2. Pointer 'result' at line 14
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void FieldMaskTree::IntersectPath(const std::string& path, FieldMaskTree* out) {
+  std::vector<std::string> parts = Split(path, ".");
+  if (parts.empty()) {
+    return;
+  }
+  const Node* node = &root_;
+  for (const std::string& node_name : parts) {
+    if (node->children.empty()) {
+      if (node != &root_) {
+        out->AddPath(path);
+      }
+      return;
+    }
+    const Node* result = FindPtrOrNull(node->children, node_name);
+    if (result == nullptr) {
+      // No intersection found.
+      return;
+    }
+    node = result;
+  }
+
+
+// Source: field_mask_util.cc
+// Lines 412-431
+
+
+[ANSWER]
+MUST

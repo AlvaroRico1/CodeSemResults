@@ -1,0 +1,1 @@
+slaveip,redis/src/server.c,None,slave,redis/src/server.c,26,1

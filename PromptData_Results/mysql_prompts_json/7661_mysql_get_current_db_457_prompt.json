@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'row' at line 12\n2. Pointer 'res' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic bool get_current_db() {\n  MYSQL_RES *res;\n\n  /* If one_database is set, current_db is not supposed to change. */\n  if (one_database) return false;\n\n  my_free(current_db);\n  current_db = nullptr;\n  /* In case of error below current_db will be NULL */\n  if (!mysql_query(&mysql, \"SELECT DATABASE()\") &&\n      (res = mysql_use_result(&mysql))) {\n    MYSQL_ROW row = mysql_fetch_row(res);\n    if (row && row[0])\n      current_db = my_strdup(PSI_NOT_INSTRUMENTED, row[0], MYF(MY_WME));\n    mysql_free_result(res);\n  } else {\n    /* We failed to issue the command and we likely lost connection */\n    return true;\n  }\n\n\n// Source: mysql.cc\n// Lines 3055-3073\n",
+  "ANSWER": "MUST-NOT"
+}

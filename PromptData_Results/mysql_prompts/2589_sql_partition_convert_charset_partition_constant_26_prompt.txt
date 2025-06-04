@@ -1,0 +1,33 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'save_list' at line 4
+2. Pointer 'context' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+Item *convert_charset_partition_constant(Item *item, const CHARSET_INFO *cs) {
+  THD *thd = current_thd;
+  Name_resolution_context *context = &thd->lex->current_query_block()->context;
+  TABLE_LIST *save_list = context->table_list;
+  const char *save_where = thd->where;
+
+  item = item->safe_charset_converter(thd, cs);
+  context->table_list = nullptr;
+  thd->where = "convert character set partition constant";
+  if (!item || item->fix_fields(thd, (Item **)nullptr)) item = nullptr;
+  thd->where = save_where;
+  context->table_list = save_list;
+  return item;
+}
+
+
+// Source: sql_partition.cc
+// Lines 210-223
+
+
+[ANSWER]
+MUST

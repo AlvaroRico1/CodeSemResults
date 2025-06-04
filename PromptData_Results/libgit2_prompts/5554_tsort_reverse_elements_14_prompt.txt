@@ -1,0 +1,29 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tmp' at line 4
+2. Pointer 'dst' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void reverse_elements(void **dst, ssize_t start, ssize_t end)
+{
+	while (start < end) {
+		void *tmp = dst[start];
+		dst[start] = dst[end];
+		dst[end] = tmp;
+
+		start++;
+		end--;
+	}
+
+
+// Source: tsort.c
+// Lines 108-117
+
+
+[ANSWER]
+MUST

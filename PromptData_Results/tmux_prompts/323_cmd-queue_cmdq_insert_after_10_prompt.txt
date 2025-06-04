@@ -1,0 +1,44 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'item' at line 1
+2. Pointer 'next' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+cmdq_insert_after(struct cmdq_item *after, struct cmdq_item *item)
+{
+	struct client		*c = after->client;
+	struct cmdq_list	*queue = after->queue;
+	struct cmdq_item	*next;
+
+	do {
+		next = item->next;
+		item->next = after->next;
+		after->next = item;
+
+		if (c != NULL)
+			c->references++;
+		item->client = c;
+
+		item->queue = queue;
+		TAILQ_INSERT_AFTER(&queue->list, after, item, entry);
+		log_debug("%s %s: %s after %s", __func__, cmdq_name(c),
+		    item->name, after->name);
+
+		after = item;
+		item = next;
+	} while (item != NULL);
+	return (after);
+}
+
+
+// Source: cmd-queue.c
+// Lines 321-345
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'row' at line 3\n2. Pointer 'stmt' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint STDCALL mysql_stmt_fetch(MYSQL_STMT *stmt) {\n  int rc;\n  uchar *row;\n  DBUG_TRACE;\n\n  if ((rc = (*stmt->read_row_func)(stmt, &row)) ||\n      ((rc = stmt_fetch_row(stmt, row)) && rc != MYSQL_DATA_TRUNCATED)) {\n    stmt->state = MYSQL_STMT_PREPARE_DONE; /* XXX: this is buggy */\n    stmt->read_row_func = (rc == MYSQL_NO_DATA) ? stmt_read_row_no_data\n                                                : stmt_read_row_no_result_set;\n  } else {\n    /* This is to know in mysql_stmt_fetch_column that data was fetched */\n    stmt->state = MYSQL_STMT_FETCH_DONE;\n  }\n  return rc;\n}\n\n\n// Source: libmysql.cc\n// Lines 3735-3750\n",
+  "ANSWER": "MUST-NOT"
+}

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'S' at line 3\n2. Pointer 'name' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nProto* luaU_undump (lua_State* L, ZIO* Z, Mbuffer* buff, const char* name)\n{\n LoadState S;\n if (*name=='@' || *name=='=')\n  S.name=name+1;\n else if (*name==LUA_SIGNATURE[0])\n  S.name=\"binary string\";\n else\n  S.name=name;\n S.L=L;\n S.Z=Z;\n S.b=buff;\n LoadHeader(&S);\n return LoadFunction(&S,luaS_newliteral(L,\"=?\"));\n}\n\n\n// Source: lundump.c\n// Lines 195-209\n",
+  "ANSWER": "MUST"
+}

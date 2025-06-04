@@ -1,0 +1,119 @@
+static int setval(const struct my_option *opts, void *value,
+                  const char *argument, bool set_maximum_value) {
+  int err = 0, res = 0;
+  ulong var_type = opts->var_type & GET_TYPE_MASK;
+
+  if (!argument) argument = enabled_my_option;
+
+  /*
+    Thus check applies only to options that have a defined value
+    storage pointer.
+    We do it for numeric types only, as empty value is a valid
+    option for strings (the only way to reset back to default value).
+    Note: it does not relate to OPT_ARG/REQUIRED_ARG/NO_ARG, since
+    --param="" is not generally the same as --param.
+    TODO: Add an option definition flag to signify whether empty value
+    (i.e. --param="") is an acceptable value or an error and extend
+    the check to all options.
+  */
+  if (!*argument &&
+      (var_type == GET_INT || var_type == GET_UINT || var_type == GET_LONG ||
+       var_type == GET_ULONG || var_type == GET_LL || var_type == GET_ULL ||
+       var_type == GET_DOUBLE || var_type == GET_ENUM)) {
+    my_getopt_error_reporter(ERROR_LEVEL, EE_OPTION_WITH_EMPTY_VALUE,
+                             my_progname, opts->name);
+    return EXIT_ARGUMENT_REQUIRED;
+  }
+
+  if (value) {
+    if (set_maximum_value && !(value = opts->u_max_value)) {
+      my_getopt_error_reporter(ERROR_LEVEL,
+                               EE_FAILED_TO_ASSIGN_MAX_VALUE_TO_OPTION,
+                               my_progname, opts->name);
+      return EXIT_NO_PTR_TO_VARIABLE;
+    }
+
+    bool error = false;
+    switch (var_type) {
+      case GET_BOOL: /* If argument differs from 0, enable option, else disable
+                      */
+        *((bool *)value) = get_bool_argument(argument, &error);
+        if (error)
+          my_getopt_error_reporter(WARNING_LEVEL,
+                                   EE_INCORRECT_BOOLEAN_VALUE_FOR_OPTION,
+                                   opts->name, argument);
+        break;
+      case GET_INT:
+        *((int *)value) = (int)getopt_ll(argument, opts, &err);
+        break;
+      case GET_UINT:
+        *((uint *)value) = (uint)getopt_ull(argument, opts, &err);
+        break;
+      case GET_LONG:
+        *((long *)value) = (long)getopt_ll(argument, opts, &err);
+        break;
+      case GET_ULONG:
+        *((long *)value) = (long)getopt_ull(argument, opts, &err);
+        break;
+      case GET_LL:
+        *((longlong *)value) = getopt_ll(argument, opts, &err);
+        break;
+      case GET_ULL:
+        *((ulonglong *)value) = getopt_ull(argument, opts, &err);
+        break;
+      case GET_DOUBLE:
+        *((double *)value) = getopt_double(argument, opts, &err);
+        break;
+      case GET_STR:
+      case GET_PASSWORD:
+        if (argument == enabled_my_option)
+          break; /* string options don't use this default of "1" */
+        *static_cast<const char **>(value) = argument;
+        break;
+      case GET_STR_ALLOC:
+        if (argument == enabled_my_option)
+          break; /* string options don't use this default of "1" */
+        my_free(*((char **)value));
+        if (!(*((char **)value) =
+                  my_strdup(key_memory_defaults, argument, MYF(MY_WME)))) {
+          res = EXIT_OUT_OF_MEMORY;
+          goto ret;
+        };
+        break;
+      case GET_ENUM: {
+        int type = find_type(argument, opts->typelib, FIND_TYPE_BASIC);
+        if (type == 0) {
+          /*
+            Accept an integer representation of the enumerated item.
+          */
+          char *endptr;
+          ulong arg = strtoul(argument, &endptr, 10);
+          if (*endptr || arg >= opts->typelib->count) {
+            res = EXIT_ARGUMENT_INVALID;
+            goto ret;
+          }
+          *(ulong *)value = arg;
+        } else if (type < 0) {
+          res = EXIT_AMBIGUOUS_OPTION;
+          goto ret;
+        } else
+          *(ulong *)value = type - 1;
+      } break;
+      case GET_SET:
+        *(static_cast<ulonglong *>(value)) =
+            find_typeset(argument, opts->typelib, &err);
+        if (err) {
+          /* Accept an integer representation of the set */
+          char *endptr;
+          ulonglong arg = (ulonglong)strtol(argument, &endptr, 10);
+          if (*endptr || (arg >> 1) >= (1ULL << (opts->typelib->count - 1))) {
+            res = EXIT_ARGUMENT_INVALID;
+            goto ret;
+          };
+          *static_cast<ulonglong *>(value) = arg;
+          err = 0;
+        }
+
+
+// Source: my_getopt.cc
+// Lines 755-869

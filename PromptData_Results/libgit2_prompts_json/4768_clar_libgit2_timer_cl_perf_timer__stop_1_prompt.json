@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 't' at line 1\n2. Pointer 'time_now' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid cl_perf_timer__stop(cl_perf_timer *t)\n{\n\tdouble time_now = git__timer();\n\n\tt->last = time_now - t->time_started;\n\tt->sum += t->last;\n}\n\n\n// Source: clar_libgit2_timer.c\n// Lines 14-20\n",
+  "ANSWER": "MUST-NOT"
+}

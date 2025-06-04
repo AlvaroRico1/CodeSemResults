@@ -1,0 +1,1 @@
+polarity,linux/drivers/acpi/pci_irq.c,9,triggering,linux/drivers/acpi/pci_irq.c,6,2

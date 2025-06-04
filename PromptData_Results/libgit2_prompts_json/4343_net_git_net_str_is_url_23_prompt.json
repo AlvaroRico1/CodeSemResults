@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'c' at line 3\n2. Pointer 'str' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nbool git_net_str_is_url(const char *str)\n{\n\tconst char *c;\n\n\tfor (c = str; *c; c++) {\n\t\tif (*c == ':' && *(c+1) == '/' && *(c+2) == '/')\n\t\t\treturn true;\n\n\t\tif ((*c < 'a' || *c > 'z') &&\n\t\t    (*c < 'A' || *c > 'Z') &&\n\t\t    (*c < '0' || *c > '9') &&\n\t\t    (*c != '+' && *c != '-' && *c != '.'))\n\t\t\tbreak;\n\t}\n\n\treturn false;\n}\n\n\n// Source: net.c\n// Lines 22-38\n",
+  "ANSWER": "MUST"
+}

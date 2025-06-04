@@ -1,0 +1,141 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 's' at line 3
+2. Pointer 'c' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+server_client_check_redraw(struct client *c)
+{
+	struct session		*s = c->session;
+	struct tty		*tty = &c->tty;
+	struct window		*w = c->session->curw->window;
+	struct window_pane	*wp;
+	int			 needed, flags, mode = tty->mode, new_flags = 0;
+	int			 redraw;
+	u_int			 bit = 0;
+	struct timeval		 tv = { .tv_usec = 1000 };
+	static struct event	 ev;
+	size_t			 left;
+
+	if (c->flags & (CLIENT_CONTROL|CLIENT_SUSPENDED))
+		return;
+	if (c->flags & CLIENT_ALLREDRAWFLAGS) {
+		log_debug("%s: redraw%s%s%s%s%s", c->name,
+		    (c->flags & CLIENT_REDRAWWINDOW) ? " window" : "",
+		    (c->flags & CLIENT_REDRAWSTATUS) ? " status" : "",
+		    (c->flags & CLIENT_REDRAWBORDERS) ? " borders" : "",
+		    (c->flags & CLIENT_REDRAWOVERLAY) ? " overlay" : "",
+		    (c->flags & CLIENT_REDRAWPANES) ? " panes" : "");
+	}
+
+	/*
+	 * If there is outstanding data, defer the redraw until it has been
+	 * consumed. We can just add a timer to get out of the event loop and
+	 * end up back here.
+	 */
+	needed = 0;
+	if (c->flags & CLIENT_ALLREDRAWFLAGS)
+		needed = 1;
+	else {
+		TAILQ_FOREACH(wp, &w->panes, entry) {
+			if (wp->flags & PANE_REDRAW) {
+				needed = 1;
+				break;
+			}
+		}
+		if (needed)
+			new_flags |= CLIENT_REDRAWPANES;
+	}
+	if (needed && (left = EVBUFFER_LENGTH(tty->out)) != 0) {
+		log_debug("%s: redraw deferred (%zu left)", c->name, left);
+		if (!evtimer_initialized(&ev))
+			evtimer_set(&ev, server_client_redraw_timer, NULL);
+		if (!evtimer_pending(&ev, NULL)) {
+			log_debug("redraw timer started");
+			evtimer_add(&ev, &tv);
+		}
+
+		if (~c->flags & CLIENT_REDRAWWINDOW) {
+			TAILQ_FOREACH(wp, &w->panes, entry) {
+				if (wp->flags & PANE_REDRAW) {
+					log_debug("%s: pane %%%u needs redraw",
+					    c->name, wp->id);
+					c->redraw_panes |= (1 << bit);
+				}
+				if (++bit == 64) {
+					/*
+					 * If more that 64 panes, give up and
+					 * just redraw the window.
+					 */
+					new_flags &= CLIENT_REDRAWPANES;
+					new_flags |= CLIENT_REDRAWWINDOW;
+					break;
+				}
+			}
+			if (c->redraw_panes != 0)
+				c->flags |= CLIENT_REDRAWPANES;
+		}
+		c->flags |= new_flags;
+		return;
+	} else if (needed)
+		log_debug("%s: redraw needed", c->name);
+
+	flags = tty->flags & (TTY_BLOCK|TTY_FREEZE|TTY_NOCURSOR);
+	tty->flags = (tty->flags & ~(TTY_BLOCK|TTY_FREEZE))|TTY_NOCURSOR;
+
+	if (~c->flags & CLIENT_REDRAWWINDOW) {
+		/*
+		 * If not redrawing the entire window, check whether each pane
+		 * needs to be redrawn.
+		 */
+		TAILQ_FOREACH(wp, &w->panes, entry) {
+			redraw = 0;
+			if (wp->flags & PANE_REDRAW)
+				redraw = 1;
+			else if (c->flags & CLIENT_REDRAWPANES)
+				redraw = !!(c->redraw_panes & (1 << bit));
+			bit++;
+			if (!redraw)
+				continue;
+			log_debug("%s: redrawing pane %%%u", __func__, wp->id);
+			screen_redraw_pane(c, wp);
+		}
+		c->redraw_panes = 0;
+		c->flags &= ~CLIENT_REDRAWPANES;
+	}
+
+	if (c->flags & CLIENT_ALLREDRAWFLAGS) {
+		if (options_get_number(s->options, "set-titles"))
+			server_client_set_title(c);
+		screen_redraw_screen(c);
+	}
+
+	tty->flags = (tty->flags & ~TTY_NOCURSOR)|(flags & TTY_NOCURSOR);
+	tty_update_mode(tty, mode, NULL);
+	tty->flags = (tty->flags & ~(TTY_BLOCK|TTY_FREEZE|TTY_NOCURSOR))|flags;
+
+	c->flags &= ~(CLIENT_ALLREDRAWFLAGS|CLIENT_STATUSFORCE);
+
+	if (needed) {
+		/*
+		 * We would have deferred the redraw unless the output buffer
+		 * was empty, so we can record how many bytes the redraw
+		 * generated.
+		 */
+		c->redraw = EVBUFFER_LENGTH(tty->out);
+		log_debug("%s: redraw added %zu bytes", c->name, c->redraw);
+	}
+}
+
+
+// Source: server-client.c
+// Lines 1900-2021
+
+
+[ANSWER]
+MUST

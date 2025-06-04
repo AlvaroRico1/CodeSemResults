@@ -1,0 +1,78 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'mi' at line 14
+2. Pointer 'current_dir_name' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void setup_path_info(struct merge_options *opt,
+			    struct string_list_item *result,
+			    const char *current_dir_name,
+			    int current_dir_name_len,
+			    char *fullpath, /* we'll take over ownership */
+			    struct name_entry *names,
+			    struct name_entry *merged_version,
+			    unsigned is_null,     /* boolean */
+			    unsigned df_conflict, /* boolean */
+			    unsigned filemask,
+			    unsigned dirmask,
+			    int resolved          /* boolean */)
+{
+	/* result->util is void*, so mi is a convenience typed variable */
+	struct merged_info *mi;
+
+	assert(!is_null || resolved);
+	assert(!df_conflict || !resolved); /* df_conflict implies !resolved */
+	assert(resolved == (merged_version != NULL));
+
+	mi = mem_pool_calloc(&opt->priv->pool, 1,
+			     resolved ? sizeof(struct merged_info) :
+					sizeof(struct conflict_info));
+	mi->directory_name = current_dir_name;
+	mi->basename_offset = current_dir_name_len;
+	mi->clean = !!resolved;
+	if (resolved) {
+		mi->result.mode = merged_version->mode;
+		oidcpy(&mi->result.oid, &merged_version->oid);
+		mi->is_null = !!is_null;
+	} else {
+		int i;
+		struct conflict_info *ci;
+
+		ASSIGN_AND_VERIFY_CI(ci, mi);
+		for (i = MERGE_BASE; i <= MERGE_SIDE2; i++) {
+			ci->pathnames[i] = fullpath;
+			ci->stages[i].mode = names[i].mode;
+			oidcpy(&ci->stages[i].oid, &names[i].oid);
+		}
+		ci->filemask = filemask;
+		ci->dirmask = dirmask;
+		ci->df_conflict = !!df_conflict;
+		if (dirmask)
+			/*
+			 * Assume is_null for now, but if we have entries
+			 * under the directory then when it is complete in
+			 * write_completed_directory() it'll update this.
+			 * Also, for D/F conflicts, we have to handle the
+			 * directory first, then clear this bit and process
+			 * the file to see how it is handled -- that occurs
+			 * near the top of process_entry().
+			 */
+			mi->is_null = 1;
+	}
+	strmap_put(&opt->priv->paths, fullpath, mi);
+	result->string = fullpath;
+	result->util = mi;
+}
+
+
+// Source: merge-ort.c
+// Lines 788-846
+
+
+[ANSWER]
+MUST

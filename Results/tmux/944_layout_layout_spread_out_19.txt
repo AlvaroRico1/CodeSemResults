@@ -1,0 +1,1 @@
+w,tmux/layout.c,4,wp,tmux/layout.c,1,1

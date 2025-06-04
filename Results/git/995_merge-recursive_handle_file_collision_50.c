@@ -1,0 +1,134 @@
+static int handle_file_collision(struct merge_options *opt,
+				 const char *collide_path,
+				 const char *prev_path1,
+				 const char *prev_path2,
+				 const char *branch1, const char *branch2,
+				 struct diff_filespec *a,
+				 struct diff_filespec *b)
+{
+	struct merge_file_info mfi;
+	struct diff_filespec null;
+	char *alt_path = NULL;
+	const char *update_path = collide_path;
+
+	/*
+	 * It's easiest to get the correct things into stage 2 and 3, and
+	 * to make sure that the content merge puts HEAD before the other
+	 * branch if we just ensure that branch1 == opt->branch1.  So, simply
+	 * flip arguments around if we don't have that.
+	 */
+	if (branch1 != opt->branch1) {
+		return handle_file_collision(opt, collide_path,
+					     prev_path2, prev_path1,
+					     branch2, branch1,
+					     b, a);
+	}
+
+	/* Remove rename sources if rename/add or rename/rename(2to1) */
+	if (prev_path1)
+		remove_file(opt, 1, prev_path1,
+			    opt->priv->call_depth || would_lose_untracked(opt, prev_path1));
+	if (prev_path2)
+		remove_file(opt, 1, prev_path2,
+			    opt->priv->call_depth || would_lose_untracked(opt, prev_path2));
+
+	/*
+	 * Remove the collision path, if it wouldn't cause dirty contents
+	 * or an untracked file to get lost.  We'll either overwrite with
+	 * merged contents, or just write out to differently named files.
+	 */
+	if (was_dirty(opt, collide_path)) {
+		output(opt, 1, _("Refusing to lose dirty file at %s"),
+		       collide_path);
+		update_path = alt_path = unique_path(opt, collide_path, "merged");
+	} else if (would_lose_untracked(opt, collide_path)) {
+		/*
+		 * Only way we get here is if both renames were from
+		 * a directory rename AND user had an untracked file
+		 * at the location where both files end up after the
+		 * two directory renames.  See testcase 10d of t6043.
+		 */
+		output(opt, 1, _("Refusing to lose untracked file at "
+			       "%s, even though it's in the way."),
+		       collide_path);
+		update_path = alt_path = unique_path(opt, collide_path, "merged");
+	} else {
+		/*
+		 * FIXME: It's possible that the two files are identical
+		 * and that the current working copy happens to match, in
+		 * which case we are unnecessarily touching the working
+		 * tree file.  It's not a likely enough scenario that I
+		 * want to code up the checks for it and a better fix is
+		 * available if we restructure how unpack_trees() and
+		 * merge-recursive interoperate anyway, so punting for
+		 * now...
+		 */
+		remove_file(opt, 0, collide_path, 0);
+	}
+
+	/* Store things in diff_filespecs for functions that need it */
+	null.path = (char *)collide_path;
+	oidcpy(&null.oid, null_oid());
+	null.mode = 0;
+
+	if (merge_mode_and_contents(opt, &null, a, b, collide_path,
+				    branch1, branch2, opt->priv->call_depth * 2, &mfi))
+		return -1;
+	mfi.clean &= !alt_path;
+	if (update_file(opt, mfi.clean, &mfi.blob, update_path))
+		return -1;
+	if (!mfi.clean && !opt->priv->call_depth &&
+	    update_stages(opt, collide_path, NULL, a, b))
+		return -1;
+	free(alt_path);
+	/*
+	 * FIXME: If both a & b both started with conflicts (only possible
+	 * if they came from a rename/rename(2to1)), but had IDENTICAL
+	 * contents including those conflicts, then in the next line we claim
+	 * it was clean.  If someone cares about this case, we should have the
+	 * caller notify us if we started with conflicts.
+	 */
+	return mfi.clean;
+}
+
+static int handle_rename_add(struct merge_options *opt,
+			     struct rename_conflict_info *ci)
+{
+	/* a was renamed to c, and a separate c was added. */
+	struct diff_filespec *a = ci->ren1->pair->one;
+	struct diff_filespec *c = ci->ren1->pair->two;
+	char *path = c->path;
+	char *prev_path_desc;
+	struct merge_file_info mfi;
+
+	const char *rename_branch = ci->ren1->branch;
+	const char *add_branch = (opt->branch1 == rename_branch ?
+				  opt->branch2 : opt->branch1);
+	int other_stage = (ci->ren1->branch == opt->branch1 ? 3 : 2);
+
+	output(opt, 1, _("CONFLICT (rename/add): "
+	       "Rename %s->%s in %s.  Added %s in %s"),
+	       a->path, c->path, rename_branch,
+	       c->path, add_branch);
+
+	prev_path_desc = xstrfmt("version of %s from %s", path, a->path);
+	ci->ren1->src_entry->stages[other_stage].path = a->path;
+	if (merge_mode_and_contents(opt, a, c,
+				    &ci->ren1->src_entry->stages[other_stage],
+				    prev_path_desc,
+				    opt->branch1, opt->branch2,
+				    1 + opt->priv->call_depth * 2, &mfi))
+		return -1;
+	free(prev_path_desc);
+
+	ci->ren1->dst_entry->stages[other_stage].path = mfi.blob.path = c->path;
+	return handle_file_collision(opt,
+				     c->path, a->path, NULL,
+				     rename_branch, add_branch,
+				     &mfi.blob,
+				     &ci->ren1->dst_entry->stages[other_stage]);
+}
+
+
+// Source: merge-recursive.c
+// Lines 1570-1699

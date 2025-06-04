@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'part' at line 4\n2. Pointer 'instream' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic size_t mime_file_read(char *buffer, size_t size, size_t nitems,\n                             void *instream)\n{\n  curl_mimepart *part = (curl_mimepart *) instream;\n\n  if(!nitems)\n    return STOP_FILLING;\n\n  if(mime_open_file(part))\n    return READ_ERROR;\n\n  return fread(buffer, size, nitems, part->fp);\n}\n\n\n// Source: mime.c\n// Lines 698-710\n",
+  "ANSWER": "MUST"
+}

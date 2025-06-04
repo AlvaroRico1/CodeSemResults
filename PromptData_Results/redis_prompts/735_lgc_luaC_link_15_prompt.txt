@@ -1,0 +1,26 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'g' at line 2
+2. Pointer 'o' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void luaC_link (lua_State *L, GCObject *o, lu_byte tt) {
+  global_State *g = G(L);
+  o->gch.next = g->rootgc;
+  g->rootgc = o;
+  o->gch.marked = luaC_white(g);
+  o->gch.tt = tt;
+}
+
+
+// Source: lgc.c
+// Lines 685-691
+
+
+[ANSWER]
+MUST

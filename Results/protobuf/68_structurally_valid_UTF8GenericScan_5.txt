@@ -1,0 +1,1 @@
+Tbl,protobuf/src/google/protobuf/stubs/structurally_valid.cc,63,Tbl_0,protobuf/src/google/protobuf/stubs/structurally_valid.cc,13,1

@@ -1,0 +1,69 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'line' at line 4
+2. Pointer 'len' at line 36
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void clar__assert_equal(
+	const char *file,
+	const char *function,
+	size_t line,
+	const char *err,
+	int should_abort,
+	const char *fmt,
+	...)
+{
+	va_list args;
+	char buf[4096];
+	int is_equal = 1;
+
+	va_start(args, fmt);
+
+	if (!strcmp("%s", fmt)) {
+		const char *s1 = va_arg(args, const char *);
+		const char *s2 = va_arg(args, const char *);
+		is_equal = (!s1 || !s2) ? (s1 == s2) : !strcmp(s1, s2);
+
+		if (!is_equal) {
+			if (s1 && s2) {
+				int pos;
+				for (pos = 0; s1[pos] == s2[pos] && s1[pos] && s2[pos]; ++pos)
+					/* find differing byte offset */;
+				p_snprintf(buf, sizeof(buf), "'%s' != '%s' (at byte %d)",
+					s1, s2, pos);
+			} else {
+				p_snprintf(buf, sizeof(buf), "'%s' != '%s'", s1, s2);
+			}
+		}
+	}
+	else if(!strcmp("%.*s", fmt)) {
+		const char *s1 = va_arg(args, const char *);
+		const char *s2 = va_arg(args, const char *);
+		int len = va_arg(args, int);
+		is_equal = (!s1 || !s2) ? (s1 == s2) : !strncmp(s1, s2, len);
+
+		if (!is_equal) {
+			if (s1 && s2) {
+				int pos;
+				for (pos = 0; s1[pos] == s2[pos] && pos < len; ++pos)
+					/* find differing byte offset */;
+				p_snprintf(buf, sizeof(buf), "'%.*s' != '%.*s' (at byte %d)",
+					len, s1, len, s2, pos);
+			} else {
+				p_snprintf(buf, sizeof(buf), "'%.*s' != '%.*s'", len, s1, len, s2);
+			}
+		}
+	}
+
+
+// Source: clar.c
+// Lines 662-711
+
+
+[ANSWER]
+MUST-NOT

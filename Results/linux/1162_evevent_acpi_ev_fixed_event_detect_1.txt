@@ -1,0 +1,1 @@
+fixed_enable,linux/drivers/acpi/acpica/evevent.c,5,fixed_status,linux/drivers/acpi/acpica/evevent.c,4,2

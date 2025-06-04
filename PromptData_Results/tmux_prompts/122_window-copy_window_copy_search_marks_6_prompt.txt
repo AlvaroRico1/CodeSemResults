@@ -1,0 +1,153 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'width' at line 10
+2. Pointer 'ssize' at line 11
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+window_copy_search_marks(struct window_mode_entry *wme, struct screen *ssp,
+    int regex, int visible_only)
+{
+	struct window_copy_mode_data	*data = wme->data;
+	struct screen			*s = data->backing, ss;
+	struct screen_write_ctx		 ctx;
+	struct grid			*gd = s->grid;
+	int				 found, cis, stopped = 0;
+	int				 cflags = REG_EXTENDED;
+	u_int				 px, py, i, b, nfound = 0, width;
+	u_int				 ssize = 1, start, end;
+	char				*sbuf;
+	regex_t				 reg;
+	uint64_t			 stop = 0, tstart, t;
+
+	if (ssp == NULL) {
+		width = screen_write_strlen("%s", data->searchstr);
+		screen_init(&ss, width, 1, 0);
+		screen_write_start(&ctx, &ss);
+		screen_write_nputs(&ctx, -1, &grid_default_cell, "%s",
+		    data->searchstr);
+		screen_write_stop(&ctx);
+		ssp = &ss;
+	} else
+		width = screen_size_x(ssp);
+
+	cis = window_copy_is_lowercase(data->searchstr);
+
+	if (regex) {
+		sbuf = xmalloc(ssize);
+		sbuf[0] = '\0';
+		sbuf = window_copy_stringify(ssp->grid, 0, 0, ssp->grid->sx,
+		    sbuf, &ssize);
+		if (cis)
+			cflags |= REG_ICASE;
+		if (regcomp(&reg, sbuf, cflags) != 0) {
+			free(sbuf);
+			return (0);
+		}
+		free(sbuf);
+	}
+	tstart = get_timer();
+
+	if (visible_only)
+		window_copy_visible_lines(data, &start, &end);
+	else {
+		start = 0;
+		end = gd->hsize + gd->sy;
+		stop = get_timer() + WINDOW_COPY_SEARCH_ALL_TIMEOUT;
+	}
+
+again:
+	free(data->searchmark);
+	data->searchmark = xcalloc(gd->sx, gd->sy);
+	data->searchgen = 1;
+
+	for (py = start; py < end; py++) {
+		px = 0;
+		for (;;) {
+			if (regex) {
+				found = window_copy_search_lr_regex(gd,
+				    &px, &width, py, px, gd->sx, &reg);
+				if (!found)
+					break;
+			} else {
+				found = window_copy_search_lr(gd, ssp->grid,
+				    &px, py, px, gd->sx, cis);
+				if (!found)
+					break;
+			}
+			nfound++;
+
+			if (window_copy_search_mark_at(data, px, py, &b) == 0) {
+				if (b + width > gd->sx * gd->sy)
+					width = (gd->sx * gd->sy) - b;
+				for (i = b; i < b + width; i++) {
+					if (data->searchmark[i] != 0)
+						continue;
+					data->searchmark[i] = data->searchgen;
+				}
+				if (data->searchgen == UCHAR_MAX)
+					data->searchgen = 1;
+				else
+					data->searchgen++;
+			}
+			px += width;
+		}
+
+		t = get_timer();
+		if (t - tstart > WINDOW_COPY_SEARCH_TIMEOUT) {
+			data->timeout = 1;
+			break;
+		}
+		if (stop != 0 && t > stop) {
+			stopped = 1;
+			break;
+		}
+	}
+	if (data->timeout) {
+		window_copy_clear_marks(wme);
+		goto out;
+	}
+
+	if (stopped && stop != 0) {
+		/* Try again but just the visible context. */
+		window_copy_visible_lines(data, &start, &end);
+		stop = 0;
+		goto again;
+	}
+
+	if (!visible_only) {
+		if (stopped) {
+			if (nfound > 1000)
+				data->searchcount = 1000;
+			else if (nfound > 100)
+				data->searchcount = 100;
+			else if (nfound > 10)
+				data->searchcount = 10;
+			else
+				data->searchcount = -1;
+			data->searchmore = 1;
+		} else {
+			data->searchcount = nfound;
+			data->searchmore = 0;
+		}
+	}
+
+out:
+	if (ssp == &ss)
+		screen_free(&ss);
+	if (regex)
+		regfree(&reg);
+	return (1);
+}
+
+
+// Source: window-copy.c
+// Lines 3699-3832
+
+
+[ANSWER]
+MAY

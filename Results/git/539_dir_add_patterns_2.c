@@ -1,0 +1,73 @@
+static int add_patterns(const char *fname, const char *base, int baselen,
+			struct pattern_list *pl, struct index_state *istate,
+			unsigned flags, struct oid_stat *oid_stat)
+{
+	struct stat st;
+	int r;
+	int fd;
+	size_t size = 0;
+	char *buf;
+
+	if (flags & PATTERN_NOFOLLOW)
+		fd = open_nofollow(fname, O_RDONLY);
+	else
+		fd = open(fname, O_RDONLY);
+
+	if (fd < 0 || fstat(fd, &st) < 0) {
+		if (fd < 0)
+			warn_on_fopen_errors(fname);
+		else
+			close(fd);
+		if (!istate)
+			return -1;
+		r = read_skip_worktree_file_from_index(istate, fname,
+						       &size, &buf,
+						       oid_stat);
+		if (r != 1)
+			return r;
+	} else {
+		size = xsize_t(st.st_size);
+		if (size == 0) {
+			if (oid_stat) {
+				fill_stat_data(&oid_stat->stat, &st);
+				oidcpy(&oid_stat->oid, the_hash_algo->empty_blob);
+				oid_stat->valid = 1;
+			}
+			close(fd);
+			return 0;
+		}
+		buf = xmallocz(size);
+		if (read_in_full(fd, buf, size) != size) {
+			free(buf);
+			close(fd);
+			return -1;
+		}
+		buf[size++] = '\n';
+		close(fd);
+		if (oid_stat) {
+			int pos;
+			if (oid_stat->valid &&
+			    !match_stat_data_racy(istate, &oid_stat->stat, &st))
+				; /* no content change, oid_stat->oid still good */
+			else if (istate &&
+				 (pos = index_name_pos(istate, fname, strlen(fname))) >= 0 &&
+				 !ce_stage(istate->cache[pos]) &&
+				 ce_uptodate(istate->cache[pos]) &&
+				 !would_convert_to_git(istate, fname))
+				oidcpy(&oid_stat->oid,
+				       &istate->cache[pos]->oid);
+			else
+				hash_object_file(the_hash_algo, buf, size,
+						 "blob", &oid_stat->oid);
+			fill_stat_data(&oid_stat->stat, &st);
+			oid_stat->valid = 1;
+		}
+	}
+
+	add_patterns_from_buffer(buf, size, base, baselen, pl);
+	return 0;
+}
+
+
+// Source: dir.c
+// Lines 1058-1126

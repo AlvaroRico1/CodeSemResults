@@ -1,0 +1,1 @@
+read,linux/fs/proc/inode.c,6,pde,linux/fs/proc/inode.c,3,1

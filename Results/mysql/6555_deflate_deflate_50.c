@@ -1,0 +1,89 @@
+int ZEXPORT deflate (strm, flush)
+    z_streamp strm;
+    int flush;
+{
+    int old_flush; /* value of flush param for previous deflate call */
+    deflate_state *s;
+
+    if (deflateStateCheck(strm) || flush > Z_BLOCK || flush < 0) {
+        return Z_STREAM_ERROR;
+    }
+    s = strm->state;
+
+    if (strm->next_out == Z_NULL ||
+        (strm->avail_in != 0 && strm->next_in == Z_NULL) ||
+        (s->status == FINISH_STATE && flush != Z_FINISH)) {
+        ERR_RETURN(strm, Z_STREAM_ERROR);
+    }
+    if (strm->avail_out == 0) ERR_RETURN(strm, Z_BUF_ERROR);
+
+    old_flush = s->last_flush;
+    s->last_flush = flush;
+
+    /* Flush as much pending output as possible */
+    if (s->pending != 0) {
+        flush_pending(strm);
+        if (strm->avail_out == 0) {
+            /* Since avail_out is 0, deflate will be called again with
+             * more output space, but possibly with both pending and
+             * avail_in equal to zero. There won't be anything to do,
+             * but this is not an error situation so make sure we
+             * return OK instead of BUF_ERROR at next call of deflate:
+             */
+            s->last_flush = -1;
+            return Z_OK;
+        }
+
+    /* Make sure there is something to do and avoid duplicate consecutive
+     * flushes. For repeated and useless calls with Z_FINISH, we keep
+     * returning Z_STREAM_END instead of Z_BUF_ERROR.
+     */
+    } else if (strm->avail_in == 0 && RANK(flush) <= RANK(old_flush) &&
+               flush != Z_FINISH) {
+        ERR_RETURN(strm, Z_BUF_ERROR);
+    }
+
+    /* User must not provide more input after the first FINISH: */
+    if (s->status == FINISH_STATE && strm->avail_in != 0) {
+        ERR_RETURN(strm, Z_BUF_ERROR);
+    }
+
+    /* Write the header */
+    if (s->status == INIT_STATE) {
+        /* zlib header */
+        uInt header = (Z_DEFLATED + ((s->w_bits-8)<<4)) << 8;
+        uInt level_flags;
+
+        if (s->strategy >= Z_HUFFMAN_ONLY || s->level < 2)
+            level_flags = 0;
+        else if (s->level < 6)
+            level_flags = 1;
+        else if (s->level == 6)
+            level_flags = 2;
+        else
+            level_flags = 3;
+        header |= (level_flags << 6);
+        if (s->strstart != 0) header |= PRESET_DICT;
+        header += 31 - (header % 31);
+
+        putShortMSB(s, header);
+
+        /* Save the adler32 of the preset dictionary: */
+        if (s->strstart != 0) {
+            putShortMSB(s, (uInt)(strm->adler >> 16));
+            putShortMSB(s, (uInt)(strm->adler & 0xffff));
+        }
+        strm->adler = adler32(0L, Z_NULL, 0);
+        s->status = BUSY_STATE;
+
+        /* Compression must start with an empty pending buffer */
+        flush_pending(strm);
+        if (s->pending != 0) {
+            s->last_flush = -1;
+            return Z_OK;
+        }
+    }
+
+
+// Source: deflate.c
+// Lines 763-847

@@ -1,0 +1,157 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'f' at line 3
+2. Pointer 'occ' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+et_splay (struct et_occ *occ)
+{
+  struct et_occ *f, *gf, *ggf;
+  int occ_depth, f_depth, gf_depth;
+
+#ifdef DEBUG_ET
+  record_path_before (occ);
+  et_check_tree_sanity (occ);
+#endif
+
+  while (occ->parent)
+    {
+      occ_depth = occ->depth;
+
+      f = occ->parent;
+      f_depth = f->depth;
+
+      gf = f->parent;
+
+      if (!gf)
+	{
+	  set_depth_add (occ, f_depth);
+	  occ->min_occ = f->min_occ;
+	  occ->min = f->min;
+
+	  if (f->prev == occ)
+	    {
+	      /* zig */
+	      set_prev (f, occ->next);
+	      set_next (occ, f);
+	      set_depth_add (f->prev, occ_depth);
+	    }
+	  else
+	    {
+	      /* zag */
+	      set_next (f, occ->prev);
+	      set_prev (occ, f);
+	      set_depth_add (f->next, occ_depth);
+	    }
+	  set_depth (f, -occ_depth);
+	  occ->parent = NULL;
+
+	  et_recomp_min (f);
+#ifdef DEBUG_ET
+	  et_check_tree_sanity (occ);
+	  check_path_after (occ);
+#endif
+	  return;
+	}
+
+      gf_depth = gf->depth;
+
+      set_depth_add (occ, f_depth + gf_depth);
+      occ->min_occ = gf->min_occ;
+      occ->min = gf->min;
+
+      ggf = gf->parent;
+
+      if (gf->prev == f)
+	{
+	  if (f->prev == occ)
+	    {
+	      /* zig zig */
+	      set_prev (gf, f->next);
+	      set_prev (f, occ->next);
+	      set_next (occ, f);
+	      set_next (f, gf);
+
+	      set_depth (f, -occ_depth);
+	      set_depth_add (f->prev, occ_depth);
+	      set_depth (gf, -f_depth);
+	      set_depth_add (gf->prev, f_depth);
+	    }
+	  else
+	    {
+	      /* zag zig */
+	      set_prev (gf, occ->next);
+	      set_next (f, occ->prev);
+	      set_prev (occ, f);
+	      set_next (occ, gf);
+
+	      set_depth (f, -occ_depth);
+	      set_depth_add (f->next, occ_depth);
+	      set_depth (gf, -occ_depth - f_depth);
+	      set_depth_add (gf->prev, occ_depth + f_depth);
+	    }
+	}
+      else
+	{
+	  if (f->prev == occ)
+	    {
+	      /* zig zag */
+	      set_next (gf, occ->prev);
+	      set_prev (f, occ->next);
+	      set_prev (occ, gf);
+	      set_next (occ, f);
+
+	      set_depth (f, -occ_depth);
+	      set_depth_add (f->prev, occ_depth);
+	      set_depth (gf, -occ_depth - f_depth);
+	      set_depth_add (gf->next, occ_depth + f_depth);
+	    }
+	  else
+	    {
+	      /* zag zag */
+	      set_next (gf, f->prev);
+	      set_next (f, occ->prev);
+	      set_prev (occ, f);
+	      set_prev (f, gf);
+
+	      set_depth (f, -occ_depth);
+	      set_depth_add (f->next, occ_depth);
+	      set_depth (gf, -f_depth);
+	      set_depth_add (gf->next, f_depth);
+	    }
+	}
+
+      occ->parent = ggf;
+      if (ggf)
+	{
+	  if (ggf->prev == gf)
+	    ggf->prev = occ;
+	  else
+	    ggf->next = occ;
+	}
+
+      et_recomp_min (gf);
+      et_recomp_min (f);
+#ifdef DEBUG_ET
+      et_check_tree_sanity (occ);
+#endif
+    }
+
+#ifdef DEBUG_ET
+  et_check_sanity (occ);
+  check_path_after (occ);
+#endif
+}
+
+
+// Source: et-forest.c
+// Lines 302-439
+
+
+[ANSWER]
+MUST

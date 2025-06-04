@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'name' at line 6\n2. Pointer 'idx' at line 7\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nwindow_tree_build_pane(struct session *s, struct winlink *wl,\n    struct window_pane *wp, void *modedata, struct mode_tree_item *parent)\n{\n\tstruct window_tree_modedata\t*data = modedata;\n\tstruct window_tree_itemdata\t*item;\n\tchar\t\t\t\t*name, *text;\n\tu_int\t\t\t\t idx;\n\n\twindow_pane_index(wp, &idx);\n\n\titem = window_tree_add_item(data);\n\titem->type = WINDOW_TREE_PANE;\n\titem->session = s->id;\n\titem->winlink = wl->idx;\n\titem->pane = wp->id;\n\n\ttext = format_single(NULL, data->format, NULL, s, wl, wp);\n\txasprintf(&name, \"%u\", idx);\n\n\tmode_tree_add(data->data, parent, item, (uint64_t)wp, name, text, -1);\n\tfree(text);\n\tfree(name);\n}\n\n\n// Source: window-tree.c\n// Lines 294-316\n",
+  "ANSWER": "MAY"
+}

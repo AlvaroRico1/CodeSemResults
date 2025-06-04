@@ -1,0 +1,63 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'item' at line 5
+2. Pointer 'cdata' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+cmd_display_panes_key(struct client *c, void *data, struct key_event *event)
+{
+	struct cmd_display_panes_data	*cdata = data;
+	char				*expanded, *error;
+	struct cmdq_item		*item = cdata->item, *new_item;
+	struct cmd_list			*cmdlist;
+	struct window			*w = c->session->curw->window;
+	struct window_pane		*wp;
+	u_int				 index;
+	key_code			 key;
+
+	if (event->key >= '0' && event->key <= '9')
+		index = event->key - '0';
+	else if ((event->key & KEYC_MASK_MODIFIERS) == 0) {
+		key = (event->key & KEYC_MASK_KEY);
+		if (key >= 'a' && key <= 'z')
+			index = 10 + (key - 'a');
+		else
+			return (-1);
+	} else
+		return (-1);
+
+	wp = window_pane_at_index(w, index);
+	if (wp == NULL)
+		return (1);
+	window_unzoom(w);
+
+	xasprintf(&expanded, "%%%u", wp->id);
+
+	cmdlist = args_make_commands(cdata->state, 1, &expanded, &error);
+	if (cmdlist == NULL) {
+		cmdq_append(c, cmdq_get_error(error));
+		free(error);
+	} else if (item == NULL) {
+		new_item = cmdq_get_command(cmdlist, NULL);
+		cmdq_append(c, new_item);
+	} else {
+		new_item = cmdq_get_command(cmdlist, cmdq_get_state(item));
+		cmdq_insert_after(item, new_item);
+	}
+
+	free(expanded);
+	return (1);
+}
+
+
+// Source: cmd-display-panes.c
+// Lines 224-267
+
+
+[ANSWER]
+MUST

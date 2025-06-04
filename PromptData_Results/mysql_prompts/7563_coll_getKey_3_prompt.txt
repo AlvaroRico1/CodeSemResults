@@ -1,0 +1,26 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'actualReturn' at line 1
+2. Pointer 'ar' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+    virtual UObject* getKey(ICUServiceKey& key, UnicodeString* actualReturn, UErrorCode& status) const {
+        UnicodeString ar;
+        if (actualReturn == NULL) {
+            actualReturn = &ar;
+        }
+        return (Collator*)ICULocaleService::getKey(key, actualReturn, status);
+    }
+
+
+// Source: coll.cpp
+// Lines 182-188
+
+
+[ANSWER]
+MUST

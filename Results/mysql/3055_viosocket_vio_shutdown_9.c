@@ -1,0 +1,43 @@
+int vio_shutdown(Vio *vio) {
+  int r = 0;
+  DBUG_TRACE;
+
+  if (vio->inactive == false) {
+    assert(vio->type == VIO_TYPE_TCPIP || vio->type == VIO_TYPE_SOCKET ||
+           vio->type == VIO_TYPE_SSL);
+
+    assert(mysql_socket_getfd(vio->mysql_socket) >= 0);
+    if (mysql_socket_shutdown(vio->mysql_socket, SHUT_RDWR)) r = -1;
+
+#ifdef USE_PPOLL_IN_VIO
+    if (vio->thread_id != 0 && vio->poll_shutdown_flag.test_and_set()) {
+      // Send signal to wake up from poll.
+      if (pthread_kill(vio->thread_id, SIGALRM) == 0)
+        vio_wait_until_woken(vio);
+      else
+        perror("Error in pthread_kill");
+    }
+#elif defined HAVE_KQUEUE
+    if (vio->kq_fd != -1 && vio->kevent_wakeup_flag.test_and_set())
+      vio_wait_until_woken(vio);
+#endif
+
+    if (mysql_socket_close(vio->mysql_socket)) r = -1;
+#ifdef HAVE_KQUEUE
+    if (vio->kq_fd == -1 || close(vio->kq_fd)) r = -1;
+    vio->kq_fd = -1;
+#endif
+  }
+
+  if (r) {
+    DBUG_PRINT("vio_error", ("close() failed, error: %d", socket_errno));
+    /* FIXME: error handling (not critical for MySQL) */
+  }
+  vio->inactive = true;
+  vio->mysql_socket = MYSQL_INVALID_SOCKET;
+  return r;
+}
+
+
+// Source: viosocket.cc
+// Lines 461-499

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'mime' at line 1\n2. Pointer 'part' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid curl_mime_free(curl_mime *mime)\n{\n  curl_mimepart *part;\n\n  if(mime) {\n    mime_subparts_unbind(mime);  /* Be sure it's not referenced anymore. */\n    while(mime->firstpart) {\n      part = mime->firstpart;\n      mime->firstpart = part->nextpart;\n      Curl_mime_cleanpart(part);\n      free(part);\n    }\n    free(mime);\n  }\n}\n\n\n// Source: mime.c\n// Lines 1211-1225\n",
+  "ANSWER": "MUST"
+}

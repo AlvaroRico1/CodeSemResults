@@ -1,0 +1,33 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'out' at line 1
+2. Pointer 'mm' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_mailmap_new(git_mailmap **out)
+{
+	int error;
+	git_mailmap *mm = git__calloc(1, sizeof(git_mailmap));
+	GIT_ERROR_CHECK_ALLOC(mm);
+
+	error = git_vector_init(&mm->entries, 0, mailmap_entry_cmp);
+	if (error < 0) {
+		git__free(mm);
+		return error;
+	}
+	*out = mm;
+	return 0;
+}
+
+
+// Source: mailmap.c
+// Lines 151-164
+
+
+[ANSWER]
+MUST

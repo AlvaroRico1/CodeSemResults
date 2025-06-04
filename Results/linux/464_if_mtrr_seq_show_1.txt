@@ -1,0 +1,1 @@
+type,linux/arch/x86/kernel/cpu/mtrr/if.c,5,size,linux/arch/x86/kernel/cpu/mtrr/if.c,6,0

@@ -1,0 +1,40 @@
+bool my_yyoverflow(short **yyss, YYSTYPE **yyvs, YYLTYPE **yyls,
+                   ulong *yystacksize) {
+  Yacc_state *state = &current_thd->m_parser_state->m_yacc;
+  ulong old_info = 0;
+  assert(state);
+  if ((uint)*yystacksize >= MY_YACC_MAX) return true;
+  if (!state->yacc_yyvs) old_info = *yystacksize;
+  *yystacksize = set_zone((*yystacksize) * 2, MY_YACC_INIT, MY_YACC_MAX);
+  if (!(state->yacc_yyvs =
+            (uchar *)my_realloc(key_memory_bison_stack, state->yacc_yyvs,
+                                *yystacksize * sizeof(**yyvs),
+                                MYF(MY_ALLOW_ZERO_PTR | MY_FREE_ON_ERROR))) ||
+      !(state->yacc_yyss =
+            (uchar *)my_realloc(key_memory_bison_stack, state->yacc_yyss,
+                                *yystacksize * sizeof(**yyss),
+                                MYF(MY_ALLOW_ZERO_PTR | MY_FREE_ON_ERROR))) ||
+      !(state->yacc_yyls =
+            (uchar *)my_realloc(key_memory_bison_stack, state->yacc_yyls,
+                                *yystacksize * sizeof(**yyls),
+                                MYF(MY_ALLOW_ZERO_PTR | MY_FREE_ON_ERROR))))
+    return true;
+  if (old_info) {
+    /*
+      Only copy the old stack on the first call to my_yyoverflow(),
+      when replacing a static stack (YYINITDEPTH) by a dynamic stack.
+      For subsequent calls, my_realloc already did preserve the old stack.
+    */
+    memcpy(state->yacc_yyss, *yyss, old_info * sizeof(**yyss));
+    memcpy(state->yacc_yyvs, *yyvs, old_info * sizeof(**yyvs));
+    memcpy(state->yacc_yyls, *yyls, old_info * sizeof(**yyls));
+  }
+  *yyss = (short *)state->yacc_yyss;
+  *yyvs = (YYSTYPE *)state->yacc_yyvs;
+  *yyls = (YYLTYPE *)state->yacc_yyls;
+  return false;
+}
+
+
+// Source: sql_parse.cc
+// Lines 4729-4764

@@ -1,0 +1,1 @@
+d_atom,gcc/gcc/gcc.c,4,end_atom,gcc/gcc/gcc.c,3,2

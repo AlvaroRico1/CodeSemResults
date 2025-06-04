@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'm' at line 3\n2. Pointer 'm' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void find_short_packed_object(struct disambiguate_state *ds)\n{\n\tstruct multi_pack_index *m;\n\tstruct packed_git *p;\n\n\tfor (m = get_multi_pack_index(ds->repo); m && !ds->ambiguous;\n\t     m = m->next)\n\t\tunique_in_midx(m, ds);\n\tfor (p = get_packed_git(ds->repo); p && !ds->ambiguous;\n\t     p = p->next)\n\t\tunique_in_pack(p, ds);\n}\n\n\n// Source: object-name.c\n// Lines 176-187\n",
+  "ANSWER": "MUST"
+}

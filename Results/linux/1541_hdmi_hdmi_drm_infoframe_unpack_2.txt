@@ -1,0 +1,1 @@
+temp,linux/drivers/video/hdmi.c,5,ptr,linux/drivers/video/hdmi.c,4,2

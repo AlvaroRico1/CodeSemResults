@@ -1,0 +1,89 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'remote_name' at line 11
+2. Pointer 'remote_list' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_branch__remote_name(
+	git_str *out,
+	git_repository *repo,
+	const char *refname)
+{
+	git_strarray remote_list = {0};
+	size_t i;
+	git_remote *remote;
+	const git_refspec *fetchspec;
+	int error = 0;
+	char *remote_name = NULL;
+
+	GIT_ASSERT_ARG(out);
+	GIT_ASSERT_ARG(repo);
+	GIT_ASSERT_ARG(refname);
+
+	/* Verify that this is a remote branch */
+	if (!git_reference__is_remote(refname)) {
+		git_error_set(GIT_ERROR_INVALID, "reference '%s' is not a remote branch.",
+			refname);
+		error = GIT_ERROR;
+		goto cleanup;
+	}
+
+	/* Get the remotes */
+	if ((error = git_remote_list(&remote_list, repo)) < 0)
+		goto cleanup;
+
+	/* Find matching remotes */
+	for (i = 0; i < remote_list.count; i++) {
+		if ((error = git_remote_lookup(&remote, repo, remote_list.strings[i])) < 0)
+			continue;
+
+		fetchspec = git_remote__matching_dst_refspec(remote, refname);
+		if (fetchspec) {
+			/* If we have not already set out yet, then set
+			 * it to the matching remote name. Otherwise
+			 * multiple remotes match this reference, and it
+			 * is ambiguous. */
+			if (!remote_name) {
+				remote_name = remote_list.strings[i];
+			} else {
+				git_remote_free(remote);
+
+				git_error_set(GIT_ERROR_REFERENCE,
+					"reference '%s' is ambiguous", refname);
+				error = GIT_EAMBIGUOUS;
+				goto cleanup;
+			}
+		}
+
+		git_remote_free(remote);
+	}
+
+	if (remote_name) {
+		git_str_clear(out);
+		error = git_str_puts(out, remote_name);
+	} else {
+		git_error_set(GIT_ERROR_REFERENCE,
+			"could not determine remote for '%s'", refname);
+		error = GIT_ENOTFOUND;
+	}
+
+cleanup:
+	if (error < 0)
+		git_str_dispose(out);
+
+	git_strarray_dispose(&remote_list);
+	return error;
+}
+
+
+// Source: branch.c
+// Lines 546-615
+
+
+[ANSWER]
+MUST

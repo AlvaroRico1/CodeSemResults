@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'close_data' at line 3\n2. Pointer 'data' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void on_close(void *data)\n{\n    struct on_close_data_t *close_data = data;\n    h2o_socketpool_t *pool = close_data->pool;\n    __sync_sub_and_fetch(&pool->targets.entries[close_data->target]->_shared.leased_count, 1);\n    free(close_data);\n    __sync_sub_and_fetch(&pool->_shared.count, 1);\n}\n\n\n// Source: socketpool.c\n// Lines 390-397\n",
+  "ANSWER": "MUST"
+}

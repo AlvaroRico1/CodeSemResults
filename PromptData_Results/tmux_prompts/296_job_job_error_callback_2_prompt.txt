@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'job' at line 4
+2. Pointer 'data' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+job_error_callback(__unused struct bufferevent *bufev, __unused short events,
+    void *data)
+{
+	struct job	*job = data;
+
+	log_debug("job error %p: %s, pid %ld", job, job->cmd, (long) job->pid);
+
+	if (job->state == JOB_DEAD) {
+		if (job->completecb != NULL)
+			job->completecb(job);
+		job_free(job);
+	} else {
+		bufferevent_disable(job->event, EV_READ);
+		job->state = JOB_CLOSED;
+	}
+}
+
+
+// Source: job.c
+// Lines 305-320
+
+
+[ANSWER]
+MUST

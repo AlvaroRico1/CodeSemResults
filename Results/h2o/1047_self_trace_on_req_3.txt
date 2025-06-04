@@ -1,0 +1,1 @@
+tracer,h2o/lib/handler/self_trace.c,8,self,h2o/lib/handler/self_trace.c,15,1

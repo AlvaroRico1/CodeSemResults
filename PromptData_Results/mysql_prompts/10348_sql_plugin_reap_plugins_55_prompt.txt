@@ -1,0 +1,57 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'list' at line 2
+2. Pointer 'reap' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void reap_plugins(void) {
+  st_plugin_int *plugin, **reap, **list;
+
+  mysql_mutex_assert_owner(&LOCK_plugin);
+
+  if (!reap_needed) return;
+
+  reap_needed = false;
+  const size_t count = plugin_array->size();
+  reap = (st_plugin_int **)my_alloca(sizeof(plugin) * (count + 1));
+  *(reap++) = nullptr;
+
+  for (size_t idx = 0; idx < count; idx++) {
+    plugin = plugin_array->at(idx);
+    if (plugin->state == PLUGIN_IS_DELETED && !plugin->ref_count) {
+      /* change the status flag to prevent reaping by another thread */
+      plugin->state = PLUGIN_IS_DYING;
+      *(reap++) = plugin;
+    }
+  }
+
+  mysql_mutex_unlock(&LOCK_plugin);
+
+  list = reap;
+  while ((plugin = *(--list))) {
+    if (!opt_initialize)
+      LogErr(INFORMATION_LEVEL, ER_PLUGIN_SHUTTING_DOWN_PLUGIN,
+             plugin->name.str);
+    plugin_deinitialize(plugin, true);
+  }
+
+  mysql_mutex_lock(&LOCK_plugin_delete);
+  mysql_mutex_lock(&LOCK_plugin);
+
+  while ((plugin = *(--reap))) plugin_del(plugin);
+
+  mysql_mutex_unlock(&LOCK_plugin_delete);
+}
+
+
+// Source: sql_plugin.cc
+// Lines 1163-1200
+
+
+[ANSWER]
+MUST

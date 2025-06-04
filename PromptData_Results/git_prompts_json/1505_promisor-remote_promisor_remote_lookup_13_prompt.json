@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'previous' at line 3\n2. Pointer 'r' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic struct promisor_remote *promisor_remote_lookup(struct promisor_remote_config *config,\n\t\t\t\t\t\t      const char *remote_name,\n\t\t\t\t\t\t      struct promisor_remote **previous)\n{\n\tstruct promisor_remote *r, *p;\n\n\tfor (p = NULL, r = config->promisors; r; p = r, r = r->next)\n\t\tif (!strcmp(r->name, remote_name)) {\n\t\t\tif (previous)\n\t\t\t\t*previous = p;\n\t\t\treturn r;\n\t\t}\n\n\treturn NULL;\n}\n\n\n// Source: promisor-remote.c\n// Lines 67-81\n",
+  "ANSWER": "MUST"
+}

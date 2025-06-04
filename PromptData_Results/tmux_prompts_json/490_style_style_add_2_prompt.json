@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ft' at line 2\n2. Pointer 'ft0' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstyle_add(struct grid_cell *gc, struct options *oo, const char *name,\n    struct format_tree *ft)\n{\n\tstruct style\t\t*sy;\n\tstruct format_tree\t*ft0 = NULL;\n\n\tif (ft == NULL)\n\t\tft = ft0 = format_create(NULL, NULL, 0, FORMAT_NOJOBS);\n\n\tsy = options_string_to_style(oo, name, ft);\n\tif (sy == NULL)\n\t\tsy = &style_default;\n\tif (sy->gc.fg != 8)\n\t\tgc->fg = sy->gc.fg;\n\tif (sy->gc.bg != 8)\n\t\tgc->bg = sy->gc.bg;\n\tgc->attr |= sy->gc.attr;\n\n\tif (ft0 != NULL)\n\t\tformat_free(ft0);\n}\n\n\n// Source: style.c\n// Lines 274-294\n",
+  "ANSWER": "MUST"
+}

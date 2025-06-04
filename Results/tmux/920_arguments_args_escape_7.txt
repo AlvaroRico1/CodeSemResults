@@ -1,0 +1,1 @@
+s,tmux/arguments.c,1,escaped,tmux/arguments.c,5,0

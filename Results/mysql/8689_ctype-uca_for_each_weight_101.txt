@@ -1,0 +1,1 @@
+send_local,mysql/strings/ctype-uca.cc,24,s_res3,mysql/strings/ctype-uca.cc,60,2

@@ -1,0 +1,69 @@
+const char* TcParser::MpRepeatedVarint(PROTOBUF_TC_PARAM_DECL) {
+  const auto& entry = RefAt<FieldEntry>(table, data.entry_offset());
+  auto type_card = entry.type_card;
+  const uint32_t decoded_tag = data.tag();
+  auto decoded_wiretype = decoded_tag & 7;
+
+  // Check for packed repeated fallback:
+  if (decoded_wiretype == WireFormatLite::WIRETYPE_LENGTH_DELIMITED) {
+    PROTOBUF_MUSTTAIL return MpPackedVarint(PROTOBUF_TC_PARAM_PASS);
+  }
+  // Check for wire type mismatch:
+  if (decoded_wiretype != WireFormatLite::WIRETYPE_VARINT) {
+    PROTOBUF_MUSTTAIL return table->fallback(PROTOBUF_TC_PARAM_PASS);
+  }
+  uint16_t xform_val = (type_card & field_layout::kTvMask);
+  const bool is_zigzag = xform_val == field_layout::kTvZigZag;
+  const bool is_validated_enum = xform_val & field_layout::kTvEnum;
+
+  uint16_t rep = type_card & field_layout::kRepMask;
+  if (rep == field_layout::kRep64Bits) {
+    auto& field = RefAt<RepeatedField<uint64_t>>(msg, entry.offset);
+    const char* ptr2 = ptr;
+    uint32_t next_tag;
+    do {
+      uint64_t tmp;
+      ptr = ParseVarint(ptr2, &tmp);
+      if (ptr == nullptr) return Error(PROTOBUF_TC_PARAM_PASS);
+      field.Add(is_zigzag ? WireFormatLite::ZigZagDecode64(tmp) : tmp);
+      if (!ctx->DataAvailable(ptr)) break;
+      ptr2 = ReadTag(ptr, &next_tag);
+    } while (next_tag == decoded_tag);
+  } else if (rep == field_layout::kRep32Bits) {
+    auto& field = RefAt<RepeatedField<uint32_t>>(msg, entry.offset);
+    const char* ptr2 = ptr;
+    uint32_t next_tag;
+    do {
+      uint64_t tmp;
+      ptr = ParseVarint(ptr2, &tmp);
+      if (ptr == nullptr) return Error(PROTOBUF_TC_PARAM_PASS);
+      if (is_validated_enum) {
+        if (!EnumIsValidAux(tmp, xform_val, *table->field_aux(&entry))) {
+          ptr = ptr2;
+          PROTOBUF_MUSTTAIL return table->fallback(PROTOBUF_TC_PARAM_PASS);
+        }
+      } else if (is_zigzag) {
+        tmp = WireFormatLite::ZigZagDecode32(tmp);
+      }
+      field.Add(tmp);
+      if (!ctx->DataAvailable(ptr)) break;
+      ptr2 = ReadTag(ptr, &next_tag);
+    } while (next_tag == decoded_tag);
+  } else {
+    GOOGLE_DCHECK_EQ(rep, static_cast<uint16_t>(field_layout::kRep8Bits));
+    auto& field = RefAt<RepeatedField<bool>>(msg, entry.offset);
+    const char* ptr2 = ptr;
+    uint32_t next_tag;
+    do {
+      uint64_t tmp;
+      ptr = ParseVarint(ptr2, &tmp);
+      if (ptr == nullptr) return Error(PROTOBUF_TC_PARAM_PASS);
+      field.Add(static_cast<bool>(tmp));
+      if (!ctx->DataAvailable(ptr)) break;
+      ptr2 = ReadTag(ptr, &next_tag);
+    } while (next_tag == decoded_tag);
+  }
+
+
+// Source: generated_message_tctable_lite.cc
+// Lines 1522-1586

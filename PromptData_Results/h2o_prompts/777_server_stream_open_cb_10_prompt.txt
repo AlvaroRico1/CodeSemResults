@@ -1,0 +1,66 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'stream' at line 17
+2. Pointer 'qs' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
+{
+    static const quicly_stream_callbacks_t callbacks = {on_stream_destroy, on_send_shift, on_send_emit,
+                                                        on_send_stop,      on_receive,    on_receive_reset};
+
+    /* handling of unidirectional streams is not server-specific */
+    if (quicly_stream_is_unidirectional(qs->stream_id)) {
+        h2o_http3_on_create_unidirectional_stream(qs);
+        return 0;
+    }
+
+    assert(quicly_stream_is_client_initiated(qs->stream_id));
+
+    struct st_h2o_http3_server_conn_t *conn =
+        H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, *quicly_get_data(qs->conn));
+
+    /* create new stream and start handling the request */
+    struct st_h2o_http3_server_stream_t *stream = h2o_mem_alloc(sizeof(*stream));
+    stream->quic = qs;
+    h2o_buffer_init(&stream->recvbuf.buf, &h2o_socket_buffer_prototype);
+    stream->recvbuf.handle_input = handle_input_expect_headers;
+    memset(&stream->sendbuf, 0, sizeof(stream->sendbuf));
+    stream->state = H2O_HTTP3_SERVER_STREAM_STATE_RECV_HEADERS;
+    stream->link = (h2o_linklist_t){NULL};
+    stream->ostr_final = (h2o_ostream_t){NULL, do_send, NULL, do_send_informational};
+    stream->scheduler.link = (h2o_linklist_t){NULL};
+    stream->scheduler.priority = h2o_absprio_default;
+    stream->scheduler.call_cnt = 0;
+
+    stream->read_blocked = 0;
+    stream->proceed_requested = 0;
+    stream->proceed_while_sending = 0;
+    stream->received_priority_update = 0;
+    stream->req_disposed = 0;
+    stream->req_streaming = 0;
+    stream->req_body = NULL;
+
+    h2o_init_request(&stream->req, &conn->super, NULL);
+    stream->req.version = 0x0300;
+    stream->req._ostr_top = &stream->ostr_final;
+
+    stream->quic->data = stream;
+    stream->quic->callbacks = &callbacks;
+
+    ++*get_state_counter(get_conn(stream), stream->state);
+    return 0;
+}
+
+
+// Source: server.c
+// Lines 1502-1548
+
+
+[ANSWER]
+MUST

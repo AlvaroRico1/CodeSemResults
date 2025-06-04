@@ -1,0 +1,42 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'expected_patterned' at line 2
+2. Pointer 'n' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void check_get_multivar_foreach(
+	git_config *cfg, int expected, int expected_patterned)
+{
+	int n = 0;
+
+	if (expected > 0) {
+		cl_git_pass(git_config_get_multivar_foreach(cfg, _name, NULL, cb, &n));
+		cl_assert_equal_i(expected, n);
+	} else {
+		cl_assert_equal_i(GIT_ENOTFOUND,
+			git_config_get_multivar_foreach(cfg, _name, NULL, cb, &n));
+	}
+
+	n = 0;
+
+	if (expected_patterned > 0) {
+		cl_git_pass(git_config_get_multivar_foreach(cfg, _name, "example", cb, &n));
+		cl_assert_equal_i(expected_patterned, n);
+	} else {
+		cl_assert_equal_i(GIT_ENOTFOUND,
+			git_config_get_multivar_foreach(cfg, _name, "example", cb, &n));
+	}
+}
+
+
+// Source: multivar.c
+// Lines 49-71
+
+
+[ANSWER]
+MUST-NOT

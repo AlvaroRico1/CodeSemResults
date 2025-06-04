@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'p' at line 6\n2. Pointer 'buf' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic size_t emit_data(struct st_h2o_http3client_req_t *req, h2o_iovec_t payload)\n{\n    size_t nbytes;\n\n    { /* emit header */\n        uint8_t buf[9], *p = buf;\n        *p++ = H2O_HTTP3_FRAME_TYPE_DATA;\n        p = quicly_encodev(p, payload.len);\n        nbytes = p - buf;\n        h2o_buffer_append(&req->sendbuf, buf, nbytes);\n    }\n\n\n// Source: http3client.c\n// Lines 123-133\n",
+  "ANSWER": "MUST"
+}

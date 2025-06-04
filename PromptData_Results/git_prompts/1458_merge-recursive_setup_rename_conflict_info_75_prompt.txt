@@ -1,0 +1,49 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ci' at line 6
+2. Pointer 'ren1' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static inline void setup_rename_conflict_info(enum rename_type rename_type,
+					      struct merge_options *opt,
+					      struct rename *ren1,
+					      struct rename *ren2)
+{
+	struct rename_conflict_info *ci;
+
+	/*
+	 * When we have two renames involved, it's easiest to get the
+	 * correct things into stage 2 and 3, and to make sure that the
+	 * content merge puts HEAD before the other branch if we just
+	 * ensure that branch1 == opt->branch1.  So, simply flip arguments
+	 * around if we don't have that.
+	 */
+	if (ren2 && ren1->branch != opt->branch1) {
+		setup_rename_conflict_info(rename_type, opt, ren2, ren1);
+		return;
+	}
+
+	CALLOC_ARRAY(ci, 1);
+	ci->rename_type = rename_type;
+	ci->ren1 = ren1;
+	ci->ren2 = ren2;
+
+	ci->ren1->dst_entry->processed = 0;
+	ci->ren1->dst_entry->rename_conflict_info = ci;
+	if (ren2) {
+		ci->ren2->dst_entry->rename_conflict_info = ci;
+	}
+}
+
+
+// Source: merge-recursive.c
+// Lines 281-310
+
+
+[ANSWER]
+MUST

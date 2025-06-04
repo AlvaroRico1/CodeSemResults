@@ -1,0 +1,68 @@
+static int nfs4_reclaim_locks(struct nfs4_state *state, const struct nfs4_state_recovery_ops *ops)
+{
+	struct inode *inode = state->inode;
+	struct nfs_inode *nfsi = NFS_I(inode);
+	struct file_lock *fl;
+	struct nfs4_lock_state *lsp;
+	int status = 0;
+	struct file_lock_context *flctx = inode->i_flctx;
+	struct list_head *list;
+
+	if (flctx == NULL)
+		return 0;
+
+	list = &flctx->flc_posix;
+
+	/* Guard against delegation returns and new lock/unlock calls */
+	down_write(&nfsi->rwsem);
+	spin_lock(&flctx->flc_lock);
+restart:
+	list_for_each_entry(fl, list, fl_list) {
+		if (nfs_file_open_context(fl->fl_file)->state != state)
+			continue;
+		spin_unlock(&flctx->flc_lock);
+		status = ops->recover_lock(state, fl);
+		switch (status) {
+		case 0:
+			break;
+		case -ETIMEDOUT:
+		case -ESTALE:
+		case -NFS4ERR_ADMIN_REVOKED:
+		case -NFS4ERR_STALE_STATEID:
+		case -NFS4ERR_BAD_STATEID:
+		case -NFS4ERR_EXPIRED:
+		case -NFS4ERR_NO_GRACE:
+		case -NFS4ERR_STALE_CLIENTID:
+		case -NFS4ERR_BADSESSION:
+		case -NFS4ERR_BADSLOT:
+		case -NFS4ERR_BAD_HIGH_SLOT:
+		case -NFS4ERR_CONN_NOT_BOUND_TO_SESSION:
+			goto out;
+		default:
+			pr_err("NFS: %s: unhandled error %d\n",
+					__func__, status);
+			/* Fall through */
+		case -ENOMEM:
+		case -NFS4ERR_DENIED:
+		case -NFS4ERR_RECLAIM_BAD:
+		case -NFS4ERR_RECLAIM_CONFLICT:
+			lsp = fl->fl_u.nfs4_fl.owner;
+			if (lsp)
+				set_bit(NFS_LOCK_LOST, &lsp->ls_flags);
+			status = 0;
+		}
+		spin_lock(&flctx->flc_lock);
+	}
+	if (list == &flctx->flc_posix) {
+		list = &flctx->flc_flock;
+		goto restart;
+	}
+	spin_unlock(&flctx->flc_lock);
+out:
+	up_write(&nfsi->rwsem);
+	return status;
+}
+
+
+// Source: nfs4state.c
+// Lines 1505-1568

@@ -1,0 +1,27 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'field_is_unsigned' at line 3
+2. Pointer 'field' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void fetch_result_short(MYSQL_BIND *param, MYSQL_FIELD *field,
+                               uchar **row) {
+  bool field_is_unsigned = (field->flags & UNSIGNED_FLAG);
+  ushort data = (ushort)sint2korr(*row);
+  shortstore(pointer_cast<uchar *>(param->buffer), data);
+  *param->error = param->is_unsigned != field_is_unsigned && data > INT_MAX16;
+  *row += 2;
+}
+
+
+// Source: libmysql.cc
+// Lines 3250-3257
+
+
+[ANSWER]
+MUST-NOT

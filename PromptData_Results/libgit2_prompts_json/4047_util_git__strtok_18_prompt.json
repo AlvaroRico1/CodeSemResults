@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'start' at line 9\n2. Pointer 'end' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nchar *git__strtok(char **end, const char *sep)\n{\n\tchar *ptr = *end;\n\n\twhile (*ptr && strchr(sep, *ptr))\n\t\t++ptr;\n\n\tif (*ptr) {\n\t\tchar *start = ptr;\n\t\t*end = start + 1;\n\n\t\twhile (**end && !strchr(sep, **end))\n\t\t\t++*end;\n\n\t\tif (**end) {\n\t\t\t**end = '\\0';\n\t\t\t++*end;\n\t\t}\n\n\t\treturn start;\n\t}\n\n\n// Source: util.c\n// Lines 281-301\n",
+  "ANSWER": "MUST"
+}

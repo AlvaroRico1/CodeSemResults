@@ -1,0 +1,26 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'bk_a' at line 3
+2. Pointer 'a' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int config_backend_cmp(const void *a, const void *b)
+{
+	const backend_internal *bk_a = (const backend_internal *)(a);
+	const backend_internal *bk_b = (const backend_internal *)(b);
+
+	return bk_b->level - bk_a->level;
+}
+
+
+// Source: config.c
+// Lines 73-79
+
+
+[ANSWER]
+MUST

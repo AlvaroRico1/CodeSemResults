@@ -1,0 +1,35 @@
+static int collect_merge_info(struct merge_options *opt,
+			      struct tree *merge_base,
+			      struct tree *side1,
+			      struct tree *side2)
+{
+	int ret;
+	struct tree_desc t[3];
+	struct traverse_info info;
+
+	opt->priv->toplevel_dir = "";
+	opt->priv->current_dir_name = opt->priv->toplevel_dir;
+	setup_traverse_info(&info, opt->priv->toplevel_dir);
+	info.fn = collect_merge_info_callback;
+	info.data = opt;
+	info.show_all_errors = 1;
+
+	parse_tree(merge_base);
+	parse_tree(side1);
+	parse_tree(side2);
+	init_tree_desc(t + 0, merge_base->buffer, merge_base->size);
+	init_tree_desc(t + 1, side1->buffer, side1->size);
+	init_tree_desc(t + 2, side2->buffer, side2->size);
+
+	trace2_region_enter("merge", "traverse_trees", opt->repo);
+	ret = traverse_trees(NULL, 3, t, &info);
+	if (ret == 0)
+		ret = handle_deferred_entries(opt, &info);
+	trace2_region_leave("merge", "traverse_trees", opt->repo);
+
+	return ret;
+}
+
+
+// Source: merge-ort.c
+// Lines 1457-1487

@@ -1,0 +1,52 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'end' at line 4
+2. Pointer 'client_flag' at line 13
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static char *mysql_fill_packet_header(MYSQL *mysql, char *buff,
+                                      size_t buff_size MY_ATTRIBUTE((unused))) {
+  NET *net = &mysql->net;
+  char *end;
+  uchar *buff_p = (uchar *)buff;
+  /*
+    Always send CLIENT_LOCAL_FILES to the server.
+    This needs to be done since the client can always decide to support
+    local files even if this option is disabled by enabling the directory.
+    But we can't turn it on in the client flag since it's used throughout the
+    code base if the option is enabled or not.
+  */
+  unsigned long client_flag = mysql->client_flag | CLIENT_LOCAL_FILES;
+
+  if (client_flag & CLIENT_PROTOCOL_41) {
+    /* 4.1 server and 4.1 client has a 32 byte option flag */
+    assert(buff_size >= 32);
+
+    int4store(buff_p, client_flag);
+    int4store(buff_p + 4, net->max_packet_size);
+    buff[8] = (char)mysql->charset->number;
+    memset(buff + 9, 0, 32 - 9);
+    end = buff + 32;
+  } else {
+    assert(buff_size >= 5);
+    assert(client_flag <= UINT_MAX16);
+
+    int2store(buff_p, (uint16)client_flag);
+    int3store(buff_p + 2, net->max_packet_size);
+    end = buff + 5;
+  }
+  return end;
+}
+
+
+// Source: client.cc
+// Lines 4063-4095
+
+
+[ANSWER]
+MUST-NOT

@@ -1,0 +1,73 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'vto' at line 46
+2. Pointer 'bio_orig' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void __blk_queue_bounce(struct request_queue *q, struct bio **bio_orig,
+			       mempool_t *pool)
+{
+	struct bio *bio;
+	int rw = bio_data_dir(*bio_orig);
+	struct bio_vec *to, from;
+	struct bvec_iter iter;
+	unsigned i = 0;
+	bool bounce = false;
+	int sectors = 0;
+	bool passthrough = bio_is_passthrough(*bio_orig);
+
+	bio_for_each_segment(from, *bio_orig, iter) {
+		if (i++ < BIO_MAX_PAGES)
+			sectors += from.bv_len >> 9;
+		if (page_to_pfn(from.bv_page) > q->limits.bounce_pfn)
+			bounce = true;
+	}
+	if (!bounce)
+		return;
+
+	if (!passthrough && sectors < bio_sectors(*bio_orig)) {
+		bio = bio_split(*bio_orig, sectors, GFP_NOIO, &bounce_bio_split);
+		bio_chain(bio, *bio_orig);
+		generic_make_request(*bio_orig);
+		*bio_orig = bio;
+	}
+	bio = bounce_clone_bio(*bio_orig, GFP_NOIO, passthrough ? NULL :
+			&bounce_bio_set);
+
+	/*
+	 * Bvec table can't be updated by bio_for_each_segment_all(),
+	 * so retrieve bvec from the table directly. This way is safe
+	 * because the 'bio' is single-page bvec.
+	 */
+	for (i = 0, to = bio->bi_io_vec; i < bio->bi_vcnt; to++, i++) {
+		struct page *page = to->bv_page;
+
+		if (page_to_pfn(page) <= q->limits.bounce_pfn)
+			continue;
+
+		to->bv_page = mempool_alloc(pool, q->bounce_gfp);
+		inc_zone_page_state(to->bv_page, NR_BOUNCE);
+
+		if (rw == WRITE) {
+			char *vto, *vfrom;
+
+			flush_dcache_page(page);
+
+			vto = page_address(to->bv_page) + to->bv_offset;
+			vfrom = kmap_atomic(page) + to->bv_offset;
+			memcpy(vto, vfrom, to->bv_len);
+			kunmap_atomic(vfrom);
+		}
+
+
+// Source: bounce.c
+// Lines 286-339
+
+
+[ANSWER]
+MAY

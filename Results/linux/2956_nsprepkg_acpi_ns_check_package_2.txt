@@ -1,0 +1,1 @@
+elements,linux/drivers/acpi/acpica/nsprepkg.c,6,return_object_ptr,linux/drivers/acpi/acpica/nsprepkg.c,2,2

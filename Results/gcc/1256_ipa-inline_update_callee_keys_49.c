@@ -1,0 +1,82 @@
+update_callee_keys (edge_heap_t *heap, struct cgraph_node *node,
+		    struct cgraph_node *update_since,
+		    bitmap updated_nodes)
+{
+  struct cgraph_edge *e = node->callees;
+  bool check_inlinability = update_since == node;
+
+  if (!e)
+    return;
+  while (true)
+    if (!e->inline_failed && e->callee->callees)
+      {
+	if (e->callee == update_since)
+	  check_inlinability = true;
+        e = e->callee->callees;
+      }
+    else
+      {
+	enum availability avail;
+	struct cgraph_node *callee;
+	if (!check_inlinability)
+	  {
+	    if (e->aux
+		&& !bitmap_bit_p (updated_nodes,
+		 		  e->callee->ultimate_alias_target
+				    (&avail, e->caller)->get_uid ()))
+	      update_edge_key (heap, e);
+	  }
+	/* We do not reset callee growth cache here.  Since we added a new call,
+	   growth should have just increased and consequently badness metric
+           don't need updating.  */
+	else if (e->inline_failed
+		 && (callee = e->callee->ultimate_alias_target (&avail,
+		  						e->caller))
+		 && avail >= AVAIL_AVAILABLE
+		 && ipa_fn_summaries->get (callee) != NULL
+		 && ipa_fn_summaries->get (callee)->inlinable
+		 && !bitmap_bit_p (updated_nodes, callee->get_uid ()))
+	  {
+	    if (can_inline_edge_p (e, false)
+		&& want_inline_small_function_p (e, false)
+		&& can_inline_edge_by_limits_p (e, false))
+	      {
+		gcc_checking_assert (check_inlinability || can_inline_edge_p (e, false));
+		gcc_checking_assert (check_inlinability || e->aux);
+	        update_edge_key (heap, e);
+	      }
+	    else if (e->aux)
+	      {
+		report_inline_failed_reason (e);
+		heap->delete_node ((edge_heap_node_t *) e->aux);
+		e->aux = NULL;
+	      }
+	  }
+	/* In case we redirected to unreachable node we only need to remove the
+	   fibheap entry.  */
+	else if (e->aux)
+	  {
+	    heap->delete_node ((edge_heap_node_t *) e->aux);
+	    e->aux = NULL;
+	  }
+	if (e->next_callee)
+	  e = e->next_callee;
+	else
+	  {
+	    do
+	      {
+		if (e->caller == node)
+		  return;
+		if (e->caller == update_since)
+		  check_inlinability = false;
+		e = e->caller->callers;
+	      }
+	    while (!e->next_callee);
+	    e = e->next_callee;
+	  }
+      }
+}
+
+
+// Source: ipa-inline.c
+// Lines 1480-1557

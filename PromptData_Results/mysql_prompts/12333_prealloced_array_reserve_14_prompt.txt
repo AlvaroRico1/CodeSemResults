@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'new_p' at line 10
+2. Pointer 'mem' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+  bool reserve(size_t n) {
+    if (n <= m_capacity) return false;
+
+    void *mem = my_malloc(m_psi_key, n * element_size(), MYF(MY_WME));
+    if (!mem) return true;
+    Element_type *new_array = static_cast<Element_type *>(mem);
+
+    // Move all the existing elements into the new array.
+    for (size_t ix = 0; ix < m_size; ++ix) {
+      Element_type *new_p = &new_array[ix];
+      Element_type &old_p = m_array_ptr[ix];
+      ::new (new_p) Element_type(std::move(old_p));  // Move into new location.
+      if (!Has_trivial_destructor)
+        old_p.~Element_type();  // Destroy the old element.
+    }
+
+
+// Source: prealloced_array.h
+// Lines 275-289
+
+
+[ANSWER]
+MUST-NOT

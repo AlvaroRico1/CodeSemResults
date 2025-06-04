@@ -1,0 +1,48 @@
+int read_directory(struct dir_struct *dir, struct index_state *istate,
+		   const char *path, int len, const struct pathspec *pathspec)
+{
+	struct untracked_cache_dir *untracked;
+
+	trace2_region_enter("dir", "read_directory", istate->repo);
+	dir->visited_paths = 0;
+	dir->visited_directories = 0;
+
+	if (has_symlink_leading_path(path, len)) {
+		trace2_region_leave("dir", "read_directory", istate->repo);
+		return dir->nr;
+	}
+
+	untracked = validate_untracked_cache(dir, len, pathspec);
+	if (!untracked)
+		/*
+		 * make sure untracked cache code path is disabled,
+		 * e.g. prep_exclude()
+		 */
+		dir->untracked = NULL;
+	if (!len || treat_leading_path(dir, istate, path, len, pathspec))
+		read_directory_recursive(dir, istate, path, len, untracked, 0, 0, pathspec);
+	QSORT(dir->entries, dir->nr, cmp_dir_entry);
+	QSORT(dir->ignored, dir->ignored_nr, cmp_dir_entry);
+
+	emit_traversal_statistics(dir, istate->repo, path, len);
+
+	trace2_region_leave("dir", "read_directory", istate->repo);
+	if (dir->untracked) {
+		static int force_untracked_cache = -1;
+
+		if (force_untracked_cache < 0)
+			force_untracked_cache =
+				git_env_bool("GIT_FORCE_UNTRACKED_CACHE", 0);
+		if (force_untracked_cache &&
+			dir->untracked == istate->untracked &&
+		    (dir->untracked->dir_opened ||
+		     dir->untracked->gitignore_invalidated ||
+		     dir->untracked->dir_invalidated))
+			istate->cache_changed |= UNTRACKED_CHANGED;
+		if (dir->untracked != istate->untracked) {
+			FREE_AND_NULL(dir->untracked);
+		}
+
+
+// Source: dir.c
+// Lines 2934-2977

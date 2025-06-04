@@ -1,0 +1,194 @@
+int quicly_decode_transport_parameter_list(quicly_transport_parameters_t *params, quicly_cid_t *original_dcid,
+                                           quicly_cid_t *initial_scid, quicly_cid_t *retry_scid, void *stateless_reset_token,
+                                           const uint8_t *src, const uint8_t *end)
+{
+/* When non-negative, tp_index contains the literal position within the list of transport parameters recognized by this function.
+ * That index is being used to find duplicates using a 64-bit bitmap (found_bits). When the transport parameter is being processed,
+ * tp_index is set to -1. */
+#define DECODE_TP(_id, block)                                                                                                      \
+    do {                                                                                                                           \
+        if (tp_index >= 0) {                                                                                                       \
+            if (id == (_id)) {                                                                                                     \
+                if ((found_bits & ((uint64_t)1 << tp_index)) != 0) {                                                               \
+                    ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;                                                              \
+                    goto Exit;                                                                                                     \
+                }                                                                                                                  \
+                found_bits |= (uint64_t)1 << tp_index;                                                                             \
+                {block} tp_index = -1;                                                                                             \
+            } else {                                                                                                               \
+                ++tp_index;                                                                                                        \
+            }                                                                                                                      \
+        }                                                                                                                          \
+    } while (0)
+#define DECODE_CID_TP(_id, dest)                                                                                                   \
+    DECODE_TP(_id, {                                                                                                               \
+        size_t cidl = end - src;                                                                                                   \
+        if (cidl > QUICLY_MAX_CID_LEN_V1) {                                                                                        \
+            ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;                                                                      \
+            goto Exit;                                                                                                             \
+        }                                                                                                                          \
+        if (dest == NULL) {                                                                                                        \
+            ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;                                                                      \
+            goto Exit;                                                                                                             \
+        } else if (dest != &tp_cid_ignore) {                                                                                       \
+            quicly_set_cid(dest, ptls_iovec_init(src, cidl));                                                                      \
+        }                                                                                                                          \
+        src = end;                                                                                                                 \
+    });
+
+    uint64_t found_bits = 0;
+    int ret;
+
+    /* set parameters to their default values */
+    *params = default_transport_params;
+
+    /* Set optional parameters to UINT8_MAX. It is used to as a sentinel for detecting missing TPs. */
+    if (original_dcid != NULL && original_dcid != &tp_cid_ignore)
+        original_dcid->len = UINT8_MAX;
+    if (initial_scid != NULL && initial_scid != &tp_cid_ignore)
+        initial_scid->len = UINT8_MAX;
+    if (retry_scid != NULL && retry_scid != &tp_cid_ignore)
+        retry_scid->len = UINT8_MAX;
+
+    /* decode the parameters block */
+    while (src != end) {
+        uint64_t id;
+        if ((id = quicly_decodev(&src, end)) == UINT64_MAX) {
+            ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;
+            goto Exit;
+        }
+        int tp_index = 0;
+        ptls_decode_open_block(src, end, -1, {
+            DECODE_CID_TP(QUICLY_TRANSPORT_PARAMETER_ID_ORIGINAL_CONNECTION_ID, original_dcid);
+            DECODE_CID_TP(QUICLY_TRANSPORT_PARAMETER_ID_INITIAL_SOURCE_CONNECTION_ID, initial_scid);
+            DECODE_CID_TP(QUICLY_TRANSPORT_PARAMETER_ID_RETRY_SOURCE_CONNECTION_ID, retry_scid);
+            DECODE_TP(QUICLY_TRANSPORT_PARAMETER_ID_MAX_UDP_PAYLOAD_SIZE, {
+                uint64_t v;
+                if ((v = ptls_decode_quicint(&src, end)) == UINT64_MAX) {
+                    ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;
+                    goto Exit;
+                }
+                if (v < 1200) {
+                    ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;
+                    goto Exit;
+                }
+                if (v > UINT16_MAX)
+                    v = UINT16_MAX;
+                params->max_udp_payload_size = (uint16_t)v;
+            });
+            DECODE_TP(QUICLY_TRANSPORT_PARAMETER_ID_INITIAL_MAX_STREAM_DATA_BIDI_LOCAL, {
+                if ((params->max_stream_data.bidi_local = ptls_decode_quicint(&src, end)) == UINT64_MAX) {
+                    ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;
+                    goto Exit;
+                }
+            });
+            DECODE_TP(QUICLY_TRANSPORT_PARAMETER_ID_INITIAL_MAX_STREAM_DATA_BIDI_REMOTE, {
+                if ((params->max_stream_data.bidi_remote = ptls_decode_quicint(&src, end)) == UINT64_MAX) {
+                    ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;
+                    goto Exit;
+                }
+            });
+            DECODE_TP(QUICLY_TRANSPORT_PARAMETER_ID_INITIAL_MAX_STREAM_DATA_UNI, {
+                if ((params->max_stream_data.uni = ptls_decode_quicint(&src, end)) == UINT64_MAX) {
+                    ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;
+                    goto Exit;
+                }
+            });
+            DECODE_TP(QUICLY_TRANSPORT_PARAMETER_ID_INITIAL_MAX_DATA, {
+                if ((params->max_data = ptls_decode_quicint(&src, end)) == UINT64_MAX) {
+                    ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;
+                    goto Exit;
+                }
+            });
+            DECODE_TP(QUICLY_TRANSPORT_PARAMETER_ID_STATELESS_RESET_TOKEN, {
+                if (!(stateless_reset_token != NULL && end - src == QUICLY_STATELESS_RESET_TOKEN_LEN)) {
+                    ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;
+                    goto Exit;
+                }
+                memcpy(stateless_reset_token, src, QUICLY_STATELESS_RESET_TOKEN_LEN);
+                src = end;
+            });
+            DECODE_TP(QUICLY_TRANSPORT_PARAMETER_ID_MAX_IDLE_TIMEOUT, {
+                if ((params->max_idle_timeout = ptls_decode_quicint(&src, end)) == UINT64_MAX) {
+                    ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;
+                    goto Exit;
+                }
+            });
+            DECODE_TP(QUICLY_TRANSPORT_PARAMETER_ID_INITIAL_MAX_STREAMS_BIDI, {
+                if ((params->max_streams_bidi = ptls_decode_quicint(&src, end)) == UINT64_MAX) {
+                    ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;
+                    goto Exit;
+                }
+            });
+            DECODE_TP(QUICLY_TRANSPORT_PARAMETER_ID_INITIAL_MAX_STREAMS_UNI, {
+                if ((params->max_streams_uni = ptls_decode_quicint(&src, end)) == UINT64_MAX) {
+                    ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;
+                    goto Exit;
+                }
+            });
+            DECODE_TP(QUICLY_TRANSPORT_PARAMETER_ID_ACK_DELAY_EXPONENT, {
+                uint64_t v;
+                if ((v = ptls_decode_quicint(&src, end)) == UINT64_MAX) {
+                    ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;
+                    goto Exit;
+                }
+                if (v > 20) {
+                    ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;
+                    goto Exit;
+                }
+                params->ack_delay_exponent = (uint8_t)v;
+            });
+            DECODE_TP(QUICLY_TRANSPORT_PARAMETER_ID_MAX_ACK_DELAY, {
+                uint64_t v;
+                if ((v = ptls_decode_quicint(&src, end)) == UINT64_MAX) {
+                    ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;
+                    goto Exit;
+                }
+                if (v >= 16384) { /* "values of 2^14 or greater are invalid" */
+                    ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;
+                    goto Exit;
+                }
+                params->max_ack_delay = (uint16_t)v;
+            });
+            DECODE_TP(QUICLY_TRANSPORT_PARAMETER_ID_MIN_ACK_DELAY, {
+                if ((params->min_ack_delay_usec = ptls_decode_quicint(&src, end)) == UINT64_MAX) {
+                    ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;
+                    goto Exit;
+                }
+                if (params->min_ack_delay_usec >= 16777216) { /* "values of 2^24 or greater are invalid" */
+                    ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;
+                    goto Exit;
+                }
+            });
+            DECODE_TP(QUICLY_TRANSPORT_PARAMETER_ID_ACTIVE_CONNECTION_ID_LIMIT, {
+                uint64_t v;
+                if ((v = ptls_decode_quicint(&src, end)) == UINT64_MAX) {
+                    ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;
+                    goto Exit;
+                }
+                if (v < QUICLY_MIN_ACTIVE_CONNECTION_ID_LIMIT) {
+                    ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;
+                    goto Exit;
+                }
+                params->active_connection_id_limit = v;
+            });
+            DECODE_TP(QUICLY_TRANSPORT_PARAMETER_ID_DISABLE_ACTIVE_MIGRATION, { params->disable_active_migration = 1; });
+            DECODE_TP(QUICLY_TRANSPORT_PARAMETER_ID_MAX_DATAGRAM_FRAME_SIZE, {
+                uint64_t v;
+                if ((v = ptls_decode_quicint(&src, end)) == UINT64_MAX) {
+                    ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;
+                    goto Exit;
+                }
+                if (v > UINT16_MAX)
+                    v = UINT16_MAX;
+                params->max_datagram_frame_size = (uint16_t)v;
+            });
+            /* skip unknown extension */
+            if (tp_index >= 0)
+                src = end;
+        });
+    }
+
+
+// Source: quicly.c
+// Lines 1825-2014

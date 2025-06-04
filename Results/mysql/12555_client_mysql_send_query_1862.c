@@ -1,0 +1,24 @@
+int STDCALL mysql_send_query(MYSQL *mysql, const char *query, ulong length) {
+  DBUG_TRACE;
+
+  STATE_INFO *info;
+  assert(mysql);
+
+  MYSQL_EXTENSION *ext = MYSQL_EXTENSION_PTR(mysql);
+  assert(ext);
+
+  if ((info = STATE_DATA(mysql))) free_state_change_info(ext);
+  uchar *ret_data;
+  unsigned long ret_data_length;
+  if (mysql_prepare_com_query_parameters(mysql, &ret_data, &ret_data_length))
+    return 1;
+  int ret = (*mysql->methods->advanced_command)(
+      mysql, COM_QUERY, ret_data, ret_data_length,
+      pointer_cast<const uchar *>(query), length, 1, NULL);
+  if (ret_data) my_free(ret_data);
+  return ret;
+}
+
+
+// Source: client.cc
+// Lines 7285-7304

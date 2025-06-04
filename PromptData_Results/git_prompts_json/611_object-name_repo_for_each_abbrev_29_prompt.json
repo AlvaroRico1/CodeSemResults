@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ds' at line 5\n2. Pointer 'collect' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint repo_for_each_abbrev(struct repository *r, const char *prefix,\n\t\t\t each_abbrev_fn fn, void *cb_data)\n{\n\tstruct oid_array collect = OID_ARRAY_INIT;\n\tstruct disambiguate_state ds;\n\tint ret;\n\n\tif (init_object_disambiguation(r, prefix, strlen(prefix), &ds) < 0)\n\t\treturn -1;\n\n\tds.always_call_fn = 1;\n\tds.fn = repo_collect_ambiguous;\n\tds.cb_data = &collect;\n\tfind_short_object_filename(&ds);\n\tfind_short_packed_object(&ds);\n\n\tret = oid_array_for_each_unique(&collect, fn, cb_data);\n\toid_array_clear(&collect);\n\treturn ret;\n}\n\n\n// Source: object-name.c\n// Lines 503-522\n",
+  "ANSWER": "MUST"
+}

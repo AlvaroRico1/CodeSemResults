@@ -1,0 +1,48 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'prev' at line 5
+2. Pointer 'prefix' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+add_prefix (struct path_prefix *pprefix, const char *prefix,
+	    const char *component, /* enum prefix_priority */ int priority,
+	    int require_machine_suffix, int os_multilib)
+{
+  struct prefix_list *pl, **prev;
+  int len;
+
+  for (prev = &pprefix->plist;
+       (*prev) != NULL && (*prev)->priority <= priority;
+       prev = &(*prev)->next)
+    ;
+
+  /* Keep track of the longest prefix.  */
+
+  prefix = update_path (prefix, component);
+  len = strlen (prefix);
+  if (len > pprefix->max_len)
+    pprefix->max_len = len;
+
+  pl = XNEW (struct prefix_list);
+  pl->prefix = prefix;
+  pl->require_machine_suffix = require_machine_suffix;
+  pl->priority = priority;
+  pl->os_multilib = os_multilib;
+
+  /* Insert after PREV.  */
+  pl->next = (*prev);
+  (*prev) = pl;
+}
+
+
+// Source: gcc.c
+// Lines 2912-2940
+
+
+[ANSWER]
+MUST-NOT

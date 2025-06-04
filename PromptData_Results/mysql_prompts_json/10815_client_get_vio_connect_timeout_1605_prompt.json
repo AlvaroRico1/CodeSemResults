@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'timeout_sec' at line 3\n2. Pointer 'mysql' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int get_vio_connect_timeout(MYSQL *mysql) {\n  int timeout_ms;\n  uint timeout_sec;\n\n  /*\n    A timeout of 0 means no timeout. Also, the connect_timeout\n    option value is in seconds, while VIO timeouts are measured\n    in milliseconds. Hence, check for a possible overflow. In\n    case of overflow, set to no timeout.\n  */\n  timeout_sec = mysql->options.connect_timeout;\n\n  if (!timeout_sec || (timeout_sec > INT_MAX / 1000))\n    timeout_ms = -1;\n  else\n    timeout_ms = (int)(timeout_sec * 1000);\n\n  return timeout_ms;\n}\n\n\n// Source: client.cc\n// Lines 233-251\n",
+  "ANSWER": "MUST-NOT"
+}

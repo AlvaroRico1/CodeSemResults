@@ -1,0 +1,36 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'key' at line None
+2. Pointer 's' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+        dict *fields;
+    } *data = userdata;
+
+    /* Odd records are field names, add to dict and check that's not a dup */
+    if (((data->count) & 1) == 0) {
+        unsigned char *str;
+        unsigned int slen;
+        long long vll;
+        if (!ziplistGet(p, &str, &slen, &vll))
+            return 0;
+        sds field = str? sdsnewlen(str, slen): sdsfromlonglong(vll);;
+        if (dictAdd(data->fields, field, NULL) != DICT_OK) {
+            /* Duplicate, return an error */
+            sdsfree(field);
+            return 0;
+        }
+    }
+
+
+// Source: t_hash.c
+// Lines 558-574
+
+
+[ANSWER]
+MUST

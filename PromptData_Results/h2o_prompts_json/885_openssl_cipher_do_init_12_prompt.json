@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ctx' at line 3\n2. Pointer '_ctx' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void cipher_do_init(ptls_cipher_context_t *_ctx, const void *iv)\n{\n    struct cipher_context_t *ctx = (struct cipher_context_t *)_ctx;\n    int ret;\n    ret = EVP_EncryptInit_ex(ctx->evp, NULL, NULL, NULL, iv);\n    assert(ret);\n}\n\n\n// Source: openssl.c\n// Lines 780-786\n",
+  "ANSWER": "MUST"
+}

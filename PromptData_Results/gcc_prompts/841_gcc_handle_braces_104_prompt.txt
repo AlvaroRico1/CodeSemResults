@@ -1,0 +1,207 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'atom' at line 3
+2. Pointer 'a_matched' at line 13
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+handle_braces (const char *p)
+{
+  const char *atom, *end_atom;
+  const char *d_atom = NULL, *d_end_atom = NULL;
+  char *esc_buf = NULL, *d_esc_buf = NULL;
+  int esc;
+  const char *orig = p;
+
+  bool a_is_suffix;
+  bool a_is_spectype;
+  bool a_is_starred;
+  bool a_is_negated;
+  bool a_matched;
+
+  bool a_must_be_last = false;
+  bool ordered_set    = false;
+  bool disjunct_set   = false;
+  bool disj_matched   = false;
+  bool disj_starred   = true;
+  bool n_way_choice   = false;
+  bool n_way_matched  = false;
+
+#define SKIP_WHITE() do { while (*p == ' ' || *p == '\t') p++; } while (0)
+
+  do
+    {
+      if (a_must_be_last)
+	goto invalid;
+
+      /* Scan one "atom" (S in the description above of %{}, possibly
+	 with '!', '.', '@', ',', or '*' modifiers).  */
+      a_matched = false;
+      a_is_suffix = false;
+      a_is_starred = false;
+      a_is_negated = false;
+      a_is_spectype = false;
+
+      SKIP_WHITE ();
+      if (*p == '!')
+	p++, a_is_negated = true;
+
+      SKIP_WHITE ();
+      if (*p == '%' && p[1] == ':')
+	{
+	  atom = NULL;
+	  end_atom = NULL;
+	  p = handle_spec_function (p + 2, &a_matched, NULL);
+	}
+      else
+	{
+	  if (*p == '.')
+	    p++, a_is_suffix = true;
+	  else if (*p == ',')
+	    p++, a_is_spectype = true;
+
+	  atom = p;
+	  esc = 0;
+	  while (ISIDNUM (*p) || *p == '-' || *p == '+' || *p == '='
+		 || *p == ',' || *p == '.' || *p == '@' || *p == '\\')
+	    {
+	      if (*p == '\\')
+		{
+		  p++;
+		  if (!*p)
+		    fatal_error (input_location,
+				 "braced spec %qs ends in escape", orig);
+		  esc++;
+		}
+	      p++;
+	    }
+	  end_atom = p;
+
+	  if (esc)
+	    {
+	      const char *ap;
+	      char *ep;
+
+	      if (esc_buf && esc_buf != d_esc_buf)
+		free (esc_buf);
+	      esc_buf = NULL;
+	      ep = esc_buf = (char *) xmalloc (end_atom - atom - esc + 1);
+	      for (ap = atom; ap != end_atom; ap++, ep++)
+		{
+		  if (*ap == '\\')
+		    ap++;
+		  *ep = *ap;
+		}
+	      *ep = '\0';
+	      atom = esc_buf;
+	      end_atom = ep;
+	    }
+
+	  if (*p == '*')
+	    p++, a_is_starred = 1;
+	}
+
+      SKIP_WHITE ();
+      switch (*p)
+	{
+	case '&': case '}':
+	  /* Substitute the switch(es) indicated by the current atom.  */
+	  ordered_set = true;
+	  if (disjunct_set || n_way_choice || a_is_negated || a_is_suffix
+	      || a_is_spectype || atom == end_atom)
+	    goto invalid;
+
+	  mark_matching_switches (atom, end_atom, a_is_starred);
+
+	  if (*p == '}')
+	    process_marked_switches ();
+	  break;
+
+	case '|': case ':':
+	  /* Substitute some text if the current atom appears as a switch
+	     or suffix.  */
+	  disjunct_set = true;
+	  if (ordered_set)
+	    goto invalid;
+
+	  if (atom && atom == end_atom)
+	    {
+	      if (!n_way_choice || disj_matched || *p == '|'
+		  || a_is_negated || a_is_suffix || a_is_spectype
+		  || a_is_starred)
+		goto invalid;
+
+	      /* An empty term may appear as the last choice of an
+		 N-way choice set; it means "otherwise".  */
+	      a_must_be_last = true;
+	      disj_matched = !n_way_matched;
+	      disj_starred = false;
+	    }
+	  else
+	    {
+	      if ((a_is_suffix || a_is_spectype) && a_is_starred)
+		goto invalid;
+
+	      if (!a_is_starred)
+		disj_starred = false;
+
+	      /* Don't bother testing this atom if we already have a
+		 match.  */
+	      if (!disj_matched && !n_way_matched)
+		{
+		  if (atom == NULL)
+		    /* a_matched is already set by handle_spec_function.  */;
+		  else if (a_is_suffix)
+		    a_matched = input_suffix_matches (atom, end_atom);
+		  else if (a_is_spectype)
+		    a_matched = input_spec_matches (atom, end_atom);
+		  else
+		    a_matched = switch_matches (atom, end_atom, a_is_starred);
+
+		  if (a_matched != a_is_negated)
+		    {
+		      disj_matched = true;
+		      d_atom = atom;
+		      d_end_atom = end_atom;
+		      d_esc_buf = esc_buf;
+		    }
+		}
+	    }
+
+	  if (*p == ':')
+	    {
+	      /* Found the body, that is, the text to substitute if the
+		 current disjunction matches.  */
+	      p = process_brace_body (p + 1, d_atom, d_end_atom, disj_starred,
+				      disj_matched && !n_way_matched);
+	      if (p == 0)
+		goto done;
+
+	      /* If we have an N-way choice, reset state for the next
+		 disjunction.  */
+	      if (*p == ';')
+		{
+		  n_way_choice = true;
+		  n_way_matched |= disj_matched;
+		  disj_matched = false;
+		  disj_starred = true;
+		  d_atom = d_end_atom = NULL;
+		}
+	    }
+	  break;
+
+	default:
+	  goto invalid;
+	}
+
+
+// Source: gcc.c
+// Lines 6367-6554
+
+
+[ANSWER]
+MAY

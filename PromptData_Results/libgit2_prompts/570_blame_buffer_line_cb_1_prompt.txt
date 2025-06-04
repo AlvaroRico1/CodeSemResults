@@ -1,0 +1,65 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'blame' at line 7
+2. Pointer 'payload' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int buffer_line_cb(
+	const git_diff_delta *delta,
+	const git_diff_hunk *hunk,
+	const git_diff_line *line,
+	void *payload)
+{
+	git_blame *blame = (git_blame*)payload;
+
+	GIT_UNUSED(delta);
+	GIT_UNUSED(hunk);
+	GIT_UNUSED(line);
+
+	if (line->origin == GIT_DIFF_LINE_ADDITION) {
+		if (hunk_is_bufferblame(blame->current_hunk) &&
+		    hunk_ends_at_or_before_line(blame->current_hunk, blame->current_diff_line)) {
+			/* Append to the current buffer-blame hunk */
+			blame->current_hunk->lines_in_hunk++;
+			shift_hunks_by(&blame->hunks, blame->current_diff_line+1, 1);
+		} else {
+			/* Create a new buffer-blame hunk with this line */
+			shift_hunks_by(&blame->hunks, blame->current_diff_line, 1);
+			blame->current_hunk = new_hunk(blame->current_diff_line, 1, 0, blame->path);
+			GIT_ERROR_CHECK_ALLOC(blame->current_hunk);
+
+			git_vector_insert_sorted(&blame->hunks, blame->current_hunk, NULL);
+		}
+		blame->current_diff_line++;
+	}
+
+	if (line->origin == GIT_DIFF_LINE_DELETION) {
+		/* Trim the line from the current hunk; remove it if it's now empty */
+		size_t shift_base = blame->current_diff_line + blame->current_hunk->lines_in_hunk+1;
+
+		if (--(blame->current_hunk->lines_in_hunk) == 0) {
+			size_t i;
+			shift_base--;
+			if (!git_vector_search2(&i, &blame->hunks, ptrs_equal_cmp, blame->current_hunk)) {
+				git_vector_remove(&blame->hunks, i);
+				free_hunk(blame->current_hunk);
+				blame->current_hunk = (git_blame_hunk*)git_blame_get_hunk_byindex(blame, (uint32_t)i);
+			}
+		}
+		shift_hunks_by(&blame->hunks, shift_base, -1);
+	}
+	return 0;
+}
+
+
+// Source: blame.c
+// Lines 461-506
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'exe' at line None\n2. Pointer 'us_elapsed_absolute' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void fn_child_ready_fl(const char *file, int line,\n\t\t\t      uint64_t us_elapsed_absolute, int cid, int pid,\n\t\t\t      const char *ready, uint64_t us_elapsed_child)\n{\n\tconst char *event_name = \"child_ready\";\n\tstruct strbuf buf_payload = STRBUF_INIT;\n\n\tstrbuf_addf(&buf_payload, \"[ch%d] pid:%d ready:%s\", cid, pid, ready);\n\n\tperf_io_write_fl(file, line, event_name, NULL, &us_elapsed_absolute,\n\t\t\t &us_elapsed_child, NULL, &buf_payload);\n\tstrbuf_release(&buf_payload);\n}\n\n\n// Source: tr2_tgt_perf.c\n// Lines 363-375\n",
+  "ANSWER": "MAY"
+}

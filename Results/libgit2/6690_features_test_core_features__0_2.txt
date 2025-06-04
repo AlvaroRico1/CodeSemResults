@@ -1,0 +1,1 @@
+major,libgit2/tests/libgit2/core/features.c,3,caps,libgit2/tests/libgit2/core/features.c,3,0

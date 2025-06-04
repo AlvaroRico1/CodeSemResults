@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'q' at line 7\n2. Pointer 'src' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic h2o_iovec_t rebuild_path(h2o_mem_pool_t *pool, const char *src, size_t src_len, size_t *query_at, size_t **norm_indexes)\n{\n    char *dst;\n    size_t src_off = 0, dst_off = 0, last_slash, rewind;\n\n    { /* locate '?', and set len to the end of input path */\n        const char *q = memchr(src, '?', src_len);\n        if (q != NULL) {\n            src_len = *query_at = q - src;\n        } else {\n            *query_at = SIZE_MAX;\n        }\n    }\n\n\n// Source: url.c\n// Lines 64-76\n",
+  "ANSWER": "MUST"
+}

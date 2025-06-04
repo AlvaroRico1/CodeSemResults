@@ -1,0 +1,50 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'rctx' at line 8
+2. Pointer 'head' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+kretprobe_perf_func(struct trace_kprobe *tk, struct kretprobe_instance *ri,
+		    struct pt_regs *regs)
+{
+	struct trace_event_call *call = trace_probe_event_call(&tk->tp);
+	struct kretprobe_trace_entry_head *entry;
+	struct hlist_head *head;
+	int size, __size, dsize;
+	int rctx;
+
+	if (bpf_prog_array_valid(call) && !trace_call_bpf(call, regs))
+		return;
+
+	head = this_cpu_ptr(call->perf_events);
+	if (hlist_empty(head))
+		return;
+
+	dsize = __get_data_size(&tk->tp, regs);
+	__size = sizeof(*entry) + tk->tp.size + dsize;
+	size = ALIGN(__size + sizeof(u32), sizeof(u64));
+	size -= sizeof(u32);
+
+	entry = perf_trace_buf_alloc(size, NULL, &rctx);
+	if (!entry)
+		return;
+
+	entry->func = (unsigned long)tk->rp.kp.addr;
+	entry->ret_ip = (unsigned long)ri->ret_addr;
+	store_trace_args(&entry[1], &tk->tp, regs, sizeof(*entry), dsize);
+	perf_trace_buf_submit(entry, size, rctx, call->event.type, 1, regs,
+			      head, NULL);
+}
+
+
+// Source: trace_kprobe.c
+// Lines 1220-1250
+
+
+[ANSWER]
+MAY

@@ -1,0 +1,1 @@
+s,tmux/cmd-rename-session.c,5,target,tmux/cmd-rename-session.c,4,1

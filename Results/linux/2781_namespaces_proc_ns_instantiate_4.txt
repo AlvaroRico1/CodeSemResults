@@ -1,0 +1,1 @@
+ns_ops,linux/fs/proc/namespaces.c,4,ptr,linux/fs/proc/namespaces.c,2,1

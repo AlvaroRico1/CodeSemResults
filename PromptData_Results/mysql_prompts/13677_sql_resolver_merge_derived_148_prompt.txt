@@ -1,0 +1,118 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tr' at line 89
+2. Pointer 'derived_table' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool Query_block::merge_derived(THD *thd, TABLE_LIST *derived_table) {
+  DBUG_TRACE;
+
+  if (!derived_table->is_view_or_derived() || derived_table->is_merged())
+    return false;
+
+  Query_expression *const derived_query_expression =
+      derived_table->derived_query_expression();
+
+  // A derived table must be prepared before we can merge it
+  assert(derived_query_expression->is_prepared());
+
+  LEX *const lex = parent_lex;
+
+  // Check whether the outer query allows merged views
+  if ((master_query_expression() == lex->unit && !lex->can_use_merged()) ||
+      lex->can_not_use_merged())
+    return false;
+
+  /*
+    @todo: The implementation of LEX::can_use_merged() currently avoids
+           merging of views that are contained in other views if
+           can_use_merged() returns false.
+  */
+  /*
+    Check whether derived table is mergeable, and directives allow merging;
+    priority order is:
+    - ALGORITHM says MERGE or TEMPTABLE
+    - hint specifies MERGE or NO_MERGE (=materialization)
+    - optimizer_switch's derived_merge is ON and heuristic suggests merge
+  */
+  if (derived_table->algorithm == VIEW_ALGORITHM_TEMPTABLE ||
+      !derived_query_expression->is_mergeable())
+    return false;
+
+  if (derived_table->algorithm == VIEW_ALGORITHM_UNDEFINED) {
+    const bool merge_heuristic =
+        (derived_table->is_view() || allow_merge_derived) &&
+        derived_query_expression->merge_heuristic(thd->lex);
+    if (!hint_table_state(thd, derived_table, DERIVED_MERGE_HINT_ENUM,
+                          merge_heuristic ? OPTIMIZER_SWITCH_DERIVED_MERGE : 0))
+      return false;
+  }
+
+  Query_block *const derived_query_block =
+      derived_query_expression->first_query_block();
+  /*
+    If STRAIGHT_JOIN is specified, it is not valid to merge in a query block
+    that contains semi-join nests
+  */
+  if ((active_options() & SELECT_STRAIGHT_JOIN) &&
+      (derived_query_block->has_sj_nests || derived_query_block->has_aj_nests))
+    return false;
+
+  // Check that we have room for the merged tables in the table map:
+  if (leaf_table_count + derived_query_block->leaf_table_count - 1 > MAX_TABLES)
+    return false;
+
+  derived_table->set_merged();
+
+  DBUG_PRINT("info", ("algorithm: MERGE"));
+
+  Opt_trace_context *const trace = &thd->opt_trace;
+  Opt_trace_object trace_wrapper(trace);
+  Opt_trace_object trace_derived(trace,
+                                 derived_table->is_view() ? "view" : "derived");
+  trace_derived.add_utf8_table(derived_table)
+      .add("select#", derived_query_block->select_number)
+      .add("merged", true);
+
+  Prepared_stmt_arena_holder ps_arena_holder(thd);
+
+  // Save offset for table number adjustment
+  uint table_adjust = derived_table->tableno();
+
+  // Set up permanent list of underlying tables of a merged view
+  derived_table->merge_underlying_list = derived_query_block->get_table_list();
+
+  /**
+    A view is updatable if any underlying table is updatable.
+    A view is insertable-into if all underlying tables are insertable.
+    A view is not updatable nor insertable if it contains an outer join
+    @see mysql_register_view()
+  */
+  if (derived_table->is_view()) {
+    bool updatable = false;
+    bool insertable = true;
+    bool outer_joined = false;
+    for (TABLE_LIST *tr = derived_table->merge_underlying_list; tr;
+         tr = tr->next_local) {
+      updatable |= tr->is_updatable();
+      insertable &= tr->is_insertable();
+      outer_joined |= tr->is_inner_table_of_outer_join();
+    }
+    updatable &= !outer_joined;
+    insertable &= !outer_joined;
+    if (updatable) derived_table->set_updatable();
+    if (insertable) derived_table->set_insertable();
+  }
+
+
+// Source: sql_resolver.cc
+// Lines 3382-3480
+
+
+[ANSWER]
+MUST

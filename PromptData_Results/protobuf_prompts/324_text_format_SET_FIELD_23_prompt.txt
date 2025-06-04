@@ -1,0 +1,54 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'value' at line 10
+2. Pointer 'value' at line 10
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+#define SET_FIELD(CPPTYPE, VALUE)                    \
+  if (field->is_repeated()) {                        \
+    reflection->Add##CPPTYPE(message, field, VALUE); \
+  } else {                                           \
+    reflection->Set##CPPTYPE(message, field, VALUE); \
+  }
+
+    switch (field->cpp_type()) {
+      case FieldDescriptor::CPPTYPE_INT32: {
+        int64_t value;
+        DO(ConsumeSignedInteger(&value, kint32max));
+        SET_FIELD(Int32, static_cast<int32_t>(value));
+        break;
+      }
+
+      case FieldDescriptor::CPPTYPE_UINT32: {
+        uint64_t value;
+        DO(ConsumeUnsignedInteger(&value, kuint32max));
+        SET_FIELD(UInt32, static_cast<uint32_t>(value));
+        break;
+      }
+
+      case FieldDescriptor::CPPTYPE_INT64: {
+        int64_t value;
+        DO(ConsumeSignedInteger(&value, kint64max));
+        SET_FIELD(Int64, value);
+        break;
+      }
+
+      case FieldDescriptor::CPPTYPE_UINT64: {
+        uint64_t value;
+        DO(ConsumeUnsignedInteger(&value, kuint64max));
+        SET_FIELD(UInt64, value);
+        break;
+      }
+
+
+// Source: text_format.cc
+// Lines 753-787
+
+
+[ANSWER]
+MAY

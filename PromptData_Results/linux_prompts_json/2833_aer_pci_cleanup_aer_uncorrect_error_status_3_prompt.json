@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'status' at line 4\n2. Pointer 'sev' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint pci_cleanup_aer_uncorrect_error_status(struct pci_dev *dev)\n{\n\tint pos;\n\tu32 status, sev;\n\n\tpos = dev->aer_cap;\n\tif (!pos)\n\t\treturn -EIO;\n\n\tif (pcie_aer_get_firmware_first(dev))\n\t\treturn -EIO;\n\n\t/* Clear status bits for ERR_NONFATAL errors only */\n\tpci_read_config_dword(dev, pos + PCI_ERR_UNCOR_STATUS, &status);\n\tpci_read_config_dword(dev, pos + PCI_ERR_UNCOR_SEVER, &sev);\n\tstatus &= ~sev;\n\tif (status)\n\t\tpci_write_config_dword(dev, pos + PCI_ERR_UNCOR_STATUS, status);\n\n\treturn 0;\n}\n\n\n// Source: aer.c\n// Lines 377-397\n",
+  "ANSWER": "MAY"
+}

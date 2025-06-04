@@ -1,0 +1,1 @@
+old,mysql/sql/sql_plugin.cc,126,ptr,mysql/sql/sql_plugin.cc,127,1

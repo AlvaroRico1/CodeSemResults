@@ -1,0 +1,161 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'target' at line 21
+2. Pointer 'loop' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+gimple_duplicate_sese_tail (edge entry, edge exit,
+			  basic_block *region, unsigned n_region,
+			  basic_block *region_copy)
+{
+  unsigned i;
+  bool free_region_copy = false;
+  class loop *loop = exit->dest->loop_father;
+  class loop *orig_loop = entry->dest->loop_father;
+  basic_block switch_bb, entry_bb, nentry_bb;
+  vec<basic_block> doms;
+  profile_count total_count = profile_count::uninitialized (),
+		exit_count = profile_count::uninitialized ();
+  edge exits[2], nexits[2], e;
+  gimple_stmt_iterator gsi;
+  gimple *cond_stmt;
+  edge sorig, snew;
+  basic_block exit_bb;
+  gphi_iterator psi;
+  gphi *phi;
+  tree def;
+  class loop *target, *aloop, *cloop;
+
+  gcc_assert (EDGE_COUNT (exit->src->succs) == 2);
+  exits[0] = exit;
+  exits[1] = EDGE_SUCC (exit->src, EDGE_SUCC (exit->src, 0) == exit);
+
+  if (!can_copy_bbs_p (region, n_region))
+    return false;
+
+  initialize_original_copy_tables ();
+  set_loop_copy (orig_loop, loop);
+
+  target= loop;
+  for (aloop = orig_loop->inner; aloop; aloop = aloop->next)
+    {
+      if (bb_part_of_region_p (aloop->header, region, n_region))
+	{
+	  cloop = duplicate_loop (aloop, target);
+	  duplicate_subloops (aloop, cloop);
+	}
+    }
+
+  if (!region_copy)
+    {
+      region_copy = XNEWVEC (basic_block, n_region);
+      free_region_copy = true;
+    }
+
+  gcc_assert (!need_ssa_update_p (cfun));
+
+  /* Record blocks outside the region that are dominated by something
+     inside.  */
+  doms = get_dominated_by_region (CDI_DOMINATORS, region, n_region);
+
+  total_count = exit->src->count;
+  exit_count = exit->count ();
+  /* Fix up corner cases, to avoid division by zero or creation of negative
+     frequencies.  */
+  if (exit_count > total_count)
+    exit_count = total_count;
+
+  copy_bbs (region, n_region, region_copy, exits, 2, nexits, orig_loop,
+	    split_edge_bb_loc (exit), true);
+  if (total_count.initialized_p () && exit_count.initialized_p ())
+    {
+      scale_bbs_frequencies_profile_count (region, n_region,
+				           total_count - exit_count,
+				           total_count);
+      scale_bbs_frequencies_profile_count (region_copy, n_region, exit_count,
+				           total_count);
+    }
+
+  /* Create the switch block, and put the exit condition to it.  */
+  entry_bb = entry->dest;
+  nentry_bb = get_bb_copy (entry_bb);
+  if (!last_stmt (entry->src)
+      || !stmt_ends_bb_p (last_stmt (entry->src)))
+    switch_bb = entry->src;
+  else
+    switch_bb = split_edge (entry);
+  set_immediate_dominator (CDI_DOMINATORS, nentry_bb, switch_bb);
+
+  gsi = gsi_last_bb (switch_bb);
+  cond_stmt = last_stmt (exit->src);
+  gcc_assert (gimple_code (cond_stmt) == GIMPLE_COND);
+  cond_stmt = gimple_copy (cond_stmt);
+
+  gsi_insert_after (&gsi, cond_stmt, GSI_NEW_STMT);
+
+  sorig = single_succ_edge (switch_bb);
+  sorig->flags = exits[1]->flags;
+  sorig->probability = exits[1]->probability;
+  snew = make_edge (switch_bb, nentry_bb, exits[0]->flags);
+  snew->probability = exits[0]->probability;
+  
+
+  /* Register the new edge from SWITCH_BB in loop exit lists.  */
+  rescan_loop_exit (snew, true, false);
+
+  /* Add the PHI node arguments.  */
+  add_phi_args_after_copy (region_copy, n_region, snew);
+
+  /* Get rid of now superfluous conditions and associated edges (and phi node
+     arguments).  */
+  exit_bb = exit->dest;
+
+  e = redirect_edge_and_branch (exits[0], exits[1]->dest);
+  PENDING_STMT (e) = NULL;
+
+  /* The latch of ORIG_LOOP was copied, and so was the backedge 
+     to the original header.  We redirect this backedge to EXIT_BB.  */
+  for (i = 0; i < n_region; i++)
+    if (get_bb_original (region_copy[i]) == orig_loop->latch)
+      {
+	gcc_assert (single_succ_edge (region_copy[i]));
+	e = redirect_edge_and_branch (single_succ_edge (region_copy[i]), exit_bb);
+	PENDING_STMT (e) = NULL;
+	for (psi = gsi_start_phis (exit_bb);
+	     !gsi_end_p (psi);
+	     gsi_next (&psi))
+	  {
+	    phi = psi.phi ();
+	    def = PHI_ARG_DEF (phi, nexits[0]->dest_idx);
+	    add_phi_arg (phi, def, e, gimple_phi_arg_location_from_edge (phi, e));
+	  }
+      }
+  e = redirect_edge_and_branch (nexits[1], nexits[0]->dest);
+  PENDING_STMT (e) = NULL;
+  
+  /* Anything that is outside of the region, but was dominated by something
+     inside needs to update dominance info.  */
+  iterate_fix_dominators (CDI_DOMINATORS, doms, false);
+  doms.release ();
+  /* Update the SSA web.  */
+  update_ssa (TODO_update_ssa);
+
+  if (free_region_copy)
+    free (region_copy);
+
+  free_original_copy_tables ();
+  return true;
+}
+
+
+// Source: tree-cfg.c
+// Lines 6622-6763
+
+
+[ANSWER]
+MUST

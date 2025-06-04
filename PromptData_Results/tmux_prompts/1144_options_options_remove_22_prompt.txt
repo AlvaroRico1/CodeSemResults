@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'oo' at line 3
+2. Pointer 'o' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+options_remove(struct options_entry *o)
+{
+	struct options	*oo = o->owner;
+
+	if (OPTIONS_IS_ARRAY(o))
+		options_array_clear(o);
+	else
+		options_value_free(o, &o->value);
+	RB_REMOVE(options_tree, &oo->tree, o);
+	free((void *)o->name);
+	free(o);
+}
+
+
+// Source: options.c
+// Lines 337-348
+
+
+[ANSWER]
+MUST

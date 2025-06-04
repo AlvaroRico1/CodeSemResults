@@ -1,0 +1,43 @@
+static net_async_status net_write_vector_nonblocking(NET *net, ssize_t *res) {
+  NET_ASYNC *net_async = NET_ASYNC_DATA(net);
+  struct io_vec *vec =
+      net_async->async_write_vector + net_async->async_write_vector_current;
+  DBUG_TRACE;
+
+  while (net_async->async_write_vector_current !=
+         net_async->async_write_vector_size) {
+    if (vio_is_blocking(net->vio)) {
+      vio_set_blocking_flag(net->vio, false);
+    }
+    *res = vio_write(net->vio, (uchar *)vec->iov_base, vec->iov_len);
+
+    if (*res < 0) {
+      if (socket_errno == SOCKET_EAGAIN ||
+          (SOCKET_EAGAIN != SOCKET_EWOULDBLOCK &&
+           socket_errno == SOCKET_EWOULDBLOCK)) {
+        /*
+          In the unlikely event that there is a renegotiation and
+          SSL_ERROR_WANT_READ is returned, set blocking state to read.
+        */
+        if (static_cast<size_t>(*res) == VIO_SOCKET_WANT_READ) {
+          net_async->async_blocking_state = NET_NONBLOCKING_READ;
+        } else {
+          net_async->async_blocking_state = NET_NONBLOCKING_WRITE;
+        }
+        return NET_ASYNC_NOT_READY;
+      }
+      return NET_ASYNC_COMPLETE;
+    }
+    size_t bytes_written = static_cast<size_t>(*res);
+    vec->iov_len -= bytes_written;
+    vec->iov_base = (char *)vec->iov_base + bytes_written;
+
+    if (vec->iov_len != 0) break;
+
+    ++net_async->async_write_vector_current;
+    vec++;
+  }
+
+
+// Source: net_serv.cc
+// Lines 729-767

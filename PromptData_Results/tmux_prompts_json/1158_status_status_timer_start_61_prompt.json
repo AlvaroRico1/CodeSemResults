@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 's' at line 3\n2. Pointer 'c' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatus_timer_start(struct client *c)\n{\n\tstruct session\t*s = c->session;\n\n\tif (event_initialized(&c->status.timer))\n\t\tevtimer_del(&c->status.timer);\n\telse\n\t\tevtimer_set(&c->status.timer, status_timer_callback, c);\n\n\tif (s != NULL && options_get_number(s->options, \"status\"))\n\t\tstatus_timer_callback(-1, 0, c);\n}\n\n\n// Source: status.c\n// Lines 204-215\n",
+  "ANSWER": "MUST"
+}

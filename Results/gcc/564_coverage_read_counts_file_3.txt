@@ -1,0 +1,1 @@
+entry,gcc/gcc/coverage.c,62,slot,gcc/gcc/coverage.c,62,1

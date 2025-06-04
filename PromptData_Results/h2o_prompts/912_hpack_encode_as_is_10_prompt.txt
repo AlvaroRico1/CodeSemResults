@@ -1,0 +1,28 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'start' at line 3
+2. Pointer 'dst' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static size_t encode_as_is(uint8_t *dst, const char *s, size_t len)
+{
+    uint8_t *start = dst;
+    *dst = '\0';
+    dst = h2o_hpack_encode_int(dst, len, 7);
+    memcpy(dst, s, len);
+    dst += len;
+    return dst - start;
+}
+
+
+// Source: hpack.c
+// Lines 714-722
+
+
+[ANSWER]
+MUST

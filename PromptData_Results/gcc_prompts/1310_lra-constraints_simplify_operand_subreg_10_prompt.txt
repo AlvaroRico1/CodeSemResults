@@ -1,0 +1,308 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'before' at line 4
+2. Pointer 'after' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+simplify_operand_subreg (int nop, machine_mode reg_mode)
+{
+  int hard_regno, inner_hard_regno;
+  rtx_insn *before, *after;
+  machine_mode mode, innermode;
+  rtx reg, new_reg;
+  rtx operand = *curr_id->operand_loc[nop];
+  enum reg_class regclass;
+  enum op_type type;
+
+  before = after = NULL;
+
+  if (GET_CODE (operand) != SUBREG)
+    return false;
+
+  mode = GET_MODE (operand);
+  reg = SUBREG_REG (operand);
+  innermode = GET_MODE (reg);
+  type = curr_static_id->operand[nop].type;
+  if (MEM_P (reg))
+    {
+      const bool addr_was_valid
+	= valid_address_p (innermode, XEXP (reg, 0), MEM_ADDR_SPACE (reg));
+      alter_subreg (curr_id->operand_loc[nop], false);
+      rtx subst = *curr_id->operand_loc[nop];
+      lra_assert (MEM_P (subst));
+      const bool addr_is_valid = valid_address_p (GET_MODE (subst),
+						  XEXP (subst, 0),
+						  MEM_ADDR_SPACE (subst));
+      if (!addr_was_valid
+	  || addr_is_valid
+	  || ((get_constraint_type (lookup_constraint
+				    (curr_static_id->operand[nop].constraint))
+	       != CT_SPECIAL_MEMORY)
+	      /* We still can reload address and if the address is
+		 valid, we can remove subreg without reloading its
+		 inner memory.  */
+	      && valid_address_p (GET_MODE (subst),
+				  regno_reg_rtx
+				  [ira_class_hard_regs
+				   [base_reg_class (GET_MODE (subst),
+						    MEM_ADDR_SPACE (subst),
+						    ADDRESS, SCRATCH)][0]],
+				  MEM_ADDR_SPACE (subst))))
+	{
+	  /* If we change the address for a paradoxical subreg of memory, the
+	     new address might violate the necessary alignment or the access
+	     might be slow; take this into consideration.  We need not worry
+	     about accesses beyond allocated memory for paradoxical memory
+	     subregs as we don't substitute such equiv memory (see processing
+	     equivalences in function lra_constraints) and because for spilled
+	     pseudos we allocate stack memory enough for the biggest
+	     corresponding paradoxical subreg.
+
+	     However, do not blindly simplify a (subreg (mem ...)) for
+	     WORD_REGISTER_OPERATIONS targets as this may lead to loading junk
+	     data into a register when the inner is narrower than outer or
+	     missing important data from memory when the inner is wider than
+	     outer.  This rule only applies to modes that are no wider than
+	     a word.
+
+	     If valid memory becomes invalid after subreg elimination
+	     and address might be different we still have to reload
+	     memory.
+	  */
+	  if ((! addr_was_valid
+	       || addr_is_valid
+	       || known_eq (GET_MODE_SIZE (mode), GET_MODE_SIZE (innermode)))
+	      && !(maybe_ne (GET_MODE_PRECISION (mode),
+			     GET_MODE_PRECISION (innermode))
+		   && known_le (GET_MODE_SIZE (mode), UNITS_PER_WORD)
+		   && known_le (GET_MODE_SIZE (innermode), UNITS_PER_WORD)
+		   && WORD_REGISTER_OPERATIONS)
+	      && (!(MEM_ALIGN (subst) < GET_MODE_ALIGNMENT (mode)
+		    && targetm.slow_unaligned_access (mode, MEM_ALIGN (subst)))
+		  || (MEM_ALIGN (reg) < GET_MODE_ALIGNMENT (innermode)
+		      && targetm.slow_unaligned_access (innermode,
+							MEM_ALIGN (reg)))))
+	    return true;
+
+	  *curr_id->operand_loc[nop] = operand;
+
+	  /* But if the address was not valid, we cannot reload the MEM without
+	     reloading the address first.  */
+	  if (!addr_was_valid)
+	    process_address (nop, false, &before, &after);
+
+	  /* INNERMODE is fast, MODE slow.  Reload the mem in INNERMODE.  */
+	  enum reg_class rclass
+	    = (enum reg_class) targetm.preferred_reload_class (reg, ALL_REGS);
+	  if (get_reload_reg (curr_static_id->operand[nop].type, innermode,
+			      reg, rclass, TRUE, "slow/invalid mem", &new_reg))
+	    {
+	      bool insert_before, insert_after;
+	      bitmap_set_bit (&lra_subreg_reload_pseudos, REGNO (new_reg));
+
+	      insert_before = (type != OP_OUT
+			       || partial_subreg_p (mode, innermode));
+	      insert_after = type != OP_IN;
+	      insert_move_for_subreg (insert_before ? &before : NULL,
+				      insert_after ? &after : NULL,
+				      reg, new_reg);
+	    }
+	  SUBREG_REG (operand) = new_reg;
+
+	  /* Convert to MODE.  */
+	  reg = operand;
+	  rclass
+	    = (enum reg_class) targetm.preferred_reload_class (reg, ALL_REGS);
+	  if (get_reload_reg (curr_static_id->operand[nop].type, mode, reg,
+			      rclass, TRUE, "slow/invalid mem", &new_reg))
+	    {
+	      bool insert_before, insert_after;
+	      bitmap_set_bit (&lra_subreg_reload_pseudos, REGNO (new_reg));
+
+	      insert_before = type != OP_OUT;
+	      insert_after = type != OP_IN;
+	      insert_move_for_subreg (insert_before ? &before : NULL,
+				      insert_after ? &after : NULL,
+				      reg, new_reg);
+	    }
+	  *curr_id->operand_loc[nop] = new_reg;
+	  lra_process_new_insns (curr_insn, before, after,
+				 "Inserting slow/invalid mem reload");
+	  return true;
+	}
+
+      /* If the address was valid and became invalid, prefer to reload
+	 the memory.  Typical case is when the index scale should
+	 correspond the memory.  */
+      *curr_id->operand_loc[nop] = operand;
+      /* Do not return false here as the MEM_P (reg) will be processed
+	 later in this function.  */
+    }
+  else if (REG_P (reg) && REGNO (reg) < FIRST_PSEUDO_REGISTER)
+    {
+      alter_subreg (curr_id->operand_loc[nop], false);
+      return true;
+    }
+  else if (CONSTANT_P (reg))
+    {
+      /* Try to simplify subreg of constant.  It is usually result of
+	 equivalence substitution.  */
+      if (innermode == VOIDmode
+	  && (innermode = original_subreg_reg_mode[nop]) == VOIDmode)
+	innermode = curr_static_id->operand[nop].mode;
+      if ((new_reg = simplify_subreg (mode, reg, innermode,
+				      SUBREG_BYTE (operand))) != NULL_RTX)
+	{
+	  *curr_id->operand_loc[nop] = new_reg;
+	  return true;
+	}
+    }
+  /* Put constant into memory when we have mixed modes.  It generates
+     a better code in most cases as it does not need a secondary
+     reload memory.  It also prevents LRA looping when LRA is using
+     secondary reload memory again and again.  */
+  if (CONSTANT_P (reg) && CONST_POOL_OK_P (reg_mode, reg)
+      && SCALAR_INT_MODE_P (reg_mode) != SCALAR_INT_MODE_P (mode))
+    {
+      SUBREG_REG (operand) = force_const_mem (reg_mode, reg);
+      alter_subreg (curr_id->operand_loc[nop], false);
+      return true;
+    }
+  /* Force a reload of the SUBREG_REG if this is a constant or PLUS or
+     if there may be a problem accessing OPERAND in the outer
+     mode.  */
+  if ((REG_P (reg)
+       && REGNO (reg) >= FIRST_PSEUDO_REGISTER
+       && (hard_regno = lra_get_regno_hard_regno (REGNO (reg))) >= 0
+       /* Don't reload paradoxical subregs because we could be looping
+	  having repeatedly final regno out of hard regs range.  */
+       && (hard_regno_nregs (hard_regno, innermode)
+	   >= hard_regno_nregs (hard_regno, mode))
+       && simplify_subreg_regno (hard_regno, innermode,
+				 SUBREG_BYTE (operand), mode) < 0
+       /* Don't reload subreg for matching reload.  It is actually
+	  valid subreg in LRA.  */
+       && ! LRA_SUBREG_P (operand))
+      || CONSTANT_P (reg) || GET_CODE (reg) == PLUS || MEM_P (reg))
+    {
+      enum reg_class rclass;
+
+      if (REG_P (reg))
+	/* There is a big probability that we will get the same class
+	   for the new pseudo and we will get the same insn which
+	   means infinite looping.  So spill the new pseudo.  */
+	rclass = NO_REGS;
+      else
+	/* The class will be defined later in curr_insn_transform.  */
+	rclass
+	  = (enum reg_class) targetm.preferred_reload_class (reg, ALL_REGS);
+
+      if (get_reload_reg (curr_static_id->operand[nop].type, reg_mode, reg,
+			  rclass, TRUE, "subreg reg", &new_reg))
+	{
+	  bool insert_before, insert_after;
+	  bitmap_set_bit (&lra_subreg_reload_pseudos, REGNO (new_reg));
+
+	  insert_before = (type != OP_OUT
+			   || read_modify_subreg_p (operand));
+	  insert_after = (type != OP_IN);
+	  insert_move_for_subreg (insert_before ? &before : NULL,
+				  insert_after ? &after : NULL,
+				  reg, new_reg);
+	}
+      SUBREG_REG (operand) = new_reg;
+      lra_process_new_insns (curr_insn, before, after,
+			     "Inserting subreg reload");
+      return true;
+    }
+  /* Force a reload for a paradoxical subreg. For paradoxical subreg,
+     IRA allocates hardreg to the inner pseudo reg according to its mode
+     instead of the outermode, so the size of the hardreg may not be enough
+     to contain the outermode operand, in that case we may need to insert
+     reload for the reg. For the following two types of paradoxical subreg,
+     we need to insert reload:
+     1. If the op_type is OP_IN, and the hardreg could not be paired with
+        other hardreg to contain the outermode operand
+        (checked by in_hard_reg_set_p), we need to insert the reload.
+     2. If the op_type is OP_OUT or OP_INOUT.
+
+     Here is a paradoxical subreg example showing how the reload is generated:
+
+     (insn 5 4 7 2 (set (reg:TI 106 [ __comp ])
+        (subreg:TI (reg:DI 107 [ __comp ]) 0)) {*movti_internal_rex64}
+
+     In IRA, reg107 is allocated to a DImode hardreg. We use x86-64 as example
+     here, if reg107 is assigned to hardreg R15, because R15 is the last
+     hardreg, compiler cannot find another hardreg to pair with R15 to
+     contain TImode data. So we insert a TImode reload reg180 for it.
+     After reload is inserted:
+
+     (insn 283 0 0 (set (subreg:DI (reg:TI 180 [orig:107 __comp ] [107]) 0)
+        (reg:DI 107 [ __comp ])) -1
+     (insn 5 4 7 2 (set (reg:TI 106 [ __comp ])
+        (subreg:TI (reg:TI 180 [orig:107 __comp ] [107]) 0)) {*movti_internal_rex64}
+
+     Two reload hard registers will be allocated to reg180 to save TImode data
+     in LRA_assign.
+
+     For LRA pseudos this should normally be handled by the biggest_mode
+     mechanism.  However, it's possible for new uses of an LRA pseudo
+     to be introduced after we've allocated it, such as when undoing
+     inheritance, and the allocated register might not then be appropriate
+     for the new uses.  */
+  else if (REG_P (reg)
+	   && REGNO (reg) >= FIRST_PSEUDO_REGISTER
+	   && paradoxical_subreg_p (operand)
+	   && (inner_hard_regno = lra_get_regno_hard_regno (REGNO (reg))) >= 0
+	   && ((hard_regno
+		= simplify_subreg_regno (inner_hard_regno, innermode,
+					 SUBREG_BYTE (operand), mode)) < 0
+	       || ((hard_regno_nregs (inner_hard_regno, innermode)
+		    < hard_regno_nregs (hard_regno, mode))
+		   && (regclass = lra_get_allocno_class (REGNO (reg)))
+		   && (type != OP_IN
+		       || !in_hard_reg_set_p (reg_class_contents[regclass],
+					      mode, hard_regno)
+		       || overlaps_hard_reg_set_p (lra_no_alloc_regs,
+						   mode, hard_regno)))))
+    {
+      /* The class will be defined later in curr_insn_transform.  */
+      enum reg_class rclass
+	= (enum reg_class) targetm.preferred_reload_class (reg, ALL_REGS);
+
+      if (get_reload_reg (curr_static_id->operand[nop].type, mode, reg,
+                          rclass, TRUE, "paradoxical subreg", &new_reg))
+        {
+	  rtx subreg;
+	  bool insert_before, insert_after;
+
+	  PUT_MODE (new_reg, mode);
+          subreg = gen_lowpart_SUBREG (innermode, new_reg);
+	  bitmap_set_bit (&lra_subreg_reload_pseudos, REGNO (new_reg));
+
+	  insert_before = (type != OP_OUT);
+	  insert_after = (type != OP_IN);
+	  insert_move_for_subreg (insert_before ? &before : NULL,
+				  insert_after ? &after : NULL,
+				  reg, subreg);
+	}
+      SUBREG_REG (operand) = new_reg;
+      lra_process_new_insns (curr_insn, before, after,
+                             "Inserting paradoxical subreg reload");
+      return true;
+    }
+  return false;
+}
+
+
+// Source: lra-constraints.c
+// Lines 1497-1785
+
+
+[ANSWER]
+MUST

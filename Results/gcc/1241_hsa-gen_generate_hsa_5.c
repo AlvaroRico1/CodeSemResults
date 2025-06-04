@@ -1,0 +1,68 @@
+generate_hsa (bool kernel)
+{
+  hsa_init_data_for_cfun ();
+
+  if (hsa_num_threads == NULL)
+    emit_hsa_module_variables ();
+
+  bool modified_cfg = convert_switch_statements ();
+  /* Initialize hsa_cfun.  */
+  hsa_cfun = new hsa_function_representation (cfun->decl, kernel,
+					      SSANAMES (cfun)->length (),
+					      modified_cfg);
+  hsa_cfun->init_extra_bbs ();
+
+  if (flag_tm)
+    {
+      HSA_SORRY_AT (UNKNOWN_LOCATION,
+		    "support for HSA does not implement transactional memory");
+      goto fail;
+    }
+
+  verify_function_arguments (cfun->decl);
+  if (hsa_seen_error ())
+    goto fail;
+
+  hsa_cfun->m_name = get_brig_function_name (cfun->decl);
+
+  gen_function_def_parameters ();
+  if (hsa_seen_error ())
+    goto fail;
+
+  init_prologue ();
+
+  gen_body_from_gimple ();
+  if (hsa_seen_error ())
+    goto fail;
+
+  if (hsa_cfun->m_kernel_dispatch_count)
+    init_hsa_num_threads ();
+
+  if (hsa_cfun->m_kern_p)
+    {
+      hsa_function_summary *s
+	= hsa_summaries->get_create (cgraph_node::get (hsa_cfun->m_decl));
+      hsa_add_kern_decl_mapping (current_function_decl, hsa_cfun->m_name,
+				 hsa_cfun->m_maximum_omp_data_size,
+				 s->m_gridified_kernel_p);
+    }
+
+  if (flag_checking)
+    {
+      for (unsigned i = 0; i < hsa_cfun->m_ssa_map.length (); i++)
+	if (hsa_cfun->m_ssa_map[i])
+	  hsa_cfun->m_ssa_map[i]->verify_ssa ();
+
+      basic_block bb;
+      FOR_EACH_BB_FN (bb, cfun)
+	{
+	  hsa_bb *hbb = hsa_bb_for_bb (bb);
+
+	  for (hsa_insn_basic *insn = hbb->m_first_insn; insn;
+	       insn = insn->m_next)
+	    insn->verify ();
+	}
+
+
+// Source: hsa-gen.c
+// Lines 6564-6627

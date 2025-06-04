@@ -1,0 +1,40 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'out_len' at line 5
+2. Pointer 'charset' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int convert_to_utf8(struct mailinfo *mi,
+			   struct strbuf *line, const char *charset)
+{
+	char *out;
+	size_t out_len;
+
+	if (!mi->metainfo_charset || !charset || !*charset)
+		return 0;
+
+	if (same_encoding(mi->metainfo_charset, charset))
+		return 0;
+	out = reencode_string_len(line->buf, line->len,
+				  mi->metainfo_charset, charset, &out_len);
+	if (!out) {
+		mi->input_error = -1;
+		return error("cannot convert from %s to %s",
+			     charset, mi->metainfo_charset);
+	}
+	strbuf_attach(line, out, out_len, out_len);
+	return 0;
+}
+
+
+// Source: mailinfo.c
+// Lines 446-466
+
+
+[ANSWER]
+MAY

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'last' at line 6\n2. Pointer 'ptr_' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nStringPiece::size_type StringPiece::rfind(StringPiece s, size_type pos) const {\n  if (length_ < s.length_) return npos;\n  const size_t ulen = length_;\n  if (s.length_ == 0) return std::min(ulen, pos);\n\n  const char* last = ptr_ + std::min(ulen - s.length_, pos) + s.length_;\n  const char* result = std::find_end(ptr_, last, s.ptr_, s.ptr_ + s.length_);\n  return result != last ? result - ptr_ : npos;\n}\n\n\n// Source: stringpiece.cc\n// Lines 108-116\n",
+  "ANSWER": "MUST"
+}

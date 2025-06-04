@@ -1,0 +1,44 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'packet_length' at line 3
+2. Pointer 'mysql' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static bool opt_flush_ok_packet(MYSQL *mysql, bool *is_ok_packet) {
+  bool is_data_packet;
+  ulong packet_length = cli_safe_read(mysql, &is_data_packet);
+
+  if (packet_length == packet_error) return true;
+
+  /* cli_safe_read always reads a non-empty packet. */
+  assert(packet_length);
+
+  *is_ok_packet =
+      ((mysql->net.read_pos[0] == 0) ||
+       ((mysql->server_capabilities & CLIENT_DEPRECATE_EOF) &&
+        mysql->net.read_pos[0] == 254 && packet_length < MAX_PACKET_LENGTH));
+  if (*is_ok_packet) {
+    read_ok_ex(mysql, packet_length);
+#if defined(CLIENT_PROTOCOL_TRACING)
+    if (mysql->server_status & SERVER_MORE_RESULTS_EXISTS)
+      MYSQL_TRACE_STAGE(mysql, WAIT_FOR_RESULT);
+    else
+      MYSQL_TRACE_STAGE(mysql, READY_FOR_COMMAND);
+#endif
+  }
+
+  return false;
+}
+
+
+// Source: client.cc
+// Lines 1686-1710
+
+
+[ANSWER]
+MUST-NOT

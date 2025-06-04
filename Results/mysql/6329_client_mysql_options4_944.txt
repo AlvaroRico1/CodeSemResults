@@ -1,0 +1,1 @@
+attr_storage_length,mysql/sql-common/client.cc,12,option,mysql/sql-common/client.cc,1,0

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 's' at line 3\n2. Pointer 'slist' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ncmd_find_best_session(struct session **slist, u_int ssize, int flags)\n{\n\tstruct session\t *s_loop, *s;\n\tu_int\t\t  i;\n\n\tlog_debug(\"%s: %u sessions to try\", __func__, ssize);\n\n\ts = NULL;\n\tif (slist != NULL) {\n\t\tfor (i = 0; i < ssize; i++) {\n\t\t\tif (cmd_find_session_better(slist[i], s, flags))\n\t\t\t\ts = slist[i];\n\t\t}\n\t} else {\n\t\tRB_FOREACH(s_loop, sessions, &sessions) {\n\t\t\tif (cmd_find_session_better(s_loop, s, flags))\n\t\t\t\ts = s_loop;\n\t\t}\n\t}\n\treturn (s);\n}\n\n\n// Source: cmd-find.c\n// Lines 152-172\n",
+  "ANSWER": "MUST"
+}

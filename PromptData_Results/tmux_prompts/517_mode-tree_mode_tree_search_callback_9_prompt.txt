@@ -1,0 +1,37 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'mtd' at line 4
+2. Pointer 'data' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+mode_tree_search_callback(__unused struct client *c, void *data, const char *s,
+    __unused int done)
+{
+	struct mode_tree_data	*mtd = data;
+
+	if (mtd->dead)
+		return (0);
+
+	free(mtd->search);
+	if (s == NULL || *s == '\0') {
+		mtd->search = NULL;
+		return (0);
+	}
+	mtd->search = xstrdup(s);
+	mode_tree_search_set(mtd);
+
+	return (0);
+}
+
+
+// Source: mode-tree.c
+// Lines 854-871
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,21 @@
+dma_addr_t dma_direct_map_page(struct device *dev, struct page *page,
+		unsigned long offset, size_t size, enum dma_data_direction dir,
+		unsigned long attrs)
+{
+	phys_addr_t phys = page_to_phys(page) + offset;
+	dma_addr_t dma_addr = phys_to_dma(dev, phys);
+
+	if (unlikely(!dma_direct_possible(dev, dma_addr, size)) &&
+	    !swiotlb_map(dev, &phys, &dma_addr, size, dir, attrs)) {
+		report_addr(dev, dma_addr, size);
+		return DMA_MAPPING_ERROR;
+	}
+
+	if (!dev_is_dma_coherent(dev) && !(attrs & DMA_ATTR_SKIP_CPU_SYNC))
+		arch_sync_dma_for_device(dev, phys, size, dir);
+	return dma_addr;
+}
+
+
+// Source: direct.c
+// Lines 332-348

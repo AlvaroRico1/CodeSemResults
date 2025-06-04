@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ptr' at line 16\n2. Pointer 'mq' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic CURLcode mqtt_doing(struct Curl_easy *data, bool *done)\n{\n  CURLcode result = CURLE_OK;\n  struct connectdata *conn = data->conn;\n  struct mqtt_conn *mqtt = &conn->proto.mqtt;\n  struct MQTT *mq = data->req.p.mqtt;\n  ssize_t nread;\n  curl_socket_t sockfd = conn->sock[FIRSTSOCKET];\n  unsigned char *pkt = (unsigned char *)data->state.buffer;\n  unsigned char byte;\n\n  *done = FALSE;\n\n  if(mq->nsend) {\n    /* send the remainder of an outgoing packet */\n    char *ptr = mq->sendleftovers;\n    result = mqtt_send(data, mq->sendleftovers, mq->nsend);\n    free(ptr);\n    if(result)\n      return result;\n  }\n\n\n// Source: mqtt.c\n// Lines 695-715\n",
+  "ANSWER": "MUST"
+}

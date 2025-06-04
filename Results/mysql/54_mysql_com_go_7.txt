@@ -1,0 +1,1 @@
+batchmode,mysql/client/mysql.cc,52,buffer,mysql/client/mysql.cc,1,0

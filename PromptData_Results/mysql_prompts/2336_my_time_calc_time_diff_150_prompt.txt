@@ -1,0 +1,65 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'neg' at line 4
+2. Pointer 'my_time2' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool calc_time_diff(const MYSQL_TIME &my_time1, const MYSQL_TIME &my_time2,
+                    int l_sign, longlong *seconds_out, long *microseconds_out) {
+  long days;
+  bool neg;
+  longlong microseconds;
+
+  /*
+    We suppose that if first argument is MYSQL_TIMESTAMP_TIME
+    the second argument should be TIMESTAMP_TIME also.
+    We should check it before calc_time_diff call.
+  */
+  if (my_time1.time_type == MYSQL_TIMESTAMP_TIME)  // Time value
+    days = static_cast<long>(my_time1.day) -
+           l_sign * static_cast<long>(my_time2.day);
+  else {
+    days = calc_daynr(static_cast<uint>(my_time1.year),
+                      static_cast<uint>(my_time1.month),
+                      static_cast<uint>(my_time1.day));
+    if (my_time2.time_type == MYSQL_TIMESTAMP_TIME)
+      days -= l_sign * static_cast<long>(my_time2.day);
+    else
+      days -= l_sign * calc_daynr(static_cast<uint>(my_time2.year),
+                                  static_cast<uint>(my_time2.month),
+                                  static_cast<uint>(my_time2.day));
+  }
+
+  microseconds =
+      (static_cast<longlong>(days) * SECONDS_IN_24H +
+       static_cast<longlong>(my_time1.hour * 3600L + my_time1.minute * 60L +
+                             my_time1.second) -
+       l_sign *
+           static_cast<longlong>(my_time2.hour * 3600L + my_time2.minute * 60L +
+                                 my_time2.second)) *
+          1000000LL +
+      static_cast<longlong>(my_time1.second_part) -
+      l_sign * static_cast<longlong>(my_time2.second_part);
+
+  neg = false;
+  if (microseconds < 0) {
+    microseconds = -microseconds;
+    neg = true;
+  }
+  *seconds_out = microseconds / 1000000L;
+  *microseconds_out = static_cast<long>(microseconds % 1000000L);
+  return neg;
+}
+
+
+// Source: my_time.cc
+// Lines 2734-2779
+
+
+[ANSWER]
+MUST-NOT

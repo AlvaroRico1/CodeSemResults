@@ -1,0 +1,30 @@
+static __le16 ext4_group_desc_csum(struct super_block *sb, __u32 block_group,
+				   struct ext4_group_desc *gdp)
+{
+	int offset = offsetof(struct ext4_group_desc, bg_checksum);
+	__u16 crc = 0;
+	__le32 le_group = cpu_to_le32(block_group);
+	struct ext4_sb_info *sbi = EXT4_SB(sb);
+
+	if (ext4_has_metadata_csum(sbi->s_sb)) {
+		/* Use new metadata_csum algorithm */
+		__u32 csum32;
+		__u16 dummy_csum = 0;
+
+		csum32 = ext4_chksum(sbi, sbi->s_csum_seed, (__u8 *)&le_group,
+				     sizeof(le_group));
+		csum32 = ext4_chksum(sbi, csum32, (__u8 *)gdp, offset);
+		csum32 = ext4_chksum(sbi, csum32, (__u8 *)&dummy_csum,
+				     sizeof(dummy_csum));
+		offset += sizeof(dummy_csum);
+		if (offset < sbi->s_desc_size)
+			csum32 = ext4_chksum(sbi, csum32, (__u8 *)gdp + offset,
+					     sbi->s_desc_size - offset);
+
+		crc = csum32 & 0xFFFF;
+		goto out;
+	}
+
+
+// Source: super.c
+// Lines 2380-2405

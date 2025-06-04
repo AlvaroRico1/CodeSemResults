@@ -1,0 +1,43 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'p' at line 2
+2. Pointer 'ptr' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void feedReplicationBacklog(void *ptr, size_t len) {
+    unsigned char *p = ptr;
+
+    server.master_repl_offset += len;
+
+    /* This is a circular buffer, so write as much data we can at every
+     * iteration and rewind the "idx" index if we reach the limit. */
+    while(len) {
+        size_t thislen = server.repl_backlog_size - server.repl_backlog_idx;
+        if (thislen > len) thislen = len;
+        memcpy(server.repl_backlog+server.repl_backlog_idx,p,thislen);
+        server.repl_backlog_idx += thislen;
+        if (server.repl_backlog_idx == server.repl_backlog_size)
+            server.repl_backlog_idx = 0;
+        len -= thislen;
+        p += thislen;
+        server.repl_backlog_histlen += thislen;
+    }
+    if (server.repl_backlog_histlen > server.repl_backlog_size)
+        server.repl_backlog_histlen = server.repl_backlog_size;
+    /* Set the offset of the first byte we have in the backlog. */
+    server.repl_backlog_off = server.master_repl_offset -
+                              server.repl_backlog_histlen + 1;
+}
+
+
+// Source: replication.c
+// Lines 159-182
+
+
+[ANSWER]
+MUST

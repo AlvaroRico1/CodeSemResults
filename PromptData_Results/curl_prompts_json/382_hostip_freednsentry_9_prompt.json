@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'dns' at line 3\n2. Pointer 'freethis' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void freednsentry(void *freethis)\n{\n  struct Curl_dns_entry *dns = (struct Curl_dns_entry *) freethis;\n  DEBUGASSERT(dns && (dns->inuse>0));\n\n  dns->inuse--;\n  if(dns->inuse == 0) {\n    Curl_freeaddrinfo(dns->addr);\n    free(dns);\n  }\n}\n\n\n// Source: hostip.c\n// Lines 967-977\n",
+  "ANSWER": "MUST"
+}

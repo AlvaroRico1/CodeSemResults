@@ -1,0 +1,1 @@
+table_list,mysql/sql/sql_rename.cc,1,prev,mysql/sql/sql_rename.cc,2,1

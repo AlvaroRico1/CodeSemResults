@@ -1,0 +1,1 @@
+force_dir,libgit2/tests/libgit2/attr/lookup.c,1,error,libgit2/tests/libgit2/attr/lookup.c,6,0

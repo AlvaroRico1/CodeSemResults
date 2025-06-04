@@ -1,0 +1,1 @@
+area,mysql/extra/libedit/libedit-20191231-3.1/src/terminal.c,5,lins,mysql/extra/libedit/libedit-20191231-3.1/src/terminal.c,8,2

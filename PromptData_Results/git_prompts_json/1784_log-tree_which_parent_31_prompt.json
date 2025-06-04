@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'parent' at line 4\n2. Pointer 'commit' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int which_parent(const struct object_id *oid, const struct commit *commit)\n{\n\tint nth;\n\tconst struct commit_list *parent;\n\n\tfor (nth = 0, parent = commit->parents; parent; parent = parent->next) {\n\t\tif (oideq(&parent->item->object.oid, oid))\n\t\t\treturn nth;\n\t\tnth++;\n\t}\n\treturn -1;\n}\n\n\n// Source: log-tree.c\n// Lines 529-540\n",
+  "ANSWER": "MUST"
+}

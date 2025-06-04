@@ -1,0 +1,1 @@
+defcontext_sid,linux/security/selinux/hooks.c,12,rootcontext_sid,linux/security/selinux/hooks.c,11,2

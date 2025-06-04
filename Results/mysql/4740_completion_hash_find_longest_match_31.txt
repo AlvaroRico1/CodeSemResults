@@ -1,0 +1,1 @@
+s,mysql/client/completion_hash.cc,4,count,mysql/client/completion_hash.cc,5,0

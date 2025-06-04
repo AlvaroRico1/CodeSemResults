@@ -1,0 +1,71 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 's' at line 6
+2. Pointer 'source' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+cmd_detach_client_exec(struct cmd *self, struct cmdq_item *item)
+{
+	struct args		*args = cmd_get_args(self);
+	struct cmd_find_state	*source = cmdq_get_source(item);
+	struct client		*tc = cmdq_get_target_client(item), *loop;
+	struct session		*s;
+	enum msgtype		 msgtype;
+	const char		*cmd = args_get(args, 'E');
+
+	if (cmd_get_entry(self) == &cmd_suspend_client_entry) {
+		server_client_suspend(tc);
+		return (CMD_RETURN_NORMAL);
+	}
+
+	if (args_has(args, 'P'))
+		msgtype = MSG_DETACHKILL;
+	else
+		msgtype = MSG_DETACH;
+
+	if (args_has(args, 's')) {
+		s = source->s;
+		if (s == NULL)
+			return (CMD_RETURN_NORMAL);
+		TAILQ_FOREACH(loop, &clients, entry) {
+			if (loop->session == s) {
+				if (cmd != NULL)
+					server_client_exec(loop, cmd);
+				else
+					server_client_detach(loop, msgtype);
+			}
+		}
+		return (CMD_RETURN_STOP);
+	}
+
+	if (args_has(args, 'a')) {
+		TAILQ_FOREACH(loop, &clients, entry) {
+			if (loop->session != NULL && loop != tc) {
+				if (cmd != NULL)
+					server_client_exec(loop, cmd);
+				else
+					server_client_detach(loop, msgtype);
+			}
+		}
+		return (CMD_RETURN_NORMAL);
+	}
+
+	if (cmd != NULL)
+		server_client_exec(tc, cmd);
+	else
+		server_client_detach(tc, msgtype);
+	return (CMD_RETURN_STOP);
+}
+
+
+// Source: cmd-detach-client.c
+// Lines 58-109
+
+
+[ANSWER]
+MUST

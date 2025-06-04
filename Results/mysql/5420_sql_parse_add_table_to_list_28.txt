@@ -1,0 +1,1 @@
+ptr,mysql/sql/sql_parse.cc,42,partition_names,mysql/sql/sql_parse.cc,4,1

@@ -1,0 +1,1 @@
+table,linux/drivers/acpi/acpica/tbdata.c,5,table_flags,linux/drivers/acpi/acpica/tbdata.c,7,2

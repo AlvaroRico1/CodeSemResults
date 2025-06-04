@@ -1,0 +1,68 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 's' at line 2
+2. Pointer 'b' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static uint my_instr_bin(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
+                         const char *b, size_t b_length, const char *s,
+                         size_t s_length, my_match_t *match, uint nmatch) {
+  const uchar *str, *search, *end, *search_end;
+
+  if (s_length <= b_length) {
+    if (!s_length) {
+      if (nmatch) {
+        match->beg = 0;
+        match->end = 0;
+        match->mb_len = 0;
+      }
+      return 1; /* Empty string is always found */
+    }
+
+    str = (const uchar *)b;
+    search = (const uchar *)s;
+    end = (const uchar *)b + b_length - s_length + 1;
+    search_end = (const uchar *)s + s_length;
+
+  skip:
+    while (str != end) {
+      if ((*str++) == (*search)) {
+        const uchar *i, *j;
+
+        i = str;
+        j = search + 1;
+
+        while (j != search_end)
+          if ((*i++) != (*j++)) goto skip;
+
+        if (nmatch > 0) {
+          match[0].beg = 0;
+          match[0].end = (uint)(str - (const uchar *)b - 1);
+          match[0].mb_len = match[0].end;
+
+          if (nmatch > 1) {
+            match[1].beg = match[0].end;
+            match[1].end = (uint)(match[0].end + s_length);
+            match[1].mb_len = match[1].end - match[1].beg;
+          }
+        }
+        return 2;
+      }
+    }
+  }
+  return 0;
+}
+}  // extern "C"
+
+
+// Source: ctype-bin.cc
+// Lines 403-451
+
+
+[ANSWER]
+MUST-NOT

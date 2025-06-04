@@ -1,0 +1,138 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'spec' at line 2
+2. Pointer 'pattern' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_attr_fnmatch__parse(
+	git_attr_fnmatch *spec,
+	git_pool *pool,
+	const char *context,
+	const char **base)
+{
+	const char *pattern, *scan;
+	int slash_count, allow_space;
+	bool escaped;
+
+	GIT_ASSERT_ARG(spec);
+	GIT_ASSERT_ARG(base && *base);
+
+	if (parse_optimized_patterns(spec, pool, *base))
+		return 0;
+
+	spec->flags = (spec->flags & GIT_ATTR_FNMATCH__INCOMING);
+	allow_space = ((spec->flags & GIT_ATTR_FNMATCH_ALLOWSPACE) != 0);
+
+	pattern = *base;
+
+	while (!allow_space && git__isspace(*pattern))
+		pattern++;
+
+	if (!*pattern || *pattern == '#' || *pattern == '\n' ||
+	    (*pattern == '\r' && *(pattern + 1) == '\n')) {
+		*base = git__next_line(pattern);
+		return GIT_ENOTFOUND;
+	}
+
+	if (*pattern == '[' && (spec->flags & GIT_ATTR_FNMATCH_ALLOWMACRO) != 0) {
+		if (strncmp(pattern, "[attr]", 6) == 0) {
+			spec->flags = spec->flags | GIT_ATTR_FNMATCH_MACRO;
+			pattern += 6;
+		}
+		/* else a character range like [a-e]* which is accepted */
+	}
+
+	if (*pattern == '!' && (spec->flags & GIT_ATTR_FNMATCH_ALLOWNEG) != 0) {
+		spec->flags = spec->flags | GIT_ATTR_FNMATCH_NEGATIVE;
+		pattern++;
+	}
+
+	slash_count = 0;
+	escaped = false;
+	/* Scan until a non-escaped whitespace. */
+	for (scan = pattern; *scan != '\0'; ++scan) {
+		char c = *scan;
+
+		if (c == '\\' && !escaped) {
+			escaped = true;
+			continue;
+		} else if (git__isspace(c) && !escaped) {
+			if (!allow_space || (c != ' ' && c != '\t' && c != '\r'))
+				break;
+		} else if (c == '/') {
+			spec->flags = spec->flags | GIT_ATTR_FNMATCH_FULLPATH;
+			slash_count++;
+
+			if (slash_count == 1 && pattern == scan)
+				pattern++;
+		} else if (git__iswildcard(c) && !escaped) {
+			/* remember if we see an unescaped wildcard in pattern */
+			spec->flags = spec->flags | GIT_ATTR_FNMATCH_HASWILD;
+		}
+
+		escaped = false;
+	}
+
+	*base = scan;
+
+	if ((spec->length = scan - pattern) == 0)
+		return GIT_ENOTFOUND;
+
+	/*
+	 * Remove one trailing \r in case this is a CRLF delimited
+	 * file, in the case of Icon\r\r\n, we still leave the first
+	 * \r there to match against.
+	 */
+	if (pattern[spec->length - 1] == '\r')
+		if (--spec->length == 0)
+			return GIT_ENOTFOUND;
+
+	/* Remove trailing spaces. */
+	spec->length -= trailing_space_length(pattern, spec->length);
+
+	if (spec->length == 0)
+		return GIT_ENOTFOUND;
+
+	if (pattern[spec->length - 1] == '/') {
+		spec->length--;
+		spec->flags = spec->flags | GIT_ATTR_FNMATCH_DIRECTORY;
+		if (--slash_count <= 0)
+			spec->flags = spec->flags & ~GIT_ATTR_FNMATCH_FULLPATH;
+	}
+
+	if (context) {
+		char *slash = strrchr(context, '/');
+		size_t len;
+		if (slash) {
+			/* include the slash for easier matching */
+			len = slash - context + 1;
+			spec->containing_dir = git_pool_strndup(pool, context, len);
+			spec->containing_dir_length = len;
+		}
+	}
+
+	spec->pattern = git_pool_strndup(pool, pattern, spec->length);
+
+	if (!spec->pattern) {
+		*base = git__next_line(pattern);
+		return -1;
+	} else {
+		/* strip '\' that might have been used for internal whitespace */
+		spec->length = unescape_spaces(spec->pattern);
+	}
+
+	return 0;
+}
+
+
+// Source: attr_file.c
+// Lines 705-823
+
+
+[ANSWER]
+MAY

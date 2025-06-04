@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'reference' at line 3\n2. Pointer 'object' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid test_refs_read__packed(void)\n{\n\t/* lookup a packed reference */\n\tgit_reference *reference;\n\tgit_object *object;\n\n\tcl_git_pass(git_reference_lookup(&reference, g_repo, packed_head_name));\n\tcl_assert(git_reference_type(reference) & GIT_REFERENCE_DIRECT);\n\tcl_assert(reference_is_packed(reference));\n\tcl_assert_equal_s(reference->name, packed_head_name);\n\n\tcl_git_pass(git_object_lookup(&object, g_repo, git_reference_target(reference), GIT_OBJECT_ANY));\n\tcl_assert(object != NULL);\n\tcl_assert(git_object_type(object) == GIT_OBJECT_COMMIT);\n\n\tgit_object_free(object);\n\n\tgit_reference_free(reference);\n}\n\n\n// Source: read.c\n// Lines 163-181\n",
+  "ANSWER": "MAY"
+}

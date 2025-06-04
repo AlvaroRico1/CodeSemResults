@@ -1,0 +1,54 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'one' at line 1
+2. Pointer 'index' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void expect_files_not_renamed(const char *one, const char *two, uint32_t whitespace_flags)
+{
+	git_index *index;
+	git_diff *diff = NULL;
+	diff_expects exp;
+	git_diff_options diffopts = GIT_DIFF_OPTIONS_INIT;
+	git_diff_find_options findopts = GIT_DIFF_FIND_OPTIONS_INIT;
+
+	diffopts.flags = GIT_DIFF_INCLUDE_UNTRACKED;
+
+	findopts.flags = GIT_DIFF_FIND_FOR_UNTRACKED |
+		whitespace_flags;
+
+	cl_git_pass(git_repository_index(&index, g_repo));
+
+	cl_git_rewritefile("renames/ikeepsix.txt", one);
+	cl_git_pass(git_index_add_bypath(index, "ikeepsix.txt"));
+
+	cl_git_rmfile("renames/ikeepsix.txt");
+	cl_git_rewritefile("renames/ikeepsix2.txt", two);
+
+	cl_git_pass(git_diff_index_to_workdir(&diff, g_repo, index, &diffopts));
+	cl_git_pass(git_diff_find_similar(diff, &findopts));
+
+	memset(&exp, 0, sizeof(exp));
+
+	cl_git_pass(git_diff_foreach(
+		diff, diff_file_cb, diff_binary_cb, diff_hunk_cb, diff_line_cb, &exp));
+	cl_assert_equal_i(2, exp.files);
+	cl_assert_equal_i(1, exp.file_status[GIT_DELTA_DELETED]);
+	cl_assert_equal_i(1, exp.file_status[GIT_DELTA_UNTRACKED]);
+
+	git_diff_free(diff);
+	git_index_free(index);
+}
+
+
+// Source: rename.c
+// Lines 1680-1714
+
+
+[ANSWER]
+MUST-NOT

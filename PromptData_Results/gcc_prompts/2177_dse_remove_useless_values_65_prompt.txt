@@ -1,0 +1,57 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'insn_info' at line 3
+2. Pointer 'insn_info' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+remove_useless_values (cselib_val *base)
+{
+  insn_info_t insn_info = active_local_stores;
+  insn_info_t last = NULL;
+
+  while (insn_info)
+    {
+      store_info *store_info = insn_info->store_rec;
+      bool del = false;
+
+      /* If ANY of the store_infos match the cselib group that is
+	 being deleted, then the insn cannot be deleted.  */
+      while (store_info)
+	{
+	  if ((store_info->group_id == -1)
+	      && (store_info->cse_base == base))
+	    {
+	      del = true;
+	      break;
+	    }
+	  store_info = store_info->next;
+	}
+
+      if (del)
+	{
+	  active_local_stores_len--;
+	  if (last)
+	    last->next_local_store = insn_info->next_local_store;
+	  else
+	    active_local_stores = insn_info->next_local_store;
+	  free_store_info (insn_info);
+	}
+      else
+	last = insn_info;
+
+      insn_info = insn_info->next_local_store;
+    }
+}
+
+
+// Source: dse.c
+// Lines 2657-2694
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'caller' at line 5\n2. Pointer 'edge' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ncompute_inlined_call_time (struct cgraph_edge *edge,\n\t\t\t   sreal time,\n\t\t\t   sreal freq)\n{\n  cgraph_node *caller = (edge->caller->inlined_to\n\t\t\t ? edge->caller->inlined_to\n\t\t\t : edge->caller);\n  sreal caller_time = ipa_fn_summaries->get (caller)->time;\n\n  if (freq > 0)\n    time *= freq;\n  else\n    time = time >> 11;\n\n  /* This calculation should match one in ipa-inline-analysis.c\n     (estimate_edge_size_and_time).  */\n  time -= (sreal)ipa_call_summaries->get (edge)->call_stmt_time * freq;\n  time += caller_time;\n  if (time <= 0)\n    time = ((sreal) 1) >> 8;\n  gcc_checking_assert (time >= 0);\n  return time;\n}\n\n\n// Source: ipa-inline.c\n// Lines 749-771\n",
+  "ANSWER": "MUST"
+}

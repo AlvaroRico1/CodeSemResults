@@ -1,0 +1,57 @@
+    extract_const_table = 2
+  };
+
+  JOIN_TAB *const tab_end = join_tab + tables;
+  for (JOIN_TAB *tab = join_tab; tab < tab_end; tab++) {
+    TABLE *const table = tab->table();
+    TABLE_LIST *const tl = tab->table_ref;
+    enum enum_const_table_extraction extract_method = extract_const_table;
+
+    const bool all_partitions_pruned_away = table->all_partitions_pruned_away;
+
+    if (tl->outer_join_nest()) {
+      /*
+        Table belongs to a nested join, no candidate for const table extraction.
+      */
+      extract_method = extract_no_table;
+    } else if (tl->embedding && tl->embedding->is_sj_or_aj_nest()) {
+      /*
+        Table belongs to a semi-join.
+        We do not currently pull out const tables from semi-join nests.
+      */
+      extract_method = extract_no_table;
+    } else if (tab->join_cond()) {
+      // tab is the only inner table of an outer join, extract empty tables
+      extract_method = extract_empty_table;
+    }
+    switch (extract_method) {
+      case extract_no_table:
+        break;
+
+      case extract_empty_table:
+        // Extract tables with zero rows, but only if statistics are exact
+        if ((table->file->stats.records == 0 || all_partitions_pruned_away) &&
+            (table->file->ha_table_flags() & HA_STATS_RECORDS_IS_EXACT))
+          mark_const_table(tab, nullptr);
+        break;
+
+      case extract_const_table:
+        /*
+          Extract tables with zero or one rows, but do not extract tables that
+           1. are dependent upon other tables, or
+           2. have no exact statistics, or
+           3. are full-text searched
+        */
+        if ((table->s->system || table->file->stats.records <= 1 ||
+             all_partitions_pruned_away) &&
+            !tab->dependent &&                                              // 1
+            (table->file->ha_table_flags() & HA_STATS_RECORDS_IS_EXACT) &&  // 2
+            !tl->is_fulltext_searched())                                    // 3
+          mark_const_table(tab, nullptr);
+        break;
+    }
+  }
+
+
+// Source: sql_optimizer.cc
+// Lines 5297-5349

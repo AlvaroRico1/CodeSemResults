@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'raw' at line 3\n2. Pointer 'data' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint git_odb_hash(git_oid *id, const void *data, size_t len, git_object_t type)\n{\n\tgit_rawobj raw;\n\n\tGIT_ASSERT_ARG(id);\n\n\traw.data = (void *)data;\n\traw.len = len;\n\traw.type = type;\n\n\treturn git_odb__hashobj(id, &raw);\n}\n\n\n// Source: odb.c\n// Lines 343-354\n",
+  "ANSWER": "MUST"
+}

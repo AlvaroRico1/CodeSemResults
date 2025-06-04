@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'p' at line 9\n2. Pointer 'cache' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint find_kept_pack_entry(struct repository *r,\n\t\t\t const struct object_id *oid,\n\t\t\t unsigned flags,\n\t\t\t struct pack_entry *e)\n{\n\tstruct packed_git **cache;\n\n\tfor (cache = kept_pack_cache(r, flags); *cache; cache++) {\n\t\tstruct packed_git *p = *cache;\n\t\tif (fill_pack_entry(oid, e, p))\n\t\t\treturn 1;\n\t}\n\n\n// Source: packfile.c\n// Lines 2099-2110\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'fld' at line 2\n2. Pointer 'part_info' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nbool partition_key_modified(TABLE *table, const MY_BITMAP *fields) {\n  Field **fld;\n  partition_info *part_info = table->part_info;\n  DBUG_TRACE;\n\n  if (!part_info) return false;\n  if (table->s->db_type()->partition_flags &&\n      (table->s->db_type()->partition_flags() & HA_CAN_UPDATE_PARTITION_KEY))\n    return false;\n  for (fld = part_info->full_part_field_array; *fld; fld++)\n    if (bitmap_is_set(fields, (*fld)->field_index())) return true;\n  return false;\n}\n\n\n// Source: sql_partition.cc\n// Lines 2472-2484\n",
+  "ANSWER": "MUST"
+}

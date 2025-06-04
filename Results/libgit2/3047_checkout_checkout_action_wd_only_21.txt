@@ -1,0 +1,1 @@
+error,libgit2/src/libgit2/checkout.c,7,pos,libgit2/src/libgit2/checkout.c,25,2

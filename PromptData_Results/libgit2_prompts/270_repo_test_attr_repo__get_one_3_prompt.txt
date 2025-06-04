@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'i' at line 3
+2. Pointer 'value' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_attr_repo__get_one(void)
+{
+	int i;
+
+	for (i = 0; i < (int)ARRAY_SIZE(get_one_test_cases); ++i) {
+		struct attr_expected *scan = &get_one_test_cases[i];
+		const char *value;
+
+		cl_git_pass(git_attr_get(&value, g_repo, 0, scan->path, scan->attr));
+		attr_check_expected(
+			scan->expected, scan->expected_str, scan->attr, value);
+	}
+
+
+// Source: repo.c
+// Lines 60-71
+
+
+[ANSWER]
+MUST-NOT

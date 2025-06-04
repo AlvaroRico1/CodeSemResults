@@ -1,0 +1,57 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'old_tree' at line 31
+2. Pointer 'ref' at line 13
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_commit_amend(
+	git_oid *id,
+	const git_commit *commit_to_amend,
+	const char *update_ref,
+	const git_signature *author,
+	const git_signature *committer,
+	const char *message_encoding,
+	const char *message,
+	const git_tree *tree)
+{
+	git_repository *repo;
+	git_oid tree_id;
+	git_reference *ref;
+	int error;
+
+	GIT_ASSERT_ARG(id);
+	GIT_ASSERT_ARG(commit_to_amend);
+
+	repo = git_commit_owner(commit_to_amend);
+
+	if (!author)
+		author = git_commit_author(commit_to_amend);
+	if (!committer)
+		committer = git_commit_committer(commit_to_amend);
+	if (!message_encoding)
+		message_encoding = git_commit_message_encoding(commit_to_amend);
+	if (!message)
+		message = git_commit_message(commit_to_amend);
+
+	if (!tree) {
+		git_tree *old_tree;
+		GIT_ERROR_CHECK_ERROR( git_commit_tree(&old_tree, commit_to_amend) );
+		git_oid_cpy(&tree_id, git_tree_id(old_tree));
+		git_tree_free(old_tree);
+	} else {
+		GIT_ASSERT_ARG(git_tree_owner(tree) == repo);
+		git_oid_cpy(&tree_id, git_tree_id(tree));
+	}
+
+
+// Source: commit.c
+// Lines 328-365
+
+
+[ANSWER]
+MAY

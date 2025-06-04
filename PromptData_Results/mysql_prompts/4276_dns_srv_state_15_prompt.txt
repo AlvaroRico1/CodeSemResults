@@ -1,0 +1,57 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'port' at line 25
+2. Pointer 'srv_data' at line 20
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+  struct __res_state state {};
+  res_ninit(&state);
+  unsigned char query_buffer[NS_PACKETSZ];
+  bool ret = true;
+
+  data.clear();
+
+  int res = res_nsearch(&state, dnsname, ns_c_in, ns_t_srv, query_buffer,
+                        sizeof(query_buffer));
+
+  if (res >= 0) {
+    ns_msg msg;
+    ns_initparse(query_buffer, res, &msg);
+
+    for (int x = 0; x < ns_msg_count(msg, ns_s_an); x++) {
+      // Get next DNS SRV record and its data
+
+      ns_rr rr;
+      ns_parserr(&msg, ns_s_an, x, &rr);
+      const unsigned char *srv_data = ns_rr_rdata(rr);
+
+      // Read port, priority and weight.
+      // Note: Each NS_GET16 call moves srv_data to next value
+
+      uint16_t port, prio, weight;
+
+      NS_GET16(prio, srv_data);
+      NS_GET16(weight, srv_data);
+      NS_GET16(port, srv_data);
+
+      // Read host name
+
+      char name_buffer[NS_MAXDNAME];
+
+      dn_expand(ns_msg_base(msg), ns_msg_end(msg), srv_data, name_buffer,
+                sizeof(name_buffer));
+      data.add(name_buffer, port, prio, weight);
+    }
+
+
+// Source: dns_srv.cc
+// Lines 43-80
+
+
+[ANSWER]
+MUST-NOT

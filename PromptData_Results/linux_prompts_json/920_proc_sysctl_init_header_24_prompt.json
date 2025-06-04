@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'entry' at line 17\n2. Pointer 'table' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void init_header(struct ctl_table_header *head,\n\tstruct ctl_table_root *root, struct ctl_table_set *set,\n\tstruct ctl_node *node, struct ctl_table *table)\n{\n\thead->ctl_table = table;\n\thead->ctl_table_arg = table;\n\thead->used = 0;\n\thead->count = 1;\n\thead->nreg = 1;\n\thead->unregistering = NULL;\n\thead->root = root;\n\thead->set = set;\n\thead->parent = NULL;\n\thead->node = node;\n\tINIT_HLIST_HEAD(&head->inodes);\n\tif (node) {\n\t\tstruct ctl_table *entry;\n\t\tfor (entry = table; entry->procname; entry++, node++)\n\t\t\tnode->header = head;\n\t}\n\n\n// Source: proc_sysctl.c\n// Lines 186-205\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,1 @@
+signature,libgit2/tests/libgit2/diff/rename.c,8,delta,libgit2/tests/libgit2/diff/rename.c,11,0

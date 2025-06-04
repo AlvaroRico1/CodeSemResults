@@ -1,0 +1,44 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'master' at line 9
+2. Pointer 'ri' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void sentinelEvent(int level, char *type, sentinelRedisInstance *ri,
+                   const char *fmt, ...) {
+    va_list ap;
+    char msg[LOG_MAX_LEN];
+    robj *channel, *payload;
+
+    /* Handle %@ */
+    if (fmt[0] == '%' && fmt[1] == '@') {
+        sentinelRedisInstance *master = (ri->flags & SRI_MASTER) ?
+                                         NULL : ri->master;
+
+        if (master) {
+            snprintf(msg, sizeof(msg), "%s %s %s %d @ %s %s %d",
+                sentinelRedisInstanceTypeStr(ri),
+                ri->name, announceSentinelAddr(ri->addr), ri->addr->port,
+                master->name, announceSentinelAddr(master->addr), master->addr->port);
+        } else {
+            snprintf(msg, sizeof(msg), "%s %s %s %d",
+                sentinelRedisInstanceTypeStr(ri),
+                ri->name, announceSentinelAddr(ri->addr), ri->addr->port);
+        }
+        fmt += 2;
+    } else {
+        msg[0] = '\0';
+    }
+
+
+// Source: sentinel.c
+// Lines 694-718
+
+
+[ANSWER]
+MUST

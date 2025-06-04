@@ -1,0 +1,68 @@
+static void apply_directory_rename_modifications(struct merge_options *opt,
+						 struct diff_filepair *pair,
+						 char *new_path)
+{
+	/*
+	 * The basic idea is to get the conflict_info from opt->priv->paths
+	 * at old path, and insert it into new_path; basically just this:
+	 *     ci = strmap_get(&opt->priv->paths, old_path);
+	 *     strmap_remove(&opt->priv->paths, old_path, 0);
+	 *     strmap_put(&opt->priv->paths, new_path, ci);
+	 * However, there are some factors complicating this:
+	 *     - opt->priv->paths may already have an entry at new_path
+	 *     - Each ci tracks its containing directory, so we need to
+	 *       update that
+	 *     - If another ci has the same containing directory, then
+	 *       the two char*'s MUST point to the same location.  See the
+	 *       comment in struct merged_info.  strcmp equality is not
+	 *       enough; we need pointer equality.
+	 *     - opt->priv->paths must hold the parent directories of any
+	 *       entries that are added.  So, if this directory rename
+	 *       causes entirely new directories, we must recursively add
+	 *       parent directories.
+	 *     - For each parent directory added to opt->priv->paths, we
+	 *       also need to get its parent directory stored in its
+	 *       conflict_info->merged.directory_name with all the same
+	 *       requirements about pointer equality.
+	 */
+	struct string_list dirs_to_insert = STRING_LIST_INIT_NODUP;
+	struct conflict_info *ci, *new_ci;
+	struct strmap_entry *entry;
+	const char *branch_with_new_path, *branch_with_dir_rename;
+	const char *old_path = pair->two->path;
+	const char *parent_name;
+	const char *cur_path;
+	int i, len;
+
+	entry = strmap_get_entry(&opt->priv->paths, old_path);
+	old_path = entry->key;
+	ci = entry->value;
+	VERIFY_CI(ci);
+
+	/* Find parent directories missing from opt->priv->paths */
+	cur_path = mem_pool_strdup(&opt->priv->pool, new_path);
+	free((char*)new_path);
+	new_path = (char *)cur_path;
+
+	while (1) {
+		/* Find the parent directory of cur_path */
+		char *last_slash = strrchr(cur_path, '/');
+		if (last_slash) {
+			parent_name = mem_pool_strndup(&opt->priv->pool,
+						       cur_path,
+						       last_slash - cur_path);
+		} else {
+			parent_name = opt->priv->toplevel_dir;
+			break;
+		}
+
+		/* Look it up in opt->priv->paths */
+		entry = strmap_get_entry(&opt->priv->paths, parent_name);
+		if (entry) {
+			parent_name = entry->key; /* reuse known pointer */
+			break;
+		}
+
+
+// Source: merge-ort.c
+// Lines 2283-2346

@@ -1,0 +1,46 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'start' at line 14
+2. Pointer 'tgt' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+deps_add_default_target (class mkdeps *d, const char *tgt)
+{
+  /* Only if we have no targets.  */
+  if (d->targets.size ())
+    return;
+
+  if (tgt[0] == '\0')
+    d->targets.push (xstrdup ("-"));
+  else
+    {
+#ifndef TARGET_OBJECT_SUFFIX
+# define TARGET_OBJECT_SUFFIX ".o"
+#endif
+      const char *start = lbasename (tgt);
+      char *o = (char *) alloca (strlen (start)
+                                 + strlen (TARGET_OBJECT_SUFFIX) + 1);
+      char *suffix;
+
+      strcpy (o, start);
+
+      suffix = strrchr (o, '.');
+      if (!suffix)
+        suffix = o + strlen (o);
+      strcpy (suffix, TARGET_OBJECT_SUFFIX);
+
+      deps_add_target (d, o, 1);
+    }
+
+
+// Source: mkdeps.c
+// Lines 263-289
+
+
+[ANSWER]
+MAY

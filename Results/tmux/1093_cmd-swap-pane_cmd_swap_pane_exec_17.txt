@@ -1,0 +1,1 @@
+src_wp,tmux/cmd-swap-pane.c,7,dst_lc,tmux/cmd-swap-pane.c,8,1

@@ -1,0 +1,32 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'part' at line 3
+2. Pointer 'instream' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int mime_file_seek(void *instream, curl_off_t offset, int whence)
+{
+  curl_mimepart *part = (curl_mimepart *) instream;
+
+  if(whence == SEEK_SET && !offset && !part->fp)
+    return CURL_SEEKFUNC_OK;   /* Not open: implicitly already at BOF. */
+
+  if(mime_open_file(part))
+    return CURL_SEEKFUNC_FAIL;
+
+  return fseek(part->fp, (long) offset, whence)?
+               CURL_SEEKFUNC_CANTSEEK: CURL_SEEKFUNC_OK;
+}
+
+
+// Source: mime.c
+// Lines 712-724
+
+
+[ANSWER]
+MUST

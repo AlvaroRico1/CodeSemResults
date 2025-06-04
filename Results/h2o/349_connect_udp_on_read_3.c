@@ -1,0 +1,41 @@
+static void udp_on_read(h2o_socket_t *_sock, const char *err)
+{
+    struct st_connect_generator_t *self = _sock->data;
+
+    if (err != NULL) {
+        close_readwrite(self);
+        return;
+    }
+
+    /* read UDP packet, or return */
+    ssize_t rret;
+    while ((rret = recv(h2o_socket_get_fd(self->sock), self->udp.ingress.buf + UDP_CHUNK_OVERHEAD,
+                        sizeof(self->udp.ingress.buf) - UDP_CHUNK_OVERHEAD, 0)) == -1 &&
+           errno == EINTR)
+        ;
+    if (rret == -1)
+        return;
+
+    /* forward UDP datagram as is; note that it might be zero-sized */
+    if (self->src_req->forward_datagram.read_ != NULL) {
+        h2o_iovec_t vec = h2o_iovec_init(self->udp.ingress.buf + UDP_CHUNK_OVERHEAD, rret);
+        self->src_req->forward_datagram.read_(self->src_req, &vec, 1);
+    } else {
+        h2o_socket_read_stop(self->sock);
+        reset_io_timeout(self); /* for simplicity, we call out I/O timeout even when downstream fails to deliver data to the client
+                                 * within given interval */
+        size_t off = 0;
+        self->udp.ingress.buf[off++] = 0; /* chunk type = UDP_PACKET */
+        off = quicly_encodev(self->udp.ingress.buf + off, (uint64_t)rret) - self->udp.ingress.buf;
+        assert(off <= UDP_CHUNK_OVERHEAD);
+        if (off < UDP_CHUNK_OVERHEAD)
+            memmove(self->udp.ingress.buf + off, self->udp.ingress.buf + UDP_CHUNK_OVERHEAD, rret);
+        off += rret;
+        h2o_iovec_t vec = h2o_iovec_init(self->udp.ingress.buf, off);
+        h2o_send(self->src_req, &vec, 1, H2O_SEND_STATE_IN_PROGRESS);
+    }
+}
+
+
+// Source: connect.c
+// Lines 721-757

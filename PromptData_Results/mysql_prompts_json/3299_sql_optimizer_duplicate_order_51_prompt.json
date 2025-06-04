@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'order' at line 3\n2. Pointer 'first_order' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic bool duplicate_order(const ORDER *first_order,\n                            const ORDER *possible_dup) {\n  const ORDER *order;\n  for (order = first_order; order; order = order->next) {\n    if (order == possible_dup) {\n      // all expressions preceding possible_dup have been checked.\n      return false;\n    } else {\n      const Item *it1 = order->item[0]->real_item();\n      const Item *it2 = possible_dup->item[0]->real_item();\n\n      if (it1->eq(it2, false)) return true;\n    }\n  }\n  return false;\n}\n\n\n// Source: sql_optimizer.cc\n// Lines 9688-9703\n",
+  "ANSWER": "MUST"
+}

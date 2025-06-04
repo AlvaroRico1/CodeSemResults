@@ -1,0 +1,52 @@
+DEFINE_2ARG(on_config_header_add, H2O_HEADERS_CMD_ADD)
+DEFINE_2ARG(on_config_header_append, H2O_HEADERS_CMD_APPEND)
+DEFINE_2ARG(on_config_header_merge, H2O_HEADERS_CMD_MERGE)
+DEFINE_2ARG(on_config_header_set, H2O_HEADERS_CMD_SET)
+DEFINE_2ARG(on_config_header_setifempty, H2O_HEADERS_CMD_SETIFEMPTY)
+
+#undef DEFINE_2ARG
+
+void h2o_configurator_define_headers_commands(h2o_globalconf_t *global_conf, h2o_configurator_t *conf, const char *prefix,
+                                              h2o_configurator_get_headers_commands_cb get_commands)
+{
+    struct headers_util_configurator_t *c = (void *)h2o_configurator_create(global_conf, sizeof(*c));
+    c->child = conf;
+    c->get_commands = get_commands;
+    size_t prefix_len = strlen(prefix);
+
+#define DEFINE_CMD_NAME(name, suffix)                                                                                              \
+    char *name = h2o_mem_alloc(prefix_len + sizeof(suffix));                                                                       \
+    memcpy(name, prefix, prefix_len);                                                                                              \
+    memcpy(name + prefix_len, suffix, sizeof(suffix))
+
+    DEFINE_CMD_NAME(add_directive, ".add");
+    DEFINE_CMD_NAME(append_directive, ".append");
+    DEFINE_CMD_NAME(merge_directive, ".merge");
+    DEFINE_CMD_NAME(set_directive, ".set");
+    DEFINE_CMD_NAME(setifempty_directive, ".setifempty");
+    DEFINE_CMD_NAME(unset_directive, ".unset");
+    DEFINE_CMD_NAME(unsetunless_directive, ".unsetunless");
+    DEFINE_CMD_NAME(cookie_unset_directive, ".cookie.unset");
+    DEFINE_CMD_NAME(cookie_unsetunless_directive, ".cookie.unsetunless");
+#undef DEFINE_CMD_NAME
+
+#define DEFINE_CMD(name, cb)                                                                                                       \
+    h2o_configurator_define_command(&c->super, name,                                                                               \
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR |                       \
+                                        H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,              \
+                                    cb)
+    DEFINE_CMD(add_directive, on_config_header_add);
+    DEFINE_CMD(append_directive, on_config_header_append);
+    DEFINE_CMD(merge_directive, on_config_header_merge);
+    DEFINE_CMD(set_directive, on_config_header_set);
+    DEFINE_CMD(setifempty_directive, on_config_header_setifempty);
+    DEFINE_CMD(unset_directive, on_config_header_unset);
+    DEFINE_CMD(unsetunless_directive, on_config_header_unsetunless);
+    DEFINE_CMD(cookie_unset_directive, on_config_cookie_unset);
+    DEFINE_CMD(cookie_unsetunless_directive, on_config_cookie_unsetunless);
+#undef DEFINE_CMD
+}
+
+
+// Source: headers_util.c
+// Lines 226-273

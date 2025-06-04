@@ -1,0 +1,40 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'plugs' at line 2
+2. Pointer 'mysql' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void load_env_plugins(MYSQL *mysql) {
+  char *plugs, *free_env, *s = getenv("LIBMYSQL_PLUGINS");
+  char *enable_cleartext_plugin = getenv("LIBMYSQL_ENABLE_CLEARTEXT_PLUGIN");
+
+  if (enable_cleartext_plugin && strchr("1Yy", enable_cleartext_plugin[0]))
+    libmysql_cleartext_plugin_enabled = true;
+
+  /* no plugins to load */
+  if (!s) return;
+
+  free_env = plugs = my_strdup(key_memory_load_env_plugins, s, MYF(MY_WME));
+
+  do {
+    s = strchr(plugs, ';');
+    if (s != nullptr) *s = '\0';
+    mysql_load_plugin(mysql, plugs, -1, 0);
+    if (s != nullptr) plugs = s + 1;
+  } while (s != nullptr);
+
+  my_free(free_env);
+}
+
+
+// Source: client_plugin.cc
+// Lines 287-307
+
+
+[ANSWER]
+MUST-NOT

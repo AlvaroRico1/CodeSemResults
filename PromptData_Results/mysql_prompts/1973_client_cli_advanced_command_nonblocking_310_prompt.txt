@@ -1,0 +1,133 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'stmt_skip' at line 9
+2. Pointer 'command' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+net_async_status cli_advanced_command_nonblocking(
+    MYSQL *mysql, enum enum_server_command command, const uchar *header,
+    ulong header_length, const uchar *arg, ulong arg_length, bool skip_check,
+    MYSQL_STMT *stmt, bool *ret) {
+  NET *net = &mysql->net;
+  NET_ASYNC *net_async = NET_ASYNC_DATA(net);
+  bool result = true;
+  *ret = result;
+  bool stmt_skip = stmt ? stmt->state != MYSQL_STMT_INIT_DONE : false;
+  DBUG_TRACE;
+  DBUG_DUMP("sending", header, header_length);
+  if (arg && arg_length) {
+    DBUG_DUMP("sending arg", arg, arg_length);
+  }
+
+  if (mysql->net.vio == nullptr) {
+    set_mysql_error(mysql, CR_SERVER_GONE_ERROR, unknown_sqlstate);
+    goto end;
+  }
+  /**
+    When non blocking API execution is pending and did not complete then
+    it can result in async context to be null. In such case if user executes
+    any other API report command out of sync error.
+  */
+  if (net_async == nullptr) {
+    set_mysql_error(mysql, CR_COMMANDS_OUT_OF_SYNC, unknown_sqlstate);
+    goto end;
+  }
+  if (net_async->async_send_command_status == NET_ASYNC_SEND_COMMAND_IDLE) {
+    if (vio_is_blocking(mysql->net.vio)) {
+      vio_set_blocking_flag(net->vio, false);
+    }
+
+    if (mysql->status != MYSQL_STATUS_READY ||
+        mysql->server_status & SERVER_MORE_RESULTS_EXISTS) {
+      DBUG_PRINT("error", ("state: %d", mysql->status));
+      set_mysql_error(mysql, CR_COMMANDS_OUT_OF_SYNC, unknown_sqlstate);
+      return NET_ASYNC_COMPLETE;
+    }
+
+    net_clear_error(net);
+    mysql->info = nullptr;
+    mysql->affected_rows = ~(my_ulonglong)0;
+    /*
+      Do not check the socket/protocol buffer on COM_QUIT as the
+      result of a previous command might not have been read. This
+      can happen if a client sends a query but does not reap
+      the result before attempting to close the connection.
+    */
+    assert(command <= COM_END);
+    net_clear(&mysql->net, 0);
+    net_async->async_send_command_status = NET_ASYNC_SEND_COMMAND_WRITE_COMMAND;
+  }
+
+  MYSQL_TRACE_STAGE(mysql, READY_FOR_COMMAND);
+  if (net_async->async_send_command_status ==
+      NET_ASYNC_SEND_COMMAND_WRITE_COMMAND) {
+    bool err;
+    MYSQL_TRACE(SEND_COMMAND, mysql,
+                (command, header_length, arg_length, header, arg));
+    net_async_status status = net_write_command_nonblocking(
+        net, (uchar)command, header, header_length, arg, arg_length, &err);
+    if (status == NET_ASYNC_NOT_READY) {
+      return NET_ASYNC_NOT_READY;
+    }
+    if (err) {
+      DBUG_PRINT("error",
+                 ("Can't send command to server. Error: %d", socket_errno));
+      if (net->last_errno == ER_NET_PACKET_TOO_LARGE) {
+        set_mysql_error(mysql, CR_NET_PACKET_TOO_LARGE, unknown_sqlstate);
+        goto end;
+      }
+      end_server(mysql);
+      /* reset net_async to null as its reference has been freed */
+      net_async = nullptr;
+      if (stmt_skip) goto end;
+      set_mysql_error(mysql, CR_SERVER_GONE_ERROR, unknown_sqlstate);
+      goto end;
+    }
+    MYSQL_TRACE(PACKET_SENT, mysql, (header_length + arg_length));
+    if (skip_check) {
+      result = false;
+      goto end;
+    } else {
+      net_async->async_send_command_status = NET_ASYNC_SEND_COMMAND_READ_STATUS;
+    }
+  }
+
+  if (net_async->async_send_command_status ==
+      NET_ASYNC_SEND_COMMAND_READ_STATUS) {
+    ulong pkt_len;
+    net_async_status status =
+        cli_safe_read_with_ok_nonblocking(mysql, true, nullptr, &pkt_len);
+    if (status == NET_ASYNC_NOT_READY) {
+      return NET_ASYNC_NOT_READY;
+    }
+    mysql->packet_length = pkt_len;
+    result = (pkt_len == packet_error ? 1 : 0);
+#if defined(CLIENT_PROTOCOL_TRACING)
+    /*
+      Return to READY_FOR_COMMAND protocol stage in case server reports
+      error or sends OK packet.
+    */
+    if (!result || mysql->net.read_pos[0] == 0x00)
+      MYSQL_TRACE_STAGE(mysql, READY_FOR_COMMAND);
+#endif
+  }
+end:
+  if (net_async)
+    net_async->async_send_command_status = NET_ASYNC_SEND_COMMAND_IDLE;
+  DBUG_PRINT("exit", ("result: %d", result));
+  *ret = result;
+  return NET_ASYNC_COMPLETE;
+}
+
+
+// Source: client.cc
+// Lines 1452-1565
+
+
+[ANSWER]
+MUST-NOT

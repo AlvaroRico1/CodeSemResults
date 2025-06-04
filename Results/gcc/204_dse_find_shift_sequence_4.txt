@@ -1,0 +1,1 @@
+insn,gcc/gcc/dse.c,13,shift_seq,gcc/gcc/dse.c,21,1

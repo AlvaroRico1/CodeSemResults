@@ -1,0 +1,64 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'value' at line 3
+2. Pointer 'varname' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+getenv_spec_function (int argc, const char **argv)
+{
+  const char *value;
+  const char *varname;
+
+  char *result;
+  char *ptr;
+  size_t len;
+
+  if (argc != 2)
+    return NULL;
+
+  varname = argv[0];
+  value = env.get (varname);
+
+  /* If the variable isn't defined and this is allowed, craft our expected
+     return value.  Assume variable names used in specs strings don't contain
+     any active spec character so don't need escaping.  */
+  if (!value && spec_undefvar_allowed)
+    {
+      result = XNEWVAR (char, strlen(varname) + 2);
+      sprintf (result, "/%s", varname);
+      return result;
+    }
+
+  if (!value)
+    fatal_error (input_location,
+		 "environment variable %qs not defined", varname);
+
+  /* We have to escape every character of the environment variable so
+     they are not interpreted as active spec characters.  A
+     particularly painful case is when we are reading a variable
+     holding a windows path complete with \ separators.  */
+  len = strlen (value) * 2 + strlen (argv[1]) + 1;
+  result = XNEWVAR (char, len);
+  for (ptr = result; *value; ptr += 2)
+    {
+      ptr[0] = '\\';
+      ptr[1] = *value++;
+    }
+
+  strcpy (ptr, argv[1]);
+
+  return result;
+}
+
+
+// Source: gcc.c
+// Lines 9371-9415
+
+
+[ANSWER]
+MAY

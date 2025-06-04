@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'thd' at line 2\n2. Pointer 'join' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void trace_plan_prefix(JOIN *join, uint idx, table_map excluded_tables) {\n  THD *const thd = join->thd;\n  Opt_trace_array plan_prefix(&thd->opt_trace, \"plan_prefix\");\n  for (uint i = 0; i < idx; i++) {\n    TABLE_LIST *const tr = join->positions[i].table->table_ref;\n    if (!(tr->map() & excluded_tables)) {\n      StringBuffer<32> str;\n      tr->print(\n          thd, &str,\n          enum_query_type(QT_TO_SYSTEM_CHARSET | QT_SHOW_SELECT_NUMBER |\n                          QT_NO_DEFAULT_DB | QT_DERIVED_TABLE_ONLY_ALIAS));\n      plan_prefix.add_utf8(str.ptr(), str.length());\n    }\n  }\n}\n\n\n// Source: sql_planner.cc\n// Lines 4634-4648\n",
+  "ANSWER": "MUST"
+}

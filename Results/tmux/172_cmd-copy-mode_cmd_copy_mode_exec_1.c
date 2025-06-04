@@ -1,0 +1,44 @@
+cmd_copy_mode_exec(struct cmd *self, struct cmdq_item *item)
+{
+	struct args		*args = cmd_get_args(self);
+	struct key_event	*event = cmdq_get_event(item);
+	struct cmd_find_state	*source = cmdq_get_source(item);
+	struct cmd_find_state	*target = cmdq_get_target(item);
+	struct client		*c = cmdq_get_client(item);
+	struct session		*s;
+	struct window_pane	*wp = target->wp, *swp;
+
+	if (args_has(args, 'q')) {
+		window_pane_reset_mode_all(wp);
+		return (CMD_RETURN_NORMAL);
+	}
+
+	if (args_has(args, 'M')) {
+		if ((wp = cmd_mouse_pane(&event->m, &s, NULL)) == NULL)
+			return (CMD_RETURN_NORMAL);
+		if (c == NULL || c->session != s)
+			return (CMD_RETURN_NORMAL);
+	}
+
+	if (cmd_get_entry(self) == &cmd_clock_mode_entry) {
+		window_pane_set_mode(wp, NULL, &window_clock_mode, NULL, NULL);
+		return (CMD_RETURN_NORMAL);
+	}
+
+	if (args_has(args, 's'))
+		swp = source->wp;
+	else
+		swp = wp;
+	if (!window_pane_set_mode(wp, swp, &window_copy_mode, NULL, args)) {
+		if (args_has(args, 'M'))
+			window_copy_start_drag(c, &event->m);
+	}
+	if (args_has(args, 'u'))
+		window_copy_pageup(wp, 0);
+
+	return (CMD_RETURN_NORMAL);
+}
+
+
+// Source: cmd-copy-mode.c
+// Lines 57-96

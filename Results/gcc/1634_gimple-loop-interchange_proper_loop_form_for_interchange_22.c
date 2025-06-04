@@ -1,0 +1,98 @@
+proper_loop_form_for_interchange (class loop *loop, class loop **min_outer)
+{
+  edge e0, e1, exit;
+
+  /* Don't interchange if loop has unsupported information for the moment.  */
+  if (loop->safelen > 0
+      || loop->constraints != 0
+      || loop->can_be_parallel
+      || loop->dont_vectorize
+      || loop->force_vectorize
+      || loop->in_oacc_kernels_region
+      || loop->orig_loop_num != 0
+      || loop->simduid != NULL_TREE)
+    return false;
+
+  /* Don't interchange if outer loop has basic block other than header, exit
+     and latch.  */
+  if (loop->inner != NULL
+      && loop->num_nodes != loop->inner->num_nodes + 3)
+    return false;
+
+  if ((exit = single_dom_exit (loop)) == NULL)
+    return false;
+
+  /* Check control flow on loop header/exit blocks.  */
+  if (loop->header == exit->src
+      && (EDGE_COUNT (loop->header->preds) != 2
+	  || EDGE_COUNT (loop->header->succs) != 2))
+    return false;
+  else if (loop->header != exit->src
+	   && (EDGE_COUNT (loop->header->preds) != 2
+	       || !single_succ_p (loop->header)
+	       || unsupported_edge (single_succ_edge (loop->header))
+	       || EDGE_COUNT (exit->src->succs) != 2
+	       || !single_pred_p (exit->src)
+	       || unsupported_edge (single_pred_edge (exit->src))))
+    return false;
+
+  e0 = EDGE_PRED (loop->header, 0);
+  e1 = EDGE_PRED (loop->header, 1);
+  if (unsupported_edge (e0) || unsupported_edge (e1)
+      || (e0->src != loop->latch && e1->src != loop->latch)
+      || (e0->src->loop_father == loop && e1->src->loop_father == loop))
+    return false;
+
+  e0 = EDGE_SUCC (exit->src, 0);
+  e1 = EDGE_SUCC (exit->src, 1);
+  if (unsupported_edge (e0) || unsupported_edge (e1)
+      || (e0->dest != loop->latch && e1->dest != loop->latch)
+      || (e0->dest->loop_father == loop && e1->dest->loop_father == loop))
+    return false;
+
+  /* Don't interchange if any reference is in basic block that doesn't
+     dominate exit block.  */
+  basic_block *bbs = get_loop_body (loop);
+  for (unsigned i = 0; i < loop->num_nodes; i++)
+    {
+      basic_block bb = bbs[i];
+
+      if (bb->loop_father != loop
+	  || bb == loop->header || bb == exit->src
+	  || dominated_by_p (CDI_DOMINATORS, exit->src, bb))
+	continue;
+
+      for (gimple_stmt_iterator gsi = gsi_start_nondebug_bb (bb);
+	   !gsi_end_p (gsi); gsi_next_nondebug (&gsi))
+	if (gimple_vuse (gsi_stmt (gsi)))
+	  {
+	    free (bbs);
+	    return false;
+	  }
+    }
+  free (bbs);
+
+  tree niters = number_of_latch_executions (loop);
+  niters = analyze_scalar_evolution (loop_outer (loop), niters);
+  if (!niters || chrec_contains_undetermined (niters))
+    return false;
+
+  /* Record the innermost outer loop that doesn't form rectangle loop nest.  */
+  for (loop_p loop2 = loop_outer (loop);
+       loop2 && flow_loop_nested_p (*min_outer, loop2);
+       loop2 = loop_outer (loop2))
+    {
+      niters = instantiate_scev (loop_preheader_edge (loop2),
+				 loop_outer (loop), niters);
+      if (!evolution_function_is_invariant_p (niters, loop2->num))
+	{
+	  *min_outer = loop2;
+	  break;
+	}
+    }
+  return true;
+}
+
+
+// Source: gimple-loop-interchange.cc
+// Lines 1719-1812

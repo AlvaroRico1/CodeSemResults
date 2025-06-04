@@ -1,0 +1,54 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'te' at line 3
+2. Pointer 'next' at line 14
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int processTimeEvents(aeEventLoop *eventLoop) {
+    int processed = 0;
+    aeTimeEvent *te;
+    long long maxId;
+
+    te = eventLoop->timeEventHead;
+    maxId = eventLoop->timeEventNextId-1;
+    monotime now = getMonotonicUs();
+    while(te) {
+        long long id;
+
+        /* Remove events scheduled for deletion. */
+        if (te->id == AE_DELETED_EVENT_ID) {
+            aeTimeEvent *next = te->next;
+            /* If a reference exists for this timer event,
+             * don't free it. This is currently incremented
+             * for recursive timerProc calls */
+            if (te->refcount) {
+                te = next;
+                continue;
+            }
+            if (te->prev)
+                te->prev->next = te->next;
+            else
+                eventLoop->timeEventHead = te->next;
+            if (te->next)
+                te->next->prev = te->prev;
+            if (te->finalizerProc) {
+                te->finalizerProc(eventLoop, te->clientData);
+                now = getMonotonicUs();
+            }
+            zfree(te);
+            te = next;
+            continue;
+        }
+
+
+// Source: ae.c
+// Lines 267-301
+
+
+[ANSWER]
+MUST

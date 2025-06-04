@@ -1,0 +1,1 @@
+stash_commit,libgit2/src/libgit2/stash.c,8,repo_index,libgit2/src/libgit2/stash.c,15,2

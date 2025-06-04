@@ -1,0 +1,28 @@
+static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
+{
+    static const h2o_sendvec_callbacks_t sendvec_callbacks = {do_pread, sendvec_update_refcnt};
+
+    struct st_h2o_sendfile_generator_t *self = (void *)_self;
+    h2o_sendvec_t vec;
+    h2o_send_state_t send_state;
+
+    vec.len = self->bytesleft < H2O_PULL_SENDVEC_MAX_SIZE ? self->bytesleft : H2O_PULL_SENDVEC_MAX_SIZE;
+    vec.callbacks = &sendvec_callbacks;
+    vec.cb_arg[0] = (uint64_t)self;
+    vec.cb_arg[1] = self->file.off;
+
+    self->file.off += vec.len;
+    self->bytesleft -= vec.len;
+    if (self->bytesleft == 0) {
+        send_state = H2O_SEND_STATE_FINAL;
+    } else {
+        send_state = H2O_SEND_STATE_IN_PROGRESS;
+    }
+
+    /* send (closed in do_pread) */
+    h2o_sendvec(req, &vec, 1, send_state);
+}
+
+
+// Source: file.c
+// Lines 161-184

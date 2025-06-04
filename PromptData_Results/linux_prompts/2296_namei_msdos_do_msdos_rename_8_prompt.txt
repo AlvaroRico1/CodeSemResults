@@ -1,0 +1,186 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'dotdot_de' at line 7
+2. Pointer 'dotdot_bh' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int do_msdos_rename(struct inode *old_dir, unsigned char *old_name,
+			   struct dentry *old_dentry,
+			   struct inode *new_dir, unsigned char *new_name,
+			   struct dentry *new_dentry, int is_hid)
+{
+	struct buffer_head *dotdot_bh;
+	struct msdos_dir_entry *dotdot_de;
+	struct inode *old_inode, *new_inode;
+	struct fat_slot_info old_sinfo, sinfo;
+	struct timespec64 ts;
+	loff_t new_i_pos;
+	int err, old_attrs, is_dir, update_dotdot, corrupt = 0;
+
+	old_sinfo.bh = sinfo.bh = dotdot_bh = NULL;
+	old_inode = d_inode(old_dentry);
+	new_inode = d_inode(new_dentry);
+
+	err = fat_scan(old_dir, old_name, &old_sinfo);
+	if (err) {
+		err = -EIO;
+		goto out;
+	}
+
+	is_dir = S_ISDIR(old_inode->i_mode);
+	update_dotdot = (is_dir && old_dir != new_dir);
+	if (update_dotdot) {
+		if (fat_get_dotdot_entry(old_inode, &dotdot_bh, &dotdot_de)) {
+			err = -EIO;
+			goto out;
+		}
+	}
+
+	old_attrs = MSDOS_I(old_inode)->i_attrs;
+	err = fat_scan(new_dir, new_name, &sinfo);
+	if (!err) {
+		if (!new_inode) {
+			/* "foo" -> ".foo" case. just change the ATTR_HIDDEN */
+			if (sinfo.de != old_sinfo.de) {
+				err = -EINVAL;
+				goto out;
+			}
+			if (is_hid)
+				MSDOS_I(old_inode)->i_attrs |= ATTR_HIDDEN;
+			else
+				MSDOS_I(old_inode)->i_attrs &= ~ATTR_HIDDEN;
+			if (IS_DIRSYNC(old_dir)) {
+				err = fat_sync_inode(old_inode);
+				if (err) {
+					MSDOS_I(old_inode)->i_attrs = old_attrs;
+					goto out;
+				}
+			} else
+				mark_inode_dirty(old_inode);
+
+			inode_inc_iversion(old_dir);
+			fat_truncate_time(old_dir, NULL, S_CTIME|S_MTIME);
+			if (IS_DIRSYNC(old_dir))
+				(void)fat_sync_inode(old_dir);
+			else
+				mark_inode_dirty(old_dir);
+			goto out;
+		}
+	}
+
+	ts = current_time(old_inode);
+	if (new_inode) {
+		if (err)
+			goto out;
+		if (is_dir) {
+			err = fat_dir_empty(new_inode);
+			if (err)
+				goto out;
+		}
+		new_i_pos = MSDOS_I(new_inode)->i_pos;
+		fat_detach(new_inode);
+	} else {
+		err = msdos_add_entry(new_dir, new_name, is_dir, is_hid, 0,
+				      &ts, &sinfo);
+		if (err)
+			goto out;
+		new_i_pos = sinfo.i_pos;
+	}
+	inode_inc_iversion(new_dir);
+
+	fat_detach(old_inode);
+	fat_attach(old_inode, new_i_pos);
+	if (is_hid)
+		MSDOS_I(old_inode)->i_attrs |= ATTR_HIDDEN;
+	else
+		MSDOS_I(old_inode)->i_attrs &= ~ATTR_HIDDEN;
+	if (IS_DIRSYNC(new_dir)) {
+		err = fat_sync_inode(old_inode);
+		if (err)
+			goto error_inode;
+	} else
+		mark_inode_dirty(old_inode);
+
+	if (update_dotdot) {
+		fat_set_start(dotdot_de, MSDOS_I(new_dir)->i_logstart);
+		mark_buffer_dirty_inode(dotdot_bh, old_inode);
+		if (IS_DIRSYNC(new_dir)) {
+			err = sync_dirty_buffer(dotdot_bh);
+			if (err)
+				goto error_dotdot;
+		}
+		drop_nlink(old_dir);
+		if (!new_inode)
+			inc_nlink(new_dir);
+	}
+
+	err = fat_remove_entries(old_dir, &old_sinfo);	/* and releases bh */
+	old_sinfo.bh = NULL;
+	if (err)
+		goto error_dotdot;
+	inode_inc_iversion(old_dir);
+	fat_truncate_time(old_dir, &ts, S_CTIME|S_MTIME);
+	if (IS_DIRSYNC(old_dir))
+		(void)fat_sync_inode(old_dir);
+	else
+		mark_inode_dirty(old_dir);
+
+	if (new_inode) {
+		drop_nlink(new_inode);
+		if (is_dir)
+			drop_nlink(new_inode);
+		fat_truncate_time(new_inode, &ts, S_CTIME);
+	}
+out:
+	brelse(sinfo.bh);
+	brelse(dotdot_bh);
+	brelse(old_sinfo.bh);
+	return err;
+
+error_dotdot:
+	/* data cluster is shared, serious corruption */
+	corrupt = 1;
+
+	if (update_dotdot) {
+		fat_set_start(dotdot_de, MSDOS_I(old_dir)->i_logstart);
+		mark_buffer_dirty_inode(dotdot_bh, old_inode);
+		corrupt |= sync_dirty_buffer(dotdot_bh);
+	}
+error_inode:
+	fat_detach(old_inode);
+	fat_attach(old_inode, old_sinfo.i_pos);
+	MSDOS_I(old_inode)->i_attrs = old_attrs;
+	if (new_inode) {
+		fat_attach(new_inode, new_i_pos);
+		if (corrupt)
+			corrupt |= fat_sync_inode(new_inode);
+	} else {
+		/*
+		 * If new entry was not sharing the data cluster, it
+		 * shouldn't be serious corruption.
+		 */
+		int err2 = fat_remove_entries(new_dir, &sinfo);
+		if (corrupt)
+			corrupt |= err2;
+		sinfo.bh = NULL;
+	}
+	if (corrupt < 0) {
+		fat_fs_error(new_dir->i_sb,
+			     "%s: Filesystem corrupted (i_pos %lld)",
+			     __func__, sinfo.i_pos);
+	}
+	goto out;
+}
+
+
+// Source: namei_msdos.c
+// Lines 427-593
+
+
+[ANSWER]
+MAY

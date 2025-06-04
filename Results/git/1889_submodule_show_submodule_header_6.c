@@ -1,0 +1,74 @@
+static void show_submodule_header(struct diff_options *o,
+		const char *path,
+		struct object_id *one, struct object_id *two,
+		unsigned dirty_submodule,
+		struct repository *sub,
+		struct commit **left, struct commit **right,
+		struct commit_list **merge_bases)
+{
+	const char *message = NULL;
+	struct strbuf sb = STRBUF_INIT;
+	int fast_forward = 0, fast_backward = 0;
+
+	if (dirty_submodule & DIRTY_SUBMODULE_UNTRACKED)
+		diff_emit_submodule_untracked(o, path);
+
+	if (dirty_submodule & DIRTY_SUBMODULE_MODIFIED)
+		diff_emit_submodule_modified(o, path);
+
+	if (is_null_oid(one))
+		message = "(new submodule)";
+	else if (is_null_oid(two))
+		message = "(submodule deleted)";
+
+	if (!sub) {
+		if (!message)
+			message = "(commits not present)";
+		goto output_header;
+	}
+
+	/*
+	 * Attempt to lookup the commit references, and determine if this is
+	 * a fast forward or fast backwards update.
+	 */
+	*left = lookup_commit_reference(sub, one);
+	*right = lookup_commit_reference(sub, two);
+
+	/*
+	 * Warn about missing commits in the submodule project, but only if
+	 * they aren't null.
+	 */
+	if ((!is_null_oid(one) && !*left) ||
+	     (!is_null_oid(two) && !*right))
+		message = "(commits not present)";
+
+	*merge_bases = repo_get_merge_bases(sub, *left, *right);
+	if (*merge_bases) {
+		if ((*merge_bases)->item == *left)
+			fast_forward = 1;
+		else if ((*merge_bases)->item == *right)
+			fast_backward = 1;
+	}
+
+	if (oideq(one, two)) {
+		strbuf_release(&sb);
+		return;
+	}
+
+output_header:
+	strbuf_addf(&sb, "Submodule %s ", path);
+	strbuf_add_unique_abbrev(&sb, one, DEFAULT_ABBREV);
+	strbuf_addstr(&sb, (fast_backward || fast_forward) ? ".." : "...");
+	strbuf_add_unique_abbrev(&sb, two, DEFAULT_ABBREV);
+	if (message)
+		strbuf_addf(&sb, " %s\n", message);
+	else
+		strbuf_addf(&sb, "%s:\n", fast_backward ? " (rewind)" : "");
+	diff_emit_submodule_header(o, sb.buf);
+
+	strbuf_release(&sb);
+}
+
+
+// Source: submodule.c
+// Lines 557-626

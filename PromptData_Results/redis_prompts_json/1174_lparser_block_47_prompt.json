@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'fs' at line 3\n2. Pointer 'ls' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void block (LexState *ls) {\n  /* block -> chunk */\n  FuncState *fs = ls->fs;\n  BlockCnt bl;\n  enterblock(fs, &bl, 0);\n  chunk(ls);\n  lua_assert(bl.breaklist == NO_JUMP);\n  leaveblock(fs);\n}\n\n\n// Source: lparser.c\n// Lines 881-889\n",
+  "ANSWER": "MUST"
+}

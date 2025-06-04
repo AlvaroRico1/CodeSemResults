@@ -1,0 +1,1 @@
+temp,gcc/gcc/gcc.c,4,fname,gcc/gcc/gcc.c,243,0

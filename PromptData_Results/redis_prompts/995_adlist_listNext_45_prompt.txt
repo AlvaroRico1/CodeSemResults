@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'iter' at line 1
+2. Pointer 'current' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+listNode *listNext(listIter *iter)
+{
+    listNode *current = iter->next;
+
+    if (current != NULL) {
+        if (iter->direction == AL_START_HEAD)
+            iter->next = current->next;
+        else
+            iter->next = current->prev;
+    }
+    return current;
+}
+
+
+// Source: adlist.c
+// Lines 230-241
+
+
+[ANSWER]
+MUST

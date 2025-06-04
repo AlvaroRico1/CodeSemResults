@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'length' at line 5\n2. Pointer 'newline' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nssize_t badblocks_store(struct badblocks *bb, const char *page, size_t len,\n\t\t\tint unack)\n{\n\tunsigned long long sector;\n\tint length;\n\tchar newline;\n\n\tswitch (sscanf(page, \"%llu %d%c\", &sector, &length, &newline)) {\n\tcase 3:\n\t\tif (newline != '\\n')\n\t\t\treturn -EINVAL;\n\t\t/* fall through */\n\tcase 2:\n\t\tif (length <= 0)\n\t\t\treturn -EINVAL;\n\t\tbreak;\n\tdefault:\n\t\treturn -EINVAL;\n\t}\n\n\tif (badblocks_set(bb, sector, length, !unack))\n\t\treturn -ENOSPC;\n\telse\n\t\treturn len;\n}\n\n\n// Source: badblocks.c\n// Lines 517-541\n",
+  "ANSWER": "MAY"
+}

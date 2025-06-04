@@ -1,0 +1,1 @@
+data,tmux/window-buffer.c,5,wp,tmux/window-buffer.c,4,1

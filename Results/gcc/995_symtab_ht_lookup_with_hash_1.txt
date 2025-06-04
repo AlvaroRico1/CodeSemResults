@@ -1,0 +1,1 @@
+chars,gcc/libcpp/symtab.c,65,str,gcc/libcpp/symtab.c,1,0

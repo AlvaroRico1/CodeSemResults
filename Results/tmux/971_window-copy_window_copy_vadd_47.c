@@ -1,0 +1,46 @@
+window_copy_vadd(struct window_pane *wp, const char *fmt, va_list ap)
+{
+	struct window_mode_entry	*wme = TAILQ_FIRST(&wp->modes);
+	struct window_copy_mode_data	*data = wme->data;
+	struct screen			*backing = data->backing;
+	struct screen_write_ctx	 	 back_ctx, ctx;
+	struct grid_cell		 gc;
+	u_int				 old_hsize, old_cy;
+
+	memcpy(&gc, &grid_default_cell, sizeof gc);
+
+	old_hsize = screen_hsize(data->backing);
+	screen_write_start(&back_ctx, backing);
+	if (data->backing_written) {
+		/*
+		 * On the second or later line, do a CRLF before writing
+		 * (so it's on a new line).
+		 */
+		screen_write_carriagereturn(&back_ctx);
+		screen_write_linefeed(&back_ctx, 0, 8);
+	} else
+		data->backing_written = 1;
+	old_cy = backing->cy;
+	screen_write_vnputs(&back_ctx, 0, &gc, fmt, ap);
+	screen_write_stop(&back_ctx);
+
+	data->oy += screen_hsize(data->backing) - old_hsize;
+
+	screen_write_start_pane(&ctx, wp, &data->screen);
+
+	/*
+	 * If the history has changed, draw the top line.
+	 * (If there's any history at all, it has changed.)
+	 */
+	if (screen_hsize(data->backing))
+		window_copy_redraw_lines(wme, 0, 1);
+
+	/* Write the new lines. */
+	window_copy_redraw_lines(wme, old_cy, backing->cy - old_cy + 1);
+
+	screen_write_stop(&ctx);
+}
+
+
+// Source: window-copy.c
+// Lines 513-554

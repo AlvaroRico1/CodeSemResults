@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'orig_buf' at line 3\n2. Pointer 'buf' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid dictGetStats(char *buf, size_t bufsize, dict *d) {\n    size_t l;\n    char *orig_buf = buf;\n    size_t orig_bufsize = bufsize;\n\n    l = _dictGetStatsHt(buf,bufsize,&d->ht[0],0);\n    buf += l;\n    bufsize -= l;\n    if (dictIsRehashing(d) && bufsize > 0) {\n        _dictGetStatsHt(buf,bufsize,&d->ht[1],1);\n    }\n\n\n// Source: dict.c\n// Lines 1161-1171\n",
+  "ANSWER": "MUST"
+}

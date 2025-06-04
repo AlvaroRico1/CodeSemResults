@@ -1,0 +1,1 @@
+idx,libgit2/src/libgit2/ignore.c,12,ignored,libgit2/src/libgit2/ignore.c,9,2

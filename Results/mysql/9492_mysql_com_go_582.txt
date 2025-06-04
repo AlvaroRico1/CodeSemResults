@@ -1,0 +1,1 @@
+result,mysql/client/mysql.cc,4,error,mysql/client/mysql.cc,6,0

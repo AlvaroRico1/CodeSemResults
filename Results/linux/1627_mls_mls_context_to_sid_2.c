@@ -1,0 +1,124 @@
+int mls_context_to_sid(struct policydb *pol,
+		       char oldc,
+		       char *scontext,
+		       struct context *context,
+		       struct sidtab *s,
+		       u32 def_sid)
+{
+	char *sensitivity, *cur_cat, *next_cat, *rngptr;
+	struct level_datum *levdatum;
+	struct cat_datum *catdatum, *rngdatum;
+	int l, rc, i;
+	char *rangep[2];
+
+	if (!pol->mls_enabled) {
+		/*
+		 * With no MLS, only return -EINVAL if there is a MLS field
+		 * and it did not come from an xattr.
+		 */
+		if (oldc && def_sid == SECSID_NULL)
+			return -EINVAL;
+		return 0;
+	}
+
+	/*
+	 * No MLS component to the security context, try and map to
+	 * default if provided.
+	 */
+	if (!oldc) {
+		struct context *defcon;
+
+		if (def_sid == SECSID_NULL)
+			return -EINVAL;
+
+		defcon = sidtab_search(s, def_sid);
+		if (!defcon)
+			return -EINVAL;
+
+		return mls_context_cpy(context, defcon);
+	}
+
+	/*
+	 * If we're dealing with a range, figure out where the two parts
+	 * of the range begin.
+	 */
+	rangep[0] = scontext;
+	rangep[1] = strchr(scontext, '-');
+	if (rangep[1]) {
+		rangep[1][0] = '\0';
+		rangep[1]++;
+	}
+
+	/* For each part of the range: */
+	for (l = 0; l < 2; l++) {
+		/* Split sensitivity and category set. */
+		sensitivity = rangep[l];
+		if (sensitivity == NULL)
+			break;
+		next_cat = strchr(sensitivity, ':');
+		if (next_cat)
+			*(next_cat++) = '\0';
+
+		/* Parse sensitivity. */
+		levdatum = hashtab_search(pol->p_levels.table, sensitivity);
+		if (!levdatum)
+			return -EINVAL;
+		context->range.level[l].sens = levdatum->level->sens;
+
+		/* Extract category set. */
+		while (next_cat != NULL) {
+			cur_cat = next_cat;
+			next_cat = strchr(next_cat, ',');
+			if (next_cat != NULL)
+				*(next_cat++) = '\0';
+
+			/* Separate into range if exists */
+			rngptr = strchr(cur_cat, '.');
+			if (rngptr != NULL) {
+				/* Remove '.' */
+				*rngptr++ = '\0';
+			}
+
+			catdatum = hashtab_search(pol->p_cats.table, cur_cat);
+			if (!catdatum)
+				return -EINVAL;
+
+			rc = ebitmap_set_bit(&context->range.level[l].cat,
+					     catdatum->value - 1, 1);
+			if (rc)
+				return rc;
+
+			/* If range, set all categories in range */
+			if (rngptr == NULL)
+				continue;
+
+			rngdatum = hashtab_search(pol->p_cats.table, rngptr);
+			if (!rngdatum)
+				return -EINVAL;
+
+			if (catdatum->value >= rngdatum->value)
+				return -EINVAL;
+
+			for (i = catdatum->value; i < rngdatum->value; i++) {
+				rc = ebitmap_set_bit(&context->range.level[l].cat, i, 1);
+				if (rc)
+					return rc;
+			}
+		}
+	}
+
+	/* If we didn't see a '-', the range start is also the range end. */
+	if (rangep[1] == NULL) {
+		context->range.level[1].sens = context->range.level[0].sens;
+		rc = ebitmap_cpy(&context->range.level[1].cat,
+				 &context->range.level[0].cat);
+		if (rc)
+			return rc;
+	}
+
+	return 0;
+}
+
+
+// Source: mls.c
+// Lines 234-353

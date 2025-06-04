@@ -1,0 +1,24 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'memory_backend' at line 3
+2. Pointer 'backend' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int config_memory_get(git_config_backend *backend, const char *key, git_config_entry **out)
+{
+	config_memory_backend *memory_backend = (config_memory_backend *) backend;
+	return git_config_entries_get(out, memory_backend->entries, key);
+}
+
+
+// Source: config_mem.c
+// Lines 101-105
+
+
+[ANSWER]
+MUST

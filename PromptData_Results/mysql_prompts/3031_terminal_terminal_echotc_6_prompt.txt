@@ -1,0 +1,232 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'area' at line 8
+2. Pointer 'ep' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+terminal_echotc(EditLine *el, int argc __attribute__((__unused__)),
+    const wchar_t **argv)
+{
+	char *cap, *scap;
+	wchar_t *ep;
+	int arg_need, arg_cols, arg_rows;
+	int verbose = 0, silent = 0;
+	char *area;
+	static const char fmts[] = "%s\n", fmtd[] = "%d\n";
+	const struct termcapstr *t;
+	char buf[TC_BUFSIZE];
+	long i;
+
+	area = buf;
+
+	if (argv == NULL || argv[1] == NULL)
+		return -1;
+	argv++;
+
+	if (argv[0][0] == '-') {
+		switch (argv[0][1]) {
+		case 'v':
+			verbose = 1;
+			break;
+		case 's':
+			silent = 1;
+			break;
+		default:
+			/* stderror(ERR_NAME | ERR_TCUSAGE); */
+			break;
+		}
+		argv++;
+	}
+	if (!*argv || *argv[0] == '\0')
+		return 0;
+	if (wcscmp(*argv, L"tabs") == 0) {
+		(void) fprintf(el->el_outfile, fmts, EL_CAN_TAB ? "yes" : "no");
+		return 0;
+	} else if (wcscmp(*argv, L"meta") == 0) {
+		(void) fprintf(el->el_outfile, fmts, Val(T_km) ? "yes" : "no");
+		return 0;
+	} else if (wcscmp(*argv, L"xn") == 0) {
+		(void) fprintf(el->el_outfile, fmts, EL_HAS_MAGIC_MARGINS ?
+		    "yes" : "no");
+		return 0;
+	} else if (wcscmp(*argv, L"am") == 0) {
+		(void) fprintf(el->el_outfile, fmts, EL_HAS_AUTO_MARGINS ?
+		    "yes" : "no");
+		return 0;
+	} else if (wcscmp(*argv, L"baud") == 0) {
+		(void) fprintf(el->el_outfile, fmtd, (int)el->el_tty.t_speed);
+		return 0;
+	} else if (wcscmp(*argv, L"rows") == 0 ||
+                   wcscmp(*argv, L"lines") == 0) {
+		(void) fprintf(el->el_outfile, fmtd, Val(T_li));
+		return 0;
+	} else if (wcscmp(*argv, L"cols") == 0) {
+		(void) fprintf(el->el_outfile, fmtd, Val(T_co));
+		return 0;
+	}
+	/*
+         * Try to use our local definition first
+         */
+	scap = NULL;
+	for (t = tstr; t->name != NULL; t++)
+		if (strcmp(t->name,
+		    ct_encode_string(*argv, &el->el_scratch)) == 0) {
+			scap = el->el_terminal.t_str[t - tstr];
+			break;
+		}
+	if (t->name == NULL) {
+		/* XXX: some systems' tgetstr needs non const */
+                scap = tgetstr(ct_encode_string(*argv, &el->el_scratch), &area);
+	}
+	if (!scap || scap[0] == '\0') {
+		if (!silent)
+			(void) fprintf(el->el_errfile,
+			    "echotc: Termcap parameter `%ls' not found.\n",
+			    *argv);
+		return -1;
+	}
+	/*
+         * Count home many values we need for this capability.
+         */
+	for (cap = scap, arg_need = 0; *cap; cap++)
+		if (*cap == '%')
+			switch (*++cap) {
+			case 'd':
+			case '2':
+			case '3':
+			case '.':
+			case '+':
+				arg_need++;
+				break;
+			case '%':
+			case '>':
+			case 'i':
+			case 'r':
+			case 'n':
+			case 'B':
+			case 'D':
+				break;
+			default:
+				/*
+				 * hpux has lot's of them...
+				 */
+				if (verbose)
+					(void) fprintf(el->el_errfile,
+				"echotc: Warning: unknown termcap %% `%c'.\n",
+					    *cap);
+				/* This is bad, but I won't complain */
+				break;
+			}
+
+	switch (arg_need) {
+	case 0:
+		argv++;
+		if (*argv && *argv[0]) {
+			if (!silent)
+				(void) fprintf(el->el_errfile,
+				    "echotc: Warning: Extra argument `%ls'.\n",
+				    *argv);
+			return -1;
+		}
+		terminal_tputs(el, scap, 1);
+		break;
+	case 1:
+		argv++;
+		if (!*argv || *argv[0] == '\0') {
+			if (!silent)
+				(void) fprintf(el->el_errfile,
+				    "echotc: Warning: Missing argument.\n");
+			return -1;
+		}
+		arg_cols = 0;
+		i = wcstol(*argv, &ep, 10);
+		if (*ep != '\0' || i < 0) {
+			if (!silent)
+				(void) fprintf(el->el_errfile,
+				    "echotc: Bad value `%ls' for rows.\n",
+				    *argv);
+			return -1;
+		}
+		arg_rows = (int) i;
+		argv++;
+		if (*argv && *argv[0]) {
+			if (!silent)
+				(void) fprintf(el->el_errfile,
+				    "echotc: Warning: Extra argument `%ls"
+				    "'.\n", *argv);
+			return -1;
+		}
+		terminal_tputs(el, tgoto(scap, arg_cols, arg_rows), 1);
+		break;
+	default:
+		/* This is wrong, but I will ignore it... */
+		if (verbose)
+			(void) fprintf(el->el_errfile,
+			 "echotc: Warning: Too many required arguments (%d).\n",
+			    arg_need);
+		/* FALLTHROUGH */
+	case 2:
+		argv++;
+		if (!*argv || *argv[0] == '\0') {
+			if (!silent)
+				(void) fprintf(el->el_errfile,
+				    "echotc: Warning: Missing argument.\n");
+			return -1;
+		}
+		i = wcstol(*argv, &ep, 10);
+		if (*ep != '\0' || i < 0) {
+			if (!silent)
+				(void) fprintf(el->el_errfile,
+				    "echotc: Bad value `%ls' for cols.\n",
+				    *argv);
+			return -1;
+		}
+		arg_cols = (int) i;
+		argv++;
+		if (!*argv || *argv[0] == '\0') {
+			if (!silent)
+				(void) fprintf(el->el_errfile,
+				    "echotc: Warning: Missing argument.\n");
+			return -1;
+		}
+		i = wcstol(*argv, &ep, 10);
+		if (*ep != '\0' || i < 0) {
+			if (!silent)
+				(void) fprintf(el->el_errfile,
+				    "echotc: Bad value `%ls' for rows.\n",
+				    *argv);
+			return -1;
+		}
+		arg_rows = (int) i;
+		if (*ep != '\0') {
+			if (!silent)
+				(void) fprintf(el->el_errfile,
+				    "echotc: Bad value `%ls'.\n", *argv);
+			return -1;
+		}
+		argv++;
+		if (*argv && *argv[0]) {
+			if (!silent)
+				(void) fprintf(el->el_errfile,
+				    "echotc: Warning: Extra argument `%ls"
+				    "'.\n", *argv);
+			return -1;
+		}
+		terminal_tputs(el, tgoto(scap, arg_cols, arg_rows), arg_rows);
+		break;
+	}
+	return 0;
+}
+
+
+// Source: terminal.c
+// Lines 1445-1657
+
+
+[ANSWER]
+MAY

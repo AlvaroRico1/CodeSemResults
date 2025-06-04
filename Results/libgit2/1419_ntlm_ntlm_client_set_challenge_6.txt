@@ -1,0 +1,1 @@
+type_indicator,libgit2/deps/ntlmclient/ntlm.c,8,reserved,libgit2/deps/ntlmclient/ntlm.c,67,2

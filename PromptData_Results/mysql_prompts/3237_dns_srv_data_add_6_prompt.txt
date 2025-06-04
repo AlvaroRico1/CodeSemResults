@@ -1,0 +1,56 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'port' at line 1
+2. Pointer 'host' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+  void add(const std::string &host, unsigned port, unsigned priority,
+           unsigned weight) {
+    dns_entry_data_t::iterator list = data_.find(priority);
+    if (list == data_.cend())
+      data_.emplace(priority,
+                    dns_entry_list_t(1, Dns_entry(host, port, weight)));
+    else {
+      // RFC2782: put the 0 weight at the front, rest at the back
+      if (weight > 0)
+        list->second.emplace_back(host, port, weight);
+      else
+        list->second.emplace_front(host, port, weight);
+    }
+  }
+  bool pop_next(std::string &host, unsigned &port) {
+    if (data_.empty()) return true;
+
+    dns_entry_list_t &list = data_.begin()->second;
+    assert(!list.empty());
+
+    unsigned long sum = 0;
+    for (Dns_entry &elt : list) elt.add_weight_sum(sum);
+
+    unsigned long draw = (std::rand() * 1UL * sum) / RAND_MAX;
+
+    dns_entry_list_t::const_iterator iter = list.cbegin();
+    while (iter->weight_sum() < draw) iter++;
+    assert(iter != list.end());
+
+    host = iter->host();
+    port = iter->port();
+
+    list.erase(iter);
+    if (list.empty()) data_.erase(data_.begin());
+    return false;
+  }
+};
+
+
+// Source: dns_srv_data.h
+// Lines 80-116
+
+
+[ANSWER]
+MUST-NOT

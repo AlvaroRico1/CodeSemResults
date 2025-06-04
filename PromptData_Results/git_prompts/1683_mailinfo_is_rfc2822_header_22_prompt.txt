@@ -1,0 +1,46 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'cp' at line 12
+2. Pointer 'line' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int is_rfc2822_header(const struct strbuf *line)
+{
+	/*
+	 * The section that defines the loosest possible
+	 * field name is "3.6.8 Optional fields".
+	 *
+	 * optional-field = field-name ":" unstructured CRLF
+	 * field-name = 1*ftext
+	 * ftext = %d33-57 / %59-126
+	 */
+	int ch;
+	char *cp = line->buf;
+
+	/* Count mbox From headers as headers */
+	if (starts_with(cp, "From ") || starts_with(cp, ">From "))
+		return 1;
+
+	while ((ch = *cp++)) {
+		if (ch == ':')
+			return 1;
+		if ((33 <= ch && ch <= 57) ||
+		    (59 <= ch && ch <= 126))
+			continue;
+		break;
+	}
+	return 0;
+}
+
+
+// Source: mailinfo.c
+// Lines 860-886
+
+
+[ANSWER]
+MUST

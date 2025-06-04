@@ -1,0 +1,75 @@
+static int cont_expand_zero(struct file *file, struct address_space *mapping,
+			    loff_t pos, loff_t *bytes)
+{
+	struct inode *inode = mapping->host;
+	unsigned int blocksize = i_blocksize(inode);
+	struct page *page;
+	void *fsdata;
+	pgoff_t index, curidx;
+	loff_t curpos;
+	unsigned zerofrom, offset, len;
+	int err = 0;
+
+	index = pos >> PAGE_SHIFT;
+	offset = pos & ~PAGE_MASK;
+
+	while (index > (curidx = (curpos = *bytes)>>PAGE_SHIFT)) {
+		zerofrom = curpos & ~PAGE_MASK;
+		if (zerofrom & (blocksize-1)) {
+			*bytes |= (blocksize-1);
+			(*bytes)++;
+		}
+		len = PAGE_SIZE - zerofrom;
+
+		err = pagecache_write_begin(file, mapping, curpos, len, 0,
+					    &page, &fsdata);
+		if (err)
+			goto out;
+		zero_user(page, zerofrom, len);
+		err = pagecache_write_end(file, mapping, curpos, len, len,
+						page, fsdata);
+		if (err < 0)
+			goto out;
+		BUG_ON(err != len);
+		err = 0;
+
+		balance_dirty_pages_ratelimited(mapping);
+
+		if (fatal_signal_pending(current)) {
+			err = -EINTR;
+			goto out;
+		}
+	}
+
+	/* page covers the boundary, find the boundary offset */
+	if (index == curidx) {
+		zerofrom = curpos & ~PAGE_MASK;
+		/* if we will expand the thing last block will be filled */
+		if (offset <= zerofrom) {
+			goto out;
+		}
+		if (zerofrom & (blocksize-1)) {
+			*bytes |= (blocksize-1);
+			(*bytes)++;
+		}
+		len = offset - zerofrom;
+
+		err = pagecache_write_begin(file, mapping, curpos, len, 0,
+					    &page, &fsdata);
+		if (err)
+			goto out;
+		zero_user(page, zerofrom, len);
+		err = pagecache_write_end(file, mapping, curpos, len, len,
+						page, fsdata);
+		if (err < 0)
+			goto out;
+		BUG_ON(err != len);
+		err = 0;
+	}
+out:
+	return err;
+}
+
+
+// Source: buffer.c
+// Lines 2330-2400

@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'd' at line 3
+2. Pointer 'filter_data' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void filter_combine__free(void *filter_data)
+{
+	struct combine_filter_data *d = filter_data;
+	size_t sub;
+	for (sub = 0; sub < d->nr; sub++) {
+		list_objects_filter__free(d->sub[sub].filter);
+		oidset_clear(&d->sub[sub].seen);
+		if (d->sub[sub].omits.set.size)
+			BUG("expected oidset to be cleared already");
+	}
+	free(d->sub);
+}
+
+
+// Source: list-objects-filter.c
+// Lines 701-712
+
+
+[ANSWER]
+MUST

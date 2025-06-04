@@ -1,0 +1,43 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'pos' at line 4
+2. Pointer 'nr1' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void my_hash_sort_8bit_bin(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
+                                  const uchar *key, size_t len, uint64 *nr1,
+                                  uint64 *nr2) {
+  const uchar *pos = key;
+  uint64 tmp1;
+  uint64 tmp2;
+
+  /*
+     Remove trailing spaces. We have to do this to be able to compare
+    'A ' and 'A' as identical
+  */
+  key = skip_trailing_space(key, len);
+
+  tmp1 = *nr1;
+  tmp2 = *nr2;
+
+  for (; pos < key; pos++) {
+    tmp1 ^= (uint64)((((uint)tmp1 & 63) + tmp2) * ((uint)*pos)) + (tmp1 << 8);
+    tmp2 += 3;
+  }
+
+  *nr1 = tmp1;
+  *nr2 = tmp2;
+}
+
+
+// Source: ctype-bin.cc
+// Lines 253-276
+
+
+[ANSWER]
+MUST-NOT

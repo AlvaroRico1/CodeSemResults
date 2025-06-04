@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'error' at line 2\n2. Pointer 'db' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint STDCALL mysql_select_db(MYSQL *mysql, const char *db) {\n  int error;\n  DBUG_TRACE;\n  DBUG_PRINT(\"enter\", (\"db: '%s'\", db));\n\n  if ((error = simple_command(mysql, COM_INIT_DB, (const uchar *)db,\n                              (ulong)strlen(db), 0)))\n    return error;\n  my_free(mysql->db);\n  mysql->db = my_strdup(key_memory_MYSQL, db, MYF(MY_WME));\n  return 0;\n}\n\n\n// Source: client.cc\n// Lines 6853-6864\n",
+  "ANSWER": "MUST-NOT"
+}

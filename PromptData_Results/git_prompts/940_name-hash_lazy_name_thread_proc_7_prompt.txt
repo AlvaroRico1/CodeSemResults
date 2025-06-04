@@ -1,0 +1,30 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ce_k' at line 7
+2. Pointer 'd' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void *lazy_name_thread_proc(void *_data)
+{
+	struct lazy_name_thread_data *d = _data;
+	int k;
+
+	for (k = 0; k < d->istate->cache_nr; k++) {
+		struct cache_entry *ce_k = d->istate->cache[k];
+		ce_k->ce_flags |= CE_HASHED;
+		hashmap_entry_init(&ce_k->ent, d->lazy_entries[k].hash_name);
+		hashmap_add(&d->istate->name_hash, &ce_k->ent);
+	}
+
+
+// Source: name-hash.c
+// Lines 477-487
+
+
+[ANSWER]
+MUST

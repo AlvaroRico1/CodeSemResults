@@ -1,0 +1,1 @@
+stash_commit,libgit2/src/libgit2/stash.c,8,index_parent_tree,libgit2/src/libgit2/stash.c,12,2

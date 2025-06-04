@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'c' at line 1\n2. Pointer 'c' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid rewriteClientCommandArgument(client *c, int i, robj *newval) {\n    robj *oldval;\n    retainOriginalCommandVector(c);\n    if (i >= c->argc) {\n        c->argv = zrealloc(c->argv,sizeof(robj*)*(i+1));\n        c->argc = i+1;\n        c->argv[i] = NULL;\n    }\n\n\n// Source: networking.c\n// Lines 3141-3148\n",
+  "ANSWER": "MUST"
+}

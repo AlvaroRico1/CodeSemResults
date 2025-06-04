@@ -1,0 +1,27 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'zp' at line 4
+2. Pointer 'writer' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void gzip_close_writer(struct Curl_easy *data,
+                              struct contenc_writer *writer)
+{
+  struct zlib_params *zp = (struct zlib_params *) &writer->params;
+  z_stream *z = &zp->z;     /* zlib state structure */
+
+  exit_zlib(data, z, &zp->zlib_init, CURLE_OK);
+}
+
+
+// Source: content_encoding.c
+// Lines 563-570
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,62 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'numcells' at line 36
+2. Pointer 'field' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void print_table_data(MYSQL_RES *result) {
+  String separator(256);
+  MYSQL_ROW cur;
+  MYSQL_FIELD *field;
+  bool *num_flag;
+  size_t sz;
+
+  sz = sizeof(bool) * mysql_num_fields(result);
+  num_flag = (bool *)my_safe_alloca(sz, MAX_ALLOCA_SIZE);
+  if (column_types_flag) {
+    print_field_types(result);
+    if (!mysql_num_rows(result)) return;
+    mysql_field_seek(result, 0);
+  }
+  separator.copy("+", 1, charset_info);
+  while ((field = mysql_fetch_field(result))) {
+    size_t length = column_names ? field->name_length : 0;
+    if (quick)
+      length = max<size_t>(length, field->length);
+    else
+      length = max<size_t>(length, field->max_length);
+    if (length < 4 && !IS_NOT_NULL(field->flags))
+      length = 4;  // Room for "NULL"
+    if (opt_binhex && is_binary_field(field)) length = 2 + length * 2;
+    field->max_length = (ulong)length;
+    separator.fill(separator.length() + length + 2, '-');
+    separator.append('+');
+  }
+  separator.append('\0');  // End marker for \0
+  tee_puts(separator.ptr(), PAGER);
+  if (column_names) {
+    mysql_field_seek(result, 0);
+    (void)tee_fputs("|", PAGER);
+    for (uint off = 0; (field = mysql_fetch_field(result)); off++) {
+      size_t name_length = strlen(field->name);
+      size_t numcells = charset_info->cset->numcells(charset_info, field->name,
+                                                     field->name + name_length);
+      size_t display_length = field->max_length + name_length - numcells;
+      tee_fprintf(PAGER, " %-*s |",
+                  min<int>((int)display_length, MAX_COLUMN_LENGTH),
+                  field->name);
+      num_flag[off] = IS_NUM(field->type);
+    }
+
+
+// Source: mysql.cc
+// Lines 3577-3619
+
+
+[ANSWER]
+MUST-NOT

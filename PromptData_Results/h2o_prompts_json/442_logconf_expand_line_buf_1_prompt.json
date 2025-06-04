@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'line' at line 1\n2. Pointer 'newpt' at line 12\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic char *expand_line_buf(char *line, size_t *cur_size, size_t required, int should_realloc)\n{\n    size_t new_size = *cur_size;\n\n    /* determine the new size */\n    do {\n        new_size *= 2;\n    } while (new_size < required);\n\n    /* reallocate */\n    if (!should_realloc) {\n        char *newpt = h2o_mem_alloc(new_size);\n        memcpy(newpt, line, *cur_size);\n        line = newpt;\n    } else {\n        line = h2o_mem_realloc(line, new_size);\n    }\n\n\n// Source: logconf.c\n// Lines 511-527\n",
+  "ANSWER": "MUST"
+}

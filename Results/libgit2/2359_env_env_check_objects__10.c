@@ -1,0 +1,37 @@
+static void env_check_objects_(bool a, bool t, bool p, const char *file, const char *func, int line)
+{
+	git_repository *repo;
+	git_oid oid_a, oid_t, oid_p;
+	git_object *object;
+	cl_git_pass(git_oid_fromstr(&oid_a, "45141a79a77842c59a63229403220a4e4be74e3d"));
+	cl_git_pass(git_oid_fromstr(&oid_t, "1385f264afb75a56a5bec74243be9b367ba4ca08"));
+	cl_git_pass(git_oid_fromstr(&oid_p, "0df1a5865c8abfc09f1f2182e6a31be550e99f07"));
+	cl_git_expect(git_repository_open_ext(&repo, "attr", GIT_REPOSITORY_OPEN_FROM_ENV, NULL), 0, file, func, line);
+
+	if (a) {
+		cl_git_expect(git_object_lookup(&object, repo, &oid_a, GIT_OBJECT_BLOB), 0, file, func, line);
+		git_object_free(object);
+	} else {
+		cl_git_fail_at_line(git_object_lookup(&object, repo, &oid_a, GIT_OBJECT_BLOB), file, func, line);
+	}
+
+	if (t) {
+		cl_git_expect(git_object_lookup(&object, repo, &oid_t, GIT_OBJECT_BLOB), 0, file, func, line);
+		git_object_free(object);
+	} else {
+		cl_git_fail_at_line(git_object_lookup(&object, repo, &oid_t, GIT_OBJECT_BLOB), file, func, line);
+	}
+
+	if (p) {
+		cl_git_expect(git_object_lookup(&object, repo, &oid_p, GIT_OBJECT_COMMIT), 0, file, func, line);
+		git_object_free(object);
+	} else {
+		cl_git_fail_at_line(git_object_lookup(&object, repo, &oid_p, GIT_OBJECT_COMMIT), file, func, line);
+	}
+
+	git_repository_free(repo);
+}
+
+
+// Source: env.c
+// Lines 93-125

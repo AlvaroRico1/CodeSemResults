@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'new_lineno' at line 3\n2. Pointer 'i' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nconst git_blame_hunk *git_blame_get_hunk_byline(git_blame *blame, size_t lineno)\n{\n\tsize_t i, new_lineno = lineno;\n\n\tGIT_ASSERT_ARG_WITH_RETVAL(blame, NULL);\n\n\tif (!git_vector_bsearch2(&i, &blame->hunks, hunk_byfinalline_search_cmp, &new_lineno)) {\n\t\treturn git_blame_get_hunk_byindex(blame, (uint32_t)i);\n\t}\n\n\treturn NULL;\n}\n\n\n// Source: blame.c\n// Lines 189-200\n",
+  "ANSWER": "MAY"
+}

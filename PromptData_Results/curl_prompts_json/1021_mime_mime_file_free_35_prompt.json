@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'part' at line 3\n2. Pointer 'ptr' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void mime_file_free(void *ptr)\n{\n  curl_mimepart *part = (curl_mimepart *) ptr;\n\n  if(part->fp) {\n    fclose(part->fp);\n    part->fp = NULL;\n  }\n  Curl_safefree(part->data);\n  part->data = NULL;\n}\n\n\n// Source: mime.c\n// Lines 726-736\n",
+  "ANSWER": "MUST"
+}

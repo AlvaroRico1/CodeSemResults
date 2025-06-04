@@ -1,0 +1,35 @@
+void test_submodule_modify__init(void)
+{
+	git_config *cfg;
+	const char *str;
+
+	/* erase submodule data from .git/config */
+	cl_git_pass(git_repository_config(&cfg, g_repo));
+	cl_git_pass(
+		git_config_foreach_match(cfg, "submodule\\..*", delete_one_config, cfg));
+	git_config_free(cfg);
+
+	/* confirm no submodule data in config */
+	cl_git_pass(git_repository_config_snapshot(&cfg, g_repo));
+	cl_git_fail_with(GIT_ENOTFOUND, git_config_get_string(&str, cfg, "submodule.sm_unchanged.url"));
+	cl_git_fail_with(GIT_ENOTFOUND, git_config_get_string(&str, cfg, "submodule.sm_changed_head.url"));
+	cl_git_fail_with(GIT_ENOTFOUND, git_config_get_string(&str, cfg, "submodule.sm_added_and_uncommited.url"));
+	git_config_free(cfg);
+
+	/* call init and see that settings are copied */
+	cl_git_pass(git_submodule_foreach(g_repo, init_one_submodule, NULL));
+
+	/* confirm submodule data in config */
+	cl_git_pass(git_repository_config_snapshot(&cfg, g_repo));
+	cl_git_pass(git_config_get_string(&str, cfg, "submodule.sm_unchanged.url"));
+	cl_assert(git__suffixcmp(str, "/submod2_target") == 0);
+	cl_git_pass(git_config_get_string(&str, cfg, "submodule.sm_changed_head.url"));
+	cl_assert(git__suffixcmp(str, "/submod2_target") == 0);
+	cl_git_pass(git_config_get_string(&str, cfg, "submodule.sm_added_and_uncommited.url"));
+	cl_assert(git__suffixcmp(str, "/submod2_target") == 0);
+	git_config_free(cfg);
+}
+
+
+// Source: modify.c
+// Lines 32-62

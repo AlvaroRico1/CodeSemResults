@@ -1,0 +1,75 @@
+c_parser_omp_depobj (c_parser *parser)
+{
+  location_t loc = c_parser_peek_token (parser)->location;
+  c_parser_consume_pragma (parser);
+  matching_parens parens;
+  if (!parens.require_open (parser))
+    {
+      c_parser_skip_to_pragma_eol (parser);
+      return;
+    }
+
+  tree depobj = c_parser_expr_no_commas (parser, NULL).value;
+  if (depobj != error_mark_node)
+    {
+      if (!lvalue_p (depobj))
+	{
+	  error_at (EXPR_LOC_OR_LOC (depobj, loc),
+		    "%<depobj%> expression is not lvalue expression");
+	  depobj = error_mark_node;
+	}
+      else
+	{
+	  tree addr = build_unary_op (EXPR_LOC_OR_LOC (depobj, loc), ADDR_EXPR,
+				      depobj, false);
+	  if (addr == error_mark_node)
+	    depobj = error_mark_node;
+	  else
+	    depobj = build_indirect_ref (EXPR_LOC_OR_LOC (depobj, loc),
+					 addr, RO_UNARY_STAR);
+	}
+    }
+
+  parens.skip_until_found_close (parser);
+  tree clause = NULL_TREE;
+  enum omp_clause_depend_kind kind = OMP_CLAUSE_DEPEND_SOURCE;
+  location_t c_loc = c_parser_peek_token (parser)->location;
+  if (c_parser_next_token_is (parser, CPP_NAME))
+    {
+      const char *p = IDENTIFIER_POINTER (c_parser_peek_token (parser)->value);
+
+      c_parser_consume_token (parser);
+      if (!strcmp ("depend", p))
+	{
+	  clause = c_parser_omp_clause_depend (parser, NULL_TREE);
+	  clause = c_finish_omp_clauses (clause, C_ORT_OMP);
+	  if (!clause)
+	    clause = error_mark_node;
+	}
+      else if (!strcmp ("destroy", p))
+	kind = OMP_CLAUSE_DEPEND_LAST;
+      else if (!strcmp ("update", p))
+	{
+	  matching_parens c_parens;
+	  if (c_parens.require_open (parser))
+	    {
+	      location_t c2_loc = c_parser_peek_token (parser)->location;
+	      if (c_parser_next_token_is (parser, CPP_NAME))
+		{
+		  const char *p2
+		    = IDENTIFIER_POINTER (c_parser_peek_token (parser)->value);
+
+		  c_parser_consume_token (parser);
+		  if (!strcmp ("in", p2))
+		    kind = OMP_CLAUSE_DEPEND_IN;
+		  else if (!strcmp ("out", p2))
+		    kind = OMP_CLAUSE_DEPEND_OUT;
+		  else if (!strcmp ("inout", p2))
+		    kind = OMP_CLAUSE_DEPEND_INOUT;
+		  else if (!strcmp ("mutexinoutset", p2))
+		    kind = OMP_CLAUSE_DEPEND_MUTEXINOUTSET;
+		}
+
+
+// Source: c-parser.c
+// Lines 17836-17906

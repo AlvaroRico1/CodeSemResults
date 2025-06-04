@@ -1,0 +1,1 @@
+removed,gcc/gcc/ipa-inline.c,6,data,gcc/gcc/ipa-inline.c,1,1

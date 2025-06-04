@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'm' at line 4\n2. Pointer 'data' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int midx_read_oid_fanout(const unsigned char *chunk_start,\n\t\t\t\tsize_t chunk_size, void *data)\n{\n\tstruct multi_pack_index *m = data;\n\tm->chunk_oid_fanout = (uint32_t *)chunk_start;\n\n\tif (chunk_size != 4 * 256) {\n\t\terror(_(\"multi-pack-index OID fanout is of the wrong size\"));\n\t\treturn 1;\n\t}\n\treturn 0;\n}\n\n\n// Source: midx.c\n// Lines 71-82\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,1 @@
+a,libgit2/tests/libgit2/diff/index.c,4,err,libgit2/tests/libgit2/diff/index.c,7,0

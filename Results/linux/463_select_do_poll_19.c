@@ -1,0 +1,50 @@
+static int do_poll(struct poll_list *list, struct poll_wqueues *wait,
+		   struct timespec64 *end_time)
+{
+	poll_table* pt = &wait->pt;
+	ktime_t expire, *to = NULL;
+	int timed_out = 0, count = 0;
+	u64 slack = 0;
+	__poll_t busy_flag = net_busy_loop_on() ? POLL_BUSY_LOOP : 0;
+	unsigned long busy_start = 0;
+
+	/* Optimise the no-wait case */
+	if (end_time && !end_time->tv_sec && !end_time->tv_nsec) {
+		pt->_qproc = NULL;
+		timed_out = 1;
+	}
+
+	if (end_time && !timed_out)
+		slack = select_estimate_accuracy(end_time);
+
+	for (;;) {
+		struct poll_list *walk;
+		bool can_busy_loop = false;
+
+		for (walk = list; walk != NULL; walk = walk->next) {
+			struct pollfd * pfd, * pfd_end;
+
+			pfd = walk->entries;
+			pfd_end = pfd + walk->len;
+			for (; pfd != pfd_end; pfd++) {
+				/*
+				 * Fish for events. If we found one, record it
+				 * and kill poll_table->_qproc, so we don't
+				 * needlessly register any other waiters after
+				 * this. They'll get immediately deregistered
+				 * when we break out and return.
+				 */
+				if (do_pollfd(pfd, pt, &can_busy_loop,
+					      busy_flag)) {
+					count++;
+					pt->_qproc = NULL;
+					/* found something, stop busy polling */
+					busy_flag = 0;
+					can_busy_loop = false;
+				}
+			}
+		}
+
+
+// Source: select.c
+// Lines 871-916

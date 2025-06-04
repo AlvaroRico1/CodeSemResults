@@ -1,0 +1,1 @@
+blobsha,libgit2/tests/libgit2/diff/rename.c,4,blob,libgit2/tests/libgit2/diff/rename.c,7,0

@@ -1,0 +1,1 @@
+entry,libgit2/src/libgit2/iterator.c,11,pos,libgit2/src/libgit2/iterator.c,25,2

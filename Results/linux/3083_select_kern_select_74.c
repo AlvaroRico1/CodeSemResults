@@ -1,0 +1,25 @@
+static int kern_select(int n, fd_set __user *inp, fd_set __user *outp,
+		       fd_set __user *exp, struct timeval __user *tvp)
+{
+	struct timespec64 end_time, *to = NULL;
+	struct timeval tv;
+	int ret;
+
+	if (tvp) {
+		if (copy_from_user(&tv, tvp, sizeof(tv)))
+			return -EFAULT;
+
+		to = &end_time;
+		if (poll_select_set_timeout(to,
+				tv.tv_sec + (tv.tv_usec / USEC_PER_SEC),
+				(tv.tv_usec % USEC_PER_SEC) * NSEC_PER_USEC))
+			return -EINVAL;
+	}
+
+	ret = core_sys_select(n, inp, outp, exp, to);
+	return poll_select_finish(&end_time, tvp, PT_TIMEVAL, ret);
+}
+
+
+// Source: select.c
+// Lines 700-720

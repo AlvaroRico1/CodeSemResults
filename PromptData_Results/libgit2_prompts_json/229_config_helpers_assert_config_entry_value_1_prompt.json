@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'expected_value' at line 4\n2. Pointer 'config' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid assert_config_entry_value(\n\tgit_repository *repo,\n\tconst char *name,\n\tconst char *expected_value)\n{\n\tgit_config *config;\n\tgit_buf buf = GIT_BUF_INIT;\n\n\tcl_git_pass(git_repository_config__weakptr(&config, repo));\n\n\tcl_git_pass(git_config_get_string_buf(&buf, config, name));\n\n\tcl_assert_equal_s(expected_value, buf.ptr);\n\tgit_buf_dispose(&buf);\n}\n\n\n// Source: config_helpers.c\n// Lines 25-39\n",
+  "ANSWER": "MUST-NOT"
+}

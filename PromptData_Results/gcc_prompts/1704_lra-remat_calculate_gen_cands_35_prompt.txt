@@ -1,0 +1,100 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'reg' at line 16
+2. Pointer 'static_id' at line 15
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+calculate_gen_cands (void)
+{
+  basic_block bb;
+  bitmap gen_cands;
+  rtx_insn *insn;
+
+  FOR_EACH_BB_FN (bb, cfun)
+    {
+      gen_cands = &get_remat_bb_data (bb)->gen_cands;
+      auto_bitmap gen_insns (&reg_obstack);
+      FOR_BB_INSNS (bb, insn)
+	if (INSN_P (insn))
+	  {
+	    lra_insn_recog_data_t id = lra_get_insn_recog_data (insn);
+	    struct lra_static_insn_data *static_id = id->insn_static_data;
+	    struct lra_insn_reg *reg;
+	    unsigned int uid;
+	    bitmap_iterator bi;
+	    cand_t cand;
+	    rtx set;
+	    int iter;
+	    int src_regno = -1, dst_regno = -1;
+
+	    if ((set = single_set (insn)) != NULL
+		&& REG_P (SET_SRC (set)) && REG_P (SET_DEST (set)))
+	      {
+		src_regno = REGNO (SET_SRC (set));
+		dst_regno = REGNO (SET_DEST (set));
+	      }
+
+	    /* Update gen_cands:  */
+	    bitmap_clear (&temp_bitmap);
+	    for (iter = 0; iter < 2; iter++)
+	      for (reg = (iter == 0 ? id->regs : static_id->hard_regs);
+		   reg != NULL;
+		   reg = reg->next)
+		if (reg->type != OP_IN
+		    || find_regno_note (insn, REG_DEAD, reg->regno) != NULL)
+		  EXECUTE_IF_SET_IN_BITMAP (gen_insns, 0, uid, bi)
+		    {
+		      rtx_insn *insn2 = lra_insn_recog_data[uid]->insn;
+		      
+		      cand = insn_to_cand[INSN_UID (insn2)];
+		      gcc_assert (cand != NULL);
+		      /* Ignore the reload insn.  */
+		      if (src_regno == cand->reload_regno
+			  && dst_regno == cand->regno)
+			continue;
+		      if (cand->regno == reg->regno
+			  || reg_overlap_for_remat_p (reg, insn2))
+			{
+			  bitmap_clear_bit (gen_cands, cand->index);
+			  bitmap_set_bit (&temp_bitmap, uid);
+			}
+		    }
+	    
+	    if (CALL_P (insn))
+	      {
+		function_abi callee_abi = insn_callee_abi (insn);
+		EXECUTE_IF_SET_IN_BITMAP (gen_insns, 0, uid, bi)
+		  {
+		    rtx_insn *insn2 = lra_insn_recog_data[uid]->insn;
+		  
+		    cand = insn_to_cand[INSN_UID (insn2)];
+		    gcc_assert (cand != NULL);
+		    if (call_used_input_regno_present_p (callee_abi, insn2))
+		      {
+			bitmap_clear_bit (gen_cands, cand->index);
+			bitmap_set_bit (&temp_bitmap, uid);
+		      }
+		  }
+	      }
+	    bitmap_and_compl_into (gen_insns, &temp_bitmap);
+
+	    cand = insn_to_cand[INSN_UID (insn)];
+	    if (cand != NULL)
+	      {
+		bitmap_set_bit (gen_cands, cand->index);
+		bitmap_set_bit (gen_insns, INSN_UID (insn));
+	      }
+	  }
+
+
+// Source: lra-remat.c
+// Lines 749-829
+
+
+[ANSWER]
+MUST

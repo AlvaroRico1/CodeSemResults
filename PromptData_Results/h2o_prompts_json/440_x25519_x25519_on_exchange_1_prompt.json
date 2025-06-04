@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ctx' at line 3\n2. Pointer '_ctx' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int x25519_on_exchange(ptls_key_exchange_context_t **_ctx, int release, ptls_iovec_t *secret, ptls_iovec_t peerkey)\n{\n    struct st_x25519_key_exchange_t *ctx = (struct st_x25519_key_exchange_t *)*_ctx;\n    int ret;\n\n    if (secret == NULL) {\n        ret = 0;\n        goto Exit;\n    }\n\n    if (peerkey.len != X25519_KEY_SIZE) {\n        ret = PTLS_ALERT_DECRYPT_ERROR;\n        goto Exit;\n    }\n    ret = x25519_derive_secret(secret, ctx->priv, ctx->pub, NULL, peerkey.base);\n\nExit:\n    if (release) {\n        ptls_clear_memory(ctx->priv, sizeof(ctx->priv));\n        free(ctx);\n        *_ctx = NULL;\n    }\n    return ret;\n}\n\n\n// Source: x25519.c\n// Lines 52-75\n",
+  "ANSWER": "MUST"
+}

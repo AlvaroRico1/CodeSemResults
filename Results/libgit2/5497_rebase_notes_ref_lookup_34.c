@@ -1,0 +1,34 @@
+static int notes_ref_lookup(git_str *out, git_rebase *rebase)
+{
+	git_config *config = NULL;
+	int do_rewrite, error;
+
+	if (rebase->options.rewrite_notes_ref) {
+		git_str_attach_notowned(out,
+			rebase->options.rewrite_notes_ref,
+			strlen(rebase->options.rewrite_notes_ref));
+		return 0;
+	}
+
+	if ((error = git_repository_config(&config, rebase->repo)) < 0 ||
+		(error = git_config_get_bool(&do_rewrite, config, "notes.rewrite.rebase")) < 0) {
+
+		if (error != GIT_ENOTFOUND)
+			goto done;
+
+		git_error_clear();
+		do_rewrite = 1;
+	}
+
+	error = do_rewrite ?
+		git_config__get_string_buf(out, config, "notes.rewriteref") :
+		GIT_ENOTFOUND;
+
+done:
+	git_config_free(config);
+	return error;
+}
+
+
+// Source: rebase.c
+// Lines 1220-1249

@@ -1,0 +1,1 @@
+check,linux/drivers/pci/setup-res.c,6,cmd,linux/drivers/pci/setup-res.c,5,2

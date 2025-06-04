@@ -1,0 +1,32 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'text_generator' at line 6
+2. Pointer 'generator' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+  void PrintMessageStart(const Message& /*message*/, int /*field_index*/,
+                         int /*field_count*/, bool single_line_mode,
+                         BaseTextGenerator* generator) const override {
+    // This is safe as only TextGenerator is used with
+    // DebugStringFieldValuePrinter.
+    TextGenerator* text_generator = static_cast<TextGenerator*>(generator);
+    if (single_line_mode) {
+      text_generator->PrintMaybeWithMarker(" ", "{ ");
+    } else {
+      text_generator->PrintMaybeWithMarker(" ", "{\n");
+    }
+  }
+};
+
+
+// Source: text_format.cc
+// Lines 1526-1538
+
+
+[ANSWER]
+MUST

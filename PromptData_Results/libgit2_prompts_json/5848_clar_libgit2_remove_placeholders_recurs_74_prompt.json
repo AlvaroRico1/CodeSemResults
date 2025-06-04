@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'path' at line 1\n2. Pointer 'data' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int remove_placeholders_recurs(void *_data, git_str *path)\n{\n\tremove_data *data = (remove_data *)_data;\n\tsize_t pathlen;\n\n\tif (git_fs_path_isdir(path->ptr) == true)\n\t\treturn git_fs_path_direach(path, 0, remove_placeholders_recurs, data);\n\n\tpathlen = path->size;\n\n\tif (pathlen < data->filename_len)\n\t\treturn 0;\n\n\t/* if path ends in '/'+filename (or equals filename) */\n\tif (!strcmp(data->filename, path->ptr + pathlen - data->filename_len) &&\n\t\t(pathlen == data->filename_len ||\n\t\t path->ptr[pathlen - data->filename_len - 1] == '/'))\n\t\treturn p_unlink(path->ptr);\n\n\treturn 0;\n}\n\n\n// Source: clar_libgit2.c\n// Lines 357-377\n",
+  "ANSWER": "MUST-NOT"
+}

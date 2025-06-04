@@ -1,0 +1,63 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tr' at line 6
+2. Pointer 'view' at line 38
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool Query_block::setup_join_cond(THD *thd,
+                                  mem_root_deque<TABLE_LIST *> *tables,
+                                  bool in_update) {
+  DBUG_TRACE;
+
+  for (TABLE_LIST *tr : *tables) {
+    // Traverse join conditions recursively
+    if (tr->nested_join != nullptr &&
+        setup_join_cond(thd, &tr->nested_join->join_list, in_update))
+      return true;
+
+    Item **ref = tr->join_cond_ref();
+    Item *join_cond = tr->join_cond();
+    bool remove_cond = false;
+    if (join_cond) {
+      assert(join_cond->is_bool_func());
+      resolve_place = Query_block::RESOLVE_JOIN_NEST;
+      resolve_nest = tr;
+      thd->where = "on clause";
+      if ((!join_cond->fixed && join_cond->fix_fields(thd, ref)) ||
+          join_cond->check_cols(1))
+        return true;
+      cond_count++;
+
+      assert(tr->join_cond()->data_type() != MYSQL_TYPE_INVALID);
+
+      if ((*ref)->const_item() && !thd->lex->is_view_context_analysis() &&
+          !(*ref)->walk(&Item::is_non_const_over_literals, enum_walk::POSTFIX,
+                        nullptr) &&
+          simplify_const_condition(thd, ref, remove_cond))
+        return true;
+
+      resolve_place = Query_block::RESOLVE_NONE;
+      resolve_nest = nullptr;
+    }
+    if (in_update) {
+      // Process CHECK OPTION
+      TABLE_LIST *view = tr->top_table();
+      if (view->is_view() && view->is_merged()) {
+        if (view->prepare_check_option(thd))
+          return true; /* purecov: inspected */
+        tr->check_option = view->check_option;
+      }
+    }
+
+
+// Source: sql_resolver.cc
+// Lines 1674-1717
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'write' at line 6\n2. Pointer 'pde' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic ssize_t proc_reg_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)\n{\n\tstruct proc_dir_entry *pde = PDE(file_inode(file));\n\tssize_t rv = -EIO;\n\tif (use_pde(pde)) {\n\t\ttypeof_member(struct file_operations, write) write;\n\n\t\twrite = pde->proc_fops->write;\n\t\tif (write)\n\t\t\trv = write(file, buf, count, ppos);\n\t\tunuse_pde(pde);\n\t}\n\n\n// Source: inode.c\n// Lines 229-240\n",
+  "ANSWER": "MUST"
+}

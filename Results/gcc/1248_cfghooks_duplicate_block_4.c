@@ -1,0 +1,76 @@
+duplicate_block (basic_block bb, edge e, basic_block after, copy_bb_data *id)
+{
+  edge s, n;
+  basic_block new_bb;
+  profile_count new_count = e ? e->count (): profile_count::uninitialized ();
+  edge_iterator ei;
+
+  if (!cfg_hooks->duplicate_block)
+    internal_error ("%s does not support duplicate_block",
+		    cfg_hooks->name);
+
+  if (bb->count < new_count)
+    new_count = bb->count;
+
+  gcc_checking_assert (can_duplicate_block_p (bb));
+
+  new_bb = cfg_hooks->duplicate_block (bb, id);
+  if (after)
+    move_block_after (new_bb, after);
+
+  new_bb->flags = (bb->flags & ~BB_DUPLICATED);
+  FOR_EACH_EDGE (s, ei, bb->succs)
+    {
+      /* Since we are creating edges from a new block to successors
+	 of another block (which therefore are known to be disjoint), there
+	 is no need to actually check for duplicated edges.  */
+      n = unchecked_make_edge (new_bb, s->dest, s->flags);
+      n->probability = s->probability;
+      n->aux = s->aux;
+    }
+
+  if (e)
+    {
+      new_bb->count = new_count;
+      bb->count -= new_count;
+
+      redirect_edge_and_branch_force (e, new_bb);
+    }
+  else
+    new_bb->count = bb->count;
+
+  set_bb_original (new_bb, bb);
+  set_bb_copy (bb, new_bb);
+
+  /* Add the new block to the copy of the loop of BB, or directly to the loop
+     of BB if the loop is not being copied.  */
+  if (current_loops != NULL)
+    {
+      class loop *cloop = bb->loop_father;
+      class loop *copy = get_loop_copy (cloop);
+      /* If we copied the loop header block but not the loop
+	 we have created a loop with multiple entries.  Ditch the loop,
+	 add the new block to the outer loop and arrange for a fixup.  */
+      if (!copy
+	  && cloop->header == bb)
+	{
+	  add_bb_to_loop (new_bb, loop_outer (cloop));
+	  mark_loop_for_removal (cloop);
+	}
+      else
+	{
+	  add_bb_to_loop (new_bb, copy ? copy : cloop);
+	  /* If we copied the loop latch block but not the loop, adjust
+	     loop state.  */
+	  if (!copy
+	      && cloop->latch == bb)
+	    {
+	      cloop->latch = NULL;
+	      loops_state_set (LOOPS_MAY_HAVE_MULTIPLE_LATCHES);
+	    }
+	}
+    }
+
+
+// Source: cfghooks.c
+// Lines 1073-1144

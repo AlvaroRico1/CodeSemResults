@@ -1,0 +1,1 @@
+modifiers,tmux/tty-keys.c,6,number,tmux/tty-keys.c,6,2

@@ -1,0 +1,54 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'csp' at line 2
+2. Pointer 'csname' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+const char *my_os_charset_to_mysql_charset(const char *csname) {
+  const MY_CSET_OS_NAME *csp;
+  for (csp = charsets; csp->os_name; csp++) {
+    if (!my_strcasecmp(&my_charset_latin1, csp->os_name, csname)) {
+      switch (csp->param) {
+        case my_cs_exact:
+          return csp->my_name;
+
+        case my_cs_approx:
+          /*
+            Maybe we should print a warning eventually:
+            character set correspondence is not exact.
+          */
+          return csp->my_name;
+
+        default:
+          my_printf_error(ER_UNKNOWN_ERROR,
+                          "OS character set '%s'"
+                          " is not supported by MySQL client",
+                          MYF(0), csp->my_name);
+          goto def;
+      }
+    }
+  }
+
+  my_printf_error(ER_UNKNOWN_ERROR, "Unknown OS character set '%s'.", MYF(0),
+                  csname);
+
+def:
+  csname = MYSQL_DEFAULT_CHARSET_NAME;
+  my_printf_error(ER_UNKNOWN_ERROR,
+                  "Switching to the default character set '%s'.", MYF(0),
+                  csname);
+  return csname;
+}
+
+
+// Source: client.cc
+// Lines 3638-3672
+
+
+[ANSWER]
+MUST-NOT

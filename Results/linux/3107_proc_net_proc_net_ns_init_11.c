@@ -1,0 +1,48 @@
+static __net_init int proc_net_ns_init(struct net *net)
+{
+	struct proc_dir_entry *netd, *net_statd;
+	kuid_t uid;
+	kgid_t gid;
+	int err;
+
+	err = -ENOMEM;
+	netd = kmem_cache_zalloc(proc_dir_entry_cache, GFP_KERNEL);
+	if (!netd)
+		goto out;
+
+	netd->subdir = RB_ROOT;
+	netd->data = net;
+	netd->nlink = 2;
+	netd->namelen = 3;
+	netd->parent = &proc_root;
+	netd->name = netd->inline_name;
+	memcpy(netd->name, "net", 4);
+
+	uid = make_kuid(net->user_ns, 0);
+	if (!uid_valid(uid))
+		uid = netd->uid;
+
+	gid = make_kgid(net->user_ns, 0);
+	if (!gid_valid(gid))
+		gid = netd->gid;
+
+	proc_set_user(netd, uid, gid);
+
+	err = -EEXIST;
+	net_statd = proc_net_mkdir(net, "stat", netd);
+	if (!net_statd)
+		goto free_net;
+
+	net->proc_net = netd;
+	net->proc_net_stat = net_statd;
+	return 0;
+
+free_net:
+	pde_free(netd);
+out:
+	return err;
+}
+
+
+// Source: proc_net.c
+// Lines 332-375

@@ -1,0 +1,83 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ptr' at line 4
+2. Pointer 'part_info' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static bool create_full_part_field_array(THD *thd, TABLE *table,
+                                         partition_info *part_info) {
+  bool result = false;
+  Field **ptr;
+  my_bitmap_map *bitmap_buf;
+  DBUG_TRACE;
+
+  if (!part_info->is_sub_partitioned()) {
+    part_info->full_part_field_array = part_info->part_field_array;
+    part_info->num_full_part_fields = part_info->num_part_fields;
+  } else {
+    Field *field, **field_array;
+    uint num_part_fields = 0, size_field_array;
+    ptr = table->field;
+    while ((field = *(ptr++))) {
+      if (field->is_flag_set(FIELD_IN_PART_FUNC_FLAG)) num_part_fields++;
+    }
+    size_field_array = (num_part_fields + 1) * sizeof(Field *);
+    field_array = (Field **)sql_calloc(size_field_array);
+    if (unlikely(!field_array)) {
+      mem_alloc_error(size_field_array);
+      result = true;
+      goto end;
+    }
+    num_part_fields = 0;
+    ptr = table->field;
+    while ((field = *(ptr++))) {
+      if (field->is_flag_set(FIELD_IN_PART_FUNC_FLAG))
+        field_array[num_part_fields++] = field;
+    }
+    field_array[num_part_fields] = nullptr;
+    part_info->full_part_field_array = field_array;
+    part_info->num_full_part_fields = num_part_fields;
+  }
+
+  /*
+    Initialize the set of all fields used in partition and subpartition
+    expression. Required for testing of partition fields in write_set
+    when updating. We need to set all bits in read_set because the row
+    may need to be inserted in a different [sub]partition.
+  */
+  if (!(bitmap_buf = (my_bitmap_map *)thd->alloc(
+            bitmap_buffer_size(table->s->fields)))) {
+    mem_alloc_error(bitmap_buffer_size(table->s->fields));
+    result = true;
+    goto end;
+  }
+  if (bitmap_init(&part_info->full_part_field_set, bitmap_buf,
+                  table->s->fields)) {
+    mem_alloc_error(table->s->fields);
+    result = true;
+    goto end;
+  }
+  /*
+    full_part_field_array may be NULL if storage engine supports native
+    partitioning.
+  */
+  if ((ptr = part_info->full_part_field_array))
+    for (; *ptr; ptr++)
+      bitmap_set_bit(&part_info->full_part_field_set, (*ptr)->field_index());
+
+end:
+  return result;
+}
+
+
+// Source: sql_partition.cc
+// Lines 547-610
+
+
+[ANSWER]
+MUST

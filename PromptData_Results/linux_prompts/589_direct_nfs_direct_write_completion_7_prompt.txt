@@ -1,0 +1,74 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'dreq' at line 3
+2. Pointer 'hdr' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void nfs_direct_write_completion(struct nfs_pgio_header *hdr)
+{
+	struct nfs_direct_req *dreq = hdr->dreq;
+	struct nfs_commit_info cinfo;
+	bool request_commit = false;
+	struct nfs_page *req = nfs_list_entry(hdr->pages.next);
+
+	nfs_init_cinfo_from_dreq(&cinfo, dreq);
+
+	spin_lock(&dreq->lock);
+
+	if (test_bit(NFS_IOHDR_ERROR, &hdr->flags))
+		dreq->error = hdr->error;
+
+	if (test_bit(NFS_IOHDR_REDO, &hdr->flags)) {
+		spin_unlock(&dreq->lock);
+		goto out_put;
+	}
+
+	if (hdr->good_bytes != 0) {
+		nfs_direct_good_bytes(dreq, hdr);
+		if (nfs_write_need_commit(hdr)) {
+			if (dreq->flags == NFS_ODIRECT_RESCHED_WRITES)
+				request_commit = true;
+			else if (dreq->flags == 0) {
+				nfs_direct_set_hdr_verf(dreq, hdr);
+				request_commit = true;
+				dreq->flags = NFS_ODIRECT_DO_COMMIT;
+			} else if (dreq->flags == NFS_ODIRECT_DO_COMMIT) {
+				request_commit = true;
+				if (nfs_direct_set_or_cmp_hdr_verf(dreq, hdr))
+					dreq->flags =
+						NFS_ODIRECT_RESCHED_WRITES;
+			}
+		}
+	}
+	spin_unlock(&dreq->lock);
+
+	while (!list_empty(&hdr->pages)) {
+
+		req = nfs_list_entry(hdr->pages.next);
+		nfs_list_remove_request(req);
+		if (request_commit) {
+			kref_get(&req->wb_kref);
+			nfs_mark_request_commit(req, hdr->lseg, &cinfo,
+				hdr->ds_commit_idx);
+		}
+		nfs_unlock_and_release_request(req);
+	}
+
+out_put:
+	if (put_dreq(dreq))
+		nfs_direct_write_complete(dreq);
+	hdr->release(hdr);
+}
+
+
+// Source: direct.c
+// Lines 784-838
+
+
+[ANSWER]
+MUST

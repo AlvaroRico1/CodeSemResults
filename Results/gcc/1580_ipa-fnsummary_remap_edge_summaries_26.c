@@ -1,0 +1,62 @@
+remap_edge_summaries (struct cgraph_edge *inlined_edge,
+		      struct cgraph_node *node,
+		      class ipa_fn_summary *info,
+		      class ipa_node_params *params_summary,
+		      class ipa_fn_summary *callee_info,
+		      vec<int> operand_map,
+		      vec<int> offset_map,
+		      clause_t possible_truths,
+		      predicate *toplev_predicate)
+{
+  struct cgraph_edge *e, *next;
+  for (e = node->callees; e; e = next)
+    {
+      predicate p;
+      next = e->next_callee;
+
+      if (e->inline_failed)
+	{
+          class ipa_call_summary *es = ipa_call_summaries->get (e);
+	  remap_edge_change_prob (inlined_edge, e);
+
+	  if (es->predicate)
+	    {
+	      p = es->predicate->remap_after_inlining
+				     (info, params_summary,
+				      callee_info, operand_map,
+				      offset_map, possible_truths,
+				      *toplev_predicate);
+	      edge_set_predicate (e, &p);
+	    }
+	  else
+	    edge_set_predicate (e, toplev_predicate);
+	}
+      else
+	remap_edge_summaries (inlined_edge, e->callee, info,
+		              params_summary, callee_info,
+			      operand_map, offset_map, possible_truths,
+			      toplev_predicate);
+    }
+  for (e = node->indirect_calls; e; e = next)
+    {
+      class ipa_call_summary *es = ipa_call_summaries->get (e);
+      predicate p;
+      next = e->next_callee;
+
+      remap_edge_change_prob (inlined_edge, e);
+      if (es->predicate)
+	{
+	  p = es->predicate->remap_after_inlining
+				 (info, params_summary,
+				  callee_info, operand_map, offset_map,
+			          possible_truths, *toplev_predicate);
+	  edge_set_predicate (e, &p);
+	}
+      else
+	edge_set_predicate (e, toplev_predicate);
+    }
+}
+
+
+// Source: ipa-fnsummary.c
+// Lines 3803-3860

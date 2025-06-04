@@ -1,0 +1,216 @@
+ulonglong my_strntoull10rnd_8bit(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
+                                 const char *str, size_t length,
+                                 int unsigned_flag, const char **endptr,
+                                 int *error) {
+  const char *dot, *end9, *beg, *end = str + length;
+  ulonglong ull;
+  ulong ul;
+  uchar ch;
+  int shift = 0, digits = 0, addon;
+  bool negative;
+
+  /* Skip leading spaces and tabs */
+  for (; str < end && (*str == ' ' || *str == '\t'); str++)
+    ;
+
+  if (str >= end) goto ret_edom;
+
+  if ((negative = (*str == '-')) || *str == '+') /* optional sign */
+  {
+    if (++str == end) goto ret_edom;
+  }
+
+  beg = str;
+  end9 = (str + 9) > end ? end : (str + 9);
+  /* Accumulate small number into ulong, for performance purposes */
+  for (ul = 0; str < end9 && (ch = (uchar)(*str - '0')) < 10; str++) {
+    ul = ul * 10 + ch;
+  }
+
+  if (str >= end) /* Small number without dots and expanents */
+  {
+    *endptr = str;
+    if (negative) {
+      if (unsigned_flag) {
+        *error = ul ? MY_ERRNO_ERANGE : 0;
+        return 0;
+      } else {
+        *error = 0;
+        return (ulonglong)(longlong) - (long)ul;
+      }
+    } else {
+      *error = 0;
+      return (ulonglong)ul;
+    }
+  }
+
+  digits = (int)(str - beg);
+
+  /* Continue to accumulate into ulonglong */
+  for (dot = nullptr, ull = ul; str < end; str++) {
+    if ((ch = (uchar)(*str - '0')) < 10) {
+      if (ull < CUTOFF || (ull == CUTOFF && ch <= CUTLIM)) {
+        ull = ull * 10 + ch;
+        digits++;
+        continue;
+      }
+      /*
+        Adding the next digit would overflow.
+        Remember the next digit in "addon", for rounding.
+        Scan all digits with an optional single dot.
+      */
+      if (ull == CUTOFF) {
+        ull = ULLONG_MAX;
+        addon = 1;
+        str++;
+      } else
+        addon = (*str >= '5');
+      if (!dot) {
+        for (; str < end && (ch = (uchar)(*str - '0')) < 10; shift++, str++)
+          ;
+        if (str < end && *str == '.') {
+          str++;
+          for (; str < end && (ch = (uchar)(*str - '0')) < 10; str++)
+            ;
+        }
+      } else {
+        shift = (int)(dot - str);
+        for (; str < end && (ch = (uchar)(*str - '0')) < 10; str++)
+          ;
+      }
+      goto exp;
+    }
+
+    if (*str == '.') {
+      if (dot) {
+        /* The second dot character */
+        goto dotshift;
+      } else {
+        dot = str + 1;
+      }
+      continue;
+    }
+
+    /* Unknown character, exit the loop */
+    break;
+  }
+
+dotshift:
+  shift = dot ? (int)(dot - str) : 0; /* Right shift */
+  addon = 0;
+
+exp: /* [ E [ <sign> ] <unsigned integer> ] */
+
+  if (!digits) {
+    str = beg;
+    goto ret_edom;
+  }
+
+  if (str < end && (*str == 'e' || *str == 'E')) {
+    str++;
+    if (str < end) {
+      longlong negative_exp, exponent;
+      if ((negative_exp = (*str == '-')) || *str == '+') {
+        if (++str == end) goto check_shift_overflow;
+      }
+      for (exponent = 0; str < end && (ch = (uchar)(*str - '0')) < 10; str++) {
+        if (exponent <= (std::numeric_limits<longlong>::max() - ch) / 10)
+          exponent = exponent * 10 + ch;
+        else
+          goto ret_too_big;
+      }
+      shift += negative_exp ? -exponent : exponent;
+    }
+  }
+
+  if (shift == 0) /* No shift, check addon digit */
+  {
+    if (addon) {
+      if (ull == ULLONG_MAX) goto ret_too_big;
+      ull++;
+    }
+    goto ret_sign;
+  }
+
+  if (shift < 0) /* Right shift */
+  {
+    ulonglong d, r;
+
+    if (shift == INT_MIN32 || -shift >= DIGITS_IN_ULONGLONG)
+      goto ret_zero; /* Exponent is a big negative number, return 0 */
+
+    d = d10[-shift];
+    r = ull % d;
+    ull /= d;
+    if (r >= d / 2) ull++;
+    goto ret_sign;
+  }
+
+check_shift_overflow:
+  if (shift > DIGITS_IN_ULONGLONG) /* Huge left shift */
+  {
+    if (!ull) goto ret_sign;
+    goto ret_too_big;
+  }
+
+  for (; shift > 0; shift--, ull *= 10) /* Left shift */
+  {
+    if (ull > CUTOFF) goto ret_too_big; /* Overflow, number too big */
+  }
+
+ret_sign:
+  *endptr = str;
+
+  if (!unsigned_flag) {
+    if (negative) {
+      if (ull > (ulonglong)LLONG_MIN) {
+        *error = MY_ERRNO_ERANGE;
+        return (ulonglong)LLONG_MIN;
+      }
+      *error = 0;
+      if (ull == static_cast<ulonglong>(LLONG_MIN))
+        return static_cast<ulonglong>(LLONG_MIN);
+      return (ulonglong) - (longlong)ull;
+    } else {
+      if (ull > (ulonglong)LLONG_MAX) {
+        *error = MY_ERRNO_ERANGE;
+        return (ulonglong)LLONG_MAX;
+      }
+      *error = 0;
+      return ull;
+    }
+  }
+
+  /* Unsigned number */
+  if (negative && ull) {
+    *error = MY_ERRNO_ERANGE;
+    return 0;
+  }
+  *error = 0;
+  return ull;
+
+ret_zero:
+  *endptr = str;
+  *error = 0;
+  return 0;
+
+ret_edom:
+  *endptr = str;
+  *error = MY_ERRNO_EDOM;
+  return 0;
+
+ret_too_big:
+  *endptr = str;
+  *error = MY_ERRNO_ERANGE;
+  if (unsigned_flag) {
+    if (negative) return 0;
+    return ULLONG_MAX;
+  } else {
+    if (negative) return LLONG_MIN;
+    return LLONG_MAX;
+  }
+}
+
+
+// Source: ctype-simple.cc
+// Lines 1225-1436

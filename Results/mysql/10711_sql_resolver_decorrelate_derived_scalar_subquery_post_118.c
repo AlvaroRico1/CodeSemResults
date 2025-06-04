@@ -1,0 +1,69 @@
+bool Query_block::decorrelate_derived_scalar_subquery_post(
+    THD *thd, TABLE_LIST *derived, Lifted_fields_map *lifted_fields,
+    bool added_card_check) {
+  // We added referenced inner fields to select list, now replace occurences
+  // of such fields in the join condition with derived.<Item_field-n>. Since
+  // we have now set up materialization the derived table, we now know the
+  // 'Field's to use for new 'Item_field's.
+  Item *field_or_ref;
+  List_iterator<Item> li(lifted_fields->m_fields);
+  uint pos = 0;
+  while ((field_or_ref = li++)) {
+    Item_field *f = down_cast<Item_field *>(field_or_ref->real_item());
+    if (!field_or_ref->is_outer_reference()) {
+      const uint pos_in_fields = lifted_fields->m_field_positions[pos++];
+      Field *field_in_derived = derived->table->field[pos_in_fields];
+      auto replaces_field = new (thd->mem_root) Item_field(field_in_derived);
+      if (replaces_field == nullptr) return true;
+
+      Item::Item_field_replacement info(f->field, replaces_field, this, false);
+      Item *new_item = derived->join_cond()->transform(
+          &Item::replace_item_field, pointer_cast<uchar *>(&info));
+      if (new_item == nullptr) return true;
+      if (new_item != derived->join_cond()) derived->set_join_cond(new_item);
+    } else {
+      // This field used to be correlated, but is now lifted out to ON
+      // clause, so change its outer status
+      if (field_or_ref->type() == Item::REF_ITEM) {
+        down_cast<Item_ref *>(field_or_ref)->depended_from = nullptr;
+        // If this is an outer ref, we need to replace the ref with the
+        // underlying field as it is no more correlated. Else used_tables
+        // will not be correct.
+        if (down_cast<Item_ref *>(field_or_ref)->ref_type() ==
+            Item_ref::OUTER_REF) {
+          Item *new_item = derived->join_cond()->transform(
+              &Item::replace_outer_ref, pointer_cast<uchar *>(field_or_ref));
+          if (new_item != derived->join_cond())
+            derived->set_join_cond(new_item);
+        }
+      }
+      f->depended_from = nullptr;
+    }
+  }
+
+  if (added_card_check) {
+    // Add derived.count(0) <= 1 condition to transformed query block's WHERE
+    // condition.
+    const uint cnt_pos_in_fields = lifted_fields->m_field_positions[pos];
+    Field *cnt_f = derived->table->field[cnt_pos_in_fields];
+    auto cnt_i = new (thd->mem_root) Item_field(cnt_f);
+    if (cnt_i == nullptr) return true;
+
+    auto number_1 = new (thd->mem_root) Item_int(1);
+    if (number_1 == nullptr) return true;
+    Item *gt = new (thd->mem_root) Item_func_gt(cnt_i, number_1);
+    if (gt == nullptr) return true;
+    Item *check_card = new (thd->mem_root) Item_func_reject_if(gt);
+    if (check_card == nullptr) return true;
+
+    Item *new_cond = and_items(derived->join_cond(), check_card);
+    if (new_cond == nullptr) return true;
+    new_cond->apply_is_true();
+    if (new_cond->fix_fields(thd, &new_cond)) return true;
+    derived->set_join_cond(new_cond);
+    cond_count++;
+  }
+
+
+// Source: sql_resolver.cc
+// Lines 6707-6771

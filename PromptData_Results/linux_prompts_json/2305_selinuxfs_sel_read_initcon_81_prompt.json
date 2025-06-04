@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'len' at line 6\n2. Pointer 'con' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic ssize_t sel_read_initcon(struct file *file, char __user *buf,\n\t\t\t\tsize_t count, loff_t *ppos)\n{\n\tstruct selinux_fs_info *fsi = file_inode(file)->i_sb->s_fs_info;\n\tchar *con;\n\tu32 sid, len;\n\tssize_t ret;\n\n\tsid = file_inode(file)->i_ino&SEL_INO_MASK;\n\tret = security_sid_to_context(fsi->state, sid, &con, &len);\n\tif (ret)\n\t\treturn ret;\n\n\tret = simple_read_from_buffer(buf, count, ppos, con, len);\n\tkfree(con);\n\treturn ret;\n}\n\n\n// Source: selinuxfs.c\n// Lines 1606-1622\n",
+  "ANSWER": "MAY"
+}

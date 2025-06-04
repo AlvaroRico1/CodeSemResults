@@ -1,0 +1,216 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'first' at line 12
+2. Pointer 'table' at line 12
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+server_client_key_callback(struct cmdq_item *item, void *data)
+{
+	struct client			*c = cmdq_get_client(item);
+	struct key_event		*event = data;
+	key_code			 key = event->key;
+	struct mouse_event		*m = &event->m;
+	struct session			*s = c->session;
+	struct winlink			*wl;
+	struct window_pane		*wp;
+	struct window_mode_entry	*wme;
+	struct timeval			 tv;
+	struct key_table		*table, *first;
+	struct key_binding		*bd;
+	int				 xtimeout, flags;
+	struct cmd_find_state		 fs;
+	key_code			 key0;
+
+	/* Check the client is good to accept input. */
+	if (s == NULL || (c->flags & CLIENT_UNATTACHEDFLAGS))
+		goto out;
+	wl = s->curw;
+
+	/* Update the activity timer. */
+	if (gettimeofday(&c->activity_time, NULL) != 0)
+		fatal("gettimeofday failed");
+	session_update_activity(s, &c->activity_time);
+
+	/* Check for mouse keys. */
+	m->valid = 0;
+	if (key == KEYC_MOUSE || key == KEYC_DOUBLECLICK) {
+		if (c->flags & CLIENT_READONLY)
+			goto out;
+		key = server_client_check_mouse(c, event);
+		if (key == KEYC_UNKNOWN)
+			goto out;
+
+		m->valid = 1;
+		m->key = key;
+
+		/*
+		 * Mouse drag is in progress, so fire the callback (now that
+		 * the mouse event is valid).
+		 */
+		if ((key & KEYC_MASK_KEY) == KEYC_DRAGGING) {
+			c->tty.mouse_drag_update(c, m);
+			goto out;
+		}
+		event->key = key;
+	}
+
+	/* Find affected pane. */
+	if (!KEYC_IS_MOUSE(key) || cmd_find_from_mouse(&fs, m, 0) != 0)
+		cmd_find_from_client(&fs, c, 0);
+	wp = fs.wp;
+
+	/* Forward mouse keys if disabled. */
+	if (KEYC_IS_MOUSE(key) && !options_get_number(s->options, "mouse"))
+		goto forward_key;
+
+	/* Treat everything as a regular key when pasting is detected. */
+	if (!KEYC_IS_MOUSE(key) && server_client_assume_paste(s))
+		goto forward_key;
+
+	/*
+	 * Work out the current key table. If the pane is in a mode, use
+	 * the mode table instead of the default key table.
+	 */
+	if (server_client_is_default_key_table(c, c->keytable) &&
+	    wp != NULL &&
+	    (wme = TAILQ_FIRST(&wp->modes)) != NULL &&
+	    wme->mode->key_table != NULL)
+		table = key_bindings_get_table(wme->mode->key_table(wme), 1);
+	else
+		table = c->keytable;
+	first = table;
+
+table_changed:
+	/*
+	 * The prefix always takes precedence and forces a switch to the prefix
+	 * table, unless we are already there.
+	 */
+	key0 = (key & (KEYC_MASK_KEY|KEYC_MASK_MODIFIERS));
+	if ((key0 == (key_code)options_get_number(s->options, "prefix") ||
+	    key0 == (key_code)options_get_number(s->options, "prefix2")) &&
+	    strcmp(table->name, "prefix") != 0) {
+		server_client_set_key_table(c, "prefix");
+		server_status_client(c);
+		goto out;
+	}
+	flags = c->flags;
+
+try_again:
+	/* Log key table. */
+	if (wp == NULL)
+		log_debug("key table %s (no pane)", table->name);
+	else
+		log_debug("key table %s (pane %%%u)", table->name, wp->id);
+	if (c->flags & CLIENT_REPEAT)
+		log_debug("currently repeating");
+
+	/* Try to see if there is a key binding in the current table. */
+	bd = key_bindings_get(table, key0);
+	if (bd != NULL) {
+		/*
+		 * Key was matched in this table. If currently repeating but a
+		 * non-repeating binding was found, stop repeating and try
+		 * again in the root table.
+		 */
+		if ((c->flags & CLIENT_REPEAT) &&
+		    (~bd->flags & KEY_BINDING_REPEAT)) {
+			log_debug("found in key table %s (not repeating)",
+			    table->name);
+			server_client_set_key_table(c, NULL);
+			first = table = c->keytable;
+			c->flags &= ~CLIENT_REPEAT;
+			server_status_client(c);
+			goto table_changed;
+		}
+		log_debug("found in key table %s", table->name);
+
+		/*
+		 * Take a reference to this table to make sure the key binding
+		 * doesn't disappear.
+		 */
+		table->references++;
+
+		/*
+		 * If this is a repeating key, start the timer. Otherwise reset
+		 * the client back to the root table.
+		 */
+		xtimeout = options_get_number(s->options, "repeat-time");
+		if (xtimeout != 0 && (bd->flags & KEY_BINDING_REPEAT)) {
+			c->flags |= CLIENT_REPEAT;
+
+			tv.tv_sec = xtimeout / 1000;
+			tv.tv_usec = (xtimeout % 1000) * 1000L;
+			evtimer_del(&c->repeat_timer);
+			evtimer_add(&c->repeat_timer, &tv);
+		} else {
+			c->flags &= ~CLIENT_REPEAT;
+			server_client_set_key_table(c, NULL);
+		}
+		server_status_client(c);
+
+		/* Execute the key binding. */
+		key_bindings_dispatch(bd, item, c, event, &fs);
+		key_bindings_unref_table(table);
+		goto out;
+	}
+
+	/*
+	 * No match, try the ANY key.
+	 */
+	if (key0 != KEYC_ANY) {
+		key0 = KEYC_ANY;
+		goto try_again;
+	}
+
+	/*
+	 * No match in this table. If not in the root table or if repeating,
+	 * switch the client back to the root table and try again.
+	 */
+	log_debug("not found in key table %s", table->name);
+	if (!server_client_is_default_key_table(c, table) ||
+	    (c->flags & CLIENT_REPEAT)) {
+		log_debug("trying in root table");
+		server_client_set_key_table(c, NULL);
+		table = c->keytable;
+		if (c->flags & CLIENT_REPEAT)
+			first = table;
+		c->flags &= ~CLIENT_REPEAT;
+		server_status_client(c);
+		goto table_changed;
+	}
+
+	/*
+	 * No match in the root table either. If this wasn't the first table
+	 * tried, don't pass the key to the pane.
+	 */
+	if (first != table && (~flags & CLIENT_REPEAT)) {
+		server_client_set_key_table(c, NULL);
+		server_status_client(c);
+		goto out;
+	}
+
+forward_key:
+	if (c->flags & CLIENT_READONLY)
+		goto out;
+	if (wp != NULL)
+		window_pane_key(wp, c, s, wl, key, m);
+
+out:
+	if (s != NULL && key != KEYC_FOCUS_OUT)
+		server_client_update_latest(c);
+	free(event);
+	return (CMD_RETURN_NORMAL);
+}
+
+
+// Source: server-client.c
+// Lines 1216-1412
+
+
+[ANSWER]
+MUST

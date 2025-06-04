@@ -1,0 +1,36 @@
+static ssize_t read_istream_filtered(struct git_istream *st, char *buf,
+				     size_t sz)
+{
+	struct filtered_istream *fs = &(st->u.filtered);
+	size_t filled = 0;
+
+	while (sz) {
+		/* do we already have filtered output? */
+		if (fs->o_ptr < fs->o_end) {
+			size_t to_move = fs->o_end - fs->o_ptr;
+			if (sz < to_move)
+				to_move = sz;
+			memcpy(buf + filled, fs->obuf + fs->o_ptr, to_move);
+			fs->o_ptr += to_move;
+			sz -= to_move;
+			filled += to_move;
+			continue;
+		}
+		fs->o_end = fs->o_ptr = 0;
+
+		/* do we have anything to feed the filter with? */
+		if (fs->i_ptr < fs->i_end) {
+			size_t to_feed = fs->i_end - fs->i_ptr;
+			size_t to_receive = FILTER_BUFFER;
+			if (stream_filter(fs->filter,
+					  fs->ibuf + fs->i_ptr, &to_feed,
+					  fs->obuf, &to_receive))
+				return -1;
+			fs->i_ptr = fs->i_end - to_feed;
+			fs->o_end = FILTER_BUFFER - to_receive;
+			continue;
+		}
+
+
+// Source: streaming.c
+// Lines 87-118

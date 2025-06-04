@@ -1,0 +1,34 @@
+int git_config_backend_snapshot(git_config_backend **out, git_config_backend *source)
+{
+	config_snapshot_backend *backend;
+
+	backend = git__calloc(1, sizeof(config_snapshot_backend));
+	GIT_ERROR_CHECK_ALLOC(backend);
+
+	backend->parent.version = GIT_CONFIG_BACKEND_VERSION;
+	git_mutex_init(&backend->values_mutex);
+
+	backend->source = source;
+
+	backend->parent.readonly = 1;
+	backend->parent.version = GIT_CONFIG_BACKEND_VERSION;
+	backend->parent.open = config_snapshot_open;
+	backend->parent.get = config_snapshot_get;
+	backend->parent.set = config_snapshot_set;
+	backend->parent.set_multivar = config_snapshot_set_multivar;
+	backend->parent.snapshot = git_config_backend_snapshot;
+	backend->parent.del = config_snapshot_delete;
+	backend->parent.del_multivar = config_snapshot_delete_multivar;
+	backend->parent.iterator = config_snapshot_iterator;
+	backend->parent.lock = config_snapshot_lock;
+	backend->parent.unlock = config_snapshot_unlock;
+	backend->parent.free = config_snapshot_free;
+
+	*out = &backend->parent;
+
+	return 0;
+}
+
+
+// Source: config_snapshot.c
+// Lines 178-207

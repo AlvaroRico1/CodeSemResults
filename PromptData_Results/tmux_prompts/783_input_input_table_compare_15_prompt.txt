@@ -1,0 +1,28 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'entry' at line 4
+2. Pointer 'value' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+input_table_compare(const void *key, const void *value)
+{
+	const struct input_ctx		*ictx = key;
+	const struct input_table_entry	*entry = value;
+
+	if (ictx->ch != entry->ch)
+		return (ictx->ch - entry->ch);
+	return (strcmp(ictx->interm_buf, entry->interm));
+}
+
+
+// Source: input.c
+// Lines 726-734
+
+
+[ANSWER]
+MUST

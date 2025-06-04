@@ -1,0 +1,1 @@
+mem,mysql/components/keyrings/common/component_helpers/src/keyring_log_builtins_definition.cc,11,ptr,mysql/components/keyrings/common/component_helpers/src/keyring_log_builtins_definition.cc,1,1

@@ -1,0 +1,111 @@
+static int get_part_iter_for_interval_via_walking(
+    partition_info *part_info, bool is_subpart,
+    uint32 *store_length_array, /* ignored */
+    uchar *min_value, uchar *max_value, uint min_len,
+    uint max_len, /* ignored */
+    uint flags, PARTITION_ITERATOR *part_iter) {
+  Field *field;
+  uint total_parts;
+  partition_iter_func get_next_func;
+  DBUG_TRACE;
+  (void)store_length_array;
+  (void)min_len;
+  (void)max_len;
+
+  part_iter->ret_null_part = part_iter->ret_null_part_orig = false;
+  if (is_subpart) {
+    field = part_info->subpart_field_array[0];
+    total_parts = part_info->num_subparts;
+    get_next_func = get_next_subpartition_via_walking;
+  } else {
+    field = part_info->part_field_array[0];
+    total_parts = part_info->num_parts;
+    get_next_func = get_next_partition_via_walking;
+  }
+
+  /* Handle the "t.field IS NULL" interval, it is a special case */
+  if (field->is_nullable() && !(flags & (NO_MIN_RANGE | NO_MAX_RANGE)) &&
+      *min_value && *max_value) {
+    /*
+      We don't have a part_iter->get_next() function that would find which
+      partition "t.field IS NULL" belongs to, so find partition that contains
+      NULL right here, and return an iterator over singleton set.
+    */
+    uint32 part_id;
+    field->set_null();
+    if (is_subpart) {
+      if (!part_info->get_subpartition_id(part_info, &part_id)) {
+        init_single_partition_iterator(part_id, part_iter);
+        return 1; /* Ok, iterator initialized */
+      }
+    } else {
+      longlong dummy;
+      int res =
+          part_info->is_sub_partitioned()
+              ? part_info->get_part_partition_id(part_info, &part_id, &dummy)
+              : part_info->get_partition_id(part_info, &part_id, &dummy);
+      if (!res) {
+        init_single_partition_iterator(part_id, part_iter);
+        return 1; /* Ok, iterator initialized */
+      }
+    }
+    return 0; /* No partitions match */
+  }
+
+  if ((field->is_nullable() &&
+       ((!(flags & NO_MIN_RANGE) && *min_value) ||    // NULL <? X
+        (!(flags & NO_MAX_RANGE) && *max_value))) ||  // X <? NULL
+      (flags & (NO_MIN_RANGE | NO_MAX_RANGE)))        // -inf at any bound
+  {
+    return -1; /* Can't handle this interval, have to use all partitions */
+  }
+
+  /* Get integers for left and right interval bound */
+  ulonglong a, b;
+  uint len = field->pack_length_in_rec();
+  store_key_image_to_rec(field, min_value, len);
+  a = field->val_int();
+
+  store_key_image_to_rec(field, max_value, len);
+  b = field->val_int();
+
+  /*
+    Handle a special case where the distance between interval bounds is
+    exactly 4G-1. This interval is too big for range walking, and if it is an
+    (x,y]-type interval then the following "b +=..." code will convert it to
+    an empty interval by "wrapping around" a + 4G-1 + 1 = a.
+  */
+  if (b - a == ~0ULL) return -1;
+
+  if (flags & NEAR_MIN) ++a;
+  if (!(flags & NEAR_MAX)) ++b;
+  ulonglong n_values = b - a;
+
+  /*
+    Will it pay off to enumerate all values in the [a..b] range and evaluate
+    the partitioning function for every value? It depends on
+     1. whether we'll be able to infer that some partitions are not used
+     2. if time savings from not scanning these partitions will be greater
+        than time spent in enumeration.
+    We will assume that the cost of accessing one extra partition is greater
+    than the cost of evaluating the partitioning function O(#partitions).
+    This means we should jump at any chance to eliminate a partition, which
+    gives us this logic:
+
+    Do the enumeration if
+     - the number of values to enumerate is comparable to the number of
+       partitions, or
+     - there are not many values to enumerate.
+  */
+  if ((n_values > 2 * total_parts) && n_values > MAX_RANGE_TO_WALK) return -1;
+
+  part_iter->field_vals.start = part_iter->field_vals.cur = a;
+  part_iter->field_vals.end = b;
+  part_iter->part_info = part_info;
+  part_iter->get_next = get_next_func;
+  return 1;
+}
+
+
+// Source: sql_partition.cc
+// Lines 5894-6000

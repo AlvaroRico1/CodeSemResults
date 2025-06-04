@@ -1,0 +1,1 @@
+ptr,linux/kernel/trace/trace_events_filter.c,7,op_stack,linux/kernel/trace/trace_events_filter.c,9,2

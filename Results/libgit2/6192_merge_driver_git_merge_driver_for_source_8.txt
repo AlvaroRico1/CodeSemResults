@@ -1,0 +1,1 @@
+name_out,libgit2/src/libgit2/merge_driver.c,2,driver_name,libgit2/src/libgit2/merge_driver.c,6,1

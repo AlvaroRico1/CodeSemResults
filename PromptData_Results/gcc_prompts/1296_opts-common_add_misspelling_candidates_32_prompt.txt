@@ -1,0 +1,45 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'opt_text' at line 3
+2. Pointer 'new_prefix' at line 14
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+add_misspelling_candidates (auto_vec<char *> *candidates,
+			    const struct cl_option *option,
+			    const char *opt_text)
+{
+  gcc_assert (candidates);
+  gcc_assert (option);
+  gcc_assert (opt_text);
+  if (remapping_prefix_p (option))
+    return;
+  candidates->safe_push (xstrdup (opt_text + 1));
+  for (unsigned i = 0; i < ARRAY_SIZE (option_map); i++)
+    {
+      const char *opt0 = option_map[i].opt0;
+      const char *new_prefix = option_map[i].new_prefix;
+      size_t new_prefix_len = strlen (new_prefix);
+
+      if (option->cl_reject_negative && option_map[i].negated)
+	continue;
+
+      if (strncmp (opt_text, new_prefix, new_prefix_len) == 0)
+	{
+	  char *alternative = concat (opt0 + 1, opt_text + new_prefix_len,
+				      NULL);
+	  candidates->safe_push (alternative);
+	}
+    }
+
+
+// Source: opts-common.c
+// Lines 487-512
+
+
+[ANSWER]
+MUST-NOT

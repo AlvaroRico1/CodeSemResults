@@ -1,0 +1,1 @@
+stack_size,libgit2/src/libgit2/pack.c,13,error,libgit2/src/libgit2/pack.c,8,2

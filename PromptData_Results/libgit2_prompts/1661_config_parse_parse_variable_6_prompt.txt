@@ -1,0 +1,75 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'name' at line 4
+2. Pointer 'multiline' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int parse_variable(git_config_parser *reader, char **var_name, char **var_value, size_t *line_len)
+{
+	const char *value_start = NULL;
+	char *line = NULL, *name = NULL, *value = NULL;
+	int quote_count, error;
+	bool multiline;
+
+	*var_name = NULL;
+	*var_value = NULL;
+
+	git_parse_advance_ws(&reader->ctx);
+	line = git__strndup(reader->ctx.line, reader->ctx.line_len);
+	GIT_ERROR_CHECK_ALLOC(line);
+
+	quote_count = strip_comments(line, 0);
+
+	if ((error = parse_name(&name, &value_start, reader, line)) < 0)
+		goto out;
+
+	/*
+	 * Now, let's try to parse the value
+	 */
+	if (value_start != NULL) {
+		while (git__isspace(value_start[0]))
+			value_start++;
+
+		if ((error = unescape_line(&value, &multiline, value_start, 0)) < 0)
+			goto out;
+
+		if (multiline) {
+			git_str multi_value = GIT_STR_INIT;
+			git_str_attach(&multi_value, value, 0);
+			value = NULL;
+
+			if (parse_multiline_variable(reader, &multi_value, quote_count % 2, line_len) < 0 ||
+			    git_str_oom(&multi_value)) {
+				error = -1;
+				git_str_dispose(&multi_value);
+				goto out;
+			}
+
+			value = git_str_detach(&multi_value);
+		}
+	}
+
+	*var_name = name;
+	*var_value = value;
+	name = NULL;
+	value = NULL;
+
+out:
+	git__free(name);
+	git__free(value);
+	git__free(line);
+	return error;
+}
+
+
+// Source: config_parse.c
+// Lines 422-477
+
+
+[ANSWER]
+MAY

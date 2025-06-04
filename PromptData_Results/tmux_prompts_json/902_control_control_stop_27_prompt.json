@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'cs' at line 3\n2. Pointer 'c' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ncontrol_stop(struct client *c)\n{\n\tstruct control_state\t*cs = c->control_state;\n\tstruct control_block\t*cb, *cb1;\n\tstruct control_sub\t*csub, *csub1;\n\n\tif (~c->flags & CLIENT_CONTROLCONTROL)\n\t\tbufferevent_free(cs->write_event);\n\tbufferevent_free(cs->read_event);\n\n\tRB_FOREACH_SAFE(csub, control_subs, &cs->subs, csub1)\n\t\tcontrol_free_sub(cs, csub);\n\tif (evtimer_initialized(&cs->subs_timer))\n\t\tevtimer_del(&cs->subs_timer);\n\n\tTAILQ_FOREACH_SAFE(cb, &cs->all_blocks, all_entry, cb1)\n\t\tcontrol_free_block(cs, cb);\n\tcontrol_reset_offsets(c);\n\n\tfree(cs);\n}\n\n\n// Source: control.c\n// Lines 809-829\n",
+  "ANSWER": "MUST"
+}

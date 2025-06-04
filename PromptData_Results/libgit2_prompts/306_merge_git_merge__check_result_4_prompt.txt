@@ -1,0 +1,77 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'merged_list' at line 6
+2. Pointer 'index_conflicts' at line 10
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_merge__check_result(git_repository *repo, git_index *index_new)
+{
+	git_tree *head_tree = NULL;
+	git_iterator *iter_head = NULL, *iter_new = NULL;
+	git_iterator_options iter_opts = GIT_ITERATOR_OPTIONS_INIT;
+	git_diff *merged_list = NULL;
+	git_diff_options opts = GIT_DIFF_OPTIONS_INIT;
+	git_diff_delta *delta;
+	git_vector paths = GIT_VECTOR_INIT;
+	size_t i, index_conflicts = 0, wd_conflicts = 0, conflicts;
+	const git_index_entry *e;
+	int error = 0;
+
+	iter_opts.flags = GIT_ITERATOR_DONT_IGNORE_CASE;
+
+	if ((error = git_repository_head_tree(&head_tree, repo)) < 0 ||
+		(error = git_iterator_for_tree(&iter_head, head_tree, &iter_opts)) < 0 ||
+		(error = git_iterator_for_index(&iter_new, repo, index_new, &iter_opts)) < 0 ||
+		(error = git_diff__from_iterators(&merged_list, repo, iter_head, iter_new, &opts)) < 0)
+		goto done;
+
+	git_vector_foreach(&merged_list->deltas, i, delta) {
+		if ((error = git_vector_insert(&paths, (char *)delta->new_file.path)) < 0)
+			goto done;
+	}
+
+	for (i = 0; i < git_index_entrycount(index_new); i++) {
+		e = git_index_get_byindex(index_new, i);
+
+		if (git_index_entry_is_conflict(e) &&
+			(git_vector_last(&paths) == NULL ||
+			strcmp(git_vector_last(&paths), e->path) != 0)) {
+
+			if ((error = git_vector_insert(&paths, (char *)e->path)) < 0)
+				goto done;
+		}
+	}
+
+	/* Make sure the index and workdir state do not prevent merging */
+	if ((error = merge_check_index(&index_conflicts, repo, index_new, &paths)) < 0 ||
+		(error = merge_check_workdir(&wd_conflicts, repo, index_new, &paths)) < 0)
+		goto done;
+
+	if ((conflicts = index_conflicts + wd_conflicts) > 0) {
+		git_error_set(GIT_ERROR_MERGE, "%" PRIuZ " uncommitted change%s would be overwritten by merge",
+			conflicts, (conflicts != 1) ? "s" : "");
+		error = GIT_ECONFLICT;
+	}
+
+done:
+	git_vector_free(&paths);
+	git_tree_free(head_tree);
+	git_iterator_free(iter_head);
+	git_iterator_free(iter_new);
+	git_diff_free(merged_list);
+
+	return error;
+}
+
+
+// Source: merge.c
+// Lines 3053-3110
+
+
+[ANSWER]
+MAY

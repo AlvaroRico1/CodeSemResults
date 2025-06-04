@@ -1,0 +1,76 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'sock' at line 1
+2. Pointer 'ptls' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void proceed_handshake_undetermined(h2o_socket_t *sock)
+{
+    assert(sock->ssl->ossl == NULL && sock->ssl->ptls == NULL);
+
+    ptls_context_t *ptls_ctx = h2o_socket_ssl_get_picotls_context(sock->ssl->ssl_ctx);
+    assert(ptls_ctx != NULL);
+
+    size_t consumed = sock->ssl->input.encrypted->size;
+    ptls_buffer_t wbuf;
+    ptls_buffer_init(&wbuf, "", 0);
+
+#if PICOTLS_USE_DTRACE
+    unsigned ptls_skip_tracing_backup = ptls_default_skip_tracing;
+    ptls_default_skip_tracing = sock->_skip_tracing;
+#endif
+    ptls_t *ptls = ptls_new(ptls_ctx, 1);
+#if PICOTLS_USE_DTRACE
+    ptls_default_skip_tracing = ptls_skip_tracing_backup;
+#endif
+    if (ptls == NULL)
+        h2o_fatal("no memory");
+    *ptls_get_data_ptr(ptls) = sock;
+    int ret = ptls_handshake(ptls, &wbuf, sock->ssl->input.encrypted->bytes, &consumed, NULL);
+
+    if (ret == PTLS_ERROR_IN_PROGRESS && wbuf.off == 0) {
+        /* we aren't sure if the picotls can process the handshake, retain handshake transcript and replay on next occasion */
+        ptls_free(ptls);
+    } else if (ret == PTLS_ALERT_PROTOCOL_VERSION) {
+        /* the client cannot use tls1.3, fallback to openssl */
+        ptls_free(ptls);
+        create_ossl(sock);
+        proceed_handshake_openssl(sock);
+    } else {
+        /* picotls is responsible for handling the handshake */
+        sock->ssl->ptls = ptls;
+        sock->ssl->handshake.server.async_resumption.state = ASYNC_RESUMPTION_STATE_COMPLETE;
+        h2o_buffer_consume(&sock->ssl->input.encrypted, consumed);
+        /* stop reading, send response */
+        h2o_socket_read_stop(sock);
+        write_ssl_bytes(sock, wbuf.base, wbuf.off);
+        h2o_socket_cb cb;
+        switch (ret) {
+        case 0:
+            cb = on_handshake_complete;
+            break;
+        case PTLS_ERROR_IN_PROGRESS:
+            cb = proceed_handshake;
+            break;
+        default:
+            assert(ret != PTLS_ERROR_STATELESS_RETRY && "stateless retry is never turned on by us for TCP");
+            cb = on_handshake_fail_complete;
+            break;
+        }
+        flush_pending_ssl(sock, cb);
+    }
+    ptls_buffer_dispose(&wbuf);
+}
+
+
+// Source: socket.c
+// Lines 1454-1510
+
+
+[ANSWER]
+MUST

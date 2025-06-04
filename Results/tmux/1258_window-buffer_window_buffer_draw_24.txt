@@ -1,0 +1,1 @@
+pdata,tmux/window-buffer.c,6,end,tmux/window-buffer.c,6,1

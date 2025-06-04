@@ -1,0 +1,62 @@
+init_iconv_desc (cpp_reader *pfile, const char *to, const char *from)
+{
+  struct cset_converter ret;
+  char *pair;
+  size_t i;
+
+  if (!strcasecmp (to, from))
+    {
+      ret.func = convert_no_conversion;
+      ret.cd = (iconv_t) -1;
+      ret.width = -1;
+      return ret;
+    }
+
+  pair = (char *) alloca(strlen(to) + strlen(from) + 2);
+
+  strcpy(pair, from);
+  strcat(pair, "/");
+  strcat(pair, to);
+  for (i = 0; i < ARRAY_SIZE (conversion_tab); i++)
+    if (!strcasecmp (pair, conversion_tab[i].pair))
+      {
+	ret.func = conversion_tab[i].func;
+	ret.cd = conversion_tab[i].fake_cd;
+	ret.width = -1;
+	return ret;
+      }
+
+  /* No custom converter - try iconv.  */
+  if (HAVE_ICONV)
+    {
+      ret.func = convert_using_iconv;
+      ret.cd = iconv_open (to, from);
+      ret.width = -1;
+
+      if (ret.cd == (iconv_t) -1)
+	{
+	  if (errno == EINVAL)
+	    cpp_error (pfile, CPP_DL_ERROR, /* FIXME should be DL_SORRY */
+		       "conversion from %s to %s not supported by iconv",
+		       from, to);
+	  else
+	    cpp_errno (pfile, CPP_DL_ERROR, "iconv_open");
+
+	  ret.func = convert_no_conversion;
+	}
+    }
+  else
+    {
+      cpp_error (pfile, CPP_DL_ERROR, /* FIXME: should be DL_SORRY */
+		 "no iconv implementation, cannot convert from %s to %s",
+		 from, to);
+      ret.func = convert_no_conversion;
+      ret.cd = (iconv_t) -1;
+      ret.width = -1;
+    }
+  return ret;
+}
+
+
+// Source: charset.c
+// Lines 635-692

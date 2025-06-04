@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'errors' at line 6\n2. Pointer 'timestamp' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ntimestamp_t approxidate_relative(const char *date)\n{\n\tstruct timeval tv;\n\ttimestamp_t timestamp;\n\tint offset;\n\tint errors = 0;\n\n\tif (!parse_date_basic(date, &timestamp, &offset))\n\t\treturn timestamp;\n\n\tget_time(&tv);\n\treturn approxidate_str(date, (const struct timeval *) &tv, &errors);\n}\n\n\n// Source: date.c\n// Lines 1326-1338\n",
+  "ANSWER": "MAY"
+}

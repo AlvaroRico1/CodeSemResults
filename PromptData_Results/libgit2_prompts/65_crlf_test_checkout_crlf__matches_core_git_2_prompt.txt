@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'a' at line 8
+2. Pointer 'b' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_checkout_crlf__matches_core_git(void)
+{
+	const char *autocrlf[] = { "true", "false", "input", NULL };
+	const char *attrs[] = { "", "-crlf", "-text", "eol=crlf", "eol=lf",
+		"text", "text eol=crlf", "text eol=lf",
+		"text=auto", "text=auto eol=crlf", "text=auto eol=lf",
+		NULL };
+	const char **a, **b;
+
+	for (a = autocrlf; *a; a++) {
+		for (b = attrs; *b; b++) {
+			empty_workdir("crlf");
+			test_checkout(*a, *b);
+		}
+	}
+}
+
+
+// Source: crlf.c
+// Lines 203-218
+
+
+[ANSWER]
+MUST-NOT

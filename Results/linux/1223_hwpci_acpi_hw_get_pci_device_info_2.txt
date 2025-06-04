@@ -1,0 +1,1 @@
+pci_value,linux/drivers/acpi/acpica/hwpci.c,8,object_type,linux/drivers/acpi/acpica/hwpci.c,6,2

@@ -1,0 +1,1 @@
+line_cb,libgit2/tests/libgit2/diff/diff_helpers.c,6,l,libgit2/tests/libgit2/diff/diff_helpers.c,43,0

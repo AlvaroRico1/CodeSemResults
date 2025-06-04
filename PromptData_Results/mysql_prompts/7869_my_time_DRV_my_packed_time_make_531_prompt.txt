@@ -1,0 +1,26 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'f' at line 1
+2. Pointer 'i' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+longlong DRV_my_packed_time_make(longlong i, longlong f) {
+  return my_packed_time_make(i, f);
+}
+longlong DRV_my_packed_time_make_int(longlong i) {
+  return my_packed_time_make_int(i);
+}
+}  // namespace mysys_my_time
+
+
+// Source: my_time.cc
+// Lines 2908-2914
+
+
+[ANSWER]
+MUST-NOT

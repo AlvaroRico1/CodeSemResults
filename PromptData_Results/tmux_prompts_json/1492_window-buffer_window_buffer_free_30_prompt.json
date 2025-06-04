@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'data' at line 3\n2. Pointer 'wme' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nwindow_buffer_free(struct window_mode_entry *wme)\n{\n\tstruct window_buffer_modedata\t*data = wme->data;\n\tu_int\t\t\t\t i;\n\n\tif (data == NULL)\n\t\treturn;\n\n\tmode_tree_free(data->data);\n\n\tfor (i = 0; i < data->item_size; i++)\n\t\twindow_buffer_free_item(data->item_list[i]);\n\tfree(data->item_list);\n\n\tfree(data->format);\n\tfree(data->key_format);\n\tfree(data->command);\n\n\tfree(data);\n}\n\n\n// Source: window-buffer.c\n// Lines 364-383\n",
+  "ANSWER": "MUST"
+}

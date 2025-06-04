@@ -1,0 +1,35 @@
+bool Query_block::replace_subquery_in_expr(THD *thd, Item::Css_info *subquery,
+                                           TABLE_LIST *tr, Item **expr) {
+  if (!(*expr)->has_subquery()) return false;
+
+  Item_singlerow_subselect::Scalar_subquery_replacement info(
+      subquery->item, *tr->table->field, this, subquery->m_add_coalesce);
+
+  Item *new_item = (*expr)->transform(&Item::replace_scalar_subquery,
+                                      pointer_cast<uchar *>(&info));
+  if (new_item == nullptr) return true;
+
+  // If we replaced an item contained in the transformed query block, save it
+  // for rollback and retain its name so the metadata column name remains
+  // correct.
+  if (*expr != new_item) {
+    new_item->item_name.set((*expr)->item_name.ptr());
+    *expr = new_item;
+  }
+
+  new_item->update_used_tables();
+
+  // If this expression has aggregation and we have replaced a subquery
+  // with a field, we need to recompute split_sum_func
+  if ((new_item->has_aggregation() &&
+       !(new_item->type() == Item::SUM_FUNC_ITEM &&
+         !new_item->m_is_window_function)) ||  //(1)
+      new_item->has_wf())                      // (2)
+    new_item->split_sum_func(thd, base_ref_items, &fields);
+  if (thd->is_error()) return true;
+  return false;
+}
+
+
+// Source: sql_resolver.cc
+// Lines 6313-6343

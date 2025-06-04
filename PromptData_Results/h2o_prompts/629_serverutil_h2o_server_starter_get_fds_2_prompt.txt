@@ -1,0 +1,54 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'end' at line 3
+2. Pointer 'start' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+size_t h2o_server_starter_get_fds(int **_fds)
+{
+    const char *ports_env, *start, *end, *eq;
+    size_t t;
+    H2O_VECTOR(int) fds = {NULL};
+
+    if ((ports_env = getenv(SERVER_STARTER_PORT)) == NULL)
+        return 0;
+    if (ports_env[0] == '\0') {
+        h2o_error_printf("$" SERVER_STARTER_PORT " is empty\n");
+        return SIZE_MAX;
+    }
+
+    /* ports_env example: 127.0.0.1:80=3;/tmp/sock=4 */
+    for (start = ports_env; *start != '\0'; start = *end == ';' ? end + 1 : end) {
+        if ((end = strchr(start, ';')) == NULL)
+            end = start + strlen(start);
+        if ((eq = memchr(start, '=', end - start)) == NULL) {
+            h2o_error_printf("invalid $" SERVER_STARTER_PORT ", an element without `=` in: %s\n", ports_env);
+            goto Error;
+        }
+        if ((t = h2o_strtosize(eq + 1, end - eq - 1)) == SIZE_MAX) {
+            h2o_error_printf("invalid file descriptor number in $" SERVER_STARTER_PORT ": %s\n", ports_env);
+            goto Error;
+        }
+        h2o_vector_reserve(NULL, &fds, fds.size + 1);
+        fds.entries[fds.size++] = (int)t;
+    }
+
+    *_fds = fds.entries;
+    return fds.size;
+Error:
+    free(fds.entries);
+    return SIZE_MAX;
+}
+
+
+// Source: serverutil.c
+// Lines 86-120
+
+
+[ANSWER]
+MUST

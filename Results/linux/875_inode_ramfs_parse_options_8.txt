@@ -1,0 +1,1 @@
+option,linux/fs/ramfs/inode.c,4,data,linux/fs/ramfs/inode.c,1,2

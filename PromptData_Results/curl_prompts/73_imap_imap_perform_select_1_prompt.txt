@@ -1,0 +1,52 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'conn' at line 4
+2. Pointer 'data' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static CURLcode imap_perform_select(struct Curl_easy *data)
+{
+  CURLcode result = CURLE_OK;
+  struct connectdata *conn = data->conn;
+  struct IMAP *imap = data->req.p.imap;
+  struct imap_conn *imapc = &conn->proto.imapc;
+  char *mailbox;
+
+  /* Invalidate old information as we are switching mailboxes */
+  Curl_safefree(imapc->mailbox);
+  Curl_safefree(imapc->mailbox_uidvalidity);
+
+  /* Check we have a mailbox */
+  if(!imap->mailbox) {
+    failf(data, "Cannot SELECT without a mailbox.");
+    return CURLE_URL_MALFORMAT;
+  }
+
+  /* Make sure the mailbox is in the correct atom format */
+  mailbox = imap_atom(imap->mailbox, false);
+  if(!mailbox)
+    return CURLE_OUT_OF_MEMORY;
+
+  /* Send the SELECT command */
+  result = imap_sendf(data, conn, "SELECT %s", mailbox);
+
+  free(mailbox);
+
+  if(!result)
+    state(data, IMAP_SELECT);
+
+  return result;
+}
+
+
+// Source: imap.c
+// Lines 657-689
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,72 @@
+static int read_loose_standard(git_rawobj *out, git_str *obj)
+{
+	git_zstream zstream = GIT_ZSTREAM_INIT;
+	unsigned char head[MAX_HEADER_LEN], *body = NULL;
+	size_t decompressed, head_len, body_len, alloc_size;
+	obj_hdr hdr;
+	int error;
+
+	if ((error = git_zstream_init(&zstream, GIT_ZSTREAM_INFLATE)) < 0 ||
+		(error = git_zstream_set_input(&zstream, git_str_cstr(obj), git_str_len(obj))) < 0)
+		goto done;
+
+	decompressed = sizeof(head);
+
+	/*
+	 * inflate the initial part of the compressed buffer in order to
+	 * parse the header; read the largest header possible, then push the
+	 * remainder into the body buffer.
+	 */
+	if ((error = git_zstream_get_output(head, &decompressed, &zstream)) < 0 ||
+		(error = parse_header(&hdr, &head_len, head, decompressed)) < 0)
+		goto done;
+
+	if (!git_object_typeisloose(hdr.type)) {
+		git_error_set(GIT_ERROR_ODB, "failed to inflate disk object");
+		error = -1;
+		goto done;
+	}
+
+	/*
+	 * allocate a buffer and inflate the object data into it
+	 * (including the initial sequence in the head buffer).
+	 */
+	if (GIT_ADD_SIZET_OVERFLOW(&alloc_size, hdr.size, 1) ||
+		(body = git__calloc(1, alloc_size)) == NULL) {
+		error = -1;
+		goto done;
+	}
+
+	GIT_ASSERT(decompressed >= head_len);
+	body_len = decompressed - head_len;
+
+	if (body_len)
+		memcpy(body, head + head_len, body_len);
+
+	decompressed = hdr.size - body_len;
+	if ((error = git_zstream_get_output(body + body_len, &decompressed, &zstream)) < 0)
+		goto done;
+
+	if (!git_zstream_done(&zstream)) {
+		git_error_set(GIT_ERROR_ZLIB, "failed to finish zlib inflation: stream aborted prematurely");
+		error = -1;
+		goto done;
+	}
+
+	body[hdr.size] = '\0';
+
+	out->data = body;
+	out->len = hdr.size;
+	out->type = hdr.type;
+
+done:
+	if (error < 0)
+		git__free(body);
+
+	git_zstream_free(&zstream);
+	return error;
+}
+
+
+// Source: odb_loose.c
+// Lines 273-340

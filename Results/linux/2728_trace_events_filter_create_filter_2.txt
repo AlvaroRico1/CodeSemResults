@@ -1,0 +1,1 @@
+filterp,linux/kernel/trace/trace_events_filter.c,4,pe,linux/kernel/trace/trace_events_filter.c,6,2

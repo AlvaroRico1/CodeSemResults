@@ -1,0 +1,1 @@
+patch,libgit2/tests/libgit2/diff/drivers.c,6,expected,libgit2/tests/libgit2/diff/drivers.c,8,0

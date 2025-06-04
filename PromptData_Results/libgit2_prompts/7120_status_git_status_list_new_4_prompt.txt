@@ -1,0 +1,152 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'index' at line 6
+2. Pointer 'head' at line 10
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_status_list_new(
+	git_status_list **out,
+	git_repository *repo,
+	const git_status_options *opts)
+{
+	git_index *index = NULL;
+	git_status_list *status = NULL;
+	git_diff_options diffopt = GIT_DIFF_OPTIONS_INIT;
+	git_diff_find_options findopt = GIT_DIFF_FIND_OPTIONS_INIT;
+	git_tree *head = NULL;
+	git_status_show_t show =
+		opts ? opts->show : GIT_STATUS_SHOW_INDEX_AND_WORKDIR;
+	int error = 0;
+	unsigned int flags = opts ? opts->flags : GIT_STATUS_OPT_DEFAULTS;
+
+	*out = NULL;
+
+	if (status_validate_options(opts) < 0)
+		return -1;
+
+	if ((error = git_repository__ensure_not_bare(repo, "status")) < 0 ||
+		(error = git_repository_index(&index, repo)) < 0)
+		return error;
+
+	if (opts != NULL && opts->baseline != NULL) {
+		head = opts->baseline;
+	} else {
+		/* if there is no HEAD, that's okay - we'll make an empty iterator */
+		if ((error = git_repository_head_tree(&head, repo)) < 0) {
+			if (error != GIT_ENOTFOUND && error != GIT_EUNBORNBRANCH)
+				goto done;
+			git_error_clear();
+		}
+	}
+
+	/* refresh index from disk unless prevented */
+	if ((flags & GIT_STATUS_OPT_NO_REFRESH) == 0 &&
+		git_index_read_safely(index) < 0)
+		git_error_clear();
+
+	status = git_status_list_alloc(index);
+	GIT_ERROR_CHECK_ALLOC(status);
+
+	if (opts) {
+		memcpy(&status->opts, opts, sizeof(git_status_options));
+		memcpy(&diffopt.pathspec, &opts->pathspec, sizeof(diffopt.pathspec));
+	}
+
+	diffopt.flags = GIT_DIFF_INCLUDE_TYPECHANGE;
+	findopt.flags = GIT_DIFF_FIND_FOR_UNTRACKED;
+
+	if ((flags & GIT_STATUS_OPT_INCLUDE_UNTRACKED) != 0)
+		diffopt.flags = diffopt.flags | GIT_DIFF_INCLUDE_UNTRACKED;
+	if ((flags & GIT_STATUS_OPT_INCLUDE_IGNORED) != 0)
+		diffopt.flags = diffopt.flags | GIT_DIFF_INCLUDE_IGNORED;
+	if ((flags & GIT_STATUS_OPT_INCLUDE_UNMODIFIED) != 0)
+		diffopt.flags = diffopt.flags | GIT_DIFF_INCLUDE_UNMODIFIED;
+	if ((flags & GIT_STATUS_OPT_RECURSE_UNTRACKED_DIRS) != 0)
+		diffopt.flags = diffopt.flags | GIT_DIFF_RECURSE_UNTRACKED_DIRS;
+	if ((flags & GIT_STATUS_OPT_DISABLE_PATHSPEC_MATCH) != 0)
+		diffopt.flags = diffopt.flags | GIT_DIFF_DISABLE_PATHSPEC_MATCH;
+	if ((flags & GIT_STATUS_OPT_RECURSE_IGNORED_DIRS) != 0)
+		diffopt.flags = diffopt.flags | GIT_DIFF_RECURSE_IGNORED_DIRS;
+	if ((flags & GIT_STATUS_OPT_EXCLUDE_SUBMODULES) != 0)
+		diffopt.flags = diffopt.flags | GIT_DIFF_IGNORE_SUBMODULES;
+	if ((flags & GIT_STATUS_OPT_UPDATE_INDEX) != 0)
+		diffopt.flags = diffopt.flags | GIT_DIFF_UPDATE_INDEX;
+	if ((flags & GIT_STATUS_OPT_INCLUDE_UNREADABLE) != 0)
+		diffopt.flags = diffopt.flags | GIT_DIFF_INCLUDE_UNREADABLE;
+	if ((flags & GIT_STATUS_OPT_INCLUDE_UNREADABLE_AS_UNTRACKED) != 0)
+		diffopt.flags = diffopt.flags | GIT_DIFF_INCLUDE_UNREADABLE_AS_UNTRACKED;
+
+	if ((flags & GIT_STATUS_OPT_RENAMES_FROM_REWRITES) != 0)
+		findopt.flags = findopt.flags |
+			GIT_DIFF_FIND_AND_BREAK_REWRITES |
+			GIT_DIFF_FIND_RENAMES_FROM_REWRITES |
+			GIT_DIFF_BREAK_REWRITES_FOR_RENAMES_ONLY;
+
+	if (opts != NULL && opts->rename_threshold != 0)
+		findopt.rename_threshold = opts->rename_threshold;
+
+	if (show != GIT_STATUS_SHOW_WORKDIR_ONLY) {
+		if ((error = git_diff_tree_to_index(
+				&status->head2idx, repo, head, index, &diffopt)) < 0)
+			goto done;
+
+		if ((flags & GIT_STATUS_OPT_RENAMES_HEAD_TO_INDEX) != 0 &&
+			(error = git_diff_find_similar(status->head2idx, &findopt)) < 0)
+			goto done;
+	}
+
+	if (show != GIT_STATUS_SHOW_INDEX_ONLY) {
+		if ((error = git_diff_index_to_workdir(
+				&status->idx2wd, repo, index, &diffopt)) < 0) {
+			goto done;
+		}
+
+		if ((flags & GIT_STATUS_OPT_RENAMES_INDEX_TO_WORKDIR) != 0 &&
+			(error = git_diff_find_similar(status->idx2wd, &findopt)) < 0)
+			goto done;
+	}
+
+	error = git_diff__paired_foreach(
+		status->head2idx, status->idx2wd, status_collect, status);
+	if (error < 0)
+		goto done;
+
+	if (flags & GIT_STATUS_OPT_SORT_CASE_SENSITIVELY)
+		git_vector_set_cmp(&status->paired, status_entry_cmp);
+	if (flags & GIT_STATUS_OPT_SORT_CASE_INSENSITIVELY)
+		git_vector_set_cmp(&status->paired, status_entry_icmp);
+
+	if ((flags &
+		 (GIT_STATUS_OPT_RENAMES_HEAD_TO_INDEX |
+		  GIT_STATUS_OPT_RENAMES_INDEX_TO_WORKDIR |
+		  GIT_STATUS_OPT_SORT_CASE_SENSITIVELY |
+		  GIT_STATUS_OPT_SORT_CASE_INSENSITIVELY)) != 0)
+		git_vector_sort(&status->paired);
+
+done:
+	if (error < 0) {
+		git_status_list_free(status);
+		status = NULL;
+	}
+
+	*out = status;
+
+	if (opts == NULL || opts->baseline != head)
+		git_tree_free(head);
+	git_index_free(index);
+
+	return error;
+}
+
+
+// Source: status.c
+// Lines 261-393
+
+
+[ANSWER]
+MAY

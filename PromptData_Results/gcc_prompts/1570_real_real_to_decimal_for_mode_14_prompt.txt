@@ -1,0 +1,319 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'last' at line 10
+2. Pointer 'str' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+real_to_decimal_for_mode (char *str, const REAL_VALUE_TYPE *r_orig,
+			  size_t buf_size, size_t digits,
+			  int crop_trailing_zeros, machine_mode mode)
+{
+  const struct real_format *fmt = NULL;
+  const REAL_VALUE_TYPE *one, *ten;
+  REAL_VALUE_TYPE r, pten, u, v;
+  int dec_exp, cmp_one, digit;
+  size_t max_digits;
+  char *p, *first, *last;
+  bool sign;
+  bool round_up;
+
+  if (mode != VOIDmode)
+   {
+     fmt = REAL_MODE_FORMAT (mode);
+     gcc_assert (fmt);
+   }
+
+  r = *r_orig;
+  switch (r.cl)
+    {
+    case rvc_zero:
+      strcpy (str, (r.sign ? "-0.0" : "0.0"));
+      return;
+    case rvc_normal:
+      break;
+    case rvc_inf:
+      strcpy (str, (r.sign ? "-Inf" : "+Inf"));
+      return;
+    case rvc_nan:
+      /* ??? Print the significand as well, if not canonical?  */
+      sprintf (str, "%c%cNaN", (r_orig->sign ? '-' : '+'),
+	       (r_orig->signalling ? 'S' : 'Q'));
+      return;
+    default:
+      gcc_unreachable ();
+    }
+
+  if (r.decimal)
+    {
+      decimal_real_to_decimal (str, &r, buf_size, digits, crop_trailing_zeros);
+      return;
+    }
+
+  /* Bound the number of digits printed by the size of the representation.  */
+  max_digits = SIGNIFICAND_BITS * M_LOG10_2;
+  if (digits == 0 || digits > max_digits)
+    digits = max_digits;
+
+  /* Estimate the decimal exponent, and compute the length of the string it
+     will print as.  Be conservative and add one to account for possible
+     overflow or rounding error.  */
+  dec_exp = REAL_EXP (&r) * M_LOG10_2;
+  for (max_digits = 1; dec_exp ; max_digits++)
+    dec_exp /= 10;
+
+  /* Bound the number of digits printed by the size of the output buffer.  */
+  max_digits = buf_size - 1 - 1 - 2 - max_digits - 1;
+  gcc_assert (max_digits <= buf_size);
+  if (digits > max_digits)
+    digits = max_digits;
+
+  one = real_digit (1);
+  ten = ten_to_ptwo (0);
+
+  sign = r.sign;
+  r.sign = 0;
+
+  dec_exp = 0;
+  pten = *one;
+
+  cmp_one = do_compare (&r, one, 0);
+  if (cmp_one > 0)
+    {
+      int m;
+
+      /* Number is greater than one.  Convert significand to an integer
+	 and strip trailing decimal zeros.  */
+
+      u = r;
+      SET_REAL_EXP (&u, SIGNIFICAND_BITS - 1);
+
+      /* Largest M, such that 10**2**M fits within SIGNIFICAND_BITS.  */
+      m = floor_log2 (max_digits);
+
+      /* Iterate over the bits of the possible powers of 10 that might
+	 be present in U and eliminate them.  That is, if we find that
+	 10**2**M divides U evenly, keep the division and increase
+	 DEC_EXP by 2**M.  */
+      do
+	{
+	  REAL_VALUE_TYPE t;
+
+	  do_divide (&t, &u, ten_to_ptwo (m));
+	  do_fix_trunc (&v, &t);
+	  if (cmp_significands (&v, &t) == 0)
+	    {
+	      u = t;
+	      dec_exp += 1 << m;
+	    }
+	}
+      while (--m >= 0);
+
+      /* Revert the scaling to integer that we performed earlier.  */
+      SET_REAL_EXP (&u, REAL_EXP (&u) + REAL_EXP (&r)
+		    - (SIGNIFICAND_BITS - 1));
+      r = u;
+
+      /* Find power of 10.  Do this by dividing out 10**2**M when
+	 this is larger than the current remainder.  Fill PTEN with
+	 the power of 10 that we compute.  */
+      if (REAL_EXP (&r) > 0)
+	{
+	  m = floor_log2 ((int)(REAL_EXP (&r) * M_LOG10_2)) + 1;
+	  do
+	    {
+	      const REAL_VALUE_TYPE *ptentwo = ten_to_ptwo (m);
+	      if (do_compare (&u, ptentwo, 0) >= 0)
+	        {
+	          do_divide (&u, &u, ptentwo);
+	          do_multiply (&pten, &pten, ptentwo);
+	          dec_exp += 1 << m;
+	        }
+	    }
+          while (--m >= 0);
+	}
+      else
+	/* We managed to divide off enough tens in the above reduction
+	   loop that we've now got a negative exponent.  Fall into the
+	   less-than-one code to compute the proper value for PTEN.  */
+	cmp_one = -1;
+    }
+  if (cmp_one < 0)
+    {
+      int m;
+
+      /* Number is less than one.  Pad significand with leading
+	 decimal zeros.  */
+
+      v = r;
+      while (1)
+	{
+	  /* Stop if we'd shift bits off the bottom.  */
+	  if (v.sig[0] & 7)
+	    break;
+
+	  do_multiply (&u, &v, ten);
+
+	  /* Stop if we're now >= 1 or zero.  */
+	  if (REAL_EXP (&u) > 0 || u.cl == rvc_zero)
+	    break;
+
+	  v = u;
+	  dec_exp -= 1;
+	}
+      r = v;
+
+      /* Find power of 10.  Do this by multiplying in P=10**2**M when
+	 the current remainder is smaller than 1/P.  Fill PTEN with the
+	 power of 10 that we compute.  */
+      m = floor_log2 ((int)(-REAL_EXP (&r) * M_LOG10_2)) + 1;
+      do
+	{
+	  const REAL_VALUE_TYPE *ptentwo = ten_to_ptwo (m);
+	  const REAL_VALUE_TYPE *ptenmtwo = ten_to_mptwo (m);
+
+	  if (do_compare (&v, ptenmtwo, 0) <= 0)
+	    {
+	      do_multiply (&v, &v, ptentwo);
+	      do_multiply (&pten, &pten, ptentwo);
+	      dec_exp -= 1 << m;
+	    }
+	}
+      while (--m >= 0);
+
+      /* Invert the positive power of 10 that we've collected so far.  */
+      do_divide (&pten, one, &pten);
+    }
+
+  p = str;
+  if (sign)
+    *p++ = '-';
+  first = p++;
+
+  /* At this point, PTEN should contain the nearest power of 10 smaller
+     than R, such that this division produces the first digit.
+
+     Using a divide-step primitive that returns the complete integral
+     remainder avoids the rounding error that would be produced if
+     we were to use do_divide here and then simply multiply by 10 for
+     each subsequent digit.  */
+
+  digit = rtd_divmod (&r, &pten);
+
+  /* Be prepared for error in that division via underflow ...  */
+  if (digit == 0 && cmp_significand_0 (&r))
+    {
+      /* Multiply by 10 and try again.  */
+      do_multiply (&r, &r, ten);
+      digit = rtd_divmod (&r, &pten);
+      dec_exp -= 1;
+      gcc_assert (digit != 0);
+    }
+
+  /* ... or overflow.  */
+  if (digit == 10)
+    {
+      *p++ = '1';
+      if (--digits > 0)
+	*p++ = '0';
+      dec_exp += 1;
+    }
+  else
+    {
+      gcc_assert (digit <= 10);
+      *p++ = digit + '0';
+    }
+
+  /* Generate subsequent digits.  */
+  while (--digits > 0)
+    {
+      do_multiply (&r, &r, ten);
+      digit = rtd_divmod (&r, &pten);
+      *p++ = digit + '0';
+    }
+  last = p;
+
+  /* Generate one more digit with which to do rounding.  */
+  do_multiply (&r, &r, ten);
+  digit = rtd_divmod (&r, &pten);
+
+  /* Round the result.  */
+  if (fmt && fmt->round_towards_zero)
+    {
+      /* If the format uses round towards zero when parsing the string
+	 back in, we need to always round away from zero here.  */
+      if (cmp_significand_0 (&r))
+	digit++;
+      round_up = digit > 0;
+    }
+  else
+    {
+      if (digit == 5)
+	{
+	  /* Round to nearest.  If R is nonzero there are additional
+	     nonzero digits to be extracted.  */
+	  if (cmp_significand_0 (&r))
+	    digit++;
+	  /* Round to even.  */
+	  else if ((p[-1] - '0') & 1)
+	    digit++;
+	}
+
+      round_up = digit > 5;
+    }
+
+  if (round_up)
+    {
+      while (p > first)
+	{
+	  digit = *--p;
+	  if (digit == '9')
+	    *p = '0';
+	  else
+	    {
+	      *p = digit + 1;
+	      break;
+	    }
+	}
+
+      /* Carry out of the first digit.  This means we had all 9's and
+	 now have all 0's.  "Prepend" a 1 by overwriting the first 0.  */
+      if (p == first)
+	{
+	  first[1] = '1';
+	  dec_exp++;
+	}
+    }
+
+  /* Insert the decimal point.  */
+  first[0] = first[1];
+  first[1] = '.';
+
+  /* If requested, drop trailing zeros.  Never crop past "1.0".  */
+  if (crop_trailing_zeros)
+    while (last > first + 3 && last[-1] == '0')
+      last--;
+
+  /* Append the exponent.  */
+  sprintf (last, "e%+d", dec_exp);
+
+  /* Verify that we can read the original value back in.  */
+  if (flag_checking && mode != VOIDmode)
+    {
+      real_from_string (&r, str);
+      real_convert (&r, mode, &r);
+      gcc_assert (real_identical (&r, r_orig));
+    }
+}
+
+
+// Source: real.c
+// Lines 1568-1867
+
+
+[ANSWER]
+MUST

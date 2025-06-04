@@ -1,0 +1,86 @@
+static struct commit *fake_working_tree_commit(struct repository *r,
+					       struct diff_options *opt,
+					       const char *path,
+					       const char *contents_from)
+{
+	struct commit *commit;
+	struct blame_origin *origin;
+	struct commit_list **parent_tail, *parent;
+	struct object_id head_oid;
+	struct strbuf buf = STRBUF_INIT;
+	const char *ident;
+	time_t now;
+	int len;
+	struct cache_entry *ce;
+	unsigned mode;
+	struct strbuf msg = STRBUF_INIT;
+
+	repo_read_index(r);
+	time(&now);
+	commit = alloc_commit_node(r);
+	commit->object.parsed = 1;
+	commit->date = now;
+	parent_tail = &commit->parents;
+
+	if (!resolve_ref_unsafe("HEAD", RESOLVE_REF_READING, &head_oid, NULL))
+		die("no such ref: HEAD");
+
+	parent_tail = append_parent(r, parent_tail, &head_oid);
+	append_merge_parents(r, parent_tail);
+	verify_working_tree_path(r, commit, path);
+
+	origin = make_origin(commit, path);
+
+	ident = fmt_ident("Not Committed Yet", "not.committed.yet",
+			WANT_BLANK_IDENT, NULL, 0);
+	strbuf_addstr(&msg, "tree 0000000000000000000000000000000000000000\n");
+	for (parent = commit->parents; parent; parent = parent->next)
+		strbuf_addf(&msg, "parent %s\n",
+			    oid_to_hex(&parent->item->object.oid));
+	strbuf_addf(&msg,
+		    "author %s\n"
+		    "committer %s\n\n"
+		    "Version of %s from %s\n",
+		    ident, ident, path,
+		    (!contents_from ? path :
+		     (!strcmp(contents_from, "-") ? "standard input" : contents_from)));
+	set_commit_buffer_from_strbuf(r, commit, &msg);
+
+	if (!contents_from || strcmp("-", contents_from)) {
+		struct stat st;
+		const char *read_from;
+		char *buf_ptr;
+		unsigned long buf_len;
+
+		if (contents_from) {
+			if (stat(contents_from, &st) < 0)
+				die_errno("Cannot stat '%s'", contents_from);
+			read_from = contents_from;
+		}
+		else {
+			if (lstat(path, &st) < 0)
+				die_errno("Cannot lstat '%s'", path);
+			read_from = path;
+		}
+		mode = canon_mode(st.st_mode);
+
+		switch (st.st_mode & S_IFMT) {
+		case S_IFREG:
+			if (opt->flags.allow_textconv &&
+			    textconv_object(r, read_from, mode, null_oid(), 0, &buf_ptr, &buf_len))
+				strbuf_attach(&buf, buf_ptr, buf_len, buf_len + 1);
+			else if (strbuf_read_file(&buf, read_from, st.st_size) != st.st_size)
+				die_errno("cannot open or read '%s'", read_from);
+			break;
+		case S_IFLNK:
+			if (strbuf_readlink(&buf, read_from, st.st_size) < 0)
+				die_errno("cannot readlink '%s'", read_from);
+			break;
+		default:
+			die("unsupported file type %s", read_from);
+		}
+	}
+
+
+// Source: blame.c
+// Lines 176-257

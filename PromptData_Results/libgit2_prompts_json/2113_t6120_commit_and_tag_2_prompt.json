@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'commit_msg' at line 3\n2. Pointer 'ref' at line 8\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void commit_and_tag(\n\tgit_time_t *time,\n\tconst char *commit_msg,\n\tconst char *tag_name)\n{\n\tgit_index *index;\n\tgit_oid commit_id;\n\tgit_reference *ref;\n\t\n\tcl_git_pass(git_repository_index__weakptr(&index, repo));\n\n\tcl_git_append2file(\"describe/file\", \"\\n\");\n\t\n\tcl_git_pass(git_index_add_bypath(index, \"file\"));\n\tcl_git_pass(git_index_write(index));\n\n\t*time += 10;\n\tcl_repo_commit_from_index(&commit_id, repo, NULL, *time, commit_msg);\n\n\tif (tag_name == NULL)\n\t\treturn;\n\n\tcl_git_pass(git_reference_create(&ref, repo, tag_name, &commit_id, 0, NULL));\n\tgit_reference_free(ref);\n}\n\n\n// Source: t6120.c\n// Lines 94-118\n",
+  "ANSWER": "MUST-NOT"
+}

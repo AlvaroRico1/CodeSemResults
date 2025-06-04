@@ -1,0 +1,32 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'group' at line 3
+2. Pointer 'file' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static __poll_t inotify_poll(struct file *file, poll_table *wait)
+{
+	struct fsnotify_group *group = file->private_data;
+	__poll_t ret = 0;
+
+	poll_wait(file, &group->notification_waitq, wait);
+	spin_lock(&group->notification_lock);
+	if (!fsnotify_notify_queue_is_empty(group))
+		ret = EPOLLIN | EPOLLRDNORM;
+	spin_unlock(&group->notification_lock);
+
+	return ret;
+}
+
+
+// Source: inotify_user.c
+// Lines 100-112
+
+
+[ANSWER]
+MUST

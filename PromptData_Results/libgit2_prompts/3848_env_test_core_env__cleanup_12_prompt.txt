@@ -1,0 +1,40 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'i' at line 3
+2. Pointer 'val' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_core_env__cleanup(void)
+{
+	int i;
+	char **val;
+
+	for (i = 0; i < NUM_VARS; ++i) {
+		cl_setenv(env_vars[i], env_save[i]);
+		git__free(env_save[i]);
+		env_save[i] = NULL;
+	}
+
+	/* these will probably have already been cleaned up, but if a test
+	 * fails, then it's probably good to try and clear out these dirs
+	 */
+	for (val = home_values; *val != NULL; val++) {
+		if (**val != '\0')
+			(void)p_rmdir(*val);
+	}
+
+	cl_sandbox_set_search_path_defaults();
+}
+
+
+// Source: env.c
+// Lines 46-66
+
+
+[ANSWER]
+MUST-NOT

@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'p' at line 5
+2. Pointer 'ops' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+struct proc_dir_entry *proc_create_net_data(const char *name, umode_t mode,
+		struct proc_dir_entry *parent, const struct seq_operations *ops,
+		unsigned int state_size, void *data)
+{
+	struct proc_dir_entry *p;
+
+	p = proc_create_reg(name, mode, &parent, data);
+	if (!p)
+		return NULL;
+	pde_force_lookup(p);
+	p->proc_fops = &proc_net_seq_fops;
+	p->seq_ops = ops;
+	p->state_size = state_size;
+	return proc_register(parent, p);
+}
+
+
+// Source: proc_net.c
+// Lines 101-115
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 't' at line 17\n2. Pointer 'task' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int do_io_accounting(struct task_struct *task, struct seq_file *m, int whole)\n{\n\tstruct task_io_accounting acct = task->ioac;\n\tunsigned long flags;\n\tint result;\n\n\tresult = mutex_lock_killable(&task->signal->cred_guard_mutex);\n\tif (result)\n\t\treturn result;\n\n\tif (!ptrace_may_access(task, PTRACE_MODE_READ_FSCREDS)) {\n\t\tresult = -EACCES;\n\t\tgoto out_unlock;\n\t}\n\n\tif (whole && lock_task_sighand(task, &flags)) {\n\t\tstruct task_struct *t = task;\n\n\t\ttask_io_accounting_add(&acct, &task->signal->ioac);\n\t\twhile_each_thread(task, t)\n\t\t\ttask_io_accounting_add(&acct, &t->ioac);\n\n\t\tunlock_task_sighand(task, &flags);\n\t}\n\n\n// Source: base.c\n// Lines 2767-2790\n",
+  "ANSWER": "MUST"
+}

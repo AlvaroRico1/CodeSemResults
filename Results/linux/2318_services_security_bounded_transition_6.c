@@ -1,0 +1,80 @@
+int security_bounded_transition(struct selinux_state *state,
+				u32 old_sid, u32 new_sid)
+{
+	struct policydb *policydb;
+	struct sidtab *sidtab;
+	struct context *old_context, *new_context;
+	struct type_datum *type;
+	int index;
+	int rc;
+
+	if (!state->initialized)
+		return 0;
+
+	read_lock(&state->ss->policy_rwlock);
+
+	policydb = &state->ss->policydb;
+	sidtab = state->ss->sidtab;
+
+	rc = -EINVAL;
+	old_context = sidtab_search(sidtab, old_sid);
+	if (!old_context) {
+		pr_err("SELinux: %s: unrecognized SID %u\n",
+		       __func__, old_sid);
+		goto out;
+	}
+
+	rc = -EINVAL;
+	new_context = sidtab_search(sidtab, new_sid);
+	if (!new_context) {
+		pr_err("SELinux: %s: unrecognized SID %u\n",
+		       __func__, new_sid);
+		goto out;
+	}
+
+	rc = 0;
+	/* type/domain unchanged */
+	if (old_context->type == new_context->type)
+		goto out;
+
+	index = new_context->type;
+	while (true) {
+		type = policydb->type_val_to_struct_array[index - 1];
+		BUG_ON(!type);
+
+		/* not bounded anymore */
+		rc = -EPERM;
+		if (!type->bounds)
+			break;
+
+		/* @newsid is bounded by @oldsid */
+		rc = 0;
+		if (type->bounds == old_context->type)
+			break;
+
+		index = type->bounds;
+	}
+
+	if (rc) {
+		char *old_name = NULL;
+		char *new_name = NULL;
+		u32 length;
+
+		if (!context_struct_to_string(policydb, old_context,
+					      &old_name, &length) &&
+		    !context_struct_to_string(policydb, new_context,
+					      &new_name, &length)) {
+			audit_log(audit_context(),
+				  GFP_ATOMIC, AUDIT_SELINUX_ERR,
+				  "op=security_bounded_transition "
+				  "seresult=denied "
+				  "oldcontext=%s newcontext=%s",
+				  old_name, new_name);
+		}
+		kfree(new_name);
+		kfree(old_name);
+	}
+
+
+// Source: services.c
+// Lines 853-928

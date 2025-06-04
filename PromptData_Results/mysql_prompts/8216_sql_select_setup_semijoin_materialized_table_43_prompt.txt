@@ -1,0 +1,167 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'emb_sj_nest' at line 5
+2. Pointer 'inner_pos' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool JOIN::setup_semijoin_materialized_table(JOIN_TAB *tab, uint tableno,
+                                             POSITION *inner_pos,
+                                             POSITION *sjm_pos) {
+  DBUG_TRACE;
+  TABLE_LIST *const emb_sj_nest = inner_pos->table->emb_sj_nest;
+  Semijoin_mat_optimize *const sjm_opt = &emb_sj_nest->nested_join->sjm;
+  Semijoin_mat_exec *const sjm_exec = tab->sj_mat_exec();
+  const uint field_count = emb_sj_nest->nested_join->sj_inner_exprs.size();
+
+  assert(field_count > 0);
+  assert(inner_pos->sj_strategy == SJ_OPT_MATERIALIZE_LOOKUP ||
+         inner_pos->sj_strategy == SJ_OPT_MATERIALIZE_SCAN);
+
+  /*
+    Set up the table to write to, do as
+    Query_result_union::create_result_table does
+  */
+  sjm_exec->table_param = Temp_table_param();
+  count_field_types(query_block, &sjm_exec->table_param,
+                    emb_sj_nest->nested_join->sj_inner_exprs, false, true);
+  sjm_exec->table_param.bit_fields_as_long = true;
+
+  char buffer[NAME_LEN];
+  const size_t len = snprintf(buffer, sizeof(buffer) - 1, "<subquery%u>",
+                              emb_sj_nest->nested_join->query_block_id);
+  char *name = (char *)thd->mem_root->Alloc(len + 1);
+  if (name == nullptr) return true; /* purecov: inspected */
+
+  memcpy(name, buffer, len);
+  name[len] = '\0';
+  TABLE *table;
+  if (!(table =
+            create_tmp_table(thd, &sjm_exec->table_param,
+                             emb_sj_nest->nested_join->sj_inner_exprs, nullptr,
+                             true /* distinct */, true /* save_sum_fields */,
+                             thd->variables.option_bits | TMP_TABLE_ALL_COLUMNS,
+                             HA_POS_ERROR /* rows_limit */, name)))
+    return true; /* purecov: inspected */
+  sjm_exec->table = table;
+  map2table[tableno] = tab;
+  table->file->ha_extra(HA_EXTRA_IGNORE_DUP_KEY);
+  sj_tmp_tables.push_back(table);
+  sjm_exec_list.push_back(sjm_exec);
+
+  /*
+    Hash_field is not applicable for MATERIALIZE_LOOKUP. If hash_field is
+    created for temporary table, semijoin_types_allow_materialization must
+    assure that MATERIALIZE_LOOKUP can't be chosen.
+  */
+  assert((inner_pos->sj_strategy == SJ_OPT_MATERIALIZE_LOOKUP &&
+          !table->hash_field) ||
+         inner_pos->sj_strategy == SJ_OPT_MATERIALIZE_SCAN);
+
+  auto tl = new (thd->mem_root) TABLE_LIST("", name, TL_IGNORE);
+  if (tl == nullptr) return true; /* purecov: inspected */
+  tl->table = table;
+
+  /*
+    If the SJ nest is inside an outer join nest, this tmp table belongs to
+    it. It's important for attachment of the semi-join ON condition with the
+    proper guards, to this table. If it's an AJ nest it's an outer join
+    nest too.
+  */
+  if (emb_sj_nest->is_aj_nest())
+    tl->embedding = emb_sj_nest;
+  else
+    tl->embedding = emb_sj_nest->outer_join_nest();
+  /*
+    Above, we do not set tl->emb_sj_nest, neither first_sj_inner nor
+    last_sj_inner; it's because there's no use to say that this table is part
+    of the SJ nest; but it's necessary to say that it's part of any outer join
+    nest. The antijoin nest is an outer join nest, but from the POV of the
+    sj-tmp table it's only an outer join nest, so there is no need to set
+    emb_sj_nest even in this case.
+  */
+
+  // Table is "nullable" if inner table of an outer_join
+  if (tl->is_inner_table_of_outer_join()) table->set_nullable();
+
+  tl->set_tableno(tableno);
+
+  table->pos_in_table_list = tl;
+  table->pos_in_table_list->query_block = query_block;
+
+  if (!(sjm_opt->mat_fields = (Item_field **)thd->mem_root->Alloc(
+            field_count * sizeof(Item_field **))))
+    return true;
+
+  for (uint fieldno = 0; fieldno < field_count; fieldno++) {
+    if (!(sjm_opt->mat_fields[fieldno] =
+              new Item_field(table->visible_field_ptr()[fieldno])))
+      return true;
+  }
+
+  tab->table_ref = tl;
+  tab->set_table(table);
+  tab->set_position(sjm_pos);
+
+  tab->worst_seeks = 1.0;
+  tab->set_records((ha_rows)emb_sj_nest->nested_join->sjm.expected_rowcount);
+
+  tab->found_records = tab->records();
+  tab->read_time = emb_sj_nest->nested_join->sjm.scan_cost.total_cost();
+
+  tab->init_join_cond_ref(tl);
+
+  table->keys_in_use_for_query.set_all();
+  sjm_pos->table = tab;
+  sjm_pos->sj_strategy = SJ_OPT_NONE;
+
+  sjm_pos->use_join_buffer = false;
+  /*
+    No need to recalculate filter_effect since there are no post-read
+    conditions for materialized tables.
+  */
+  sjm_pos->filter_effect = 1.0;
+
+  /*
+    Key_use objects are required so that create_ref_for_key() can set up
+    a proper ref access for this table.
+  */
+  Key_use_array *keyuse =
+      create_keyuse_for_table(thd, field_count, sjm_opt->mat_fields,
+                              emb_sj_nest->nested_join->sj_outer_exprs);
+  if (!keyuse) return true;
+
+  double fanout = ((uint)tab->idx() == const_tables)
+                      ? 1.0
+                      : best_ref[tab->idx() - 1]->position()->prefix_rowcount;
+  if (!sjm_exec->is_scan) {
+    sjm_pos->key = keyuse->begin();  // MaterializeLookup will use the index
+    sjm_pos->read_cost =
+        emb_sj_nest->nested_join->sjm.lookup_cost.total_cost() * fanout;
+    tab->set_keyuse(keyuse->begin());
+    tab->keys().set_bit(0);  // There is one index - use it always
+    tab->set_index(0);
+    sjm_pos->rows_fetched = 1.0;
+    tab->set_type(JT_REF);
+  } else {
+    sjm_pos->key = nullptr;  // No index use for MaterializeScan
+    sjm_pos->read_cost = tab->read_time * fanout;
+    sjm_pos->rows_fetched = static_cast<double>(tab->records());
+    tab->set_type(JT_ALL);
+  }
+  sjm_pos->set_prefix_join_cost((tab - join_tab), cost_model());
+
+  return false;
+}
+
+
+// Source: sql_select.cc
+// Lines 2935-3082
+
+
+[ANSWER]
+MUST

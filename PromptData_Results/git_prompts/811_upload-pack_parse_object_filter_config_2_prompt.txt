@@ -1,0 +1,53 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'sub_len' at line 6
+2. Pointer 'sub' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int parse_object_filter_config(const char *var, const char *value,
+				       struct upload_pack_data *data)
+{
+	struct strbuf buf = STRBUF_INIT;
+	const char *sub, *key;
+	size_t sub_len;
+
+	if (parse_config_key(var, "uploadpackfilter", &sub, &sub_len, &key))
+		return 0;
+
+	if (!sub) {
+		if (!strcmp(key, "allow"))
+			data->allow_filter_fallback = git_config_bool(var, value);
+		return 0;
+	}
+
+	strbuf_add(&buf, sub, sub_len);
+
+	if (!strcmp(key, "allow"))
+		string_list_insert(&data->allowed_filters, buf.buf)->util =
+			(void *)(intptr_t)git_config_bool(var, value);
+	else if (!strcmp(buf.buf, "tree") && !strcmp(key, "maxdepth")) {
+		if (!value) {
+			strbuf_release(&buf);
+			return config_error_nonbool(var);
+		}
+		string_list_insert(&data->allowed_filters, buf.buf)->util =
+			(void *)(intptr_t)1;
+		data->tree_filter_max_depth = git_config_ulong(var, value);
+	}
+
+	strbuf_release(&buf);
+	return 0;
+}
+
+
+// Source: upload-pack.c
+// Lines 1250-1283
+
+
+[ANSWER]
+MAY

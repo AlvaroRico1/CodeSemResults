@@ -1,0 +1,174 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'el' at line 1
+2. Pointer 'm' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+tty_stty(EditLine *el, int argc __attribute__((__unused__)),
+    const wchar_t **argv)
+{
+	const ttymodes_t *m;
+	char x;
+	int aflag = 0;
+	const wchar_t *s, *d;
+        char name[EL_BUFSIZ];
+	struct termios *tios = &el->el_tty.t_ex;
+	int z = EX_IO;
+
+	if (argv == NULL)
+		return -1;
+	strncpy(name, ct_encode_string(*argv++, &el->el_scratch), sizeof(name));
+        name[sizeof(name) - 1] = '\0';
+
+	while (argv && *argv && argv[0][0] == '-' && argv[0][2] == '\0')
+		switch (argv[0][1]) {
+		case 'a':
+			aflag++;
+			argv++;
+			break;
+		case 'd':
+			argv++;
+			tios = &el->el_tty.t_ed;
+			z = ED_IO;
+			break;
+		case 'x':
+			argv++;
+			tios = &el->el_tty.t_ex;
+			z = EX_IO;
+			break;
+		case 'q':
+			argv++;
+			tios = &el->el_tty.t_ts;
+			z = QU_IO;
+			break;
+		default:
+			(void) fprintf(el->el_errfile,
+			    "%s: Unknown switch `%lc'.\n",
+			    name, (wint_t)argv[0][1]);
+			return -1;
+		}
+
+	if (!argv || !*argv) {
+		int i = -1;
+		size_t len = 0, st = 0, cu;
+		for (m = ttymodes; m->m_name; m++) {
+			if (m->m_type != i) {
+				(void) fprintf(el->el_outfile, "%s%s",
+				    i != -1 ? "\n" : "",
+				    el->el_tty.t_t[z][m->m_type].t_name);
+				i = m->m_type;
+				st = len =
+				    strlen(el->el_tty.t_t[z][m->m_type].t_name);
+			}
+			if (i != -1) {
+			    x = (el->el_tty.t_t[z][i].t_setmask & m->m_value)
+				?  '+' : '\0';
+
+			    if (el->el_tty.t_t[z][i].t_clrmask & m->m_value)
+				x = '-';
+			} else {
+			    x = '\0';
+			}
+
+			if (x != '\0' || aflag) {
+
+				cu = strlen(m->m_name) + (x != '\0') + 1;
+
+				if (len + cu >=
+				    (size_t)el->el_terminal.t_size.h) {
+					(void) fprintf(el->el_outfile, "\n%*s",
+					    (int)st, "");
+					len = st + cu;
+				} else
+					len += cu;
+
+				if (x != '\0')
+					(void) fprintf(el->el_outfile, "%c%s ",
+					    x, m->m_name);
+				else
+					(void) fprintf(el->el_outfile, "%s ",
+					    m->m_name);
+			}
+		}
+		(void) fprintf(el->el_outfile, "\n");
+		return 0;
+	}
+	while (argv && (s = *argv++)) {
+		const wchar_t *p;
+		switch (*s) {
+		case '+':
+		case '-':
+			x = (char)*s++;
+			break;
+		default:
+			x = '\0';
+			break;
+		}
+		d = s;
+		p = wcschr(s, L'=');
+		for (m = ttymodes; m->m_name; m++)
+			if ((p ? strncmp(m->m_name, ct_encode_string(d,
+			    &el->el_scratch), (size_t)(p - d)) :
+			    strcmp(m->m_name, ct_encode_string(d,
+			    &el->el_scratch))) == 0 &&
+			    (p == NULL || m->m_type == MD_CHAR))
+				break;
+
+		if (!m->m_name) {
+			(void) fprintf(el->el_errfile,
+			    "%s: Invalid argument `%ls'.\n", name, d);
+			return -1;
+		}
+		if (p) {
+			int c = ffs((int)m->m_value);
+			int v = *++p ? parse__escape(&p) :
+			    el->el_tty.t_vdisable;
+			assert(c != 0);
+			c--;
+			c = tty__getcharindex(c);
+			assert(c != -1);
+			tios->c_cc[c] = (cc_t)v;
+			continue;
+		}
+		switch (x) {
+		case '+':
+			el->el_tty.t_t[z][m->m_type].t_setmask |= m->m_value;
+			el->el_tty.t_t[z][m->m_type].t_clrmask &= ~m->m_value;
+			break;
+		case '-':
+			el->el_tty.t_t[z][m->m_type].t_setmask &= ~m->m_value;
+			el->el_tty.t_t[z][m->m_type].t_clrmask |= m->m_value;
+			break;
+		default:
+			el->el_tty.t_t[z][m->m_type].t_setmask &= ~m->m_value;
+			el->el_tty.t_t[z][m->m_type].t_clrmask &= ~m->m_value;
+			break;
+		}
+	}
+
+	tty_setup_flags(el, tios, z);
+	if (el->el_tty.t_mode == z) {
+		if (tty_setty(el, TCSADRAIN, tios) == -1) {
+#ifdef DEBUG_TTY
+			(void) fprintf(el->el_errfile, "%s: tty_setty: %s\n",
+			    __func__, strerror(errno));
+#endif /* DEBUG_TTY */
+			return -1;
+		}
+	}
+
+	return 0;
+}
+
+
+// Source: tty.c
+// Lines 1153-1307
+
+
+[ANSWER]
+MAY

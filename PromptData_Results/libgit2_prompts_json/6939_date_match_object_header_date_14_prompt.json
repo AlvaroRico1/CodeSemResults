@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'date' at line 1\n2. Pointer 'end' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int match_object_header_date(const char *date, git_time_t *timestamp, int *offset)\n{\n\tchar *end;\n\tunsigned long stamp;\n\tint ofs;\n\n\tif (*date < '0' || '9' <= *date)\n\t\treturn -1;\n\tstamp = strtoul(date, &end, 10);\n\tif (*end != ' ' || stamp == ULONG_MAX || (end[1] != '+' && end[1] != '-'))\n\t\treturn -1;\n\tdate = end + 2;\n\tofs = strtol(date, &end, 10);\n\tif ((*end != '\\0' && (*end != '\\n')) || end != date + 4)\n\t\treturn -1;\n\tofs = (ofs / 100) * 60 + (ofs % 100);\n\tif (date[-1] == '-')\n\t\tofs = -ofs;\n\t*timestamp = stamp;\n\t*offset = ofs;\n\treturn 0;\n}\n\n\n// Source: date.c\n// Lines 458-479\n",
+  "ANSWER": "MUST"
+}

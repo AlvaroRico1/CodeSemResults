@@ -1,0 +1,1 @@
+original_options,protobuf/src/google/protobuf/descriptor.cc,6,options_to_interpret,protobuf/src/google/protobuf/descriptor.cc,2,1

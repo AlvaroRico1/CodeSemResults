@@ -1,0 +1,26 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'cs' at line 3
+2. Pointer 'c' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+control_get_pane(struct client *c, struct window_pane *wp)
+{
+	struct control_state	*cs = c->control_state;
+	struct control_pane	 cp = { .pane = wp->id };
+
+	return (RB_FIND(control_panes, &cs->panes, &cp));
+}
+
+
+// Source: control.c
+// Lines 235-241
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'lzf' at line 7\n2. Pointer 'node' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nREDIS_STATIC int __quicklistDecompressNode(quicklistNode *node) {\n#ifdef REDIS_TEST\n    node->attempted_compress = 0;\n#endif\n\n    void *decompressed = zmalloc(node->sz);\n    quicklistLZF *lzf = (quicklistLZF *)node->zl;\n    if (lzf_decompress(lzf->compressed, lzf->sz, decompressed, node->sz) == 0) {\n        /* Someone requested decompress, but we can't decompress.  Not good. */\n        zfree(decompressed);\n        return 0;\n    }\n    zfree(lzf);\n    node->zl = decompressed;\n    node->encoding = QUICKLIST_NODE_ENCODING_RAW;\n    return 1;\n}\n\n\n// Source: quicklist.c\n// Lines 222-238\n",
+  "ANSWER": "MUST"
+}

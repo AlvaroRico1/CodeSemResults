@@ -1,0 +1,62 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'sp' at line 6
+2. Pointer 'state' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int nfs_delegation_claim_opens(struct inode *inode,
+		const nfs4_stateid *stateid, fmode_t type)
+{
+	struct nfs_inode *nfsi = NFS_I(inode);
+	struct nfs_open_context *ctx;
+	struct nfs4_state_owner *sp;
+	struct nfs4_state *state;
+	unsigned int seq;
+	int err;
+
+again:
+	rcu_read_lock();
+	list_for_each_entry_rcu(ctx, &nfsi->open_files, list) {
+		state = ctx->state;
+		if (state == NULL)
+			continue;
+		if (!test_bit(NFS_DELEGATED_STATE, &state->flags))
+			continue;
+		if (!nfs4_valid_open_stateid(state))
+			continue;
+		if (!nfs4_stateid_match(&state->stateid, stateid))
+			continue;
+		if (!get_nfs_open_context(ctx))
+			continue;
+		rcu_read_unlock();
+		sp = state->owner;
+		/* Block nfs4_proc_unlck */
+		mutex_lock(&sp->so_delegreturn_mutex);
+		seq = raw_seqcount_begin(&sp->so_reclaim_seqcount);
+		err = nfs4_open_delegation_recall(ctx, state, stateid);
+		if (!err)
+			err = nfs_delegation_claim_locks(state, stateid);
+		if (!err && read_seqcount_retry(&sp->so_reclaim_seqcount, seq))
+			err = -EAGAIN;
+		mutex_unlock(&sp->so_delegreturn_mutex);
+		put_nfs_open_context(ctx);
+		if (err != 0)
+			return err;
+		goto again;
+	}
+	rcu_read_unlock();
+	return 0;
+}
+
+
+// Source: delegation.c
+// Lines 127-169
+
+
+[ANSWER]
+MUST

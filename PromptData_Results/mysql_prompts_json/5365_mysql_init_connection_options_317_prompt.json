@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'mysql' at line 1\n2. Pointer 'timeout' at line 8\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic bool init_connection_options(MYSQL *mysql) {\n  bool handle_expired = (opt_connect_expired_password || !status.batch);\n\n  if (opt_init_command)\n    mysql_options(mysql, MYSQL_INIT_COMMAND, opt_init_command);\n\n  if (opt_connect_timeout) {\n    uint timeout = opt_connect_timeout;\n    mysql_options(mysql, MYSQL_OPT_CONNECT_TIMEOUT, (char *)&timeout);\n  }\n\n\n// Source: mysql.cc\n// Lines 4622-4631\n",
+  "ANSWER": "MAY"
+}

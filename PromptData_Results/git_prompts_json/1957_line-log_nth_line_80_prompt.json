@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'd' at line 3\n2. Pointer 'data' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic const char *nth_line(void *data, long line)\n{\n\tstruct nth_line_cb *d = data;\n\tassert(d && line <= d->lines);\n\tassert(d->spec && d->spec->data);\n\n\tif (line == 0)\n\t\treturn (char *)d->spec->data;\n\telse\n\t\treturn (char *)d->spec->data + d->line_ends[line] + 1;\n}\n\n\n// Source: line-log.c\n// Lines 549-559\n",
+  "ANSWER": "MUST"
+}

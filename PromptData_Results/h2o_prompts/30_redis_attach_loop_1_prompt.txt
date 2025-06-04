@@ -1,0 +1,41 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'p' at line 5
+2. Pointer 'p' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void attach_loop(redisAsyncContext *ac, h2o_loop_t *loop)
+{
+    redisContext *c = &(ac->c);
+
+    struct st_redis_socket_data_t *p = h2o_mem_alloc(sizeof(*p));
+    *p = (struct st_redis_socket_data_t){NULL};
+
+    ac->ev.addRead = socket_add_read;
+    ac->ev.delRead = socket_del_read;
+    ac->ev.addWrite = socket_add_write;
+    ac->ev.cleanup = socket_cleanup;
+    ac->ev.data = p;
+
+#if H2O_USE_LIBUV
+    p->socket = h2o_uv__poll_create(loop, c->fd, (uv_close_cb)free);
+#else
+    p->socket = h2o_evloop_socket_create(loop, c->fd, H2O_SOCKET_FLAG_DONT_READ);
+#endif
+
+    p->socket->data = p;
+    p->context = ac;
+}
+
+
+// Source: redis.c
+// Lines 390-411
+
+
+[ANSWER]
+MUST

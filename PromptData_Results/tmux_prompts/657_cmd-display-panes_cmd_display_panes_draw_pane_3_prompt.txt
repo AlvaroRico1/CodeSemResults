@@ -1,0 +1,156 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ptr' at line 12
+2. Pointer 'pane' at line 10
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+cmd_display_panes_draw_pane(struct screen_redraw_ctx *ctx,
+    struct window_pane *wp)
+{
+	struct client		*c = ctx->c;
+	struct tty		*tty = &c->tty;
+	struct session		*s = c->session;
+	struct options		*oo = s->options;
+	struct window		*w = wp->window;
+	struct grid_cell	 fgc, bgc;
+	u_int			 pane, idx, px, py, i, j, xoff, yoff, sx, sy;
+	int			 colour, active_colour;
+	char			 buf[16], lbuf[16], rbuf[16], *ptr;
+	size_t			 len, llen, rlen;
+
+	if (wp->xoff + wp->sx <= ctx->ox ||
+	    wp->xoff >= ctx->ox + ctx->sx ||
+	    wp->yoff + wp->sy <= ctx->oy ||
+	    wp->yoff >= ctx->oy + ctx->sy)
+		return;
+
+	if (wp->xoff >= ctx->ox && wp->xoff + wp->sx <= ctx->ox + ctx->sx) {
+		/* All visible. */
+		xoff = wp->xoff - ctx->ox;
+		sx = wp->sx;
+	} else if (wp->xoff < ctx->ox &&
+	    wp->xoff + wp->sx > ctx->ox + ctx->sx) {
+		/* Both left and right not visible. */
+		xoff = 0;
+		sx = ctx->sx;
+	} else if (wp->xoff < ctx->ox) {
+		/* Left not visible. */
+		xoff = 0;
+		sx = wp->sx - (ctx->ox - wp->xoff);
+	} else {
+		/* Right not visible. */
+		xoff = wp->xoff - ctx->ox;
+		sx = wp->sx - xoff;
+	}
+	if (wp->yoff >= ctx->oy && wp->yoff + wp->sy <= ctx->oy + ctx->sy) {
+		/* All visible. */
+		yoff = wp->yoff - ctx->oy;
+		sy = wp->sy;
+	} else if (wp->yoff < ctx->oy &&
+	    wp->yoff + wp->sy > ctx->oy + ctx->sy) {
+		/* Both top and bottom not visible. */
+		yoff = 0;
+		sy = ctx->sy;
+	} else if (wp->yoff < ctx->oy) {
+		/* Top not visible. */
+		yoff = 0;
+		sy = wp->sy - (ctx->oy - wp->yoff);
+	} else {
+		/* Bottom not visible. */
+		yoff = wp->yoff - ctx->oy;
+		sy = wp->sy - yoff;
+	}
+
+	if (ctx->statustop)
+		yoff += ctx->statuslines;
+	px = sx / 2;
+	py = sy / 2;
+
+	if (window_pane_index(wp, &pane) != 0)
+		fatalx("index not found");
+	len = xsnprintf(buf, sizeof buf, "%u", pane);
+
+	if (sx < len)
+		return;
+	colour = options_get_number(oo, "display-panes-colour");
+	active_colour = options_get_number(oo, "display-panes-active-colour");
+
+	memcpy(&fgc, &grid_default_cell, sizeof fgc);
+	memcpy(&bgc, &grid_default_cell, sizeof bgc);
+	if (w->active == wp) {
+		fgc.fg = active_colour;
+		bgc.bg = active_colour;
+	} else {
+		fgc.fg = colour;
+		bgc.bg = colour;
+	}
+
+	rlen = xsnprintf(rbuf, sizeof rbuf, "%ux%u", wp->sx, wp->sy);
+	if (pane > 9 && pane < 35)
+		llen = xsnprintf(lbuf, sizeof lbuf, "%c", 'a' + (pane - 10));
+	else
+		llen = 0;
+
+	if (sx < len * 6 || sy < 5) {
+		tty_attributes(tty, &fgc, &grid_default_cell, NULL);
+		if (sx >= len + llen + 1) {
+			len += llen + 1;
+			tty_cursor(tty, xoff + px - len / 2, yoff + py);
+			tty_putn(tty, buf, len,	 len);
+			tty_putn(tty, " ", 1, 1);
+			tty_putn(tty, lbuf, llen, llen);
+		} else {
+			tty_cursor(tty, xoff + px - len / 2, yoff + py);
+			tty_putn(tty, buf, len, len);
+		}
+		goto out;
+	}
+
+	px -= len * 3;
+	py -= 2;
+
+	tty_attributes(tty, &bgc, &grid_default_cell, NULL);
+	for (ptr = buf; *ptr != '\0'; ptr++) {
+		if (*ptr < '0' || *ptr > '9')
+			continue;
+		idx = *ptr - '0';
+
+		for (j = 0; j < 5; j++) {
+			for (i = px; i < px + 5; i++) {
+				tty_cursor(tty, xoff + i, yoff + py + j);
+				if (window_clock_table[idx][j][i - px])
+					tty_putc(tty, ' ');
+			}
+		}
+		px += 6;
+	}
+
+	if (sy <= 6)
+		goto out;
+	tty_attributes(tty, &fgc, &grid_default_cell, NULL);
+	if (rlen != 0 && sx >= rlen) {
+		tty_cursor(tty, xoff + sx - rlen, yoff);
+		tty_putn(tty, rbuf, rlen, rlen);
+	}
+	if (llen != 0) {
+		tty_cursor(tty, xoff + sx / 2 + len * 3 - llen - 1,
+		    yoff + py + 5);
+		tty_putn(tty, lbuf, llen, llen);
+	}
+
+out:
+	tty_cursor(tty, 0, 0);
+}
+
+
+// Source: cmd-display-panes.c
+// Lines 59-195
+
+
+[ANSWER]
+MUST-NOT

@@ -1,0 +1,68 @@
+static int load_revindex_from_disk(char *revindex_name,
+				   uint32_t num_objects,
+				   const uint32_t **data_p, size_t *len_p)
+{
+	int fd, ret = 0;
+	struct stat st;
+	void *data = NULL;
+	size_t revindex_size;
+	struct revindex_header *hdr;
+
+	fd = git_open(revindex_name);
+
+	if (fd < 0) {
+		ret = -1;
+		goto cleanup;
+	}
+	if (fstat(fd, &st)) {
+		ret = error_errno(_("failed to read %s"), revindex_name);
+		goto cleanup;
+	}
+
+	revindex_size = xsize_t(st.st_size);
+
+	if (revindex_size < RIDX_MIN_SIZE) {
+		ret = error(_("reverse-index file %s is too small"), revindex_name);
+		goto cleanup;
+	}
+
+	if (revindex_size - RIDX_MIN_SIZE != st_mult(sizeof(uint32_t), num_objects)) {
+		ret = error(_("reverse-index file %s is corrupt"), revindex_name);
+		goto cleanup;
+	}
+
+	data = xmmap(NULL, revindex_size, PROT_READ, MAP_PRIVATE, fd, 0);
+	hdr = data;
+
+	if (ntohl(hdr->signature) != RIDX_SIGNATURE) {
+		ret = error(_("reverse-index file %s has unknown signature"), revindex_name);
+		goto cleanup;
+	}
+	if (ntohl(hdr->version) != 1) {
+		ret = error(_("reverse-index file %s has unsupported version %"PRIu32),
+			    revindex_name, ntohl(hdr->version));
+		goto cleanup;
+	}
+	if (!(ntohl(hdr->hash_id) == 1 || ntohl(hdr->hash_id) == 2)) {
+		ret = error(_("reverse-index file %s has unsupported hash id %"PRIu32),
+			    revindex_name, ntohl(hdr->hash_id));
+		goto cleanup;
+	}
+
+cleanup:
+	if (ret) {
+		if (data)
+			munmap(data, revindex_size);
+	} else {
+		*len_p = revindex_size;
+		*data_p = (const uint32_t *)data;
+	}
+
+	if (fd >= 0)
+		close(fd);
+	return ret;
+}
+
+
+// Source: pack-revindex.c
+// Lines 197-260

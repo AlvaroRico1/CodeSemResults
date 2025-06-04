@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'expected' at line 1
+2. Pointer 'offset' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void overwrite_filemode(const char *expected, git_buf *actual)
+{
+	size_t offset;
+	char *found;
+
+	found = strstr(expected, "100644");
+	if (!found)
+		return;
+
+	offset = ((const char *)found) - expected;
+	if (actual->size < offset + 6)
+		return;
+
+	if (memcmp(&actual->ptr[offset], "100644", 6) != 0)
+		memcpy(&actual->ptr[offset], "100644", 6);
+}
+
+
+// Source: drivers.c
+// Lines 18-33
+
+
+[ANSWER]
+MUST-NOT

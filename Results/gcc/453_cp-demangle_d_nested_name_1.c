@@ -1,0 +1,36 @@
+d_nested_name (struct d_info *di)
+{
+  struct demangle_component *ret;
+  struct demangle_component **pret;
+  struct demangle_component *rqual;
+
+  if (! d_check_char (di, 'N'))
+    return NULL;
+
+  pret = d_cv_qualifiers (di, &ret, 1);
+  if (pret == NULL)
+    return NULL;
+
+  /* Parse the ref-qualifier now and then attach it
+     once we have something to attach it to.  */
+  rqual = d_ref_qualifier (di, NULL);
+
+  *pret = d_prefix (di);
+  if (*pret == NULL)
+    return NULL;
+
+  if (rqual)
+    {
+      d_left (rqual) = ret;
+      ret = rqual;
+    }
+
+  if (! d_check_char (di, 'E'))
+    return NULL;
+
+  return ret;
+}
+
+
+// Source: cp-demangle.c
+// Lines 1496-1527

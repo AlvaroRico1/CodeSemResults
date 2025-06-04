@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'emb_sj_nest' at line 2\n2. Pointer 'item_field' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic uint get_semi_join_select_list_index(Item_field *item_field) {\n  TABLE_LIST *emb_sj_nest = item_field->table_ref->embedding;\n  if (emb_sj_nest && emb_sj_nest->is_sj_or_aj_nest()) {\n    const mem_root_deque<Item *> &items =\n        emb_sj_nest->nested_join->sj_inner_exprs;\n    for (size_t i = 0; i < items.size(); i++) {\n      const Item *sel_item = items[i];\n      if (sel_item->type() == Item::FIELD_ITEM &&\n          down_cast<const Item_field *>(sel_item)->field->eq(item_field->field))\n        return i;\n    }\n  }\n  return UINT_MAX;\n}\n\n\n// Source: sql_optimizer.cc\n// Lines 6640-6653\n",
+  "ANSWER": "MUST"
+}

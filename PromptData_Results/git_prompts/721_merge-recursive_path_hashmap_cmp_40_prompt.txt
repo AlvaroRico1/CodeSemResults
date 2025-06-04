@@ -1,0 +1,32 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'key' at line 7
+2. Pointer 'keydata' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int path_hashmap_cmp(const void *cmp_data,
+			    const struct hashmap_entry *eptr,
+			    const struct hashmap_entry *entry_or_key,
+			    const void *keydata)
+{
+	const struct path_hashmap_entry *a, *b;
+	const char *key = keydata;
+
+	a = container_of(eptr, const struct path_hashmap_entry, e);
+	b = container_of(entry_or_key, const struct path_hashmap_entry, e);
+
+	return fspathcmp(a->path, key ? key : b->path);
+}
+
+
+// Source: merge-recursive.c
+// Lines 48-60
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,1 @@
+scrap_key_field_ptr,mysql/sql/sql_optimizer.cc,211,scrap_key_field,mysql/sql/sql_optimizer.cc,210,1

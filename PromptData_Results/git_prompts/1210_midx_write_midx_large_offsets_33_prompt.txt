@@ -1,0 +1,47 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'end' at line 6
+2. Pointer 'ctx' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int write_midx_large_offsets(struct hashfile *f,
+				    void *data)
+{
+	struct write_midx_context *ctx = data;
+	struct pack_midx_entry *list = ctx->entries;
+	struct pack_midx_entry *end = ctx->entries + ctx->entries_nr;
+	uint32_t nr_large_offset = ctx->num_large_offsets;
+
+	while (nr_large_offset) {
+		struct pack_midx_entry *obj;
+		uint64_t offset;
+
+		if (list >= end)
+			BUG("too many large-offset objects");
+
+		obj = list++;
+		offset = obj->offset;
+
+		if (!(offset >> 31))
+			continue;
+
+		hashwrite_be64(f, offset);
+
+		nr_large_offset--;
+	}
+
+	return 0;
+}
+
+
+// Source: midx.c
+// Lines 784-811
+
+
+[ANSWER]
+MUST

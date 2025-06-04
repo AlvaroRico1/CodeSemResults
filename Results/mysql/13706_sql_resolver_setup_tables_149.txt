@@ -1,0 +1,1 @@
+table,mysql/sql/sql_resolver.cc,28,tr,mysql/sql/sql_resolver.cc,27,1

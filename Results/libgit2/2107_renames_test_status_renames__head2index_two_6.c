@@ -1,0 +1,43 @@
+void test_status_renames__head2index_two(void)
+{
+	git_index *index;
+	git_status_list *statuslist;
+	git_status_options opts = GIT_STATUS_OPTIONS_INIT;
+	struct status_entry expected[] = {
+		{ GIT_STATUS_INDEX_RENAMED | GIT_STATUS_INDEX_MODIFIED,
+		  "sixserving.txt", "aaa.txt" },
+		{ GIT_STATUS_INDEX_RENAMED | GIT_STATUS_INDEX_MODIFIED,
+		  "untimely.txt", "bbb.txt" },
+		{ GIT_STATUS_INDEX_RENAMED, "songof7cities.txt", "ccc.txt" },
+		{ GIT_STATUS_INDEX_RENAMED, "ikeepsix.txt", "ddd.txt" },
+	};
+
+	opts.flags |= GIT_STATUS_OPT_RENAMES_HEAD_TO_INDEX;
+
+	cl_git_pass(git_repository_index(&index, g_repo));
+
+	rename_file(g_repo, "ikeepsix.txt", "ddd.txt");
+	rename_and_edit_file(g_repo, "sixserving.txt", "aaa.txt");
+	rename_file(g_repo, "songof7cities.txt", "ccc.txt");
+	rename_and_edit_file(g_repo, "untimely.txt", "bbb.txt");
+
+	cl_git_pass(git_index_remove_bypath(index, "ikeepsix.txt"));
+	cl_git_pass(git_index_remove_bypath(index, "sixserving.txt"));
+	cl_git_pass(git_index_remove_bypath(index, "songof7cities.txt"));
+	cl_git_pass(git_index_remove_bypath(index, "untimely.txt"));
+	cl_git_pass(git_index_add_bypath(index, "ddd.txt"));
+	cl_git_pass(git_index_add_bypath(index, "aaa.txt"));
+	cl_git_pass(git_index_add_bypath(index, "ccc.txt"));
+	cl_git_pass(git_index_add_bypath(index, "bbb.txt"));
+	cl_git_pass(git_index_write(index));
+
+	cl_git_pass(git_status_list_new(&statuslist, g_repo, &opts));
+	check_status(statuslist, expected, 4);
+	git_status_list_free(statuslist);
+
+	git_index_free(index);
+}
+
+
+// Source: renames.c
+// Lines 119-157

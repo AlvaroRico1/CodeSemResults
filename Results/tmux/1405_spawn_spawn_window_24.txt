@@ -1,0 +1,1 @@
+s,tmux/spawn.c,5,sc,tmux/spawn.c,1,1

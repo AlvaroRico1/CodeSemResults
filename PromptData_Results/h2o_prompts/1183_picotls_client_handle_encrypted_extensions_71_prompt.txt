@@ -1,0 +1,144 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'esni_nonce' at line 3
+2. Pointer 'src' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int client_handle_encrypted_extensions(ptls_t *tls, ptls_iovec_t message, ptls_handshake_properties_t *properties)
+{
+    const uint8_t *src = message.base + PTLS_HANDSHAKE_HEADER_SIZE, *const end = message.base + message.len, *esni_nonce = NULL;
+    uint16_t type;
+    static const ptls_raw_extension_t no_unknown_extensions = {UINT16_MAX};
+    ptls_raw_extension_t *unknown_extensions = (ptls_raw_extension_t *)&no_unknown_extensions;
+    int ret, skip_early_data = 1;
+    uint8_t server_offered_cert_type = PTLS_CERTIFICATE_TYPE_X509;
+
+    decode_extensions(src, end, PTLS_HANDSHAKE_TYPE_ENCRYPTED_EXTENSIONS, &type, {
+        if (tls->ctx->on_extension != NULL &&
+            (ret = tls->ctx->on_extension->cb(tls->ctx->on_extension, tls, PTLS_HANDSHAKE_TYPE_ENCRYPTED_EXTENSIONS, type,
+                                              ptls_iovec_init(src, end - src)) != 0))
+            goto Exit;
+        switch (type) {
+        case PTLS_EXTENSION_TYPE_SERVER_NAME:
+            if (src != end) {
+                ret = PTLS_ALERT_DECODE_ERROR;
+                goto Exit;
+            }
+            if (!(tls->server_name != NULL && !ptls_server_name_is_ipaddr(tls->server_name))) {
+                ret = PTLS_ALERT_ILLEGAL_PARAMETER;
+                goto Exit;
+            }
+            break;
+        case PTLS_EXTENSION_TYPE_ENCRYPTED_SERVER_NAME:
+            if (*src == PTLS_ESNI_RESPONSE_TYPE_ACCEPT) {
+                if (end - src != PTLS_ESNI_NONCE_SIZE + 1) {
+                    ret = PTLS_ALERT_ILLEGAL_PARAMETER;
+                    goto Exit;
+                }
+                esni_nonce = src + 1;
+            } else {
+                /* TODO: provide API to parse the RETRY REQUEST response */
+                ret = PTLS_ERROR_ESNI_RETRY;
+                goto Exit;
+            }
+            break;
+        case PTLS_EXTENSION_TYPE_ALPN:
+            ptls_decode_block(src, end, 2, {
+                ptls_decode_open_block(src, end, 1, {
+                    if (src == end) {
+                        ret = PTLS_ALERT_DECODE_ERROR;
+                        goto Exit;
+                    }
+                    if ((ret = ptls_set_negotiated_protocol(tls, (const char *)src, end - src)) != 0)
+                        goto Exit;
+                    src = end;
+                });
+                if (src != end) {
+                    ret = PTLS_ALERT_HANDSHAKE_FAILURE;
+                    goto Exit;
+                }
+            });
+            break;
+        case PTLS_EXTENSION_TYPE_EARLY_DATA:
+            if (!tls->client.using_early_data) {
+                ret = PTLS_ALERT_ILLEGAL_PARAMETER;
+                goto Exit;
+            }
+            skip_early_data = 0;
+            break;
+        case PTLS_EXTENSION_TYPE_SERVER_CERTIFICATE_TYPE:
+            if (end - src != 1) {
+                ret = PTLS_ALERT_DECODE_ERROR;
+                goto Exit;
+            }
+            server_offered_cert_type = *src;
+            src = end;
+            break;
+        default:
+            if (should_collect_unknown_extension(tls, properties, type)) {
+                if (unknown_extensions == &no_unknown_extensions) {
+                    if ((unknown_extensions = malloc(sizeof(*unknown_extensions) * (MAX_UNKNOWN_EXTENSIONS + 1))) == NULL) {
+                        ret = PTLS_ERROR_NO_MEMORY;
+                        goto Exit;
+                    }
+                    unknown_extensions[0].type = UINT16_MAX;
+                }
+                if ((ret = collect_unknown_extension(tls, type, src, end, unknown_extensions)) != 0)
+                    goto Exit;
+            }
+            break;
+        }
+        src = end;
+    });
+
+    if (server_offered_cert_type !=
+        (tls->ctx->use_raw_public_keys ? PTLS_CERTIFICATE_TYPE_RAW_PUBLIC_KEY : PTLS_CERTIFICATE_TYPE_X509)) {
+        ret = PTLS_ALERT_UNSUPPORTED_CERTIFICATE;
+        goto Exit;
+    }
+
+    if (tls->esni != NULL) {
+        if (esni_nonce == NULL || !ptls_mem_equal(esni_nonce, tls->esni->nonce, PTLS_ESNI_NONCE_SIZE)) {
+            ret = PTLS_ALERT_ILLEGAL_PARAMETER;
+            goto Exit;
+        }
+        free_esni_secret(&tls->esni, 0);
+    } else {
+        if (esni_nonce != NULL) {
+            ret = PTLS_ALERT_ILLEGAL_PARAMETER;
+            goto Exit;
+        }
+    }
+
+    if (tls->client.using_early_data) {
+        if (skip_early_data)
+            tls->client.using_early_data = 0;
+        if (properties != NULL)
+            properties->client.early_data_acceptance = skip_early_data ? PTLS_EARLY_DATA_REJECTED : PTLS_EARLY_DATA_ACCEPTED;
+    }
+    if ((ret = report_unknown_extensions(tls, properties, unknown_extensions)) != 0)
+        goto Exit;
+
+    ptls__key_schedule_update_hash(tls->key_schedule, message.base, message.len);
+    tls->state =
+        tls->is_psk_handshake ? PTLS_STATE_CLIENT_EXPECT_FINISHED : PTLS_STATE_CLIENT_EXPECT_CERTIFICATE_REQUEST_OR_CERTIFICATE;
+    ret = PTLS_ERROR_IN_PROGRESS;
+
+Exit:
+    if (unknown_extensions != &no_unknown_extensions)
+        free(unknown_extensions);
+    return ret;
+}
+
+
+// Source: picotls.c
+// Lines 2449-2573
+
+
+[ANSWER]
+MUST

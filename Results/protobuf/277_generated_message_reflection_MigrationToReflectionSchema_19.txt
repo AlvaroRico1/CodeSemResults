@@ -1,0 +1,1 @@
+result,protobuf/src/google/protobuf/generated_message_reflection.cc,4,offsets,protobuf/src/google/protobuf/generated_message_reflection.cc,2,1

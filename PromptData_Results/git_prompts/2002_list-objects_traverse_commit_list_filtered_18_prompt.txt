@@ -1,0 +1,37 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ctx' at line 9
+2. Pointer 'show_data' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void traverse_commit_list_filtered(
+	struct list_objects_filter_options *filter_options,
+	struct rev_info *revs,
+	show_commit_fn show_commit,
+	show_object_fn show_object,
+	void *show_data,
+	struct oidset *omitted)
+{
+	struct traversal_context ctx;
+
+	ctx.revs = revs;
+	ctx.show_object = show_object;
+	ctx.show_commit = show_commit;
+	ctx.show_data = show_data;
+	ctx.filter = list_objects_filter__init(omitted, filter_options);
+	do_traverse(&ctx);
+	list_objects_filter__free(ctx.filter);
+}
+
+
+// Source: list-objects.c
+// Lines 433-450
+
+
+[ANSWER]
+MUST

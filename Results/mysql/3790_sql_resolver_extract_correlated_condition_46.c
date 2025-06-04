@@ -1,0 +1,61 @@
+static bool extract_correlated_condition(THD *thd, Item **cond,
+                                         Item **correlated_cond) {
+  Item_cond *or_condition = down_cast<Item_cond *>(*cond);
+  Item *cor_pred = nullptr;
+  bool found = false;
+  for (Item &item : *or_condition->argument_list()) {
+    Mem_root_array<Item *> cond_parts(thd->mem_root);
+    ExtractConditions(&item, &cond_parts);  // all elements AND'ed
+    found = false;
+    for (Item *pred : cond_parts) {
+      // Check if we have a correlated condition that is present in all the
+      // arguments to this OR condition. Only then we can extract it.
+      if (pred->is_outer_reference()) {
+        // If the correlated condition itself is disjuntive, we reject.
+        if (pred->type() == Item::COND_ITEM) return true;
+        // If this is the first argument to the OR condition, we need to be
+        // finding this correlated condition in all other arguments of the OR
+        // condition
+        if (cor_pred == nullptr) cor_pred = pred;
+        // If it is not the first argument to the OR condition, we already
+        // have a predicate with us that we need to look for in this argument.
+        // So, continue to search until we find it.
+        else if (!cor_pred->eq(pred, false))
+          continue;
+        found = true;
+        if (check_predicate_and_args(cor_pred)) return true;
+        break;
+      }
+    }
+    if (!found) return true;
+  }
+
+  // We now have a correlated condition that could be extracted. So we remove
+  // the condition from each of the arguments of the OR condition and return
+  // the correlated condition to the caller.
+  List_iterator<Item> li(*(or_condition->argument_list()));
+  Item *item;
+  while ((item = li++)) {
+    Mem_root_array<Item *> cond_parts(thd->mem_root);
+    ExtractConditions(item, &cond_parts);  // all elements AND'ed
+    std::vector<Item *> final_args;
+    for (Item *pred : cond_parts) {
+      if (!cor_pred->eq(pred, false)) final_args.push_back(pred);
+    }
+    if (final_args.size() == 0)
+      li.remove();
+    else {
+      auto *tmp_cond = down_cast<Item_cond *>(*li.ref());
+      tmp_cond->argument_list()->clear();
+      for (Item *pred : final_args) tmp_cond->argument_list()->push_back(pred);
+      li.replace(tmp_cond);
+    }
+  }
+  or_condition->update_used_tables();
+  *correlated_cond = cor_pred;
+  return false;
+}
+
+
+// Source: sql_resolver.cc
+// Lines 6921-6977

@@ -1,0 +1,341 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'buf' at line 258
+2. Pointer 'fmacro' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+_cpp_scan_out_logical_line (cpp_reader *pfile, cpp_macro *macro,
+			    bool builtin_macro_arg)
+{
+  bool result = true;
+  cpp_context *context;
+  const uchar *cur;
+  uchar *out;
+  struct fun_macro fmacro;
+  unsigned int c, paren_depth = 0, quote;
+  enum ls lex_state = ls_none;
+  bool header_ok;
+  const uchar *start_of_input_line;
+
+  fmacro.buff = NULL;
+  fmacro.args = NULL;
+  fmacro.node = NULL;
+  fmacro.offset = 0;
+  fmacro.line = 0;
+  fmacro.paramc = 0;
+  fmacro.argc = 0;
+
+  quote = 0;
+  header_ok = pfile->state.angled_headers;
+  CUR (pfile->context) = pfile->buffer->cur;
+  RLIMIT (pfile->context) = pfile->buffer->rlimit;
+  if (!builtin_macro_arg)
+    {
+      pfile->out.cur = pfile->out.base;
+      pfile->out.first_line = pfile->line_table->highest_line;
+    }
+  /* start_of_input_line is needed to make sure that directives really,
+     really start at the first character of the line.  */
+  start_of_input_line = pfile->buffer->cur;
+ new_context:
+  context = pfile->context;
+  cur = CUR (context);
+  check_output_buffer (pfile, RLIMIT (context) - cur);
+  out = pfile->out.cur;
+
+  for (;;)
+    {
+      if (!context->prev
+	  && !builtin_macro_arg
+	  && cur >= pfile->buffer->notes[pfile->buffer->cur_note].pos)
+	{
+	  pfile->buffer->cur = cur;
+	  _cpp_process_line_notes (pfile, false);
+	}
+      c = *cur++;
+      *out++ = c;
+
+      /* Whitespace should "continue" out of the switch,
+	 non-whitespace should "break" out of it.  */
+      switch (c)
+	{
+	case ' ':
+	case '\t':
+	case '\f':
+	case '\v':
+	case '\0':
+	  continue;
+
+	case '\n':
+	  /* If this is a macro's expansion, pop it.  */
+	  if (context->prev)
+	    {
+	      pfile->out.cur = out - 1;
+	      _cpp_pop_context (pfile);
+	      goto new_context;
+	    }
+
+	  /* Omit the newline from the output buffer.  */
+	  pfile->out.cur = out - 1;
+	  pfile->buffer->cur = cur;
+	  if (builtin_macro_arg)
+	    goto done;
+	  pfile->buffer->need_line = true;
+	  CPP_INCREMENT_LINE (pfile, 0);
+
+	  if ((lex_state == ls_fun_open || lex_state == ls_fun_close)
+	      && !pfile->state.in_directive
+	      && _cpp_get_fresh_line (pfile))
+	    {
+	      /* Newlines in arguments become a space, but we don't
+		 clear any in-progress quote.  */
+	      if (lex_state == ls_fun_close)
+		out[-1] = ' ';
+	      cur = pfile->buffer->cur;
+	      continue;
+	    }
+	  goto done;
+
+	case '<':
+	  if (header_ok)
+	    quote = '>';
+	  break;
+	case '>':
+	  if (c == quote)
+	    quote = 0;
+	  break;
+
+	case '"':
+	case '\'':
+	  if (c == quote)
+	    quote = 0;
+	  else if (!quote)
+	    quote = c;
+	  break;
+
+	case '\\':
+	  /* Skip escaped quotes here, it's easier than above.  */
+	  if (*cur == '\\' || *cur == '"' || *cur == '\'')
+	    *out++ = *cur++;
+	  break;
+
+	case '/':
+	  /* Traditional CPP does not recognize comments within
+	     literals.  */
+	  if (!quote && *cur == '*')
+	    {
+	      pfile->out.cur = out;
+	      cur = copy_comment (pfile, cur, macro != 0);
+	      out = pfile->out.cur;
+	      continue;
+	    }
+	  break;
+
+	case '_':
+	case 'a': case 'b': case 'c': case 'd': case 'e': case 'f':
+	case 'g': case 'h': case 'i': case 'j': case 'k': case 'l':
+	case 'm': case 'n': case 'o': case 'p': case 'q': case 'r':
+	case 's': case 't': case 'u': case 'v': case 'w': case 'x':
+	case 'y': case 'z':
+	case 'A': case 'B': case 'C': case 'D': case 'E': case 'F':
+	case 'G': case 'H': case 'I': case 'J': case 'K': case 'L':
+	case 'M': case 'N': case 'O': case 'P': case 'Q': case 'R':
+	case 'S': case 'T': case 'U': case 'V': case 'W': case 'X':
+	case 'Y': case 'Z':
+	  if (!pfile->state.skipping && (quote == 0 || macro))
+	    {
+	      cpp_hashnode *node;
+	      uchar *out_start = out - 1;
+
+	      pfile->out.cur = out_start;
+	      node = lex_identifier (pfile, cur - 1);
+	      out = pfile->out.cur;
+	      cur = CUR (context);
+
+	      if (cpp_macro_p (node)
+		  /* Should we expand for ls_answer?  */
+		  && (lex_state == ls_none || lex_state == ls_fun_open)
+		  && !pfile->state.prevent_expansion)
+		{
+		  /* Macros invalidate MI optimization.  */
+		  pfile->mi_valid = false;
+		  if (fun_like_macro (node))
+		    {
+		      maybe_start_funlike (pfile, node, out_start, &fmacro);
+		      lex_state = ls_fun_open;
+		      fmacro.line = pfile->line_table->highest_line;
+		      continue;
+		    }
+		  else if (!recursive_macro (pfile, node))
+		    {
+		      /* Remove the object-like macro's name from the
+			 output, and push its replacement text.  */
+		      pfile->out.cur = out_start;
+		      push_replacement_text (pfile, node);
+		      lex_state = ls_none;
+		      goto new_context;
+		    }
+		}
+	      else if (macro && node->type == NT_MACRO_ARG)
+		{
+		  /* Found a parameter in the replacement text of a
+		     #define.  Remove its name from the output.  */
+		  pfile->out.cur = out_start;
+		  save_replacement_text (pfile, macro, node->value.arg_index);
+		  out = pfile->out.base;
+		}
+	      else if (lex_state == ls_hash)
+		{
+		  lex_state = ls_predicate;
+		  continue;
+		}
+	      else if (pfile->state.in_expression
+		       && node == pfile->spec_nodes.n_defined)
+		{
+		  lex_state = ls_defined;
+		  continue;
+		}
+	    }
+	  break;
+
+	case '(':
+	  if (quote == 0)
+	    {
+	      paren_depth++;
+	      if (lex_state == ls_fun_open)
+		{
+		  if (recursive_macro (pfile, fmacro.node))
+		    lex_state = ls_none;
+		  else
+		    {
+		      lex_state = ls_fun_close;
+		      paren_depth = 1;
+		      out = pfile->out.base + fmacro.offset;
+		      fmacro.args[0] = fmacro.offset;
+		    }
+		}
+	      else if (lex_state == ls_predicate)
+		lex_state = ls_answer;
+	      else if (lex_state == ls_defined)
+		lex_state = ls_defined_close;
+	    }
+	  break;
+
+	case ',':
+	  if (quote == 0 && lex_state == ls_fun_close && paren_depth == 1)
+	    save_argument (&fmacro, out - pfile->out.base);
+	  break;
+
+	case ')':
+	  if (quote == 0)
+	    {
+	      paren_depth--;
+	      if (lex_state == ls_fun_close && paren_depth == 0)
+		{
+		  if (cpp_builtin_macro_p (fmacro.node))
+		    {
+		      /* Handle builtin function-like macros like
+			 __has_attribute.  The already parsed arguments
+			 are put into a buffer, which is then preprocessed
+			 and the result is fed to _cpp_push_text_context
+			 with disabled expansion, where the ISO preprocessor
+			 parses it.  While in traditional preprocessing
+			 macro arguments aren't immediately expanded, they in
+			 the end are because the macro with replaced arguments
+			 is preprocessed again.  For the builtin function-like
+			 macros we need the argument immediately though,
+			 if we don't preprocess them, they would behave
+			 very differently from ISO preprocessor handling
+			 of those builtin macros.  So, this handling is
+			 more similar to traditional preprocessing of
+			 #if directives, where we also keep preprocessing
+			 until everything is expanded, and then feed the
+			 result with disabled expansion to ISO preprocessor
+			 for handling the directives.  */
+		      lex_state = ls_none;
+		      save_argument (&fmacro, out - pfile->out.base);
+		      cpp_macro m;
+		      memset (&m, '\0', sizeof (m));
+		      m.paramc = fmacro.paramc;
+		      if (_cpp_arguments_ok (pfile, &m, fmacro.node,
+					     fmacro.argc))
+			{
+			  size_t len = fmacro.args[1] - fmacro.args[0];
+			  uchar *buf;
+
+			  /* Remove the macro's invocation from the
+			     output, and push its replacement text.  */
+			  pfile->out.cur = pfile->out.base + fmacro.offset;
+			  CUR (context) = cur;
+			  buf = _cpp_unaligned_alloc (pfile, len + 2);
+			  buf[0] = '(';
+			  memcpy (buf + 1, pfile->out.base + fmacro.args[0],
+				  len);
+			  buf[len + 1] = '\n';
+
+			  const unsigned char *ctx_rlimit = RLIMIT (context);
+			  const unsigned char *saved_cur = pfile->buffer->cur;
+			  const unsigned char *saved_rlimit
+			    = pfile->buffer->rlimit;
+			  const unsigned char *saved_line_base
+			    = pfile->buffer->line_base;
+			  bool saved_need_line = pfile->buffer->need_line;
+			  cpp_buffer *saved_overlaid_buffer
+			    = pfile->overlaid_buffer;
+			  pfile->buffer->cur = buf;
+			  pfile->buffer->line_base = buf;
+			  pfile->buffer->rlimit = buf + len + 1;
+			  pfile->buffer->need_line = false;
+			  pfile->overlaid_buffer = pfile->buffer;
+			  bool saved_in_directive = pfile->state.in_directive;
+			  pfile->state.in_directive = true;
+			  cpp_context *saved_prev_context = context->prev;
+			  context->prev = NULL;
+
+			  _cpp_scan_out_logical_line (pfile, NULL, true);
+
+			  pfile->state.in_directive = saved_in_directive;
+			  check_output_buffer (pfile, 1);
+			  *pfile->out.cur = '\n';
+			  pfile->buffer->cur = pfile->out.base + fmacro.offset;
+			  pfile->buffer->line_base = pfile->buffer->cur;
+			  pfile->buffer->rlimit = pfile->out.cur;
+			  CUR (context) = pfile->buffer->cur;
+			  RLIMIT (context) = pfile->buffer->rlimit;
+
+			  pfile->state.prevent_expansion++;
+			  const uchar *text
+			    = _cpp_builtin_macro_text (pfile, fmacro.node);
+			  pfile->state.prevent_expansion--;
+
+			  context->prev = saved_prev_context;
+			  pfile->buffer->cur = saved_cur;
+			  pfile->buffer->rlimit = saved_rlimit;
+			  pfile->buffer->line_base = saved_line_base;
+			  pfile->buffer->need_line = saved_need_line;
+			  pfile->overlaid_buffer = saved_overlaid_buffer;
+			  pfile->out.cur = pfile->out.base + fmacro.offset;
+			  CUR (context) = cur;
+			  RLIMIT (context) = ctx_rlimit;
+			  len = ustrlen (text);
+			  buf = _cpp_unaligned_alloc (pfile, len + 1);
+			  memcpy (buf, text, len);
+			  buf[len] = '\n';
+			  text = buf;
+			  _cpp_push_text_context (pfile, fmacro.node,
+						  text, len);
+			  goto new_context;
+			}
+
+
+// Source: traditional.c
+// Lines 377-698
+
+
+[ANSWER]
+MAY

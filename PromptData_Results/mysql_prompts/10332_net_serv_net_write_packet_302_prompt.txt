@@ -1,0 +1,59 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'do_compress' at line 12
+2. Pointer 'length' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool net_write_packet(NET *net, const uchar *packet, size_t length) {
+  bool res;
+  DBUG_TRACE;
+
+  /* Socket can't be used */
+  if (net->error == NET_ERROR_SOCKET_UNUSABLE ||
+      net->error == NET_ERROR_SOCKET_NOT_WRITABLE)
+    return true;
+
+  net->reading_or_writing = 2;
+
+  const bool do_compress = net->compress;
+  if (do_compress) {
+    if ((packet = compress_packet(net, packet, &length)) == nullptr) {
+      net->error = NET_ERROR_SOCKET_UNUSABLE;
+      net->last_errno = ER_OUT_OF_RESOURCES;
+      /* In the server, allocation failure raises a error. */
+      net->reading_or_writing = 0;
+      return true;
+    }
+  }
+
+#ifdef DEBUG_DATA_PACKETS
+  DBUG_DUMP("data", packet, length);
+#endif
+
+  res = net_write_raw_loop(net, packet, length);
+
+  if (do_compress) my_free(const_cast<uchar *>(packet));
+
+  net->reading_or_writing = 0;
+
+  /* Socket can't be used any more */
+  if (net->error == NET_ERROR_SOCKET_NOT_READABLE) {
+    net->error = NET_ERROR_SOCKET_UNUSABLE;
+    return true;
+  }
+
+  return res;
+}
+
+
+// Source: net_serv.cc
+// Lines 1286-1325
+
+
+[ANSWER]
+MUST-NOT

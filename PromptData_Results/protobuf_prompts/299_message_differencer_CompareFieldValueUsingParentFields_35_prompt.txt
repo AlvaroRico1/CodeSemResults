@@ -1,0 +1,57 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'specific_field' at line 27
+2. Pointer 'field' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool MessageDifferencer::CompareFieldValueUsingParentFields(
+    const Message& message1, const Message& message2,
+    const FieldDescriptor* field, int index1, int index2,
+    std::vector<SpecificField>* parent_fields) {
+  FieldContext field_context(parent_fields);
+  FieldComparator::ComparisonResult result = GetFieldComparisonResult(
+      message1, message2, field, index1, index2, &field_context);
+
+  if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE &&
+      result == FieldComparator::RECURSE) {
+    // Get the nested messages and compare them using one of the Compare
+    // methods.
+    const Reflection* reflection1 = message1.GetReflection();
+    const Reflection* reflection2 = message2.GetReflection();
+    const Message& m1 =
+        field->is_repeated()
+            ? reflection1->GetRepeatedMessage(message1, field, index1)
+            : reflection1->GetMessage(message1, field);
+    const Message& m2 =
+        field->is_repeated()
+            ? reflection2->GetRepeatedMessage(message2, field, index2)
+            : reflection2->GetMessage(message2, field);
+
+    // parent_fields is used in calls to Reporter methods.
+    if (parent_fields != NULL) {
+      // Append currently compared field to the end of parent_fields.
+      SpecificField specific_field;
+      specific_field.field = field;
+      AddSpecificIndex(&specific_field, message1, field, index1);
+      AddSpecificNewIndex(&specific_field, message2, field, index2);
+      parent_fields->push_back(specific_field);
+      const bool compare_result = Compare(m1, m2, parent_fields);
+      parent_fields->pop_back();
+      return compare_result;
+    } else {
+      // Recreates parent_fields as if m1 and m2 had no parents.
+      return Compare(m1, m2);
+    }
+
+
+// Source: message_differencer.cc
+// Lines 1278-1315
+
+
+[ANSWER]
+MUST

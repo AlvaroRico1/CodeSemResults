@@ -1,0 +1,1 @@
+tentry,libgit2/tests/libgit2/clone/nonetwork.c,10,stage,libgit2/tests/libgit2/clone/nonetwork.c,3,0

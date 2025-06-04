@@ -1,0 +1,1 @@
+exclude_patterns,git/log-tree.c,5,filter,git/log-tree.c,2,1

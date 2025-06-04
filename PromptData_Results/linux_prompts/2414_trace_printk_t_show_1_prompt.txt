@@ -1,0 +1,55 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'str' at line 4
+2. Pointer 'fmt' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int t_show(struct seq_file *m, void *v)
+{
+	const char **fmt = v;
+	const char *str = *fmt;
+	int i;
+
+	if (!*fmt)
+		return 0;
+
+	seq_printf(m, "0x%lx : \"", *(unsigned long *)fmt);
+
+	/*
+	 * Tabs and new lines need to be converted.
+	 */
+	for (i = 0; str[i]; i++) {
+		switch (str[i]) {
+		case '\n':
+			seq_puts(m, "\\n");
+			break;
+		case '\t':
+			seq_puts(m, "\\t");
+			break;
+		case '\\':
+			seq_putc(m, '\\');
+			break;
+		case '"':
+			seq_puts(m, "\\\"");
+			break;
+		default:
+			seq_putc(m, str[i]);
+		}
+	}
+	seq_puts(m, "\"\n");
+
+	return 0;
+}
+
+
+// Source: trace_printk.c
+// Lines 299-334
+
+
+[ANSWER]
+MAY

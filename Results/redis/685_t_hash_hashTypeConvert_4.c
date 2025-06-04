@@ -1,0 +1,58 @@
+void hashTypeConvert(robj *o, int enc) {
+    if (o->encoding == OBJ_ENCODING_ZIPLIST) {
+        hashTypeConvertZiplist(o, enc);
+    } else if (o->encoding == OBJ_ENCODING_HT) {
+        serverPanic("Not implemented");
+    } else {
+        serverPanic("Unknown hash encoding");
+    }
+}
+
+/* This is a helper function for the COPY command.
+ * Duplicate a hash object, with the guarantee that the returned object
+ * has the same encoding as the original one.
+ *
+ * The resulting object always has refcount set to 1 */
+robj *hashTypeDup(robj *o) {
+    robj *hobj;
+    hashTypeIterator *hi;
+
+    serverAssert(o->type == OBJ_HASH);
+
+    if(o->encoding == OBJ_ENCODING_ZIPLIST){
+        unsigned char *zl = o->ptr;
+        size_t sz = ziplistBlobLen(zl);
+        unsigned char *new_zl = zmalloc(sz);
+        memcpy(new_zl, zl, sz);
+        hobj = createObject(OBJ_HASH, new_zl);
+        hobj->encoding = OBJ_ENCODING_ZIPLIST;
+    } else if(o->encoding == OBJ_ENCODING_HT){
+        dict *d = dictCreate(&hashDictType, NULL);
+        dictExpand(d, dictSize((const dict*)o->ptr));
+
+        hi = hashTypeInitIterator(o);
+        while (hashTypeNext(hi) != C_ERR) {
+            sds field, value;
+            sds newfield, newvalue;
+            /* Extract a field-value pair from an original hash object.*/
+            field = hashTypeCurrentFromHashTable(hi, OBJ_HASH_KEY);
+            value = hashTypeCurrentFromHashTable(hi, OBJ_HASH_VALUE);
+            newfield = sdsdup(field);
+            newvalue = sdsdup(value);
+
+            /* Add a field-value pair to a new hash object. */
+            dictAdd(d,newfield,newvalue);
+        }
+        hashTypeReleaseIterator(hi);
+
+        hobj = createObject(OBJ_HASH, d);
+        hobj->encoding = OBJ_ENCODING_HT;
+    } else {
+        serverPanic("Unknown hash encoding");
+    }
+    return hobj;
+}
+
+
+// Source: t_hash.c
+// Lines 499-552

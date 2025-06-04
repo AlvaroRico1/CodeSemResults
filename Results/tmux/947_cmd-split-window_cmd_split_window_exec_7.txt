@@ -1,0 +1,1 @@
+sc,tmux/cmd-split-window.c,6,wl,tmux/cmd-split-window.c,9,1

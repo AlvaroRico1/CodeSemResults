@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ka' at line 3\n2. Pointer 'kb' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic double ratio(Bigint *a, Bigint *b) {\n  U da, db;\n  int k, ka, kb;\n\n  dval(&da) = b2d(a, &ka);\n  dval(&db) = b2d(b, &kb);\n  k = ka - kb + 32 * (a->wds - b->wds);\n  if (k > 0)\n    word0(&da) += k * Exp_msk1;\n  else {\n    k = -k;\n    word0(&db) += k * Exp_msk1;\n  }\n  return dval(&da) / dval(&db);\n}\n\n\n// Source: dtoa.cc\n// Lines 1209-1223\n",
+  "ANSWER": "MAY"
+}

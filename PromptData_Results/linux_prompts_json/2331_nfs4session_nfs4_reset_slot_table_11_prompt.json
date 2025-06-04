@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'p' at line 5\n2. Pointer 'tbl' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void nfs4_reset_slot_table(struct nfs4_slot_table *tbl,\n\t\tu32 server_highest_slotid,\n\t\tu32 ivalue)\n{\n\tstruct nfs4_slot **p;\n\n\tnfs4_shrink_slot_table(tbl, server_highest_slotid + 1);\n\tp = &tbl->slots;\n\twhile (*p) {\n\t\t(*p)->seq_nr = ivalue;\n\t\t(*p)->seq_nr_highest_sent = ivalue;\n\t\t(*p)->seq_nr_last_acked = ivalue - 1;\n\t\tp = &(*p)->next;\n\t}\n\ttbl->highest_used_slotid = NFS4_NO_SLOT;\n\ttbl->target_highest_slotid = server_highest_slotid;\n\ttbl->server_highest_slotid = server_highest_slotid;\n\ttbl->d_target_highest_slotid = 0;\n\ttbl->d2_target_highest_slotid = 0;\n\ttbl->max_slotid = server_highest_slotid;\n}\n\n\n// Source: nfs4session.c\n// Lines 272-292\n",
+  "ANSWER": "MUST"
+}

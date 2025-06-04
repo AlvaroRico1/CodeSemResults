@@ -1,0 +1,1 @@
+hwirq,linux/kernel/irq/irqdomain.c,5,type,linux/kernel/irq/irqdomain.c,6,2

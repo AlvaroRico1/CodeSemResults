@@ -1,0 +1,457 @@
+analyze_function_body (struct cgraph_node *node, bool early)
+{
+  sreal time = opt_for_fn (node->decl, param_uninlined_function_time);
+  /* Estimate static overhead for function prologue/epilogue and alignment. */
+  int size = opt_for_fn (node->decl, param_uninlined_function_insns);
+  /* Benefits are scaled by probability of elimination that is in range
+     <0,2>.  */
+  basic_block bb;
+  struct function *my_function = DECL_STRUCT_FUNCTION (node->decl);
+  sreal freq;
+  class ipa_fn_summary *info = ipa_fn_summaries->get_create (node);
+  class ipa_node_params *params_summary = early ? NULL : IPA_NODE_REF (node);
+  predicate bb_predicate;
+  struct ipa_func_body_info fbi;
+  vec<predicate> nonconstant_names = vNULL;
+  int nblocks, n;
+  int *order;
+  gimple *fix_builtin_expect_stmt;
+
+  gcc_assert (my_function && my_function->cfg);
+  gcc_assert (cfun == my_function);
+
+  memset(&fbi, 0, sizeof(fbi));
+  vec_free (info->conds);
+  info->conds = NULL;
+  vec_free (info->size_time_table);
+  info->size_time_table = NULL;
+
+  /* When optimizing and analyzing for IPA inliner, initialize loop optimizer
+     so we can produce proper inline hints.
+
+     When optimizing and analyzing for early inliner, initialize node params
+     so we can produce correct BB predicates.  */
+     
+  if (opt_for_fn (node->decl, optimize))
+    {
+      calculate_dominance_info (CDI_DOMINATORS);
+      calculate_dominance_info (CDI_POST_DOMINATORS);
+      if (!early)
+        loop_optimizer_init (LOOPS_NORMAL | LOOPS_HAVE_RECORDED_EXITS);
+      else
+	{
+	  ipa_check_create_node_params ();
+	  ipa_initialize_node_params (node);
+	}
+
+      if (ipa_node_params_sum)
+	{
+	  fbi.node = node;
+	  fbi.info = IPA_NODE_REF (node);
+	  fbi.bb_infos = vNULL;
+	  fbi.bb_infos.safe_grow_cleared (last_basic_block_for_fn (cfun));
+	  fbi.param_count = count_formal_params (node->decl);
+	  fbi.aa_walk_budget = opt_for_fn (node->decl, param_ipa_max_aa_steps);
+
+	  nonconstant_names.safe_grow_cleared
+	    (SSANAMES (my_function)->length ());
+	}
+    }
+
+  if (dump_file)
+    fprintf (dump_file, "\nAnalyzing function body size: %s\n",
+	     node->dump_name ());
+
+  /* When we run into maximal number of entries, we assign everything to the
+     constant truth case.  Be sure to have it in list. */
+  bb_predicate = true;
+  info->account_size_time (0, 0, bb_predicate, bb_predicate);
+
+  bb_predicate = predicate::not_inlined ();
+  info->account_size_time (opt_for_fn (node->decl,
+				param_uninlined_function_insns)
+			   * ipa_fn_summary::size_scale,
+			   opt_for_fn (node->decl,
+				param_uninlined_function_time),
+			   bb_predicate,
+		           bb_predicate);
+
+  if (fbi.info)
+    compute_bb_predicates (&fbi, node, info, params_summary);
+  order = XNEWVEC (int, n_basic_blocks_for_fn (cfun));
+  nblocks = pre_and_rev_post_order_compute (NULL, order, false);
+  for (n = 0; n < nblocks; n++)
+    {
+      bb = BASIC_BLOCK_FOR_FN (cfun, order[n]);
+      freq = bb->count.to_sreal_scale (ENTRY_BLOCK_PTR_FOR_FN (cfun)->count);
+      if (clobber_only_eh_bb_p (bb))
+	{
+	  if (dump_file && (dump_flags & TDF_DETAILS))
+	    fprintf (dump_file, "\n Ignoring BB %i;"
+		     " it will be optimized away by cleanup_clobbers\n",
+		     bb->index);
+	  continue;
+	}
+
+      /* TODO: Obviously predicates can be propagated down across CFG.  */
+      if (fbi.info)
+	{
+	  if (bb->aux)
+	    bb_predicate = *(predicate *) bb->aux;
+	  else
+	    bb_predicate = false;
+	}
+      else
+	bb_predicate = true;
+
+      if (dump_file && (dump_flags & TDF_DETAILS))
+	{
+	  fprintf (dump_file, "\n BB %i predicate:", bb->index);
+	  bb_predicate.dump (dump_file, info->conds);
+	}
+
+      if (fbi.info && nonconstant_names.exists ())
+	{
+	  predicate phi_predicate;
+	  bool first_phi = true;
+
+	  for (gphi_iterator bsi = gsi_start_phis (bb); !gsi_end_p (bsi);
+	       gsi_next (&bsi))
+	    {
+	      if (first_phi
+		  && !phi_result_unknown_predicate (&fbi, info,
+			  			    params_summary,
+			 			    bb,
+						    &phi_predicate,
+						    nonconstant_names))
+		break;
+	      first_phi = false;
+	      if (dump_file && (dump_flags & TDF_DETAILS))
+		{
+		  fprintf (dump_file, "  ");
+		  print_gimple_stmt (dump_file, gsi_stmt (bsi), 0);
+		}
+	      predicate_for_phi_result (info, bsi.phi (), &phi_predicate,
+					nonconstant_names);
+	    }
+	}
+
+      fix_builtin_expect_stmt = find_foldable_builtin_expect (bb);
+
+      for (gimple_stmt_iterator bsi = gsi_start_nondebug_bb (bb);
+	   !gsi_end_p (bsi); gsi_next_nondebug (&bsi))
+	{
+	  gimple *stmt = gsi_stmt (bsi);
+	  int this_size = estimate_num_insns (stmt, &eni_size_weights);
+	  int this_time = estimate_num_insns (stmt, &eni_time_weights);
+	  int prob;
+	  predicate will_be_nonconstant;
+
+          /* This relation stmt should be folded after we remove
+             __builtin_expect call. Adjust the cost here.  */
+	  if (stmt == fix_builtin_expect_stmt)
+            {
+              this_size--;
+              this_time--;
+            }
+
+	  if (dump_file && (dump_flags & TDF_DETAILS))
+	    {
+	      fprintf (dump_file, "  ");
+	      print_gimple_stmt (dump_file, stmt, 0);
+	      fprintf (dump_file, "\t\tfreq:%3.2f size:%3i time:%3i\n",
+		       freq.to_double (), this_size,
+		       this_time);
+	    }
+
+	  if (is_gimple_call (stmt)
+	      && !gimple_call_internal_p (stmt))
+	    {
+	      struct cgraph_edge *edge = node->get_edge (stmt);
+	      ipa_call_summary *es = ipa_call_summaries->get_create (edge);
+
+	      /* Special case: results of BUILT_IN_CONSTANT_P will be always
+	         resolved as constant.  We however don't want to optimize
+	         out the cgraph edges.  */
+	      if (nonconstant_names.exists ()
+		  && gimple_call_builtin_p (stmt, BUILT_IN_CONSTANT_P)
+		  && gimple_call_lhs (stmt)
+		  && TREE_CODE (gimple_call_lhs (stmt)) == SSA_NAME)
+		{
+		  predicate false_p = false;
+		  nonconstant_names[SSA_NAME_VERSION (gimple_call_lhs (stmt))]
+		    = false_p;
+		}
+	      if (ipa_node_params_sum)
+		{
+		  int count = gimple_call_num_args (stmt);
+		  int i;
+
+		  if (count)
+		    es->param.safe_grow_cleared (count);
+		  for (i = 0; i < count; i++)
+		    {
+		      int prob = param_change_prob (&fbi, stmt, i);
+		      gcc_assert (prob >= 0 && prob <= REG_BR_PROB_BASE);
+		      es->param[i].change_prob = prob;
+		    }
+		}
+
+	      es->call_stmt_size = this_size;
+	      es->call_stmt_time = this_time;
+	      es->loop_depth = bb_loop_depth (bb);
+	      edge_set_predicate (edge, &bb_predicate);
+	      if (edge->speculative)
+		{
+		  cgraph_edge *indirect
+			= edge->speculative_call_indirect_edge ();
+	          ipa_call_summary *es2
+			 = ipa_call_summaries->get_create (indirect);
+		  ipa_call_summaries->duplicate (edge, indirect,
+						 es, es2);
+
+		  /* Edge is the first direct call.
+		     create and duplicate call summaries for multiple
+		     speculative call targets.  */
+		  for (cgraph_edge *direct
+			 = edge->next_speculative_call_target ();
+		       direct;
+		       direct = direct->next_speculative_call_target ())
+		    {
+		      ipa_call_summary *es3
+			= ipa_call_summaries->get_create (direct);
+		      ipa_call_summaries->duplicate (edge, direct,
+						     es, es3);
+		    }
+		}
+	    }
+
+	  /* TODO: When conditional jump or switch is known to be constant, but
+	     we did not translate it into the predicates, we really can account
+	     just maximum of the possible paths.  */
+	  if (fbi.info)
+	    will_be_nonconstant
+	      = will_be_nonconstant_predicate (&fbi, info, params_summary,
+					       stmt, nonconstant_names);
+	  else
+	    will_be_nonconstant = true;
+	  if (this_time || this_size)
+	    {
+	      sreal final_time = (sreal)this_time * freq;
+
+	      prob = eliminated_by_inlining_prob (&fbi, stmt);
+	      if (prob == 1 && dump_file && (dump_flags & TDF_DETAILS))
+		fprintf (dump_file,
+			 "\t\t50%% will be eliminated by inlining\n");
+	      if (prob == 2 && dump_file && (dump_flags & TDF_DETAILS))
+		fprintf (dump_file, "\t\tWill be eliminated by inlining\n");
+
+	      class predicate p = bb_predicate & will_be_nonconstant;
+
+	      /* We can ignore statement when we proved it is never going
+		 to happen, but we cannot do that for call statements
+		 because edges are accounted specially.  */
+
+	      if (*(is_gimple_call (stmt) ? &bb_predicate : &p) != false)
+		{
+		  time += final_time;
+		  size += this_size;
+		}
+
+	      /* We account everything but the calls.  Calls have their own
+	         size/time info attached to cgraph edges.  This is necessary
+	         in order to make the cost disappear after inlining.  */
+	      if (!is_gimple_call (stmt))
+		{
+		  if (prob)
+		    {
+		      predicate ip = bb_predicate & predicate::not_inlined ();
+		      info->account_size_time (this_size * prob,
+					       (final_time * prob) / 2, ip,
+					       p);
+		    }
+		  if (prob != 2)
+		    info->account_size_time (this_size * (2 - prob),
+					     (final_time * (2 - prob) / 2),
+					     bb_predicate,
+					     p);
+		}
+
+	      if (!info->fp_expressions && fp_expression_p (stmt))
+		{
+		  info->fp_expressions = true;
+		  if (dump_file)
+		    fprintf (dump_file, "   fp_expression set\n");
+		}
+	    }
+
+	  /* Account cost of address calculations in the statements.  */
+	  for (unsigned int i = 0; i < gimple_num_ops (stmt); i++)
+	    {
+	      for (tree op = gimple_op (stmt, i);
+		   op && handled_component_p (op);
+		   op = TREE_OPERAND (op, 0))
+	        if ((TREE_CODE (op) == ARRAY_REF
+		     || TREE_CODE (op) == ARRAY_RANGE_REF)
+		    && TREE_CODE (TREE_OPERAND (op, 1)) == SSA_NAME)
+		  {
+		    predicate p = bb_predicate;
+		    if (fbi.info)
+		      p = p & will_be_nonconstant_expr_predicate
+				 (&fbi, info, params_summary,
+				  TREE_OPERAND (op, 1),
+			          nonconstant_names);
+		    if (p != false)
+		      {
+			time += freq;
+			size += 1;
+			if (dump_file)
+			  fprintf (dump_file,
+				   "\t\tAccounting address calculation.\n");
+			info->account_size_time (ipa_fn_summary::size_scale,
+						 freq,
+						 bb_predicate,
+						 p);
+		      }
+		  }
+	    }
+
+	}
+    }
+  free (order);
+
+  if (nonconstant_names.exists () && !early)
+    {
+      class loop *loop;
+      predicate loop_iterations = true;
+      predicate loop_stride = true;
+
+      if (dump_file && (dump_flags & TDF_DETAILS))
+	flow_loops_dump (dump_file, NULL, 0);
+      scev_initialize ();
+      FOR_EACH_LOOP (loop, 0)
+	{
+	  vec<edge> exits;
+	  edge ex;
+	  unsigned int j;
+	  class tree_niter_desc niter_desc;
+	  if (loop->header->aux)
+	    bb_predicate = *(predicate *) loop->header->aux;
+	  else
+	    bb_predicate = false;
+
+	  exits = get_loop_exit_edges (loop);
+	  FOR_EACH_VEC_ELT (exits, j, ex)
+	    if (number_of_iterations_exit (loop, ex, &niter_desc, false)
+		&& !is_gimple_min_invariant (niter_desc.niter))
+	    {
+	      predicate will_be_nonconstant
+		= will_be_nonconstant_expr_predicate (&fbi, info,
+						      params_summary,
+						      niter_desc.niter,
+						      nonconstant_names);
+	      if (will_be_nonconstant != true)
+		will_be_nonconstant = bb_predicate & will_be_nonconstant;
+	      if (will_be_nonconstant != true
+		  && will_be_nonconstant != false)
+		/* This is slightly inprecise.  We may want to represent each
+		   loop with independent predicate.  */
+		loop_iterations &= will_be_nonconstant;
+	    }
+	  exits.release ();
+	}
+
+      /* To avoid quadratic behavior we analyze stride predicates only
+         with respect to the containing loop.  Thus we simply iterate
+	 over all defs in the outermost loop body.  */
+      for (loop = loops_for_fn (cfun)->tree_root->inner;
+	   loop != NULL; loop = loop->next)
+	{
+	  basic_block *body = get_loop_body (loop);
+	  for (unsigned i = 0; i < loop->num_nodes; i++)
+	    {
+	      gimple_stmt_iterator gsi;
+	      if (body[i]->aux)
+		bb_predicate = *(predicate *) body[i]->aux;
+	      else
+		bb_predicate = false;
+	      for (gsi = gsi_start_bb (body[i]); !gsi_end_p (gsi);
+		   gsi_next (&gsi))
+		{
+		  gimple *stmt = gsi_stmt (gsi);
+
+		  if (!is_gimple_assign (stmt))
+		    continue;
+
+		  tree def = gimple_assign_lhs (stmt);
+		  if (TREE_CODE (def) != SSA_NAME)
+		    continue;
+
+		  affine_iv iv;
+		  if (!simple_iv (loop_containing_stmt (stmt),
+				  loop_containing_stmt (stmt),
+				  def, &iv, true)
+		      || is_gimple_min_invariant (iv.step))
+		    continue;
+
+		  predicate will_be_nonconstant
+		    = will_be_nonconstant_expr_predicate (&fbi, info,
+				    			  params_summary,
+				   			  iv.step,
+							  nonconstant_names);
+		  if (will_be_nonconstant != true)
+		    will_be_nonconstant = bb_predicate & will_be_nonconstant;
+		  if (will_be_nonconstant != true
+		      && will_be_nonconstant != false)
+		    /* This is slightly inprecise.  We may want to represent
+		       each loop with independent predicate.  */
+		    loop_stride = loop_stride & will_be_nonconstant;
+		}
+	    }
+	  free (body);
+	}
+      ipa_fn_summary *s = ipa_fn_summaries->get (node);
+      set_hint_predicate (&s->loop_iterations, loop_iterations);
+      set_hint_predicate (&s->loop_stride, loop_stride);
+      scev_finalize ();
+    }
+  FOR_ALL_BB_FN (bb, my_function)
+    {
+      edge e;
+      edge_iterator ei;
+
+      if (bb->aux)
+	edge_predicate_pool.remove ((predicate *)bb->aux);
+      bb->aux = NULL;
+      FOR_EACH_EDGE (e, ei, bb->succs)
+	{
+	  if (e->aux)
+	    edge_predicate_pool.remove ((predicate *) e->aux);
+	  e->aux = NULL;
+	}
+    }
+  ipa_fn_summary *s = ipa_fn_summaries->get (node);
+  ipa_size_summary *ss = ipa_size_summaries->get (node);
+  s->time = time;
+  ss->self_size = size;
+  nonconstant_names.release ();
+  ipa_release_body_info (&fbi);
+  if (opt_for_fn (node->decl, optimize))
+    {
+      if (!early)
+        loop_optimizer_finalize ();
+      else if (!ipa_edge_args_sum)
+	ipa_free_all_node_params ();
+      free_dominance_info (CDI_DOMINATORS);
+      free_dominance_info (CDI_POST_DOMINATORS);
+    }
+  if (dump_file)
+    {
+      fprintf (dump_file, "\n");
+      ipa_dump_fn_summary (dump_file, node);
+    }
+}
+
+
+// Source: ipa-fnsummary.c
+// Lines 2432-2884

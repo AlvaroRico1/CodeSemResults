@@ -1,0 +1,1 @@
+payload,libgit2/tests/libgit2/diff/binary.c,5,buf,libgit2/tests/libgit2/diff/binary.c,7,0

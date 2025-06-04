@@ -1,0 +1,1 @@
+method,mysql/sql-common/compression.cc,44,ignore_errors,mysql/sql-common/compression.cc,4,0

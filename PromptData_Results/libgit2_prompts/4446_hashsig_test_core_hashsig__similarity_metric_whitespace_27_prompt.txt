@@ -1,0 +1,96 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'crlf_spaced2' at line 33
+2. Pointer 'opt' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_core_hashsig__similarity_metric_whitespace(void)
+{
+	git_hashsig *a, *b;
+	git_str buf = GIT_STR_INIT;
+	int sim, i, j;
+	git_hashsig_option_t opt;
+	const char *tabbed =
+		"	for (s = 0; s < sizeof(sep) / sizeof(char); ++s) {\n"
+		"		separator = sep[s];\n"
+		"		expect = expect_values[s];\n"
+		"\n"
+		"		for (j = 0; j < sizeof(b) / sizeof(char*); ++j) {\n"
+		"			for (i = 0; i < sizeof(a) / sizeof(char*); ++i) {\n"
+		"				git_str_join(&buf, separator, a[i], b[j]);\n"
+		"				cl_assert_equal_s(*expect, buf.ptr);\n"
+		"				expect++;\n"
+		"			}\n"
+		"		}\n"
+		"	}\n";
+	const char *spaced =
+		"   for (s = 0; s < sizeof(sep) / sizeof(char); ++s) {\n"
+		"       separator = sep[s];\n"
+		"       expect = expect_values[s];\n"
+		"\n"
+		"       for (j = 0; j < sizeof(b) / sizeof(char*); ++j) {\n"
+		"           for (i = 0; i < sizeof(a) / sizeof(char*); ++i) {\n"
+		"               git_str_join(&buf, separator, a[i], b[j]);\n"
+		"               cl_assert_equal_s(*expect, buf.ptr);\n"
+		"               expect++;\n"
+		"           }\n"
+		"       }\n"
+		"   }\n";
+	const char *crlf_spaced2 =
+		"  for (s = 0; s < sizeof(sep) / sizeof(char); ++s) {\r\n"
+		"    separator = sep[s];\r\n"
+		"    expect = expect_values[s];\r\n"
+		"\r\n"
+		"    for (j = 0; j < sizeof(b) / sizeof(char*); ++j) {\r\n"
+		"      for (i = 0; i < sizeof(a) / sizeof(char*); ++i) {\r\n"
+		"        git_str_join(&buf, separator, a[i], b[j]);\r\n"
+		"        cl_assert_equal_s(*expect, buf.ptr);\r\n"
+		"        expect++;\r\n"
+		"      }\r\n"
+		"    }\r\n"
+		"  }\r\n";
+	const char *text[3] = { tabbed, spaced, crlf_spaced2 };
+
+	/* let's try variations of our own code with whitespace changes */
+
+	for (opt = GIT_HASHSIG_NORMAL; opt <= GIT_HASHSIG_SMART_WHITESPACE; ++opt) {
+		for (i = 0; i < 3; ++i) {
+			for (j = 0; j < 3; ++j) {
+				cl_git_pass(git_str_sets(&buf, text[i]));
+				cl_git_pass(git_hashsig_create(&a, buf.ptr, buf.size, opt));
+
+				cl_git_pass(git_str_sets(&buf, text[j]));
+				cl_git_pass(git_hashsig_create(&b, buf.ptr, buf.size, opt));
+
+				sim = git_hashsig_compare(a, b);
+
+				if (opt == GIT_HASHSIG_NORMAL) {
+					if (i == j)
+						cl_assert_equal_i(100, sim);
+					else
+						cl_assert_in_range(0, sim, 30); /* pretty different */
+				} else {
+					cl_assert_equal_i(100, sim);
+				}
+
+				git_hashsig_free(a);
+				git_hashsig_free(b);
+			}
+		}
+	}
+
+	git_str_dispose(&buf);
+}
+
+
+// Source: hashsig.c
+// Lines 106-182
+
+
+[ANSWER]
+MUST-NOT

@@ -1,0 +1,46 @@
+screen_write_menu(struct screen_write_ctx *ctx, struct menu *menu,
+    int choice, const struct grid_cell *choice_gc)
+{
+	struct screen		*s = ctx->s;
+	struct grid_cell	 default_gc;
+	const struct grid_cell	*gc = &default_gc;
+	u_int			 cx, cy, i, j;
+	const char		*name;
+
+	cx = s->cx;
+	cy = s->cy;
+
+	memcpy(&default_gc, &grid_default_cell, sizeof default_gc);
+
+	screen_write_box(ctx, menu->width + 4, menu->count + 2,
+	    BOX_LINES_DEFAULT, &default_gc, menu->title);
+
+	for (i = 0; i < menu->count; i++) {
+		name = menu->items[i].name;
+		if (name == NULL) {
+			screen_write_cursormove(ctx, cx, cy + 1 + i, 0);
+			screen_write_hline(ctx, menu->width + 4, 1, 1);
+		} else {
+			if (choice >= 0 && i == (u_int)choice && *name != '-')
+				gc = choice_gc;
+			screen_write_cursormove(ctx, cx + 2, cy + 1 + i, 0);
+			for (j = 0; j < menu->width; j++)
+				screen_write_putc(ctx, gc, ' ');
+			screen_write_cursormove(ctx, cx + 2, cy + 1 + i, 0);
+			if (*name == '-') {
+				name++;
+				default_gc.attr |= GRID_ATTR_DIM;
+				format_draw(ctx, gc, menu->width, name, NULL);
+				default_gc.attr &= ~GRID_ATTR_DIM;
+			} else
+				format_draw(ctx, gc, menu->width, name, NULL);
+			gc = &default_gc;
+		}
+	}
+
+	screen_write_set_cursor(ctx, cx, cy);
+}
+
+
+// Source: screen-write.c
+// Lines 634-675

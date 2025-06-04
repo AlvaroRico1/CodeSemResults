@@ -1,0 +1,1 @@
+werror_arg,gcc/gcc/opts-common.c,234,argv,gcc/gcc/opts-common.c,1,2

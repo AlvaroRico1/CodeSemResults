@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'd' at line 5\n2. Pointer 'filter_data' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void filter_combine__finalize_omits(\n\tstruct oidset *omits,\n\tvoid *filter_data)\n{\n\tstruct combine_filter_data *d = filter_data;\n\tsize_t sub;\n\n\tfor (sub = 0; sub < d->nr; sub++) {\n\t\tadd_all(omits, &d->sub[sub].omits);\n\t\toidset_clear(&d->sub[sub].omits);\n\t}\n}\n\n\n// Source: list-objects-filter.c\n// Lines 723-734\n",
+  "ANSWER": "MUST"
+}

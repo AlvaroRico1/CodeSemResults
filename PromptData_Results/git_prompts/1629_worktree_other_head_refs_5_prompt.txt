@@ -1,0 +1,44 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'flag' at line 11
+2. Pointer 'worktrees' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int other_head_refs(each_ref_fn fn, void *cb_data)
+{
+	struct worktree **worktrees, **p;
+	struct strbuf refname = STRBUF_INIT;
+	int ret = 0;
+
+	worktrees = get_worktrees();
+	for (p = worktrees; *p; p++) {
+		struct worktree *wt = *p;
+		struct object_id oid;
+		int flag;
+
+		if (wt->is_current)
+			continue;
+
+		strbuf_reset(&refname);
+		strbuf_worktree_ref(wt, &refname, "HEAD");
+		if (!refs_read_ref_full(get_main_ref_store(the_repository),
+					refname.buf,
+					RESOLVE_REF_READING,
+					&oid, &flag))
+			ret = fn(refname.buf, &oid, flag, cb_data);
+		if (ret)
+			break;
+	}
+
+
+// Source: worktree.c
+// Lines 555-579
+
+
+[ANSWER]
+MAY

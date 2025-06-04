@@ -1,0 +1,28 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'write_data' at line 3
+2. Pointer 'data' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int write_on_comment(git_config_parser *reader, const char *line, size_t line_len, void *data)
+{
+	struct write_data *write_data;
+
+	GIT_UNUSED(reader);
+
+	write_data = (struct write_data *)data;
+	return write_line_to(&write_data->buffered_comment, line, line_len);
+}
+
+
+// Source: config_file.c
+// Lines 1075-1083
+
+
+[ANSWER]
+MUST

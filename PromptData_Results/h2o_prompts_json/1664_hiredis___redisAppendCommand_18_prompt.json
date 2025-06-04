@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'c' at line 1\n2. Pointer 'newbuf' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint __redisAppendCommand(redisContext *c, const char *cmd, size_t len) {\n    sds newbuf;\n\n    newbuf = sdscatlen(c->obuf,cmd,len);\n    if (newbuf == NULL) {\n        __redisSetError(c,REDIS_ERR_OOM,\"Out of memory\");\n        return REDIS_ERR;\n    }\n\n    c->obuf = newbuf;\n    return REDIS_OK;\n}\n\n\n// Source: hiredis.c\n// Lines 907-918\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,179 @@
+bool DescriptorBuilder::OptionInterpreter::SetOptionValue(
+    const FieldDescriptor* option_field, UnknownFieldSet* unknown_fields) {
+  // We switch on the CppType to validate.
+  switch (option_field->cpp_type()) {
+    case FieldDescriptor::CPPTYPE_INT32:
+      if (uninterpreted_option_->has_positive_int_value()) {
+        if (uninterpreted_option_->positive_int_value() >
+            static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
+          return AddValueError("Value out of range for int32 option \"" +
+                               option_field->full_name() + "\".");
+        } else {
+          SetInt32(option_field->number(),
+                   uninterpreted_option_->positive_int_value(),
+                   option_field->type(), unknown_fields);
+        }
+      } else if (uninterpreted_option_->has_negative_int_value()) {
+        if (uninterpreted_option_->negative_int_value() <
+            static_cast<int64_t>(std::numeric_limits<int32_t>::min())) {
+          return AddValueError("Value out of range for int32 option \"" +
+                               option_field->full_name() + "\".");
+        } else {
+          SetInt32(option_field->number(),
+                   uninterpreted_option_->negative_int_value(),
+                   option_field->type(), unknown_fields);
+        }
+      } else {
+        return AddValueError("Value must be integer for int32 option \"" +
+                             option_field->full_name() + "\".");
+      }
+      break;
+
+    case FieldDescriptor::CPPTYPE_INT64:
+      if (uninterpreted_option_->has_positive_int_value()) {
+        if (uninterpreted_option_->positive_int_value() >
+            static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+          return AddValueError("Value out of range for int64 option \"" +
+                               option_field->full_name() + "\".");
+        } else {
+          SetInt64(option_field->number(),
+                   uninterpreted_option_->positive_int_value(),
+                   option_field->type(), unknown_fields);
+        }
+      } else if (uninterpreted_option_->has_negative_int_value()) {
+        SetInt64(option_field->number(),
+                 uninterpreted_option_->negative_int_value(),
+                 option_field->type(), unknown_fields);
+      } else {
+        return AddValueError("Value must be integer for int64 option \"" +
+                             option_field->full_name() + "\".");
+      }
+      break;
+
+    case FieldDescriptor::CPPTYPE_UINT32:
+      if (uninterpreted_option_->has_positive_int_value()) {
+        if (uninterpreted_option_->positive_int_value() >
+            std::numeric_limits<uint32_t>::max()) {
+          return AddValueError("Value out of range for uint32 option \"" +
+                               option_field->name() + "\".");
+        } else {
+          SetUInt32(option_field->number(),
+                    uninterpreted_option_->positive_int_value(),
+                    option_field->type(), unknown_fields);
+        }
+      } else {
+        return AddValueError(
+            "Value must be non-negative integer for uint32 "
+            "option \"" +
+            option_field->full_name() + "\".");
+      }
+      break;
+
+    case FieldDescriptor::CPPTYPE_UINT64:
+      if (uninterpreted_option_->has_positive_int_value()) {
+        SetUInt64(option_field->number(),
+                  uninterpreted_option_->positive_int_value(),
+                  option_field->type(), unknown_fields);
+      } else {
+        return AddValueError(
+            "Value must be non-negative integer for uint64 "
+            "option \"" +
+            option_field->full_name() + "\".");
+      }
+      break;
+
+    case FieldDescriptor::CPPTYPE_FLOAT: {
+      float value;
+      if (uninterpreted_option_->has_double_value()) {
+        value = uninterpreted_option_->double_value();
+      } else if (uninterpreted_option_->has_positive_int_value()) {
+        value = uninterpreted_option_->positive_int_value();
+      } else if (uninterpreted_option_->has_negative_int_value()) {
+        value = uninterpreted_option_->negative_int_value();
+      } else {
+        return AddValueError("Value must be number for float option \"" +
+                             option_field->full_name() + "\".");
+      }
+      unknown_fields->AddFixed32(option_field->number(),
+                                 internal::WireFormatLite::EncodeFloat(value));
+      break;
+    }
+
+    case FieldDescriptor::CPPTYPE_DOUBLE: {
+      double value;
+      if (uninterpreted_option_->has_double_value()) {
+        value = uninterpreted_option_->double_value();
+      } else if (uninterpreted_option_->has_positive_int_value()) {
+        value = uninterpreted_option_->positive_int_value();
+      } else if (uninterpreted_option_->has_negative_int_value()) {
+        value = uninterpreted_option_->negative_int_value();
+      } else {
+        return AddValueError("Value must be number for double option \"" +
+                             option_field->full_name() + "\".");
+      }
+      unknown_fields->AddFixed64(option_field->number(),
+                                 internal::WireFormatLite::EncodeDouble(value));
+      break;
+    }
+
+    case FieldDescriptor::CPPTYPE_BOOL:
+      uint64_t value;
+      if (!uninterpreted_option_->has_identifier_value()) {
+        return AddValueError(
+            "Value must be identifier for boolean option "
+            "\"" +
+            option_field->full_name() + "\".");
+      }
+      if (uninterpreted_option_->identifier_value() == "true") {
+        value = 1;
+      } else if (uninterpreted_option_->identifier_value() == "false") {
+        value = 0;
+      } else {
+        return AddValueError(
+            "Value must be \"true\" or \"false\" for boolean "
+            "option \"" +
+            option_field->full_name() + "\".");
+      }
+      unknown_fields->AddVarint(option_field->number(), value);
+      break;
+
+    case FieldDescriptor::CPPTYPE_ENUM: {
+      if (!uninterpreted_option_->has_identifier_value()) {
+        return AddValueError(
+            "Value must be identifier for enum-valued option "
+            "\"" +
+            option_field->full_name() + "\".");
+      }
+      const EnumDescriptor* enum_type = option_field->enum_type();
+      const std::string& value_name = uninterpreted_option_->identifier_value();
+      const EnumValueDescriptor* enum_value = nullptr;
+
+      if (enum_type->file()->pool() != DescriptorPool::generated_pool()) {
+        // Note that the enum value's fully-qualified name is a sibling of the
+        // enum's name, not a child of it.
+        std::string fully_qualified_name = enum_type->full_name();
+        fully_qualified_name.resize(fully_qualified_name.size() -
+                                    enum_type->name().size());
+        fully_qualified_name += value_name;
+
+        // Search for the enum value's descriptor in the builder's pool. Note
+        // that we use DescriptorBuilder::FindSymbolNotEnforcingDeps(), not
+        // DescriptorPool::FindEnumValueByName() because we're already holding
+        // the pool's mutex, and the latter method locks it again.
+        Symbol symbol =
+            builder_->FindSymbolNotEnforcingDeps(fully_qualified_name);
+        if (auto* candicate_descriptor = symbol.enum_value_descriptor()) {
+          if (candicate_descriptor->type() != enum_type) {
+            return AddValueError(
+                "Enum type \"" + enum_type->full_name() +
+                "\" has no value named \"" + value_name + "\" for option \"" +
+                option_field->full_name() +
+                "\". This appears to be a value from a sibling type.");
+          } else {
+            enum_value = candicate_descriptor;
+          }
+        }
+
+
+// Source: descriptor.cc
+// Lines 7605-7779

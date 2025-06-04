@@ -1,0 +1,1 @@
+specs,gcc/gcc/gcc.c,8,buffer,gcc/gcc/gcc.c,6,0

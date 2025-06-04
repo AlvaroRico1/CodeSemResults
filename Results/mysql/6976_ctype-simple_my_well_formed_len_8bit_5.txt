@@ -1,0 +1,1 @@
+nchars,mysql/strings/ctype-simple.cc,3,nbytes,mysql/strings/ctype-simple.cc,4,2

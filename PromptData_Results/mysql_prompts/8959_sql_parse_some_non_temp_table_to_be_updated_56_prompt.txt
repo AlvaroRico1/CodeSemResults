@@ -1,0 +1,32 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'table' at line 2
+2. Pointer 'tables' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool some_non_temp_table_to_be_updated(THD *thd, TABLE_LIST *tables) {
+  for (TABLE_LIST *table = tables; table; table = table->next_global) {
+    assert(table->db && table->table_name);
+    /*
+      Update on performance_schema and temp tables are allowed
+      in readonly mode.
+    */
+    if (table->updating && !find_temporary_table(thd, table) &&
+        !is_perfschema_db(table->db, table->db_length))
+      return true;
+  }
+  return false;
+}
+
+
+// Source: sql_parse.cc
+// Lines 336-348
+
+
+[ANSWER]
+MUST

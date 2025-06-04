@@ -1,0 +1,103 @@
+status_redraw(struct client *c)
+{
+	struct status_line		*sl = &c->status;
+	struct status_line_entry	*sle;
+	struct session			*s = c->session;
+	struct screen_write_ctx		 ctx;
+	struct grid_cell		 gc;
+	u_int				 lines, i, n, width = c->tty.sx;
+	int				 flags, force = 0, changed = 0, fg, bg;
+	struct options_entry		*o;
+	union options_value		*ov;
+	struct format_tree		*ft;
+	char				*expanded;
+
+	log_debug("%s enter", __func__);
+
+	/* Shouldn't get here if not the active screen. */
+	if (sl->active != &sl->screen)
+		fatalx("not the active screen");
+
+	/* No status line? */
+	lines = status_line_size(c);
+	if (c->tty.sy == 0 || lines == 0)
+		return (1);
+
+	/* Create format tree. */
+	flags = FORMAT_STATUS;
+	if (c->flags & CLIENT_STATUSFORCE)
+		flags |= FORMAT_FORCE;
+	ft = format_create(c, NULL, FORMAT_NONE, flags);
+	format_defaults(ft, c, NULL, NULL, NULL);
+
+	/* Set up default colour. */
+	style_apply(&gc, s->options, "status-style", ft);
+	fg = options_get_number(s->options, "status-fg");
+	if (!COLOUR_DEFAULT(fg))
+		gc.fg = fg;
+	bg = options_get_number(s->options, "status-bg");
+	if (!COLOUR_DEFAULT(bg))
+		gc.bg = bg;
+	if (!grid_cells_equal(&gc, &sl->style)) {
+		force = 1;
+		memcpy(&sl->style, &gc, sizeof sl->style);
+	}
+
+	/* Resize the target screen. */
+	if (screen_size_x(&sl->screen) != width ||
+	    screen_size_y(&sl->screen) != lines) {
+		screen_resize(&sl->screen, width, lines, 0);
+		changed = force = 1;
+	}
+	screen_write_start(&ctx, &sl->screen);
+
+	/* Write the status lines. */
+	o = options_get(s->options, "status-format");
+	if (o == NULL) {
+		for (n = 0; n < width * lines; n++)
+			screen_write_putc(&ctx, &gc, ' ');
+	} else {
+		for (i = 0; i < lines; i++) {
+			screen_write_cursormove(&ctx, 0, i, 0);
+
+			ov = options_array_get(o, i);
+			if (ov == NULL) {
+				for (n = 0; n < width; n++)
+					screen_write_putc(&ctx, &gc, ' ');
+				continue;
+			}
+			sle = &sl->entries[i];
+
+			expanded = format_expand_time(ft, ov->string);
+			if (!force &&
+			    sle->expanded != NULL &&
+			    strcmp(expanded, sle->expanded) == 0) {
+				free(expanded);
+				continue;
+			}
+			changed = 1;
+
+			for (n = 0; n < width; n++)
+				screen_write_putc(&ctx, &gc, ' ');
+			screen_write_cursormove(&ctx, 0, i, 0);
+
+			status_free_ranges(&sle->ranges);
+			format_draw(&ctx, &gc, width, expanded, &sle->ranges);
+
+			free(sle->expanded);
+			sle->expanded = expanded;
+		}
+	}
+	screen_write_stop(&ctx);
+
+	/* Free the format tree. */
+	format_free(ft);
+
+	/* Return if the status line has changed. */
+	log_debug("%s exit: force=%d, changed=%d", __func__, force, changed);
+	return (force || changed);
+}
+
+
+// Source: status.c
+// Lines 358-456

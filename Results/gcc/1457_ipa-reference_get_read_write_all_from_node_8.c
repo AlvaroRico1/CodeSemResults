@@ -1,0 +1,44 @@
+get_read_write_all_from_node (struct cgraph_node *node,
+			      bool &read_all, bool &write_all)
+{
+  struct cgraph_edge *e, *ie;
+
+  /* When function is overwritable, we cannot assume anything.  */
+  if (node->get_availability () <= AVAIL_INTERPOSABLE
+      || (node->analyzed && !opt_for_fn (node->decl, flag_ipa_reference)))
+    read_write_all_from_decl (node, read_all, write_all);
+
+  for (e = node->callees;
+       e && !(read_all && write_all);
+       e = e->next_callee)
+    {
+      enum availability avail;
+      struct cgraph_node *callee = e->callee->function_symbol (&avail);
+      gcc_checking_assert (callee);
+      if (avail <= AVAIL_INTERPOSABLE
+	  || (callee->analyzed && !opt_for_fn (callee->decl,
+					       flag_ipa_reference)))
+	read_write_all_from_decl (callee, read_all, write_all);
+    }
+
+  for (ie = node->indirect_calls;
+       ie && !(read_all && write_all);
+       ie = ie->next_callee)
+    if (!(ie->indirect_info->ecf_flags & ECF_CONST))
+      {
+	read_all = true;
+	if (dump_file && (dump_flags & TDF_DETAILS))
+	  fprintf (dump_file, "   indirect call -> read all\n");
+	if (!ie->cannot_lead_to_return_p ()
+	    && !(ie->indirect_info->ecf_flags & ECF_PURE))
+	  {
+	    if (dump_file && (dump_flags & TDF_DETAILS))
+	      fprintf (dump_file, "   indirect call -> write all\n");
+	    write_all = true;
+	  }
+      }
+}
+
+
+// Source: ipa-reference.c
+// Lines 691-730

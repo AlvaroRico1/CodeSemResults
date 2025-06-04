@@ -1,0 +1,1 @@
+getHour,mysql/client/mysql.cc,84,lclock,mysql/client/mysql.cc,3,0

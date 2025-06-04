@@ -1,0 +1,34 @@
+h2o_iovec_t h2o_encode_sf_string(h2o_mem_pool_t *pool, const char *s, size_t slen)
+{
+    if (slen == SIZE_MAX)
+        slen = strlen(s);
+
+    /* https://tools.ietf.org/html/rfc8941#section-3.3.3 */
+    size_t to_escape = 0;
+    for (size_t i = 0; i < slen; ++i) {
+        if (s[i] == '\\' || s[i] == '"')
+            ++to_escape;
+    }
+
+    h2o_iovec_t ret;
+    ret.len = slen + to_escape + 2;
+    if (pool != NULL) {
+        ret.base = h2o_mem_alloc_pool(pool, char, ret.len + 1);
+    } else {
+        ret.base = h2o_mem_alloc(ret.len + 1);
+    }
+    char *dst = ret.base;
+    *dst++ = '"';
+    for (size_t i = 0; i < slen; ++i) {
+        if (s[i] == '\\' || s[i] == '"')
+            *dst++ = '\\';
+        *dst++ = s[i];
+    }
+    *dst++ = '"';
+    *dst++ = '\0';
+    return ret;
+}
+
+
+// Source: string.c
+// Lines 631-660

@@ -1,0 +1,30 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'blob' at line 3
+2. Pointer '_blob' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_blob__parse_raw(void *_blob, const char *data, size_t size)
+{
+	git_blob *blob = (git_blob *) _blob;
+
+	GIT_ASSERT_ARG(blob);
+
+	blob->raw = 1;
+	blob->data.raw.data = data;
+	blob->data.raw.size = size;
+	return 0;
+}
+
+
+// Source: blob.c
+// Lines 55-65
+
+
+[ANSWER]
+MUST

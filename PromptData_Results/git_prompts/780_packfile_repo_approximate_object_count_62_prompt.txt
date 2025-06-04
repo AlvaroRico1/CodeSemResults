@@ -1,0 +1,38 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'p' at line 6
+2. Pointer 'p' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+unsigned long repo_approximate_object_count(struct repository *r)
+{
+	if (!r->objects->approximate_object_count_valid) {
+		unsigned long count;
+		struct multi_pack_index *m;
+		struct packed_git *p;
+
+		prepare_packed_git(r);
+		count = 0;
+		for (m = get_multi_pack_index(r); m; m = m->next)
+			count += m->num_objects;
+		for (p = r->objects->packed_git; p; p = p->next) {
+			if (open_pack_index(p))
+				continue;
+			count += p->num_objects;
+		}
+		r->objects->approximate_object_count = count;
+		r->objects->approximate_object_count_valid = 1;
+	}
+
+
+// Source: packfile.c
+// Lines 906-924
+
+
+[ANSWER]
+MUST

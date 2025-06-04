@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'clp' at line 3\n2. Pointer 'state' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void nfs_test_and_clear_all_open_stateid(struct nfs4_state *state)\n{\n\tstruct nfs_client *clp = state->owner->so_server->nfs_client;\n\tbool need_recover = false;\n\n\tif (test_and_clear_bit(NFS_O_RDONLY_STATE, &state->flags) && state->n_rdonly)\n\t\tneed_recover = true;\n\tif (test_and_clear_bit(NFS_O_WRONLY_STATE, &state->flags) && state->n_wronly)\n\t\tneed_recover = true;\n\tif (test_and_clear_bit(NFS_O_RDWR_STATE, &state->flags) && state->n_rdwr)\n\t\tneed_recover = true;\n\tif (need_recover)\n\t\tnfs4_state_mark_reclaim_nograce(clp, state);\n}\n\n\n// Source: nfs4proc.c\n// Lines 1502-1515\n",
+  "ANSWER": "MUST"
+}

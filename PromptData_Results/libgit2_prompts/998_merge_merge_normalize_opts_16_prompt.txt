@@ -1,0 +1,86 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'opts' at line 3
+2. Pointer 'entry' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int merge_normalize_opts(
+	git_repository *repo,
+	git_merge_options *opts,
+	const git_merge_options *given)
+{
+	git_config *cfg = NULL;
+	git_config_entry *entry = NULL;
+	int error = 0;
+
+	GIT_ASSERT_ARG(repo);
+	GIT_ASSERT_ARG(opts);
+
+	if ((error = git_repository_config__weakptr(&cfg, repo)) < 0)
+		return error;
+
+	if (given != NULL) {
+		memcpy(opts, given, sizeof(git_merge_options));
+	} else {
+		git_merge_options init = GIT_MERGE_OPTIONS_INIT;
+		memcpy(opts, &init, sizeof(init));
+	}
+
+	if ((opts->flags & GIT_MERGE_FIND_RENAMES) && !opts->rename_threshold)
+		opts->rename_threshold = GIT_MERGE_DEFAULT_RENAME_THRESHOLD;
+
+	if (given && given->default_driver) {
+		opts->default_driver = git__strdup(given->default_driver);
+		GIT_ERROR_CHECK_ALLOC(opts->default_driver);
+	} else {
+		error = git_config_get_entry(&entry, cfg, "merge.default");
+
+		if (error == 0) {
+			opts->default_driver = git__strdup(entry->value);
+			GIT_ERROR_CHECK_ALLOC(opts->default_driver);
+		} else if (error == GIT_ENOTFOUND) {
+			error = 0;
+		} else {
+			goto done;
+		}
+	}
+
+	if (!opts->target_limit) {
+		int limit = git_config__get_int_force(cfg, "merge.renamelimit", 0);
+
+		if (!limit)
+			limit = git_config__get_int_force(cfg, "diff.renamelimit", 0);
+
+		opts->target_limit = (limit <= 0) ?
+			GIT_MERGE_DEFAULT_TARGET_LIMIT : (unsigned int)limit;
+	}
+
+	/* assign the internal metric with whitespace flag as payload */
+	if (!opts->metric) {
+		opts->metric = git__malloc(sizeof(git_diff_similarity_metric));
+		GIT_ERROR_CHECK_ALLOC(opts->metric);
+
+		opts->metric->file_signature = git_diff_find_similar__hashsig_for_file;
+		opts->metric->buffer_signature = git_diff_find_similar__hashsig_for_buf;
+		opts->metric->free_signature = git_diff_find_similar__hashsig_free;
+		opts->metric->similarity = git_diff_find_similar__calc_similarity;
+		opts->metric->payload = (void *)GIT_HASHSIG_SMART_WHITESPACE;
+	}
+
+done:
+	git_config_entry_free(entry);
+	return error;
+}
+
+
+// Source: merge.c
+// Lines 1867-1933
+
+
+[ANSWER]
+MAY

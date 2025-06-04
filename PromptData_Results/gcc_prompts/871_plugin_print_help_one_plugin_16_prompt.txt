@@ -1,0 +1,43 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'nl' at line 8
+2. Pointer 'nl' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+print_help_one_plugin (void **slot, void *data)
+{
+  struct print_options *opt = (struct print_options *) data;
+  struct plugin_name_args *plugin = (struct plugin_name_args *) *slot;
+  const char *help = plugin->help ? plugin->help : "No help available .";
+
+  char *dup = xstrdup (help);
+  char *p, *nl;
+  fprintf (opt->file, " %s%s:\n", opt->indent, plugin->base_name);
+
+  for (p = nl = dup; nl; p = nl)
+    {
+      nl = strchr (nl, '\n');
+      if (nl)
+	{
+	  *nl = '\0';
+	  nl++;
+	}
+      fprintf (opt->file, "   %s %s\n", opt->indent, p);
+    }
+
+  free (dup);
+  return 1;
+}
+
+
+// Source: plugin.c
+// Lines 856-879
+
+
+[ANSWER]
+MUST

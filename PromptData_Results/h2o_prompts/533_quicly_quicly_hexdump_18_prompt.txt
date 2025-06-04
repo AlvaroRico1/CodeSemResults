@@ -1,0 +1,70 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'p' at line 4
+2. Pointer 'buf' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+char *quicly_hexdump(const uint8_t *bytes, size_t len, size_t indent)
+{
+    size_t i, line, row, bufsize = indent == SIZE_MAX ? len * 2 + 1 : (indent + 5 + 3 * 16 + 2 + 16 + 1) * ((len + 15) / 16) + 1;
+    char *buf, *p;
+
+    if ((buf = malloc(bufsize)) == NULL)
+        return NULL;
+    p = buf;
+    if (indent == SIZE_MAX) {
+        for (i = 0; i != len; ++i) {
+            quicly_byte_to_hex(p, bytes[i]);
+            p += 2;
+        }
+    } else {
+        for (line = 0; line * 16 < len; ++line) {
+            for (i = 0; i < indent; ++i)
+                *p++ = ' ';
+            quicly_byte_to_hex(p, (line >> 4) & 0xff);
+            p += 2;
+            quicly_byte_to_hex(p, (line << 4) & 0xff);
+            p += 2;
+            *p++ = ' ';
+            for (row = 0; row < 16; ++row) {
+                *p++ = row == 8 ? '-' : ' ';
+                if (line * 16 + row < len) {
+                    quicly_byte_to_hex(p, bytes[line * 16 + row]);
+                    p += 2;
+                } else {
+                    *p++ = ' ';
+                    *p++ = ' ';
+                }
+            }
+            *p++ = ' ';
+            *p++ = ' ';
+            for (row = 0; row < 16; ++row) {
+                if (line * 16 + row < len) {
+                    int ch = bytes[line * 16 + row];
+                    *p++ = 0x20 <= ch && ch < 0x7f ? ch : '.';
+                } else {
+                    *p++ = ' ';
+                }
+            }
+            *p++ = '\n';
+        }
+    }
+    *p++ = '\0';
+
+    assert(p - buf <= bufsize);
+
+    return buf;
+}
+
+
+// Source: quicly.c
+// Lines 6176-6226
+
+
+[ANSWER]
+MUST

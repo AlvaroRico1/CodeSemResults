@@ -1,0 +1,48 @@
+static int write_pc_item_to_fd(struct parallel_checkout_item *pc_item, int fd,
+			       const char *path)
+{
+	int ret;
+	struct stream_filter *filter;
+	struct strbuf buf = STRBUF_INIT;
+	char *blob;
+	unsigned long size;
+	ssize_t wrote;
+
+	/* Sanity check */
+	assert(is_eligible_for_parallel_checkout(pc_item->ce, &pc_item->ca));
+
+	filter = get_stream_filter_ca(&pc_item->ca, &pc_item->ce->oid);
+	if (filter) {
+		if (stream_blob_to_fd(fd, &pc_item->ce->oid, filter, 1)) {
+			/* On error, reset fd to try writing without streaming */
+			if (reset_fd(fd, path))
+				return -1;
+		} else {
+			return 0;
+		}
+	}
+
+	blob = read_blob_entry(pc_item->ce, &size);
+	if (!blob)
+		return error("cannot read object %s '%s'",
+			     oid_to_hex(&pc_item->ce->oid), pc_item->ce->name);
+
+	/*
+	 * checkout metadata is used to give context for external process
+	 * filters. Files requiring such filters are not eligible for parallel
+	 * checkout, so pass NULL. Note: if that changes, the metadata must also
+	 * be passed from the main process to the workers.
+	 */
+	ret = convert_to_working_tree_ca(&pc_item->ca, pc_item->ce->name,
+					 blob, size, &buf, NULL);
+
+	if (ret) {
+		size_t newsize;
+		free(blob);
+		blob = strbuf_detach(&buf, &newsize);
+		size = newsize;
+	}
+
+
+// Source: parallel-checkout.c
+// Lines 257-300

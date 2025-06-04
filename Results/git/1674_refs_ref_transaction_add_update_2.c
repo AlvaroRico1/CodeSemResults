@@ -1,0 +1,29 @@
+struct ref_update *ref_transaction_add_update(
+		struct ref_transaction *transaction,
+		const char *refname, unsigned int flags,
+		const struct object_id *new_oid,
+		const struct object_id *old_oid,
+		const char *msg)
+{
+	struct ref_update *update;
+
+	if (transaction->state != REF_TRANSACTION_OPEN)
+		BUG("update called for transaction that is not open");
+
+	FLEX_ALLOC_STR(update, refname, refname);
+	ALLOC_GROW(transaction->updates, transaction->nr + 1, transaction->alloc);
+	transaction->updates[transaction->nr++] = update;
+
+	update->flags = flags;
+
+	if (flags & REF_HAVE_NEW)
+		oidcpy(&update->new_oid, new_oid);
+	if (flags & REF_HAVE_OLD)
+		oidcpy(&update->old_oid, old_oid);
+	update->msg = normalize_reflog_message(msg);
+	return update;
+}
+
+
+// Source: refs.c
+// Lines 1045-1069

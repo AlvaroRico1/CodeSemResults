@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'reserved_len' at line 5\n2. Pointer 'reserved' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid test_repo_reservedname__includes_shortname_when_requested(void)\n{\n\tgit_repository *repo;\n\tgit_str *reserved;\n\tsize_t reserved_len;\n\n\trepo = cl_git_sandbox_init(\"nasty\");\n\tcl_assert(git_repository__reserved_names(&reserved, &reserved_len, repo, true));\n\n\tcl_assert_equal_i(2, reserved_len);\n\tcl_assert_equal_s(\".git\", reserved[0].ptr);\n\tcl_assert_equal_s(\"GIT~1\", reserved[1].ptr);\n}\n\n\n// Source: reservedname.c\n// Lines 29-41\n",
+  "ANSWER": "MAY"
+}

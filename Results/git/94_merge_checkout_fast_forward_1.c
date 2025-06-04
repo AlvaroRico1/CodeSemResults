@@ -1,0 +1,62 @@
+int checkout_fast_forward(struct repository *r,
+			  const struct object_id *head,
+			  const struct object_id *remote,
+			  int overwrite_ignore)
+{
+	struct tree *trees[MAX_UNPACK_TREES];
+	struct unpack_trees_options opts;
+	struct tree_desc t[MAX_UNPACK_TREES];
+	int i, nr_trees = 0;
+	struct lock_file lock_file = LOCK_INIT;
+
+	refresh_index(r->index, REFRESH_QUIET, NULL, NULL, NULL);
+
+	if (repo_hold_locked_index(r, &lock_file, LOCK_REPORT_ON_ERROR) < 0)
+		return -1;
+
+	memset(&trees, 0, sizeof(trees));
+	memset(&t, 0, sizeof(t));
+
+	trees[nr_trees] = parse_tree_indirect(head);
+	if (!trees[nr_trees++]) {
+		rollback_lock_file(&lock_file);
+		return -1;
+	}
+	trees[nr_trees] = parse_tree_indirect(remote);
+	if (!trees[nr_trees++]) {
+		rollback_lock_file(&lock_file);
+		return -1;
+	}
+	for (i = 0; i < nr_trees; i++) {
+		parse_tree(trees[i]);
+		init_tree_desc(t+i, trees[i]->buffer, trees[i]->size);
+	}
+
+	memset(&opts, 0, sizeof(opts));
+	opts.preserve_ignored = !overwrite_ignore;
+
+	opts.head_idx = 1;
+	opts.src_index = r->index;
+	opts.dst_index = r->index;
+	opts.update = 1;
+	opts.verbose_update = 1;
+	opts.merge = 1;
+	opts.fn = twoway_merge;
+	init_checkout_metadata(&opts.meta, NULL, remote, NULL);
+	setup_unpack_trees_porcelain(&opts, "merge");
+
+	if (unpack_trees(nr_trees, t, &opts)) {
+		rollback_lock_file(&lock_file);
+		clear_unpack_trees_porcelain(&opts);
+		return -1;
+	}
+	clear_unpack_trees_porcelain(&opts);
+
+	if (write_locked_index(r->index, &lock_file, COMMIT_LOCK))
+		return error(_("unable to write new index file"));
+	return 0;
+}
+
+
+// Source: merge.c
+// Lines 47-104

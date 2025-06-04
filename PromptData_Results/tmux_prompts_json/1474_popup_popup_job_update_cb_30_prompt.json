@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'c' at line 5\n2. Pointer 'pd' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\npopup_job_update_cb(struct job *job)\n{\n\tstruct popup_data\t*pd = job_get_data(job);\n\tstruct evbuffer\t\t*evb = job_get_event(job)->input;\n\tstruct client\t\t*c = pd->c;\n\tstruct screen\t\t*s = &pd->s;\n\tvoid\t\t\t*data = EVBUFFER_DATA(evb);\n\tsize_t\t\t\t size = EVBUFFER_LENGTH(evb);\n\n\tif (size == 0)\n\t\treturn;\n\n\tif (pd->md != NULL) {\n\t\tc->overlay_check = menu_check_cb;\n\t\tc->overlay_data = pd->md;\n\t} else {\n\t\tc->overlay_check = NULL;\n\t\tc->overlay_data = NULL;\n\t}\n\tinput_parse_screen(pd->ictx, s, popup_init_ctx_cb, pd, data, size);\n\tc->overlay_check = popup_check_cb;\n\tc->overlay_data = pd;\n\n\tevbuffer_drain(evb, size);\n}\n\n\n// Source: popup.c\n// Lines 588-612\n",
+  "ANSWER": "MUST"
+}

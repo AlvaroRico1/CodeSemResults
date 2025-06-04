@@ -1,0 +1,54 @@
+static ulong net_read_available(NET *net, size_t count) {
+  size_t recvcnt;
+  DBUG_TRACE;
+  NET_ASYNC *net_async = NET_ASYNC_DATA(net);
+  if (net_async->cur_pos + count > net->buff + net->max_packet) {
+    if (net_realloc(net, net->max_packet + count)) {
+      return packet_error;
+    }
+  }
+  if (vio_is_blocking(net->vio)) {
+    vio_set_blocking_flag(net->vio, false);
+  }
+  recvcnt = vio_read(net->vio, net_async->cur_pos, count);
+  /*
+    When OpenSSL is used in non-blocking mode, it is possible that an
+    SSL_ERROR_WANT_READ or SSL_ERROR_WANT_WRITE error is returned after a
+    SSL_read() operation (if a renegotiation takes place).
+    We are treating this case here and signaling correctly the next expected
+    operation in the async_blocking_state.
+  */
+  if (recvcnt == VIO_SOCKET_WANT_READ) {
+    net_async->async_blocking_state = NET_NONBLOCKING_READ;
+    return 0;
+  } else if (recvcnt == VIO_SOCKET_WANT_WRITE) {
+    net_async->async_blocking_state = NET_NONBLOCKING_WRITE;
+    return 0;
+  }
+
+  /* Call would block, just return with socket_errno set */
+  if ((recvcnt == VIO_SOCKET_ERROR) &&
+      (socket_errno == SOCKET_EAGAIN || (SOCKET_EAGAIN != SOCKET_EWOULDBLOCK &&
+                                         socket_errno == SOCKET_EWOULDBLOCK))) {
+    net_async->async_blocking_state = NET_NONBLOCKING_READ;
+    return 0;
+  }
+
+  /* Not EOF and not an error?  Return the bytes read.*/
+  if (recvcnt != 0 && recvcnt != VIO_SOCKET_ERROR) {
+    net_async->cur_pos += recvcnt;
+#ifdef MYSQL_SERVER
+    thd_increment_bytes_received(recvcnt);
+#endif
+    return recvcnt;
+  }
+
+  /* EOF or hard failure; socket should be closed. */
+  net->error = NET_ERROR_SOCKET_UNUSABLE;
+  net->last_errno = ER_NET_READ_ERROR;
+  return packet_error;
+}
+
+
+// Source: net_serv.cc
+// Lines 1509-1558

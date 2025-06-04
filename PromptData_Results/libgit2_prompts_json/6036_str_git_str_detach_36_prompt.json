@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'data' at line 3\n2. Pointer 'buf' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nchar *git_str_detach(git_str *buf)\n{\n\tchar *data = buf->ptr;\n\n\tif (buf->asize == 0 || buf->ptr == git_str__oom)\n\t\treturn NULL;\n\n\tgit_str_init(buf, 0);\n\n\treturn data;\n}\n\n\n// Source: str.c\n// Lines 629-639\n",
+  "ANSWER": "MUST"
+}

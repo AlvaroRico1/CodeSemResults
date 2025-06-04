@@ -1,0 +1,39 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'd' at line 2
+2. Pointer 'o' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+robj *dupStringObject(const robj *o) {
+    robj *d;
+
+    serverAssert(o->type == OBJ_STRING);
+
+    switch(o->encoding) {
+    case OBJ_ENCODING_RAW:
+        return createRawStringObject(o->ptr,sdslen(o->ptr));
+    case OBJ_ENCODING_EMBSTR:
+        return createEmbeddedStringObject(o->ptr,sdslen(o->ptr));
+    case OBJ_ENCODING_INT:
+        d = createObject(OBJ_STRING, NULL);
+        d->encoding = OBJ_ENCODING_INT;
+        d->ptr = o->ptr;
+        return d;
+    default:
+        serverPanic("Wrong encoding.");
+        break;
+    }
+}
+
+
+// Source: object.c
+// Lines 208-227
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,54 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'len' at line 27
+2. Pointer 'ctx' at line 26
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void show_special(struct audit_context *context, int *call_panic)
+{
+	struct audit_buffer *ab;
+	int i;
+
+	ab = audit_log_start(context, GFP_KERNEL, context->type);
+	if (!ab)
+		return;
+
+	switch (context->type) {
+	case AUDIT_SOCKETCALL: {
+		int nargs = context->socketcall.nargs;
+		audit_log_format(ab, "nargs=%d", nargs);
+		for (i = 0; i < nargs; i++)
+			audit_log_format(ab, " a%d=%lx", i,
+				context->socketcall.args[i]);
+		break; }
+	case AUDIT_IPC: {
+		u32 osid = context->ipc.osid;
+
+		audit_log_format(ab, "ouid=%u ogid=%u mode=%#ho",
+				 from_kuid(&init_user_ns, context->ipc.uid),
+				 from_kgid(&init_user_ns, context->ipc.gid),
+				 context->ipc.mode);
+		if (osid) {
+			char *ctx = NULL;
+			u32 len;
+			if (security_secid_to_secctx(osid, &ctx, &len)) {
+				audit_log_format(ab, " osid=%u", osid);
+				*call_panic = 1;
+			} else {
+				audit_log_format(ab, " obj=%s", ctx);
+				security_release_secctx(ctx, len);
+			}
+		}
+
+
+// Source: auditsc.c
+// Lines 1188-1222
+
+
+[ANSWER]
+MAY

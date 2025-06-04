@@ -1,0 +1,32 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'expected_id' at line 1
+2. Pointer 'diff' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void verify_patch_id(const char *diff_content, const char *expected_id)
+{
+	git_oid expected_oid, actual_oid;
+	git_diff *diff;
+
+	cl_git_pass(git_oid_fromstr(&expected_oid, expected_id));
+	cl_git_pass(git_diff_from_buffer(&diff, diff_content, strlen(diff_content)));
+	cl_git_pass(git_diff_patchid(&actual_oid, diff, NULL));
+
+	cl_assert_equal_oid(&expected_oid, &actual_oid);
+
+	git_diff_free(diff);
+}
+
+
+// Source: patchid.c
+// Lines 4-16
+
+
+[ANSWER]
+MUST-NOT

@@ -1,0 +1,172 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'insn' at line 4
+2. Pointer 'prev' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+delete_trivially_dead_insns (rtx_insn *insns, int nreg)
+{
+  int *counts;
+  rtx_insn *insn, *prev;
+  rtx *replacements = NULL;
+  int ndead = 0;
+
+  timevar_push (TV_DELETE_TRIVIALLY_DEAD);
+  /* First count the number of times each register is used.  */
+  if (MAY_HAVE_DEBUG_BIND_INSNS)
+    {
+      counts = XCNEWVEC (int, nreg * 3);
+      for (insn = insns; insn; insn = NEXT_INSN (insn))
+	if (DEBUG_BIND_INSN_P (insn))
+	  count_reg_usage (INSN_VAR_LOCATION_LOC (insn), counts + nreg,
+			   NULL_RTX, 1);
+	else if (INSN_P (insn))
+	  {
+	    count_reg_usage (insn, counts, NULL_RTX, 1);
+	    note_stores (insn, count_stores, counts + nreg * 2);
+	  }
+      /* If there can be debug insns, COUNTS are 3 consecutive arrays.
+	 First one counts how many times each pseudo is used outside
+	 of debug insns, second counts how many times each pseudo is
+	 used in debug insns and third counts how many times a pseudo
+	 is stored.  */
+    }
+  else
+    {
+      counts = XCNEWVEC (int, nreg);
+      for (insn = insns; insn; insn = NEXT_INSN (insn))
+	if (INSN_P (insn))
+	  count_reg_usage (insn, counts, NULL_RTX, 1);
+      /* If no debug insns can be present, COUNTS is just an array
+	 which counts how many times each pseudo is used.  */
+    }
+  /* Pseudo PIC register should be considered as used due to possible
+     new usages generated.  */
+  if (!reload_completed
+      && pic_offset_table_rtx
+      && REGNO (pic_offset_table_rtx) >= FIRST_PSEUDO_REGISTER)
+    counts[REGNO (pic_offset_table_rtx)]++;
+  /* Go from the last insn to the first and delete insns that only set unused
+     registers or copy a register to itself.  As we delete an insn, remove
+     usage counts for registers it uses.
+
+     The first jump optimization pass may leave a real insn as the last
+     insn in the function.   We must not skip that insn or we may end
+     up deleting code that is not really dead.
+
+     If some otherwise unused register is only used in DEBUG_INSNs,
+     try to create a DEBUG_EXPR temporary and emit a DEBUG_INSN before
+     the setter.  Then go through DEBUG_INSNs and if a DEBUG_EXPR
+     has been created for the unused register, replace it with
+     the DEBUG_EXPR, otherwise reset the DEBUG_INSN.  */
+  for (insn = get_last_insn (); insn; insn = prev)
+    {
+      int live_insn = 0;
+
+      prev = PREV_INSN (insn);
+      if (!INSN_P (insn))
+	continue;
+
+      live_insn = insn_live_p (insn, counts);
+
+      /* If this is a dead insn, delete it and show registers in it aren't
+	 being used.  */
+
+      if (! live_insn && dbg_cnt (delete_trivial_dead))
+	{
+	  if (DEBUG_INSN_P (insn))
+	    {
+	      if (DEBUG_BIND_INSN_P (insn))
+		count_reg_usage (INSN_VAR_LOCATION_LOC (insn), counts + nreg,
+				 NULL_RTX, -1);
+	    }
+	  else
+	    {
+	      rtx set;
+	      if (MAY_HAVE_DEBUG_BIND_INSNS
+		  && (set = single_set (insn)) != NULL_RTX
+		  && is_dead_reg (SET_DEST (set), counts)
+		  /* Used at least once in some DEBUG_INSN.  */
+		  && counts[REGNO (SET_DEST (set)) + nreg] > 0
+		  /* And set exactly once.  */
+		  && counts[REGNO (SET_DEST (set)) + nreg * 2] == 1
+		  && !side_effects_p (SET_SRC (set))
+		  && asm_noperands (PATTERN (insn)) < 0)
+		{
+		  rtx dval, bind_var_loc;
+		  rtx_insn *bind;
+
+		  /* Create DEBUG_EXPR (and DEBUG_EXPR_DECL).  */
+		  dval = make_debug_expr_from_rtl (SET_DEST (set));
+
+		  /* Emit a debug bind insn before the insn in which
+		     reg dies.  */
+		  bind_var_loc =
+		    gen_rtx_VAR_LOCATION (GET_MODE (SET_DEST (set)),
+					  DEBUG_EXPR_TREE_DECL (dval),
+					  SET_SRC (set),
+					  VAR_INIT_STATUS_INITIALIZED);
+		  count_reg_usage (bind_var_loc, counts + nreg, NULL_RTX, 1);
+
+		  bind = emit_debug_insn_before (bind_var_loc, insn);
+		  df_insn_rescan (bind);
+
+		  if (replacements == NULL)
+		    replacements = XCNEWVEC (rtx, nreg);
+		  replacements[REGNO (SET_DEST (set))] = dval;
+		}
+
+	      count_reg_usage (insn, counts, NULL_RTX, -1);
+	      ndead++;
+	    }
+	  cse_cfg_altered |= delete_insn_and_edges (insn);
+	}
+    }
+
+  if (MAY_HAVE_DEBUG_BIND_INSNS)
+    {
+      for (insn = get_last_insn (); insn; insn = PREV_INSN (insn))
+	if (DEBUG_BIND_INSN_P (insn))
+	  {
+	    /* If this debug insn references a dead register that wasn't replaced
+	       with an DEBUG_EXPR, reset the DEBUG_INSN.  */
+	    bool seen_repl = false;
+	    if (is_dead_debug_insn (INSN_VAR_LOCATION_LOC (insn),
+				    counts, replacements, &seen_repl))
+	      {
+		INSN_VAR_LOCATION_LOC (insn) = gen_rtx_UNKNOWN_VAR_LOC ();
+		df_insn_rescan (insn);
+	      }
+	    else if (seen_repl)
+	      {
+		INSN_VAR_LOCATION_LOC (insn)
+		  = simplify_replace_fn_rtx (INSN_VAR_LOCATION_LOC (insn),
+					     NULL_RTX, replace_dead_reg,
+					     replacements);
+		df_insn_rescan (insn);
+	      }
+	  }
+      free (replacements);
+    }
+
+  if (dump_file && ndead)
+    fprintf (dump_file, "Deleted %i trivially dead insns\n",
+	     ndead);
+  /* Clean up.  */
+  free (counts);
+  timevar_pop (TV_DELETE_TRIVIALLY_DEAD);
+  return ndead;
+}
+
+
+// Source: cse.c
+// Lines 7058-7210
+
+
+[ANSWER]
+MUST

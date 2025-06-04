@@ -1,0 +1,1 @@
+prompt,tmux/window-tree.c,8,key,tmux/window-tree.c,2,2

@@ -1,0 +1,57 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'dreq' at line 4
+2. Pointer 'hdr' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void nfs_direct_read_completion(struct nfs_pgio_header *hdr)
+{
+	unsigned long bytes = 0;
+	struct nfs_direct_req *dreq = hdr->dreq;
+
+	spin_lock(&dreq->lock);
+	if (test_bit(NFS_IOHDR_ERROR, &hdr->flags))
+		dreq->error = hdr->error;
+
+	if (test_bit(NFS_IOHDR_REDO, &hdr->flags)) {
+		spin_unlock(&dreq->lock);
+		goto out_put;
+	}
+
+	if (hdr->good_bytes != 0)
+		nfs_direct_good_bytes(dreq, hdr);
+
+	if (test_bit(NFS_IOHDR_EOF, &hdr->flags))
+		dreq->error = 0;
+
+	spin_unlock(&dreq->lock);
+
+	while (!list_empty(&hdr->pages)) {
+		struct nfs_page *req = nfs_list_entry(hdr->pages.next);
+		struct page *page = req->wb_page;
+
+		if (!PageCompound(page) && bytes < hdr->good_bytes &&
+		    (dreq->flags == NFS_ODIRECT_SHOULD_DIRTY))
+			set_page_dirty(page);
+		bytes += req->wb_bytes;
+		nfs_list_remove_request(req);
+		nfs_release_request(req);
+	}
+out_put:
+	if (put_dreq(dreq))
+		nfs_direct_complete(dreq);
+	hdr->release(hdr);
+}
+
+
+// Source: direct.c
+// Lines 399-436
+
+
+[ANSWER]
+MUST

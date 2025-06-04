@@ -1,0 +1,24 @@
+void JOIN::mark_const_table(JOIN_TAB *tab, Key_use *key) {
+  POSITION *const position = positions + const_tables;
+  position->table = tab;
+  position->key = key;
+  position->rows_fetched = 1.0;  // This is a const table
+  position->filter_effect = 1.0;
+  position->prefix_rowcount = 1.0;
+  position->read_cost = 0.0;
+  position->ref_depend_map = 0;
+  position->loosescan_key = MAX_KEY;  // Not a LooseScan
+  position->sj_strategy = SJ_OPT_NONE;
+  positions->use_join_buffer = false;
+
+  // Move the const table as far down as possible in best_ref
+  JOIN_TAB **pos = best_ref + const_tables + 1;
+  for (JOIN_TAB *next = best_ref[const_tables]; next != tab; pos++) {
+    JOIN_TAB *const tmp = pos[0];
+    pos[0] = next;
+    next = tmp;
+  }
+
+
+// Source: sql_optimizer.cc
+// Lines 8125-8144

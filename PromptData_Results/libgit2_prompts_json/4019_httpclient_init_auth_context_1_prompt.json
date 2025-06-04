@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'scheme' at line 6\n2. Pointer 'challenge' at line 7\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic const char *init_auth_context(\n\tgit_http_server *server,\n\tgit_vector *challenges,\n\tgit_credential *credentials)\n{\n\tgit_http_auth_scheme *scheme;\n\tconst char *challenge;\n\tint error;\n\n\tif (!best_scheme_and_challenge(&scheme, &challenge, challenges, credentials)) {\n\t\tgit_error_set(GIT_ERROR_HTTP, \"could not find appropriate mechanism for credentials\");\n\t\treturn NULL;\n\t}\n\n\terror = scheme->init_context(&server->auth_context, &server->url);\n\n\tif (error == GIT_PASSTHROUGH) {\n\t\tgit_error_set(GIT_ERROR_HTTP, \"'%s' authentication is not supported\", scheme->name);\n\t\treturn NULL;\n\t}\n\n\treturn challenge;\n}\n\n\n// Source: httpclient.c\n// Lines 515-537\n",
+  "ANSWER": "MAY"
+}

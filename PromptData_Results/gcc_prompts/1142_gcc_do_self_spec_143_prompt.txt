@@ -1,0 +1,98 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'decoded_options_count' at line 20
+2. Pointer 'argbuf_copy' at line 17
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+do_self_spec (const char *spec)
+{
+  int i;
+
+  do_spec_2 (spec, NULL);
+  do_spec_1 (" ", 0, NULL);
+
+  /* Mark %<S switches processed by do_self_spec to be ignored permanently.
+     do_self_specs adds the replacements to switches array, so it shouldn't
+     be processed afterwards.  */
+  for (i = 0; i < n_switches; i++)
+    if ((switches[i].live_cond & SWITCH_IGNORE))
+      switches[i].live_cond |= SWITCH_IGNORE_PERMANENTLY;
+
+  if (argbuf.length () > 0)
+    {
+      const char **argbuf_copy;
+      struct cl_decoded_option *decoded_options;
+      struct cl_option_handlers handlers;
+      unsigned int decoded_options_count;
+      unsigned int j;
+
+      /* Create a copy of argbuf with a dummy argv[0] entry for
+	 decode_cmdline_options_to_array.  */
+      argbuf_copy = XNEWVEC (const char *,
+			     argbuf.length () + 1);
+      argbuf_copy[0] = "";
+      memcpy (argbuf_copy + 1, argbuf.address (),
+	      argbuf.length () * sizeof (const char *));
+
+      decode_cmdline_options_to_array (argbuf.length () + 1,
+				       argbuf_copy,
+				       CL_DRIVER, &decoded_options,
+				       &decoded_options_count);
+      free (argbuf_copy);
+
+      set_option_handlers (&handlers);
+
+      for (j = 1; j < decoded_options_count; j++)
+	{
+	  switch (decoded_options[j].opt_index)
+	    {
+	    case OPT_SPECIAL_input_file:
+	      /* Specs should only generate options, not input
+		 files.  */
+	      if (strcmp (decoded_options[j].arg, "-") != 0)
+		fatal_error (input_location,
+			     "switch %qs does not start with %<-%>",
+			     decoded_options[j].arg);
+	      else
+		fatal_error (input_location,
+			     "spec-generated switch is just %<-%>");
+	      break;
+
+	    case OPT_fcompare_debug_second:
+	    case OPT_fcompare_debug:
+	    case OPT_fcompare_debug_:
+	    case OPT_o:
+	      /* Avoid duplicate processing of some options from
+		 compare-debug specs; just save them here.  */
+	      save_switch (decoded_options[j].canonical_option[0],
+			   (decoded_options[j].canonical_option_num_elements
+			    - 1),
+			   &decoded_options[j].canonical_option[1], false, true);
+	      break;
+
+	    default:
+	      read_cmdline_option (&global_options, &global_options_set,
+				   decoded_options + j, UNKNOWN_LOCATION,
+				   CL_DRIVER, &handlers, global_dc);
+	      break;
+	    }
+	}
+
+      free (decoded_options);
+
+      alloc_switch ();
+      switches[n_switches].part1 = 0;
+    }
+
+
+// Source: gcc.c
+// Lines 5086-5164
+
+
+[ANSWER]
+MUST-NOT

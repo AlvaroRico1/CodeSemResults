@@ -1,0 +1,1 @@
+a_content,libgit2/tests/libgit2/diff/blob.c,6,tc,libgit2/tests/libgit2/diff/blob.c,8,0

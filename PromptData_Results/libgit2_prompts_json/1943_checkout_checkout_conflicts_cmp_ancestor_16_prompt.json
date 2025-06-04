@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'path' at line 3\n2. Pointer 'p' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int checkout_conflicts_cmp_ancestor(const void *p, const void *c)\n{\n\tconst char *path = p;\n\tconst checkout_conflictdata *conflict = c;\n\n\tif (!conflict->ancestor)\n\t\treturn 1;\n\n\treturn checkout_conflicts_cmp_entry(path, conflict->ancestor);\n}\n\n\n// Source: checkout.c\n// Lines 989-998\n",
+  "ANSWER": "MUST"
+}

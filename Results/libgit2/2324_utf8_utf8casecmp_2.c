@@ -1,0 +1,34 @@
+int utf8casecmp(const void *src1, const void *src2) {
+  utf8_int32_t src1_cp, src2_cp, src1_orig_cp, src2_orig_cp;
+
+  for (;;) {
+    src1 = utf8codepoint(src1, &src1_cp);
+    src2 = utf8codepoint(src2, &src2_cp);
+
+    // Take a copy of src1 & src2
+    src1_orig_cp = src1_cp;
+    src2_orig_cp = src2_cp;
+
+    // Lower the srcs if required
+    src1_cp = utf8lwrcodepoint(src1_cp);
+    src2_cp = utf8lwrcodepoint(src2_cp);
+
+    // Check if the lowered codepoints match
+    if ((0 == src1_orig_cp) && (0 == src2_orig_cp)) {
+      return 0;
+    } else if (src1_cp == src2_cp) {
+      continue;
+    }
+
+    // If they don't match, then we return which of the original's are less
+    if (src1_orig_cp < src2_orig_cp) {
+      return -1;
+    } else if (src1_orig_cp > src2_orig_cp) {
+      return 1;
+    }
+  }
+}
+
+
+// Source: utf8.h
+// Lines 220-249

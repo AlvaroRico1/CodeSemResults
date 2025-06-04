@@ -1,0 +1,115 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'prev_elem' at line 4
+2. Pointer 'elem' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+setup_reg_equiv (void)
+{
+  int i;
+  rtx_insn_list *elem, *prev_elem, *next_elem;
+  rtx_insn *insn;
+  rtx set, x;
+
+  for (i = FIRST_PSEUDO_REGISTER; i < ira_reg_equiv_len; i++)
+    for (prev_elem = NULL, elem = ira_reg_equiv[i].init_insns;
+	 elem;
+	 prev_elem = elem, elem = next_elem)
+      {
+	next_elem = elem->next ();
+	insn = elem->insn ();
+	set = single_set (insn);
+	
+	/* Init insns can set up equivalence when the reg is a destination or
+	   a source (in this case the destination is memory).  */
+	if (set != 0 && (REG_P (SET_DEST (set)) || REG_P (SET_SRC (set))))
+	  {
+	    if ((x = find_reg_note (insn, REG_EQUIV, NULL_RTX)) != NULL)
+	      {
+		x = XEXP (x, 0);
+		if (REG_P (SET_DEST (set))
+		    && REGNO (SET_DEST (set)) == (unsigned int) i
+		    && ! rtx_equal_p (SET_SRC (set), x) && MEM_P (x))
+		  {
+		    /* This insn reporting the equivalence but
+		       actually not setting it.  Remove it from the
+		       list.  */
+		    if (prev_elem == NULL)
+		      ira_reg_equiv[i].init_insns = next_elem;
+		    else
+		      XEXP (prev_elem, 1) = next_elem;
+		    elem = prev_elem;
+		  }
+	      }
+	    else if (REG_P (SET_DEST (set))
+		     && REGNO (SET_DEST (set)) == (unsigned int) i)
+	      x = SET_SRC (set);
+	    else
+	      {      
+		gcc_assert (REG_P (SET_SRC (set))
+			    && REGNO (SET_SRC (set)) == (unsigned int) i);
+		x = SET_DEST (set);
+	      }
+	    if (! function_invariant_p (x)
+		|| ! flag_pic
+		/* A function invariant is often CONSTANT_P but may
+		   include a register.  We promise to only pass
+		   CONSTANT_P objects to LEGITIMATE_PIC_OPERAND_P.  */
+		|| (CONSTANT_P (x) && LEGITIMATE_PIC_OPERAND_P (x)))
+	      {
+		/* It can happen that a REG_EQUIV note contains a MEM
+		   that is not a legitimate memory operand.  As later
+		   stages of reload assume that all addresses found in
+		   the lra_regno_equiv_* arrays were originally
+		   legitimate, we ignore such REG_EQUIV notes.  */
+		if (memory_operand (x, VOIDmode))
+		  {
+		    ira_reg_equiv[i].defined_p = true;
+		    ira_reg_equiv[i].memory = x;
+		    continue;
+		  }
+		else if (function_invariant_p (x))
+		  {
+		    machine_mode mode;
+		    
+		    mode = GET_MODE (SET_DEST (set));
+		    if (GET_CODE (x) == PLUS
+			|| x == frame_pointer_rtx || x == arg_pointer_rtx)
+		      /* This is PLUS of frame pointer and a constant,
+			 or fp, or argp.  */
+		      ira_reg_equiv[i].invariant = x;
+		    else if (targetm.legitimate_constant_p (mode, x))
+		      ira_reg_equiv[i].constant = x;
+		    else
+		      {
+			ira_reg_equiv[i].memory = force_const_mem (mode, x);
+			if (ira_reg_equiv[i].memory == NULL_RTX)
+			  {
+			    ira_reg_equiv[i].defined_p = false;
+			    ira_reg_equiv[i].init_insns = NULL;
+			    break;
+			  }
+		      }
+		    ira_reg_equiv[i].defined_p = true;
+		    continue;
+		  }
+	      }
+	  }
+	ira_reg_equiv[i].defined_p = false;
+	ira_reg_equiv[i].init_insns = NULL;
+	break;
+      }
+}
+
+
+// Source: ira.c
+// Lines 3970-4065
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'dst' at line 6\n2. Pointer 'pos' at line 10\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int ghash_update(struct shash_desc *desc,\n\t\t\t const u8 *src, unsigned int srclen)\n{\n\tstruct ghash_desc_ctx *dctx = shash_desc_ctx(desc);\n\tstruct ghash_ctx *ctx = crypto_shash_ctx(desc->tfm);\n\tu8 *dst = dctx->buffer;\n\n\tif (dctx->bytes) {\n\t\tint n = min(srclen, dctx->bytes);\n\t\tu8 *pos = dst + (GHASH_BLOCK_SIZE - dctx->bytes);\n\n\t\tdctx->bytes -= n;\n\t\tsrclen -= n;\n\n\t\twhile (n--)\n\t\t\t*pos++ ^= *src++;\n\n\t\tif (!dctx->bytes)\n\t\t\tgf128mul_4k_lle((be128 *)dst, ctx->gf128);\n\t}\n\n\n// Source: ghash-generic.c\n// Lines 55-74\n",
+  "ANSWER": "MAY"
+}

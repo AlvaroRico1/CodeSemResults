@@ -1,0 +1,38 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'c' at line 4
+2. Pointer 'tty' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+tty_timer_callback(__unused int fd, __unused short events, void *data)
+{
+	struct tty	*tty = data;
+	struct client	*c = tty->client;
+	struct timeval	 tv = { .tv_usec = TTY_BLOCK_INTERVAL };
+
+	log_debug("%s: %zu discarded", c->name, tty->discarded);
+
+	c->flags |= CLIENT_ALLREDRAWFLAGS;
+	c->discarded += tty->discarded;
+
+	if (tty->discarded < TTY_BLOCK_STOP(tty)) {
+		tty->flags &= ~TTY_BLOCK;
+		tty_invalidate(tty);
+		return;
+	}
+	tty->discarded = 0;
+	evtimer_add(&tty->timer, &tv);
+}
+
+
+// Source: tty.c
+// Lines 182-200
+
+
+[ANSWER]
+MUST

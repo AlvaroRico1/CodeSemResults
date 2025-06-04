@@ -1,0 +1,1 @@
+nowildcardlen,git/dir.c,7,string,git/dir.c,1,2

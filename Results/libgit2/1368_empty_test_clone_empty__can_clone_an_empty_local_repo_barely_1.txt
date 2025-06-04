@@ -1,0 +1,1 @@
+local_name,libgit2/tests/libgit2/clone/empty.c,3,expected_tracked_branch_name,libgit2/tests/libgit2/clone/empty.c,4,0

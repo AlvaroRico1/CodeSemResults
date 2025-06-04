@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'wp' at line 4
+2. Pointer 'ictx' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+input_exit_apc(struct input_ctx *ictx)
+{
+	struct screen_write_ctx	*sctx = &ictx->ctx;
+	struct window_pane	*wp = ictx->wp;
+
+	if (ictx->flags & INPUT_DISCARD)
+		return;
+	log_debug("%s: \"%s\"", __func__, ictx->input_buf);
+
+	if (screen_set_title(sctx->s, ictx->input_buf) && wp != NULL) {
+		notify_pane("pane-title-changed", wp);
+		server_redraw_window_borders(wp->window);
+		server_status_window(wp->window);
+	}
+}
+
+
+// Source: input.c
+// Lines 2351-2365
+
+
+[ANSWER]
+MUST

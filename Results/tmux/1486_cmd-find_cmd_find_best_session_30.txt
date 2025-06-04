@@ -1,0 +1,1 @@
+s,tmux/cmd-find.c,3,slist,tmux/cmd-find.c,1,1

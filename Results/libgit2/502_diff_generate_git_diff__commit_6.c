@@ -1,0 +1,45 @@
+int git_diff__commit(
+	git_diff **out,
+	git_repository *repo,
+	const git_commit *commit,
+	const git_diff_options *opts)
+{
+	git_commit *parent = NULL;
+	git_diff *commit_diff = NULL;
+	git_tree *old_tree = NULL, *new_tree = NULL;
+	size_t parents;
+	int error = 0;
+
+	*out = NULL;
+
+	if ((parents = git_commit_parentcount(commit)) > 1) {
+		char commit_oidstr[GIT_OID_HEXSZ + 1];
+
+		error = -1;
+		git_error_set(GIT_ERROR_INVALID, "commit %s is a merge commit",
+			git_oid_tostr(commit_oidstr, GIT_OID_HEXSZ + 1, git_commit_id(commit)));
+		goto on_error;
+	}
+
+	if (parents > 0)
+		if ((error = git_commit_parent(&parent, commit, 0)) < 0 ||
+			(error = git_commit_tree(&old_tree, parent)) < 0)
+				goto on_error;
+
+	if ((error = git_commit_tree(&new_tree, commit)) < 0 ||
+		(error = git_diff_tree_to_tree(&commit_diff, repo, old_tree, new_tree, opts)) < 0)
+			goto on_error;
+
+	*out = commit_diff;
+
+on_error:
+	git_tree_free(new_tree);
+	git_tree_free(old_tree);
+	git_commit_free(parent);
+
+	return error;
+}
+
+
+// Source: diff_generate.c
+// Lines 1683-1723

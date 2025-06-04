@@ -1,0 +1,46 @@
+#define OUTPUT_FIELD(CPPTYPE, METHOD)                                \
+  case FieldDescriptor::CPPTYPE_##CPPTYPE:                           \
+    printer->Print##METHOD(                                          \
+        field->is_repeated()                                         \
+            ? reflection->GetRepeated##METHOD(message, field, index) \
+            : reflection->Get##METHOD(message, field),               \
+        generator);                                                  \
+    break
+
+    OUTPUT_FIELD(INT32, Int32);
+    OUTPUT_FIELD(INT64, Int64);
+    OUTPUT_FIELD(UINT32, UInt32);
+    OUTPUT_FIELD(UINT64, UInt64);
+    OUTPUT_FIELD(FLOAT, Float);
+    OUTPUT_FIELD(DOUBLE, Double);
+    OUTPUT_FIELD(BOOL, Bool);
+#undef OUTPUT_FIELD
+
+    case FieldDescriptor::CPPTYPE_STRING: {
+      std::string scratch;
+      const std::string& value =
+          field->is_repeated()
+              ? reflection->GetRepeatedStringReference(message, field, index,
+                                                       &scratch)
+              : reflection->GetStringReference(message, field, &scratch);
+      const std::string* value_to_print = &value;
+      std::string truncated_value;
+      if (truncate_string_field_longer_than_ > 0 &&
+          static_cast<size_t>(truncate_string_field_longer_than_) <
+              value.size()) {
+        truncated_value = value.substr(0, truncate_string_field_longer_than_) +
+                          "...<truncated>...";
+        value_to_print = &truncated_value;
+      }
+      if (field->type() == FieldDescriptor::TYPE_STRING) {
+        printer->PrintString(*value_to_print, generator);
+      } else {
+        GOOGLE_DCHECK_EQ(field->type(), FieldDescriptor::TYPE_BYTES);
+        printer->PrintBytes(*value_to_print, generator);
+      }
+      break;
+    }
+
+
+// Source: text_format.cc
+// Lines 2529-2570

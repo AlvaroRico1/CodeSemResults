@@ -1,0 +1,1 @@
+buf,gcc/libcpp/directives.c,2,fname,gcc/libcpp/directives.c,4,2

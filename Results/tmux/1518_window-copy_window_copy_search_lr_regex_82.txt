@@ -1,0 +1,1 @@
+psx,tmux/window-copy.c,1,buf,tmux/window-copy.c,6,2

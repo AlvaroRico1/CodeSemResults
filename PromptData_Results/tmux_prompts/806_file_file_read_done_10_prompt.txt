@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'msg' at line 3
+2. Pointer 'imsg' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+file_read_done(struct client_files *files, struct imsg *imsg)
+{
+	struct msg_read_done	*msg = imsg->data;
+	size_t			 msglen = imsg->hdr.len - IMSG_HEADER_SIZE;
+	struct client_file	 find, *cf;
+
+	if (msglen != sizeof *msg)
+		fatalx("bad MSG_READ_DONE size");
+	find.stream = msg->stream;
+	if ((cf = RB_FIND(client_files, files, &find)) == NULL)
+		return;
+
+	log_debug("file %d read done", cf->stream);
+	cf->error = msg->error;
+	file_fire_done(cf);
+}
+
+
+// Source: file.c
+// Lines 804-819
+
+
+[ANSWER]
+MUST

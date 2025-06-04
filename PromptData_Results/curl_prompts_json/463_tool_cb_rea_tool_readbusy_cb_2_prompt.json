@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'per' at line 5\n2. Pointer 'clientp' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint tool_readbusy_cb(void *clientp,\n                     curl_off_t dltotal, curl_off_t dlnow,\n                     curl_off_t ultotal, curl_off_t ulnow)\n{\n  struct per_transfer *per = clientp;\n  struct OperationConfig *config = per->config;\n\n  (void)dltotal;  /* unused */\n  (void)dlnow;  /* unused */\n  (void)ultotal;  /* unused */\n  (void)ulnow;  /* unused */\n\n  if(config->readbusy) {\n    config->readbusy = FALSE;\n    curl_easy_pause(per->curl, CURLPAUSE_CONT);\n  }\n\n  return per->noprogress? 0 : CURL_PROGRESSFUNC_CONTINUE;\n}\n\n\n// Source: tool_cb_rea.c\n// Lines 61-79\n",
+  "ANSWER": "MUST"
+}

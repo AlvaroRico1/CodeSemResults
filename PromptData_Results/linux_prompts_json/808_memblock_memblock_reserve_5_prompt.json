@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'end' at line 3\n2. Pointer 'base' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint __init_memblock memblock_reserve(phys_addr_t base, phys_addr_t size)\n{\n\tphys_addr_t end = base + size - 1;\n\n\tmemblock_dbg(\"memblock_reserve: [%pa-%pa] %pS\\n\",\n\t\t     &base, &end, (void *)_RET_IP_);\n\n\treturn memblock_add_range(&memblock.reserved, base, size, MAX_NUMNODES, 0);\n}\n\n\n// Source: memblock.c\n// Lines 827-835\n",
+  "ANSWER": "MAY"
+}

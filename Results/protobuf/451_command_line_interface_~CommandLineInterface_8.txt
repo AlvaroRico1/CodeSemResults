@@ -1,0 +1,1 @@
+info,protobuf/src/google/protobuf/compiler/command_line_interface.cc,6,generator,protobuf/src/google/protobuf/compiler/command_line_interface.cc,4,1

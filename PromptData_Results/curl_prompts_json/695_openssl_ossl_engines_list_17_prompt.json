@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'list' at line 3\n2. Pointer 'beg' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic struct curl_slist *ossl_engines_list(struct Curl_easy *data)\n{\n  struct curl_slist *list = NULL;\n#ifdef USE_OPENSSL_ENGINE\n  struct curl_slist *beg;\n  ENGINE *e;\n\n  for(e = ENGINE_get_first(); e; e = ENGINE_get_next(e)) {\n    beg = curl_slist_append(list, ENGINE_get_id(e));\n    if(!beg) {\n      curl_slist_free_all(list);\n      return NULL;\n    }\n    list = beg;\n  }\n#endif\n  (void) data;\n  return list;\n}\n\n\n// Source: openssl.c\n// Lines 1373-1391\n",
+  "ANSWER": "MUST"
+}

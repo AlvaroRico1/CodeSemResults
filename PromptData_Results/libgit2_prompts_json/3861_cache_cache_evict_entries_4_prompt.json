@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'i' at line 3\n2. Pointer 'evict' at line 9\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void cache_evict_entries(git_cache *cache)\n{\n\tsize_t evict_count = git_cache_size(cache) / 2048, i;\n\tssize_t evicted_memory = 0;\n\n\tif (evict_count < 8)\n\t\tevict_count = 8;\n\n\t/* do not infinite loop if there's not enough entries to evict  */\n\tif (evict_count > git_cache_size(cache)) {\n\t\tclear_cache(cache);\n\t\treturn;\n\t}\n\n\ti = 0;\n\twhile (evict_count > 0) {\n\t\tgit_cached_obj *evict;\n\t\tconst git_oid *key;\n\n\t\tif (git_oidmap_iterate((void **) &evict, cache->map, &i, &key) == GIT_ITEROVER)\n\t\t\tbreak;\n\n\t\tevict_count--;\n\t\tevicted_memory += evict->size;\n\t\tgit_oidmap_delete(cache->map, key);\n\t\tgit_cached_obj_decref(evict);\n\t}\n\n\n// Source: cache.c\n// Lines 95-121\n",
+  "ANSWER": "MAY"
+}

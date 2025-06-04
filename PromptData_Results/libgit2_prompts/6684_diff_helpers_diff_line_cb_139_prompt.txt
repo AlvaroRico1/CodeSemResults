@@ -1,0 +1,49 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'line' at line 4
+2. Pointer 'e' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int diff_line_cb(
+	const git_diff_delta *delta,
+	const git_diff_hunk *hunk,
+	const git_diff_line *line,
+	void *payload)
+{
+	diff_expects *e = payload;
+
+	GIT_UNUSED(delta);
+	GIT_UNUSED(hunk);
+
+	e->lines++;
+	switch (line->origin) {
+	case GIT_DIFF_LINE_CONTEXT:
+	case GIT_DIFF_LINE_CONTEXT_EOFNL: /* techically not a line */
+		e->line_ctxt++;
+		break;
+	case GIT_DIFF_LINE_ADDITION:
+	case GIT_DIFF_LINE_ADD_EOFNL: /* technically not a line add */
+		e->line_adds++;
+		break;
+	case GIT_DIFF_LINE_DELETION:
+	case GIT_DIFF_LINE_DEL_EOFNL: /* technically not a line delete */
+		e->line_dels++;
+		break;
+	default:
+		break;
+	}
+	return 0;
+}
+
+
+// Source: diff_helpers.c
+// Lines 126-155
+
+
+[ANSWER]
+MUST-NOT

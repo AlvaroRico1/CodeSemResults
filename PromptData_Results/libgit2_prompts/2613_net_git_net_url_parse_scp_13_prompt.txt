@@ -1,0 +1,161 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'port_len' at line 5
+2. Pointer 'c' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_net_url_parse_scp(git_net_url *url, const char *given)
+{
+	const char *default_port = default_port_for_scheme("ssh");
+	const char *c, *user, *host, *port, *path = NULL;
+	size_t user_len = 0, host_len = 0, port_len = 0;
+	unsigned short bracket = 0;
+
+	enum {
+		NONE,
+		USER,
+		HOST_START, HOST, HOST_END,
+		IPV6, IPV6_END,
+		PORT_START, PORT, PORT_END,
+		PATH_START
+	} state = NONE;
+
+	memset(url, 0, sizeof(git_net_url));
+
+	for (c = given; *c && !path; c++) {
+		switch (state) {
+		case NONE:
+			switch (*c) {
+			case '@':
+				return scp_invalid("unexpected '@'");
+			case ':':
+				return scp_invalid("unexpected ':'");
+			case '[':
+				if (is_ipv6(c)) {
+					state = IPV6;
+					host = c;
+				} else if (bracket++ > 1) {
+					return scp_invalid("unexpected '['");
+				}
+				break;
+			default:
+				if (has_at(c)) {
+					state = USER;
+					user = c;
+				} else {
+					state = HOST;
+					host = c;
+				}
+				break;
+			}
+			break;
+
+		case USER:
+			if (*c == '@') {
+				user_len = (c - user);
+				state = HOST_START;
+			}
+			break;
+
+		case HOST_START:
+			state = (*c == '[') ? IPV6 : HOST;
+			host = c;
+			break;
+
+		case HOST:
+			if (*c == ':') {
+				host_len = (c - host);
+				state = bracket ? PORT_START : PATH_START;
+			} else if (*c == ']') {
+				if (bracket-- == 0)
+					return scp_invalid("unexpected ']'");
+
+				host_len = (c - host);
+				state = HOST_END;
+			}
+			break;
+
+		case HOST_END:
+			if (*c != ':')
+				return scp_invalid("unexpected character after hostname");
+			state = PATH_START;
+			break;
+
+		case IPV6:
+			if (*c == ']')
+				state = IPV6_END;
+			break;
+
+		case IPV6_END:
+			if (*c != ':')
+				return scp_invalid("unexpected character after ipv6 address");
+
+			host_len = (c - host);
+			state = bracket ? PORT_START : PATH_START;
+			break;
+
+		case PORT_START:
+			port = c;
+			state = PORT;
+			break;
+
+		case PORT:
+			if (*c == ']') {
+				if (bracket-- == 0)
+					return scp_invalid("unexpected ']'");
+
+				port_len = c - port;
+				state = PORT_END;
+			}
+			break;
+
+		case PORT_END:
+			if (*c != ':')
+				return scp_invalid("unexpected character after ipv6 address");
+
+			state = PATH_START;
+			break;
+
+		case PATH_START:
+			path = c;
+			break;
+
+		default:
+			GIT_ASSERT("unhandled state");
+		}
+	}
+
+	if (!path)
+		return scp_invalid("path is required");
+
+	GIT_ERROR_CHECK_ALLOC(url->scheme = git__strdup("ssh"));
+
+	if (user_len)
+		GIT_ERROR_CHECK_ALLOC(url->username = git__strndup(user, user_len));
+
+	GIT_ASSERT(host_len);
+	GIT_ERROR_CHECK_ALLOC(url->host = git__strndup(host, host_len));
+
+	if (port_len)
+		GIT_ERROR_CHECK_ALLOC(url->port = git__strndup(port, port_len));
+	else
+		GIT_ERROR_CHECK_ALLOC(url->port = git__strdup(default_port));
+
+	GIT_ASSERT(path);
+	GIT_ERROR_CHECK_ALLOC(url->path = git__strdup(path));
+
+	return 0;
+}
+
+
+// Source: net.c
+// Lines 260-401
+
+
+[ANSWER]
+MUST

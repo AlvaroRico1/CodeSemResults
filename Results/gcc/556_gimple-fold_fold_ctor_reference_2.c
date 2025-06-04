@@ -1,0 +1,89 @@
+fold_ctor_reference (tree type, tree ctor, const poly_uint64 &poly_offset,
+		     const poly_uint64 &poly_size, tree from_decl,
+		     unsigned HOST_WIDE_INT *suboff /* = NULL */)
+{
+  tree ret;
+
+  /* We found the field with exact match.  */
+  if (type
+      && useless_type_conversion_p (type, TREE_TYPE (ctor))
+      && known_eq (poly_offset, 0U))
+    return canonicalize_constructor_val (unshare_expr (ctor), from_decl);
+
+  /* The remaining optimizations need a constant size and offset.  */
+  unsigned HOST_WIDE_INT size, offset;
+  if (!poly_size.is_constant (&size) || !poly_offset.is_constant (&offset))
+    return NULL_TREE;
+
+  /* We are at the end of walk, see if we can view convert the
+     result.  */
+  if (!AGGREGATE_TYPE_P (TREE_TYPE (ctor)) && !offset
+      /* VIEW_CONVERT_EXPR is defined only for matching sizes.  */
+      && !compare_tree_int (TYPE_SIZE (type), size)
+      && !compare_tree_int (TYPE_SIZE (TREE_TYPE (ctor)), size))
+    {
+      ret = canonicalize_constructor_val (unshare_expr (ctor), from_decl);
+      if (ret)
+	{
+	  ret = fold_unary (VIEW_CONVERT_EXPR, type, ret);
+	  if (ret)
+	    STRIP_USELESS_TYPE_CONVERSION (ret);
+	}
+      return ret;
+    }
+  /* For constants and byte-aligned/sized reads try to go through
+     native_encode/interpret.  */
+  if (CONSTANT_CLASS_P (ctor)
+      && BITS_PER_UNIT == 8
+      && offset % BITS_PER_UNIT == 0
+      && offset / BITS_PER_UNIT <= INT_MAX
+      && size % BITS_PER_UNIT == 0
+      && size <= MAX_BITSIZE_MODE_ANY_MODE
+      && can_native_interpret_type_p (type))
+    {
+      unsigned char buf[MAX_BITSIZE_MODE_ANY_MODE / BITS_PER_UNIT];
+      int len = native_encode_expr (ctor, buf, size / BITS_PER_UNIT,
+				    offset / BITS_PER_UNIT);
+      if (len > 0)
+	return native_interpret_expr (type, buf, len);
+    }
+  if (TREE_CODE (ctor) == CONSTRUCTOR)
+    {
+      unsigned HOST_WIDE_INT dummy = 0;
+      if (!suboff)
+	suboff = &dummy;
+
+      tree ret;
+      if (TREE_CODE (TREE_TYPE (ctor)) == ARRAY_TYPE
+	  || TREE_CODE (TREE_TYPE (ctor)) == VECTOR_TYPE)
+	ret = fold_array_ctor_reference (type, ctor, offset, size,
+					 from_decl, suboff);
+      else
+	ret = fold_nonarray_ctor_reference (type, ctor, offset, size,
+					    from_decl, suboff);
+
+      /* Fall back to native_encode_initializer.  Needs to be done
+	 only in the outermost fold_ctor_reference call (because it itself
+	 recurses into CONSTRUCTORs) and doesn't update suboff.  */
+      if (ret == NULL_TREE
+	  && suboff == &dummy
+	  && BITS_PER_UNIT == 8
+	  && offset % BITS_PER_UNIT == 0
+	  && offset / BITS_PER_UNIT <= INT_MAX
+	  && size % BITS_PER_UNIT == 0
+	  && size <= MAX_BITSIZE_MODE_ANY_MODE
+	  && can_native_interpret_type_p (type))
+	{
+	  unsigned char buf[MAX_BITSIZE_MODE_ANY_MODE / BITS_PER_UNIT];
+	  int len = native_encode_initializer (ctor, buf, size / BITS_PER_UNIT,
+					       offset / BITS_PER_UNIT);
+	  if (len > 0)
+	    return native_interpret_expr (type, buf, len);
+	}
+
+      return ret;
+    }
+
+
+// Source: gimple-fold.c
+// Lines 6949-7033

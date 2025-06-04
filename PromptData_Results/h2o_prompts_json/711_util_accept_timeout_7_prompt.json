@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'sock' at line 4\n2. Pointer 'data' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void accept_timeout(struct st_h2o_accept_data_t *data)\n{\n    /* TODO log */\n    h2o_socket_t *sock = data->sock;\n    accept_data_callbacks.destroy(data);\n    h2o_socket_close(sock);\n}\n\n\n// Source: util.c\n// Lines 304-310\n",
+  "ANSWER": "MUST"
+}

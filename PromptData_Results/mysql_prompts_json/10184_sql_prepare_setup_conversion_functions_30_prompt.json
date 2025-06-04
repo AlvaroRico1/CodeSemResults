@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'end' at line 8\n2. Pointer 'it' at line 7\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void setup_conversion_functions(Prepared_statement *stmt,\n                                       PS_PARAM *parameters) {\n  /*\n    First execute or types altered by the client, setup the\n    conversion routines for all parameters (one time)\n  */\n  Item_param **it = stmt->param_array;\n  Item_param **end = it + stmt->param_count;\n  for (uint i = 0; it < end; ++it, ++i) {\n    Item_param *const param = *it;\n    param->set_type_actual(parameters[i].type, parameters[i].unsigned_type);\n    setup_one_conversion_function(param,\n                                  stmt->thd->variables.character_set_client);\n    param->sync_clones();\n  }\n}\n\n\n// Source: sql_prepare.cc\n// Lines 857-872\n",
+  "ANSWER": "MUST"
+}

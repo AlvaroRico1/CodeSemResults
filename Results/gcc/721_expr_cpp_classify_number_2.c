@@ -1,0 +1,337 @@
+cpp_classify_number (cpp_reader *pfile, const cpp_token *token,
+		     const char **ud_suffix, location_t virtual_location)
+{
+  const uchar *str = token->val.str.text;
+  const uchar *limit;
+  unsigned int max_digit, result, radix;
+  enum {NOT_FLOAT = 0, AFTER_POINT, AFTER_EXPON} float_flag;
+  bool seen_digit;
+  bool seen_digit_sep;
+
+  if (ud_suffix)
+    *ud_suffix = NULL;
+
+  /* If the lexer has done its job, length one can only be a single
+     digit.  Fast-path this very common case.  */
+  if (token->val.str.len == 1)
+    return CPP_N_INTEGER | CPP_N_SMALL | CPP_N_DECIMAL;
+
+  limit = str + token->val.str.len;
+  float_flag = NOT_FLOAT;
+  max_digit = 0;
+  radix = 10;
+  seen_digit = false;
+  seen_digit_sep = false;
+
+  /* First, interpret the radix.  */
+  if (*str == '0')
+    {
+      radix = 8;
+      str++;
+
+      /* Require at least one hex digit to classify it as hex.  */
+      if (*str == 'x' || *str == 'X')
+	{
+	  if (str[1] == '.' || ISXDIGIT (str[1]))
+	    {
+	      radix = 16;
+	      str++;
+	    }
+	  else if (DIGIT_SEP (str[1]))
+	    SYNTAX_ERROR_AT (virtual_location,
+			     "digit separator after base indicator");
+	}
+      else if (*str == 'b' || *str == 'B')
+	{
+	  if (str[1] == '0' || str[1] == '1')
+	    {
+	      radix = 2;
+	      str++;
+	    }
+	  else if (DIGIT_SEP (str[1]))
+	    SYNTAX_ERROR_AT (virtual_location,
+			     "digit separator after base indicator");
+	}
+    }
+
+  /* Now scan for a well-formed integer or float.  */
+  for (;;)
+    {
+      unsigned int c = *str++;
+
+      if (ISDIGIT (c) || (ISXDIGIT (c) && radix == 16))
+	{
+	  seen_digit_sep = false;
+	  seen_digit = true;
+	  c = hex_value (c);
+	  if (c > max_digit)
+	    max_digit = c;
+	}
+      else if (DIGIT_SEP (c))
+	{
+	  if (seen_digit_sep)
+	    SYNTAX_ERROR_AT (virtual_location, "adjacent digit separators");
+	  seen_digit_sep = true;
+	}
+      else if (c == '.')
+	{
+	  if (seen_digit_sep || DIGIT_SEP (*str))
+	    SYNTAX_ERROR_AT (virtual_location,
+			     "digit separator adjacent to decimal point");
+	  seen_digit_sep = false;
+	  if (float_flag == NOT_FLOAT)
+	    float_flag = AFTER_POINT;
+	  else
+	    SYNTAX_ERROR_AT (virtual_location,
+			     "too many decimal points in number");
+	}
+      else if ((radix <= 10 && (c == 'e' || c == 'E'))
+	       || (radix == 16 && (c == 'p' || c == 'P')))
+	{
+	  if (seen_digit_sep || DIGIT_SEP (*str))
+	    SYNTAX_ERROR_AT (virtual_location,
+			     "digit separator adjacent to exponent");
+	  float_flag = AFTER_EXPON;
+	  break;
+	}
+      else
+	{
+	  /* Start of suffix.  */
+	  str--;
+	  break;
+	}
+    }
+
+  if (seen_digit_sep && float_flag != AFTER_EXPON)
+    SYNTAX_ERROR_AT (virtual_location,
+		     "digit separator outside digit sequence");
+
+  /* The suffix may be for decimal fixed-point constants without exponent.  */
+  if (radix != 16 && float_flag == NOT_FLOAT)
+    {
+      result = interpret_float_suffix (pfile, str, limit - str);
+      if ((result & CPP_N_FRACT) || (result & CPP_N_ACCUM))
+	{
+	  result |= CPP_N_FLOATING;
+	  /* We need to restore the radix to 10, if the radix is 8.  */
+	  if (radix == 8)
+	    radix = 10;
+
+	  if (CPP_PEDANTIC (pfile))
+	    cpp_error_with_line (pfile, CPP_DL_PEDWARN, virtual_location, 0,
+				 "fixed-point constants are a GCC extension");
+	  goto syntax_ok;
+	}
+      else
+	result = 0;
+    }
+
+  if (float_flag != NOT_FLOAT && radix == 8)
+    radix = 10;
+
+  if (max_digit >= radix)
+    {
+      if (radix == 2)
+	SYNTAX_ERROR2_AT (virtual_location,
+			  "invalid digit \"%c\" in binary constant", '0' + max_digit);
+      else
+	SYNTAX_ERROR2_AT (virtual_location,
+			  "invalid digit \"%c\" in octal constant", '0' + max_digit);
+    }
+
+  if (float_flag != NOT_FLOAT)
+    {
+      if (radix == 2)
+	{
+	  cpp_error_with_line (pfile, CPP_DL_ERROR, virtual_location, 0,
+			       "invalid prefix \"0b\" for floating constant");
+	  return CPP_N_INVALID;
+	}
+
+      if (radix == 16 && !seen_digit)
+	SYNTAX_ERROR_AT (virtual_location,
+			 "no digits in hexadecimal floating constant");
+
+      if (radix == 16 && CPP_PEDANTIC (pfile)
+	  && !CPP_OPTION (pfile, extended_numbers))
+	{
+	  if (CPP_OPTION (pfile, cplusplus))
+	    cpp_error_with_line (pfile, CPP_DL_PEDWARN, virtual_location, 0,
+				 "use of C++17 hexadecimal floating constant");
+	  else
+	    cpp_error_with_line (pfile, CPP_DL_PEDWARN, virtual_location, 0,
+				 "use of C99 hexadecimal floating constant");
+	}
+
+      if (float_flag == AFTER_EXPON)
+	{
+	  if (*str == '+' || *str == '-')
+	    str++;
+
+	  /* Exponent is decimal, even if string is a hex float.  */
+	  if (!ISDIGIT (*str))
+	    {
+	      if (DIGIT_SEP (*str))
+		SYNTAX_ERROR_AT (virtual_location,
+				 "digit separator adjacent to exponent");
+	      else
+		SYNTAX_ERROR_AT (virtual_location, "exponent has no digits");
+	    }
+	  do
+	    {
+	      seen_digit_sep = DIGIT_SEP (*str);
+	      str++;
+	    }
+	  while (ISDIGIT (*str) || DIGIT_SEP (*str));
+	}
+      else if (radix == 16)
+	SYNTAX_ERROR_AT (virtual_location,
+			 "hexadecimal floating constants require an exponent");
+
+      if (seen_digit_sep)
+	SYNTAX_ERROR_AT (virtual_location,
+			 "digit separator outside digit sequence");
+
+      result = interpret_float_suffix (pfile, str, limit - str);
+      if (result == 0)
+	{
+	  if (CPP_OPTION (pfile, user_literals))
+	    {
+	      if (ud_suffix)
+		*ud_suffix = (const char *) str;
+	      result = CPP_N_LARGE | CPP_N_USERDEF;
+	    }
+	  else
+	    {
+	      cpp_error_with_line (pfile, CPP_DL_ERROR, virtual_location, 0,
+				   "invalid suffix \"%.*s\" on floating constant",
+				   (int) (limit - str), str);
+	      return CPP_N_INVALID;
+	    }
+	}
+
+      /* Traditional C didn't accept any floating suffixes.  */
+      if (limit != str
+	  && CPP_WTRADITIONAL (pfile)
+	  && ! cpp_sys_macro_p (pfile))
+	cpp_warning_with_line (pfile, CPP_W_TRADITIONAL, virtual_location, 0,
+			       "traditional C rejects the \"%.*s\" suffix",
+			       (int) (limit - str), str);
+
+      /* A suffix for double is a GCC extension via decimal float support.
+	 If the suffix also specifies an imaginary value we'll catch that
+	 later.  */
+      if ((result == CPP_N_MEDIUM) && CPP_PEDANTIC (pfile))
+	cpp_error_with_line (pfile, CPP_DL_PEDWARN, virtual_location, 0,
+			     "suffix for double constant is a GCC extension");
+
+      /* Radix must be 10 for decimal floats.  */
+      if ((result & CPP_N_DFLOAT) && radix != 10)
+        {
+          cpp_error_with_line (pfile, CPP_DL_ERROR, virtual_location, 0,
+			       "invalid suffix \"%.*s\" with hexadecimal floating constant",
+			       (int) (limit - str), str);
+          return CPP_N_INVALID;
+        }
+
+      if ((result & (CPP_N_FRACT | CPP_N_ACCUM)) && CPP_PEDANTIC (pfile))
+	cpp_error_with_line (pfile, CPP_DL_PEDWARN, virtual_location, 0,
+			     "fixed-point constants are a GCC extension");
+
+      if (result & CPP_N_DFLOAT)
+	{
+	  if (CPP_PEDANTIC (pfile) && !CPP_OPTION (pfile, dfp_constants))
+	    cpp_error_with_line (pfile, CPP_DL_PEDWARN, virtual_location, 0,
+				 "decimal float constants are a C2X feature");
+	  else if (CPP_OPTION (pfile, cpp_warn_c11_c2x_compat) > 0)
+	    cpp_warning_with_line (pfile, CPP_W_C11_C2X_COMPAT,
+				   virtual_location, 0,
+				   "decimal float constants are a C2X feature");
+	}
+
+      result |= CPP_N_FLOATING;
+    }
+  else
+    {
+      result = interpret_int_suffix (pfile, str, limit - str);
+      if (result == 0)
+	{
+	  if (CPP_OPTION (pfile, user_literals))
+	    {
+	      if (ud_suffix)
+		*ud_suffix = (const char *) str;
+	      result = CPP_N_UNSIGNED | CPP_N_LARGE | CPP_N_USERDEF;
+	    }
+	  else
+	    {
+	      cpp_error_with_line (pfile, CPP_DL_ERROR, virtual_location, 0,
+				   "invalid suffix \"%.*s\" on integer constant",
+				   (int) (limit - str), str);
+	      return CPP_N_INVALID;
+	    }
+	}
+
+      /* Traditional C only accepted the 'L' suffix.
+         Suppress warning about 'LL' with -Wno-long-long.  */
+      if (CPP_WTRADITIONAL (pfile) && ! cpp_sys_macro_p (pfile))
+	{
+	  int u_or_i = (result & (CPP_N_UNSIGNED|CPP_N_IMAGINARY));
+	  int large = (result & CPP_N_WIDTH) == CPP_N_LARGE
+		       && CPP_OPTION (pfile, cpp_warn_long_long);
+
+	  if (u_or_i || large)
+	    cpp_warning_with_line (pfile, large ? CPP_W_LONG_LONG : CPP_W_TRADITIONAL,
+				   virtual_location, 0,
+				   "traditional C rejects the \"%.*s\" suffix",
+				   (int) (limit - str), str);
+	}
+
+      if ((result & CPP_N_WIDTH) == CPP_N_LARGE
+	  && CPP_OPTION (pfile, cpp_warn_long_long))
+        {
+          const char *message = CPP_OPTION (pfile, cplusplus) 
+				? N_("use of C++11 long long integer constant")
+		                : N_("use of C99 long long integer constant");
+
+	  if (CPP_OPTION (pfile, c99))
+            cpp_warning_with_line (pfile, CPP_W_LONG_LONG, virtual_location,
+				   0, message);
+          else
+            cpp_pedwarning_with_line (pfile, CPP_W_LONG_LONG,
+				      virtual_location, 0, message);
+        }
+
+      result |= CPP_N_INTEGER;
+    }
+
+ syntax_ok:
+  if ((result & CPP_N_IMAGINARY) && CPP_PEDANTIC (pfile))
+    cpp_error_with_line (pfile, CPP_DL_PEDWARN, virtual_location, 0,
+			 "imaginary constants are a GCC extension");
+  if (radix == 2
+      && !CPP_OPTION (pfile, binary_constants)
+      && CPP_PEDANTIC (pfile))
+    cpp_error_with_line (pfile, CPP_DL_PEDWARN, virtual_location, 0,
+			 CPP_OPTION (pfile, cplusplus)
+			 ? N_("binary constants are a C++14 feature "
+			      "or GCC extension")
+			 : N_("binary constants are a GCC extension"));
+
+  if (radix == 10)
+    result |= CPP_N_DECIMAL;
+  else if (radix == 16)
+    result |= CPP_N_HEX;
+  else if (radix == 2)
+    result |= CPP_N_BINARY;
+  else
+    result |= CPP_N_OCTAL;
+
+  return result;
+
+ syntax_error:
+  return CPP_N_INVALID;
+}
+
+
+// Source: expr.c
+// Lines 505-837

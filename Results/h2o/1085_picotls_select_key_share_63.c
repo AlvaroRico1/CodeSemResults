@@ -1,0 +1,34 @@
+static int select_key_share(ptls_key_exchange_algorithm_t **selected, ptls_iovec_t *peer_key,
+                            ptls_key_exchange_algorithm_t **candidates, const uint8_t **src, const uint8_t *const end,
+                            int expect_one)
+{
+    int ret;
+
+    *selected = NULL;
+
+    if (expect_one && *src == end) {
+        ret = PTLS_ALERT_ILLEGAL_PARAMETER;
+        goto Exit;
+    }
+
+    while (*src != end) {
+        uint16_t group;
+        ptls_iovec_t key;
+        if ((ret = decode_key_share_entry(&group, &key, src, end)) != 0)
+            goto Exit;
+        ptls_key_exchange_algorithm_t **c = candidates;
+        for (; *c != NULL; ++c) {
+            if (*selected == NULL && (*c)->id == group) {
+                *selected = *c;
+                *peer_key = key;
+            }
+        }
+        if (expect_one) {
+            ret = *selected != NULL ? 0 : PTLS_ALERT_ILLEGAL_PARAMETER;
+            goto Exit;
+        }
+    }
+
+
+// Source: picotls.c
+// Lines 1636-1665

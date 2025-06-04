@@ -1,0 +1,133 @@
+        ptls_openssl_verify_certificate_t vc;
+    } *pctx = h2o_mem_alloc(sizeof(*pctx));
+    EVP_PKEY *key;
+    X509 *cert;
+    STACK_OF(X509) * cert_chain;
+    int ret;
+    int use_client_verify = 0;
+    if (cipher_suites == NULL)
+        cipher_suites = ptls_openssl_cipher_suites;
+
+    *pctx = (struct st_fat_context_t){
+        .ctx =
+            {
+                .random_bytes = ptls_openssl_random_bytes,
+                .get_time = &ptls_get_time,
+                .key_exchanges = key_exchanges,
+                .cipher_suites = cipher_suites,
+                .certificates = {0}, /* fill later */
+                .esni = NULL,        /* fill later */
+                .on_client_hello = &pctx->ch.super,
+                .emit_certificate = &pctx->ec.super,
+                .sign_certificate = &pctx->sc.super,
+                .verify_certificate = NULL,
+                .ticket_lifetime = 0, /* initialized alongside encrypt_ticket */
+                .max_early_data_size = 8192,
+                .hkdf_label_prefix__obsolete = NULL,
+                .require_dhe_on_psk = 1,
+                .use_exporter = 0,
+                .send_change_cipher_spec = 0, /* is a client-only flag. As a server, this flag can be of any value. */
+                .require_client_authentication = 0,
+                .omit_end_of_early_data = 0,
+                .server_cipher_preference = server_cipher_preference,
+                .encrypt_ticket = NULL, /* initialized later */
+                .save_ticket = NULL,    /* initialized later */
+                .log_event = NULL,
+                .update_open_count = NULL,
+                .update_traffic_key = NULL,
+                .decompress_certificate = NULL,
+                .update_esni_key = NULL,
+                .on_extension = NULL,
+            },
+        .ch =
+            {
+                .listener = listener,
+                .super =
+                    {
+                        .cb = on_client_hello_ptls,
+                    },
+            },
+        .ec =
+            {
+                .conf = identity,
+                .super =
+                    {
+                        .cb = on_emit_certificate_ptls,
+                    },
+            },
+    };
+    { /* obtain key and cert (via fake connection for libressl compatibility) */
+        SSL *fakeconn = SSL_new(identity->ossl);
+        assert(fakeconn != NULL);
+        key = SSL_get_privatekey(fakeconn);
+        assert(key != NULL);
+        cert = SSL_get_certificate(fakeconn);
+        /* obtain peer verify mode */
+        use_client_verify = (SSL_get_verify_mode(fakeconn) & SSL_VERIFY_PEER) ? 1 : 0;
+        SSL_free(fakeconn);
+    }
+
+    if (use_client_verify) {
+        pctx->ctx.require_client_authentication = 1;
+        /* set verify callback */
+        X509_STORE *ca_store = SSL_CTX_get_cert_store(identity->ossl);
+        if (ptls_openssl_init_verify_certificate(&pctx->vc, ca_store) != 0) {
+            free(pctx);
+            return "failed to setup client certificate verification environment";
+        }
+        pctx->ctx.verify_certificate = &pctx->vc.super;
+    }
+
+    /* create signer */
+    if (ptls_openssl_init_sign_certificate(&pctx->sc, key) != 0) {
+        free(pctx);
+        return "failed to setup private key";
+    }
+
+    if (raw_public_key.base == NULL) {
+        /* setup X.509 certificates */
+        assert(cert != NULL);
+        SSL_CTX_get_extra_chain_certs(identity->ossl, &cert_chain);
+        ret = ptls_openssl_load_certificates(&pctx->ctx, cert, cert_chain);
+        assert(ret == 0);
+    } else {
+        /* setup raw public key */
+        pctx->ctx.certificates.list = h2o_mem_alloc(sizeof(pctx->ctx.certificates.list[0]));
+        pctx->ctx.certificates.list[0] = raw_public_key;
+        pctx->ctx.certificates.count = 1;
+        pctx->ctx.use_raw_public_keys = 1;
+        pctx->ctx.emit_certificate = NULL;
+    }
+
+    if (listener->quic.ctx != NULL) {
+#if H2O_USE_FUSION
+        /* rebuild and replace the cipher suite list, replacing the corresponding ones to fusion */
+        if (ptls_fusion_is_supported_by_cpu()) {
+            static const ptls_cipher_suite_t fusion_aes128gcmsha256 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_fusion_aes128gcm,
+                                                                       &ptls_openssl_sha256},
+                                             fusion_aes256gcmsha384 = {PTLS_CIPHER_SUITE_AES_256_GCM_SHA384, &ptls_fusion_aes256gcm,
+                                                                       &ptls_openssl_sha384};
+            H2O_VECTOR(ptls_cipher_suite_t *) new_list = {};
+#define PUSH_NEW(x)                                                                                                                \
+    do {                                                                                                                           \
+        h2o_vector_reserve(NULL, &new_list, new_list.size + 1);                                                                    \
+        new_list.entries[new_list.size++] = (x);                                                                                   \
+    } while (0)
+            for (ptls_cipher_suite_t **input = pctx->ctx.cipher_suites; *input != NULL; ++input) {
+                h2o_vector_reserve(NULL, &new_list, new_list.size + 1);
+                if (*input == &ptls_openssl_aes128gcmsha256) {
+                    PUSH_NEW(&fusion_aes128gcmsha256);
+                } else if (*input == &ptls_openssl_aes256gcmsha384) {
+                    PUSH_NEW(&fusion_aes256gcmsha384);
+                } else {
+                    PUSH_NEW(*input);
+                }
+            }
+            PUSH_NEW(NULL);
+#undef PUSH_NEW
+            pctx->ctx.cipher_suites = new_list.entries;
+        }
+
+
+// Source: main.c
+// Lines 749-877

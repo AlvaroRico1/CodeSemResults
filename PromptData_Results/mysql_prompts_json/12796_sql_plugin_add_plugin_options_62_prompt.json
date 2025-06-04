@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'p' at line 8\n2. Pointer 'it' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid add_plugin_options(std::vector<my_option> *options, MEM_ROOT *mem_root) {\n  my_option *opt;\n\n  if (!initialized) return;\n\n  for (st_plugin_int **it = plugin_array->begin(); it != plugin_array->end();\n       ++it) {\n    st_plugin_int *p = *it;\n\n    if (!(opt = construct_help_options(mem_root, p))) continue;\n\n    /* Only options with a non-NULL comment are displayed in help text */\n    for (; opt->name; opt++)\n      if (opt->comment) options->push_back(*opt);\n  }\n\n\n// Source: sql_plugin.cc\n// Lines 3678-3692\n",
+  "ANSWER": "MUST"
+}

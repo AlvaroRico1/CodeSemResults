@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'obj' at line 6\n2. Pointer 'r' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid repo_clear_commit_marks(struct repository *r, unsigned int flags)\n{\n\tint i;\n\n\tfor (i = 0; i < r->parsed_objects->obj_hash_size; i++) {\n\t\tstruct object *obj = r->parsed_objects->obj_hash[i];\n\t\tif (obj && obj->type == OBJ_COMMIT)\n\t\t\tobj->flags &= ~flags;\n\t}\n\n\n// Source: object.c\n// Lines 475-483\n",
+  "ANSWER": "MUST"
+}

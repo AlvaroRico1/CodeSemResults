@@ -1,0 +1,1 @@
+sbeg_local,mysql/strings/ctype-uca.cc,42,four_bytes,mysql/strings/ctype-uca.cc,52,2

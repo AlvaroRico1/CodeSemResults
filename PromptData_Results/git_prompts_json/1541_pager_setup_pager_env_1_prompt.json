@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'cp' at line 13\n2. Pointer 'argv' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void setup_pager_env(struct strvec *env)\n{\n\tconst char **argv;\n\tint i;\n\tchar *pager_env = xstrdup(PAGER_ENV);\n\tint n = split_cmdline(pager_env, &argv);\n\n\tif (n < 0)\n\t\tdie(\"malformed build-time PAGER_ENV: %s\",\n\t\t\tsplit_cmdline_strerror(n));\n\n\tfor (i = 0; i < n; i++) {\n\t\tchar *cp = strchr(argv[i], '=');\n\n\t\tif (!cp)\n\t\t\tdie(\"malformed build-time PAGER_ENV\");\n\n\t\t*cp = '\\0';\n\t\tif (!getenv(argv[i])) {\n\t\t\t*cp = '=';\n\t\t\tstrvec_push(env, argv[i]);\n\t\t}\n\t}\n\n\n// Source: pager.c\n// Lines 71-93\n",
+  "ANSWER": "MAY"
+}

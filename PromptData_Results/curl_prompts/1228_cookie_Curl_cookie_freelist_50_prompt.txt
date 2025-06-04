@@ -1,0 +1,28 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'next' at line 3
+2. Pointer 'co' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void Curl_cookie_freelist(struct Cookie *co)
+{
+  struct Cookie *next;
+  while(co) {
+    next = co->next;
+    freecookie(co);
+    co = next;
+  }
+}
+
+
+// Source: cookie.c
+// Lines 1475-1483
+
+
+[ANSWER]
+MUST

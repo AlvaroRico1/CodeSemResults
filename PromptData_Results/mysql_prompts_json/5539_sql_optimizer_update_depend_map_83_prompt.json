@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'item' at line 7\n2. Pointer 'ref' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid JOIN::update_depend_map() {\n  ASSERT_BEST_REF_IN_JOIN_ORDER(this);\n  for (uint tableno = 0; tableno < tables; tableno++) {\n    JOIN_TAB *const tab = best_ref[tableno];\n    TABLE_REF *const ref = &tab->ref();\n    table_map depend_map = 0;\n    Item **item = ref->items;\n    for (uint i = 0; i < ref->key_parts; i++, item++)\n      depend_map |= (*item)->used_tables();\n    depend_map &= ~PSEUDO_TABLE_BITS;\n    ref->depend_map = depend_map;\n    for (JOIN_TAB **tab2 = map2table; depend_map; tab2++, depend_map >>= 1) {\n      if (depend_map & 1) ref->depend_map |= (*tab2)->ref().depend_map;\n    }\n  }\n\n\n// Source: sql_optimizer.cc\n// Lines 4737-4751\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,36 @@
+sorted_attr_string (tree arglist)
+{
+  tree arg;
+  size_t str_len_sum = 0;
+  char **args = NULL;
+  char *attr_str, *ret_str;
+  char *attr = NULL;
+  unsigned int argnum = 1;
+  unsigned int i;
+
+  for (arg = arglist; arg; arg = TREE_CHAIN (arg))
+    {
+      const char *str = TREE_STRING_POINTER (TREE_VALUE (arg));
+      size_t len = strlen (str);
+      str_len_sum += len + 1;
+      if (arg != arglist)
+	argnum++;
+      for (i = 0; i < strlen (str); i++)
+	if (str[i] == ',')
+	  argnum++;
+    }
+
+  attr_str = XNEWVEC (char, str_len_sum);
+  str_len_sum = 0;
+  for (arg = arglist; arg; arg = TREE_CHAIN (arg))
+    {
+      const char *str = TREE_STRING_POINTER (TREE_VALUE (arg));
+      size_t len = strlen (str);
+      memcpy (attr_str + str_len_sum, str, len);
+      attr_str[str_len_sum + len] = TREE_CHAIN (arg) ? ',' : '\0';
+      str_len_sum += len + 1;
+    }
+
+
+// Source: attribs.c
+// Lines 891-922

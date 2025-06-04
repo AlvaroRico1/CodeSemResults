@@ -1,0 +1,38 @@
+do_unlk(struct file *filp, int cmd, struct file_lock *fl, int is_local)
+{
+	struct inode *inode = filp->f_mapping->host;
+	struct nfs_lock_context *l_ctx;
+	int status;
+
+	/*
+	 * Flush all pending writes before doing anything
+	 * with locks..
+	 */
+	nfs_wb_all(inode);
+
+	l_ctx = nfs_get_lock_context(nfs_file_open_context(filp));
+	if (!IS_ERR(l_ctx)) {
+		status = nfs_iocounter_wait(l_ctx);
+		nfs_put_lock_context(l_ctx);
+		/*  NOTE: special case
+		 * 	If we're signalled while cleaning up locks on process exit, we
+		 * 	still need to complete the unlock.
+		 */
+		if (status < 0 && !(fl->fl_flags & FL_CLOSE))
+			return status;
+	}
+
+	/*
+	 * Use local locking if mounted with "-onolock" or with appropriate
+	 * "-olocal_lock="
+	 */
+	if (!is_local)
+		status = NFS_PROTO(inode)->lock(filp, cmd, fl);
+	else
+		status = locks_lock_file_wait(filp, fl);
+	return status;
+}
+
+
+// Source: file.c
+// Lines 686-719

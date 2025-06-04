@@ -1,0 +1,86 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'text' at line 2
+2. Pointer 'end' at line 28
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void Printer::Print(const std::map<std::string, std::string>& variables,
+                    const char* text) {
+  int size = strlen(text);
+  int pos = 0;  // The number of bytes we've written so far.
+  substitutions_.clear();
+  line_start_variables_.clear();
+
+  for (int i = 0; i < size; i++) {
+    if (text[i] == '\n') {
+      // Saw newline.  If there is more text, we may need to insert an indent
+      // here.  So, write what we have so far, including the '\n'.
+      WriteRaw(text + pos, i - pos + 1);
+      pos = i + 1;
+
+      // Setting this true will cause the next WriteRaw() to insert an indent
+      // first.
+      at_start_of_line_ = true;
+      line_start_variables_.clear();
+
+    } else if (text[i] == variable_delimiter_) {
+      // Saw the start of a variable name.
+
+      // Write what we have so far.
+      WriteRaw(text + pos, i - pos);
+      pos = i + 1;
+
+      // Find closing delimiter.
+      const char* end = strchr(text + pos, variable_delimiter_);
+      if (end == NULL) {
+        GOOGLE_LOG(DFATAL) << " Unclosed variable name.";
+        end = text + pos;
+      }
+      int endpos = end - text;
+
+      std::string varname(text + pos, endpos - pos);
+      if (varname.empty()) {
+        // Two delimiters in a row reduce to a literal delimiter character.
+        WriteRaw(&variable_delimiter_, 1);
+      } else {
+        // Replace with the variable's value.
+        std::map<std::string, std::string>::const_iterator iter =
+            variables.find(varname);
+        if (iter == variables.end()) {
+          GOOGLE_LOG(DFATAL) << " Undefined variable: " << varname;
+        } else {
+          if (at_start_of_line_ && iter->second.empty()) {
+            line_start_variables_.push_back(varname);
+          }
+          WriteRaw(iter->second.data(), iter->second.size());
+          std::pair<std::map<std::string, std::pair<size_t, size_t> >::iterator,
+                    bool>
+              inserted = substitutions_.insert(std::make_pair(
+                  varname,
+                  std::make_pair(offset_ - iter->second.size(), offset_)));
+          if (!inserted.second) {
+            // This variable was used multiple times.  Make its span have
+            // negative length so we can detect it if it gets used in an
+            // annotation.
+            inserted.first->second = std::make_pair(1, 0);
+          }
+        }
+      }
+
+      // Advance past this variable.
+      i = endpos;
+      pos = endpos + 1;
+    }
+
+
+// Source: printer.cc
+// Lines 116-182
+
+
+[ANSWER]
+MAY

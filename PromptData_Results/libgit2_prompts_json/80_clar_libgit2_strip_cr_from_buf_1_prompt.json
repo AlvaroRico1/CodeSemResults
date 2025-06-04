@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'len' at line 1\n2. Pointer 'trail' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic size_t strip_cr_from_buf(char *start, size_t len)\n{\n\tchar *scan, *trail, *end = start + len;\n\n\tfor (scan = trail = start; scan < end; trail++, scan++) {\n\t\twhile (*scan == '\\r')\n\t\t\tscan++; /* skip '\\r' */\n\n\t\tif (trail != scan)\n\t\t\t*trail = *scan;\n\t}\n\n\t*trail = '\\0';\n\n\treturn (trail - start);\n}\n\n\n// Source: clar_libgit2.c\n// Lines 488-503\n",
+  "ANSWER": "MUST-NOT"
+}

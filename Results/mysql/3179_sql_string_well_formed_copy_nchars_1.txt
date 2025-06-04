@@ -1,0 +1,1 @@
+nchars,mysql/sql-common/sql_string.cc,4,wc,mysql/sql-common/sql_string.cc,114,2

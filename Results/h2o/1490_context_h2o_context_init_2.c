@@ -1,0 +1,50 @@
+void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *config)
+{
+    size_t i, j;
+
+    assert(config->hosts[0] != NULL);
+
+    memset(ctx, 0, sizeof(*ctx));
+    ctx->loop = loop;
+    ctx->globalconf = config;
+    ctx->queue = h2o_multithread_create_queue(loop);
+    h2o_multithread_register_receiver(ctx->queue, &ctx->receivers.hostinfo_getaddr, h2o_hostinfo_getaddr_receiver);
+    ctx->filecache = h2o_filecache_create(config->filecache.capacity);
+
+    h2o_linklist_init_anchor(&ctx->http1._conns);
+    h2o_linklist_init_anchor(&ctx->http2._conns);
+    h2o_linklist_init_anchor(&ctx->http3._conns);
+    ctx->proxy.client_ctx.loop = loop;
+    ctx->proxy.client_ctx.io_timeout = ctx->globalconf->proxy.io_timeout;
+    ctx->proxy.client_ctx.connect_timeout = ctx->globalconf->proxy.connect_timeout;
+    ctx->proxy.client_ctx.first_byte_timeout = ctx->globalconf->proxy.first_byte_timeout;
+    ctx->proxy.client_ctx.keepalive_timeout = ctx->globalconf->proxy.keepalive_timeout;
+    ctx->proxy.client_ctx.getaddr_receiver = &ctx->receivers.hostinfo_getaddr;
+    ctx->proxy.client_ctx.http2.latency_optimization = ctx->globalconf->http2.latency_optimization;
+    ctx->proxy.client_ctx.max_buffer_size = ctx->globalconf->proxy.max_buffer_size;
+    ctx->proxy.client_ctx.http2.max_concurrent_streams = ctx->globalconf->proxy.http2.max_concurrent_streams;
+    ctx->proxy.client_ctx.protocol_selector.ratio.http2 = ctx->globalconf->proxy.protocol_ratio.http2;
+    ctx->proxy.client_ctx.protocol_selector.ratio.http3 = ctx->globalconf->proxy.protocol_ratio.http3;
+    ctx->proxy.connpool.socketpool = &ctx->globalconf->proxy.global_socketpool;
+    h2o_linklist_init_anchor(&ctx->proxy.connpool.http2.conns);
+
+    ctx->_module_configs = h2o_mem_alloc(sizeof(*ctx->_module_configs) * config->_num_config_slots);
+    memset(ctx->_module_configs, 0, sizeof(*ctx->_module_configs) * config->_num_config_slots);
+
+    static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_lock(&mutex);
+
+    h2o_socketpool_register_loop(&ctx->globalconf->proxy.global_socketpool, loop);
+
+    for (i = 0; config->hosts[i] != NULL; ++i) {
+        h2o_hostconf_t *hostconf = config->hosts[i];
+        for (j = 0; j != hostconf->paths.size; ++j) {
+            h2o_pathconf_t *pathconf = hostconf->paths.entries[j];
+            h2o_context_init_pathconf_context(ctx, pathconf);
+        }
+        h2o_context_init_pathconf_context(ctx, &hostconf->fallback_path);
+    }
+
+
+// Source: context.c
+// Lines 83-128

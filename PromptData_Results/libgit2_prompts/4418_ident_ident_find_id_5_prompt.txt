@@ -1,0 +1,46 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'end' at line 4
+2. Pointer 'start' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int ident_find_id(
+	const char **id_start, const char **id_end, const char *start, size_t len)
+{
+	const char *end = start + len, *found = NULL;
+
+	while (len > 3 && (found = memchr(start, '$', len)) != NULL) {
+		size_t remaining = (size_t)(end - found) - 1;
+		if (remaining < 3)
+			return GIT_ENOTFOUND;
+
+		start = found + 1;
+		len   = remaining;
+
+		if (start[0] == 'I' && start[1] == 'd')
+			break;
+	}
+
+	if (len < 3 || !found)
+		return GIT_ENOTFOUND;
+	*id_start = found;
+
+	if ((found = memchr(start + 2, '$', len - 2)) == NULL)
+		return GIT_ENOTFOUND;
+
+	*id_end = found + 1;
+	return 0;
+}
+
+
+// Source: ident.c
+// Lines 14-40
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,40 @@
+static ssize_t sel_write_checkreqprot(struct file *file, const char __user *buf,
+				      size_t count, loff_t *ppos)
+{
+	struct selinux_fs_info *fsi = file_inode(file)->i_sb->s_fs_info;
+	char *page;
+	ssize_t length;
+	unsigned int new_value;
+
+	length = avc_has_perm(&selinux_state,
+			      current_sid(), SECINITSID_SECURITY,
+			      SECCLASS_SECURITY, SECURITY__SETCHECKREQPROT,
+			      NULL);
+	if (length)
+		return length;
+
+	if (count >= PAGE_SIZE)
+		return -ENOMEM;
+
+	/* No partial writes. */
+	if (*ppos != 0)
+		return -EINVAL;
+
+	page = memdup_user_nul(buf, count);
+	if (IS_ERR(page))
+		return PTR_ERR(page);
+
+	length = -EINVAL;
+	if (sscanf(page, "%u", &new_value) != 1)
+		goto out;
+
+	fsi->state->checkreqprot = new_value ? 1 : 0;
+	length = count;
+out:
+	kfree(page);
+	return length;
+}
+
+
+// Source: selinuxfs.c
+// Lines 639-674

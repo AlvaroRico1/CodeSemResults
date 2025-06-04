@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'fp' at line 3\n2. Pointer 'fapp' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint fasync_remove_entry(struct file *filp, struct fasync_struct **fapp)\n{\n\tstruct fasync_struct *fa, **fp;\n\tint result = 0;\n\n\tspin_lock(&filp->f_lock);\n\tspin_lock(&fasync_lock);\n\tfor (fp = fapp; (fa = *fp) != NULL; fp = &fa->fa_next) {\n\t\tif (fa->fa_file != filp)\n\t\t\tcontinue;\n\n\t\twrite_lock_irq(&fa->fa_lock);\n\t\tfa->fa_file = NULL;\n\t\twrite_unlock_irq(&fa->fa_lock);\n\n\t\t*fp = fa->fa_next;\n\t\tcall_rcu(&fa->fa_rcu, fasync_free_rcu);\n\t\tfilp->f_flags &= ~FASYNC;\n\t\tresult = 1;\n\t\tbreak;\n\t}\n\tspin_unlock(&fasync_lock);\n\tspin_unlock(&filp->f_lock);\n\treturn result;\n}\n\n\n// Source: fcntl.c\n// Lines 867-891\n",
+  "ANSWER": "MAY"
+}

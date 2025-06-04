@@ -1,0 +1,40 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'odb' at line 5
+2. Pointer 'r' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int open_loose_object(struct repository *r,
+			     const struct object_id *oid, const char **path)
+{
+	int fd;
+	struct object_directory *odb;
+	int most_interesting_errno = ENOENT;
+	static struct strbuf buf = STRBUF_INIT;
+
+	prepare_alt_odb(r);
+	for (odb = r->objects->odb; odb; odb = odb->next) {
+		*path = odb_loose_path(odb, &buf, oid);
+		fd = git_open(*path);
+		if (fd >= 0)
+			return fd;
+
+		if (most_interesting_errno == ENOENT)
+			most_interesting_errno = errno;
+	}
+	errno = most_interesting_errno;
+	return -1;
+}
+
+
+// Source: object-file.c
+// Lines 1115-1135
+
+
+[ANSWER]
+MUST

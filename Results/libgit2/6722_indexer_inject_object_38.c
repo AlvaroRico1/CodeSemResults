@@ -1,0 +1,80 @@
+static int inject_object(git_indexer *idx, git_oid *id)
+{
+	git_odb_object *obj = NULL;
+	struct entry *entry = NULL;
+	struct git_pack_entry *pentry = NULL;
+	unsigned char empty_checksum[GIT_HASH_SHA1_SIZE] = {0};
+	unsigned char hdr[64];
+	git_str buf = GIT_STR_INIT;
+	off64_t entry_start;
+	const void *data;
+	size_t len, hdr_len;
+	size_t checksum_size = GIT_HASH_SHA1_SIZE;
+	int error;
+
+	if ((error = seek_back_trailer(idx)) < 0)
+		goto cleanup;
+
+	entry_start = idx->pack->mwf.size;
+
+	if ((error = git_odb_read(&obj, idx->odb, id)) < 0) {
+		git_error_set(GIT_ERROR_INDEXER, "missing delta bases");
+		goto cleanup;
+	}
+
+	data = git_odb_object_data(obj);
+	len = git_odb_object_size(obj);
+
+	entry = git__calloc(1, sizeof(*entry));
+	GIT_ERROR_CHECK_ALLOC(entry);
+
+	entry->crc = crc32(0L, Z_NULL, 0);
+
+	/* Write out the object header */
+	if ((error = git_packfile__object_header(&hdr_len, hdr, len, git_odb_object_type(obj))) < 0 ||
+	    (error = append_to_pack(idx, hdr, hdr_len)) < 0)
+		goto cleanup;
+
+	idx->pack->mwf.size += hdr_len;
+	entry->crc = crc32(entry->crc, hdr, (uInt)hdr_len);
+
+	if ((error = git_zstream_deflatebuf(&buf, data, len)) < 0)
+		goto cleanup;
+
+	/* And then the compressed object */
+	if ((error = append_to_pack(idx, buf.ptr, buf.size)) < 0)
+		goto cleanup;
+
+	idx->pack->mwf.size += buf.size;
+	entry->crc = htonl(crc32(entry->crc, (unsigned char *)buf.ptr, (uInt)buf.size));
+	git_str_dispose(&buf);
+
+	/* Write a fake trailer so the pack functions play ball */
+
+	if ((error = append_to_pack(idx, empty_checksum, checksum_size)) < 0)
+		goto cleanup;
+
+	idx->pack->mwf.size += GIT_OID_RAWSZ;
+
+	pentry = git__calloc(1, sizeof(struct git_pack_entry));
+	GIT_ERROR_CHECK_ALLOC(pentry);
+
+	git_oid_cpy(&pentry->sha1, id);
+	git_oid_cpy(&entry->oid, id);
+	idx->off = entry_start + hdr_len + len;
+
+	error = save_entry(idx, entry, pentry, entry_start);
+
+cleanup:
+	if (error) {
+		git__free(entry);
+		git__free(pentry);
+	}
+
+	git_odb_object_free(obj);
+	return error;
+}
+
+
+// Source: indexer.c
+// Lines 924-999

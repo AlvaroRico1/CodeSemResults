@@ -1,0 +1,29 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'name' at line 5
+2. Pointer 'names_ptr' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void FileDescriptor::InternalDependenciesOnceInit() const {
+  GOOGLE_CHECK(finished_building_ == true);
+  const char* names_ptr = reinterpret_cast<const char*>(dependencies_once_ + 1);
+  for (int i = 0; i < dependency_count(); i++) {
+    const char* name = names_ptr;
+    names_ptr += strlen(name) + 1;
+    if (name[0] != '\0') {
+      dependencies_[i] = pool_->FindFileByName(name);
+    }
+  }
+
+
+// Source: descriptor.cc
+// Lines 8141-8150
+
+
+[ANSWER]
+MUST

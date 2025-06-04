@@ -1,0 +1,36 @@
+int git_diff_tree_to_workdir_with_index(
+	git_diff **out,
+	git_repository *repo,
+	git_tree *tree,
+	const git_diff_options *opts)
+{
+	git_diff *d1 = NULL, *d2 = NULL;
+	git_index *index = NULL;
+	int error = 0;
+
+	GIT_ASSERT_ARG(out);
+	GIT_ASSERT_ARG(repo);
+
+	*out = NULL;
+
+	if ((error = diff_load_index(&index, repo)) < 0)
+		return error;
+
+	if (!(error = git_diff_tree_to_index(&d1, repo, tree, index, opts)) &&
+		!(error = git_diff_index_to_workdir(&d2, repo, index, opts)))
+		error = git_diff_merge(d1, d2);
+
+	git_diff_free(d2);
+
+	if (error) {
+		git_diff_free(d1);
+		d1 = NULL;
+	}
+
+	*out = d1;
+	return error;
+}
+
+
+// Source: diff_generate.c
+// Lines 1520-1551

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'out' at line 1\n2. Pointer 'db' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint git_odb_new(git_odb **out)\n{\n\tgit_odb *db = git__calloc(1, sizeof(*db));\n\tGIT_ERROR_CHECK_ALLOC(db);\n\n\tif (git_mutex_init(&db->lock) < 0) {\n\t\tgit__free(db);\n\t\treturn -1;\n\t}\n\tif (git_cache_init(&db->own_cache) < 0) {\n\t\tgit_mutex_free(&db->lock);\n\t\tgit__free(db);\n\t\treturn -1;\n\t}\n\tif (git_vector_init(&db->backends, 4, backend_sort_cmp) < 0) {\n\t\tgit_cache_dispose(&db->own_cache);\n\t\tgit_mutex_free(&db->lock);\n\t\tgit__free(db);\n\t\treturn -1;\n\t}\n\n\t*out = db;\n\tGIT_REFCOUNT_INC(db);\n\treturn 0;\n}\n\n\n// Source: odb.c\n// Lines 445-469\n",
+  "ANSWER": "MUST"
+}

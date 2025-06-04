@@ -1,0 +1,1 @@
+scan,git/mailinfo.c,20,it,git/mailinfo.c,1,1

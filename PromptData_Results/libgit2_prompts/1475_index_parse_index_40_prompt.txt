@@ -1,0 +1,85 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'last' at line 8
+2. Pointer 'entry' at line 43
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int parse_index(git_index *index, const char *buffer, size_t buffer_size)
+{
+	int error = 0;
+	unsigned int i;
+	struct index_header header = { 0 };
+	unsigned char checksum[GIT_HASH_SHA1_SIZE];
+	size_t checksum_size = GIT_HASH_SHA1_SIZE;
+	const char *last = NULL;
+	const char *empty = "";
+
+#define seek_forward(_increase) { \
+	if (_increase >= buffer_size) { \
+		error = index_error_invalid("ran out of data while parsing"); \
+		goto done; } \
+	buffer += _increase; \
+	buffer_size -= _increase;\
+}
+
+	if (buffer_size < INDEX_HEADER_SIZE + checksum_size)
+		return index_error_invalid("insufficient buffer space");
+
+	/* Precalculate the SHA1 of the files's contents -- we'll match it to
+	 * the provided SHA1 in the footer */
+	git_hash_buf(checksum, buffer, buffer_size - checksum_size, GIT_HASH_ALGORITHM_SHA1);
+
+	/* Parse header */
+	if ((error = read_header(&header, buffer)) < 0)
+		return error;
+
+	index->version = header.version;
+	if (index->version >= INDEX_VERSION_NUMBER_COMP)
+		last = empty;
+
+	seek_forward(INDEX_HEADER_SIZE);
+
+	GIT_ASSERT(!index->entries.length);
+
+	if ((error = index_map_resize(index->entries_map, header.entry_count, index->ignore_case)) < 0)
+		return error;
+
+	/* Parse all the entries */
+	for (i = 0; i < header.entry_count && buffer_size > checksum_size; ++i) {
+		git_index_entry *entry = NULL;
+		size_t entry_size;
+
+		if ((error = read_entry(&entry, &entry_size, index, buffer, buffer_size, last)) < 0) {
+			error = index_error_invalid("invalid entry");
+			goto done;
+		}
+
+		if ((error = git_vector_insert(&index->entries, entry)) < 0) {
+			index_entry_free(entry);
+			goto done;
+		}
+
+		if ((error = index_map_set(index->entries_map, entry, index->ignore_case)) < 0) {
+			index_entry_free(entry);
+			goto done;
+		}
+		error = 0;
+
+		if (index->version >= INDEX_VERSION_NUMBER_COMP)
+			last = entry->path;
+
+		seek_forward(entry_size);
+	}
+
+
+// Source: index.c
+// Lines 2624-2689
+
+
+[ANSWER]
+MUST

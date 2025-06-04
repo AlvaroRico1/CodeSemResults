@@ -1,0 +1,1 @@
+verify_identity,mysql/sql-common/client.cc,83,end,mysql/sql-common/client.cc,48,0

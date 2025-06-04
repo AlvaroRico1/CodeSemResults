@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ele' at line None\n2. Pointer 'c' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid lremCommand(client *c) {\n    robj *subject, *obj;\n    obj = c->argv[3];\n    long toremove;\n    long removed = 0;\n\n    if (sdslen(obj->ptr) > LIST_MAX_ITEM_SIZE) {\n        addReplyError(c, \"Element too large\");\n        return;\n    }\n\n\n// Source: t_list.c\n// Lines 692-701\n",
+  "ANSWER": "MUST"
+}

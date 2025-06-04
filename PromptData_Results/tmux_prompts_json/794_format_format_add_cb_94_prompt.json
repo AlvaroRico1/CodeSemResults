@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'fe' at line 3\n2. Pointer 'fe_now' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nformat_add_cb(struct format_tree *ft, const char *key, format_cb cb)\n{\n\tstruct format_entry\t*fe;\n\tstruct format_entry\t*fe_now;\n\n\tfe = xmalloc(sizeof *fe);\n\tfe->key = xstrdup(key);\n\n\tfe_now = RB_INSERT(format_entry_tree, &ft->tree, fe);\n\tif (fe_now != NULL) {\n\t\tfree(fe->key);\n\t\tfree(fe);\n\t\tfree(fe_now->value);\n\t\tfe = fe_now;\n\t}\n\n\tfe->cb = cb;\n\tfe->time = 0;\n\n\tfe->value = NULL;\n}\n\n\n// Source: format.c\n// Lines 3208-3228\n",
+  "ANSWER": "MUST"
+}

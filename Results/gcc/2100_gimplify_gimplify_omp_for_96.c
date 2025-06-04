@@ -1,0 +1,969 @@
+gimplify_omp_for (tree *expr_p, gimple_seq *pre_p)
+{
+  tree for_stmt, orig_for_stmt, inner_for_stmt = NULL_TREE, decl, var, t;
+  enum gimplify_status ret = GS_ALL_DONE;
+  enum gimplify_status tret;
+  gomp_for *gfor;
+  gimple_seq for_body, for_pre_body;
+  int i;
+  bitmap has_decl_expr = NULL;
+  enum omp_region_type ort = ORT_WORKSHARE;
+
+  orig_for_stmt = for_stmt = *expr_p;
+
+  bool loop_p = (omp_find_clause (OMP_FOR_CLAUSES (for_stmt), OMP_CLAUSE_BIND)
+		 != NULL_TREE);
+  if (OMP_FOR_INIT (for_stmt) == NULL_TREE)
+    {
+      tree *data[4] = { NULL, NULL, NULL, NULL };
+      gcc_assert (TREE_CODE (for_stmt) != OACC_LOOP);
+      inner_for_stmt = walk_tree (&OMP_FOR_BODY (for_stmt),
+				  find_combined_omp_for, data, NULL);
+      if (inner_for_stmt == NULL_TREE)
+	{
+	  gcc_assert (seen_error ());
+	  *expr_p = NULL_TREE;
+	  return GS_ERROR;
+	}
+      if (data[2] && OMP_FOR_PRE_BODY (*data[2]))
+	{
+	  append_to_statement_list_force (OMP_FOR_PRE_BODY (*data[2]),
+					  &OMP_FOR_PRE_BODY (for_stmt));
+	  OMP_FOR_PRE_BODY (*data[2]) = NULL_TREE;
+	}
+      if (OMP_FOR_PRE_BODY (inner_for_stmt))
+	{
+	  append_to_statement_list_force (OMP_FOR_PRE_BODY (inner_for_stmt),
+					  &OMP_FOR_PRE_BODY (for_stmt));
+	  OMP_FOR_PRE_BODY (inner_for_stmt) = NULL_TREE;
+	}
+
+      if (data[0])
+	{
+	  /* We have some statements or variable declarations in between
+	     the composite construct directives.  Move them around the
+	     inner_for_stmt.  */
+	  data[0] = expr_p;
+	  for (i = 0; i < 3; i++)
+	    if (data[i])
+	      {
+		tree t = *data[i];
+		if (i < 2 && data[i + 1] == &OMP_BODY (t))
+		  data[i + 1] = data[i];
+		*data[i] = OMP_BODY (t);
+		tree body = build3 (BIND_EXPR, void_type_node, NULL_TREE,
+				    NULL_TREE, make_node (BLOCK));
+		OMP_BODY (t) = body;
+		append_to_statement_list_force (inner_for_stmt,
+						&BIND_EXPR_BODY (body));
+		*data[3] = t;
+		data[3] = tsi_stmt_ptr (tsi_start (BIND_EXPR_BODY (body)));
+		gcc_assert (*data[3] == inner_for_stmt);
+	      }
+	  return GS_OK;
+	}
+
+      for (i = 0; i < TREE_VEC_LENGTH (OMP_FOR_INIT (inner_for_stmt)); i++)
+	if (!loop_p
+	    && OMP_FOR_ORIG_DECLS (inner_for_stmt)
+	    && TREE_CODE (TREE_VEC_ELT (OMP_FOR_ORIG_DECLS (inner_for_stmt),
+					i)) == TREE_LIST
+	    && TREE_PURPOSE (TREE_VEC_ELT (OMP_FOR_ORIG_DECLS (inner_for_stmt),
+					   i)))
+	  {
+	    tree orig = TREE_VEC_ELT (OMP_FOR_ORIG_DECLS (inner_for_stmt), i);
+	    /* Class iterators aren't allowed on OMP_SIMD, so the only
+	       case we need to solve is distribute parallel for.  They are
+	       allowed on the loop construct, but that is already handled
+	       in gimplify_omp_loop.  */
+	    gcc_assert (TREE_CODE (inner_for_stmt) == OMP_FOR
+			&& TREE_CODE (for_stmt) == OMP_DISTRIBUTE
+			&& data[1]);
+	    tree orig_decl = TREE_PURPOSE (orig);
+	    tree last = TREE_VALUE (orig);
+	    tree *pc;
+	    for (pc = &OMP_FOR_CLAUSES (inner_for_stmt);
+		 *pc; pc = &OMP_CLAUSE_CHAIN (*pc))
+	      if ((OMP_CLAUSE_CODE (*pc) == OMP_CLAUSE_PRIVATE
+		   || OMP_CLAUSE_CODE (*pc) == OMP_CLAUSE_LASTPRIVATE)
+		  && OMP_CLAUSE_DECL (*pc) == orig_decl)
+		break;
+	    if (*pc == NULL_TREE)
+	      {
+		tree *spc;
+		for (spc = &OMP_PARALLEL_CLAUSES (*data[1]);
+		     *spc; spc = &OMP_CLAUSE_CHAIN (*spc))
+		  if (OMP_CLAUSE_CODE (*spc) == OMP_CLAUSE_PRIVATE
+		      && OMP_CLAUSE_DECL (*spc) == orig_decl)
+		    break;
+		if (*spc)
+		  {
+		    tree c = *spc;
+		    *spc = OMP_CLAUSE_CHAIN (c);
+		    OMP_CLAUSE_CHAIN (c) = NULL_TREE;
+		    *pc = c;
+		  }
+	      }
+	    if (*pc == NULL_TREE)
+	      ;
+	    else if (OMP_CLAUSE_CODE (*pc) == OMP_CLAUSE_PRIVATE)
+	      {
+		/* private clause will appear only on inner_for_stmt.
+		   Change it into firstprivate, and add private clause
+		   on for_stmt.  */
+		tree c = copy_node (*pc);
+		OMP_CLAUSE_CHAIN (c) = OMP_FOR_CLAUSES (for_stmt);
+		OMP_FOR_CLAUSES (for_stmt) = c;
+		OMP_CLAUSE_CODE (*pc) = OMP_CLAUSE_FIRSTPRIVATE;
+		lang_hooks.decls.omp_finish_clause (*pc, pre_p);
+	      }
+	    else
+	      {
+		/* lastprivate clause will appear on both inner_for_stmt
+		   and for_stmt.  Add firstprivate clause to
+		   inner_for_stmt.  */
+		tree c = build_omp_clause (OMP_CLAUSE_LOCATION (*pc),
+					   OMP_CLAUSE_FIRSTPRIVATE);
+		OMP_CLAUSE_DECL (c) = OMP_CLAUSE_DECL (*pc);
+		OMP_CLAUSE_CHAIN (c) = *pc;
+		*pc = c;
+		lang_hooks.decls.omp_finish_clause (*pc, pre_p);
+	      }
+	    tree c = build_omp_clause (UNKNOWN_LOCATION,
+				       OMP_CLAUSE_FIRSTPRIVATE);
+	    OMP_CLAUSE_DECL (c) = last;
+	    OMP_CLAUSE_CHAIN (c) = OMP_PARALLEL_CLAUSES (*data[1]);
+	    OMP_PARALLEL_CLAUSES (*data[1]) = c;
+	    c = build_omp_clause (UNKNOWN_LOCATION,
+				  *pc ? OMP_CLAUSE_SHARED
+				      : OMP_CLAUSE_FIRSTPRIVATE);
+	    OMP_CLAUSE_DECL (c) = orig_decl;
+	    OMP_CLAUSE_CHAIN (c) = OMP_PARALLEL_CLAUSES (*data[1]);
+	    OMP_PARALLEL_CLAUSES (*data[1]) = c;
+	  }
+      /* Similarly, take care of C++ range for temporaries, those should
+	 be firstprivate on OMP_PARALLEL if any.  */
+      if (data[1])
+	for (i = 0; i < TREE_VEC_LENGTH (OMP_FOR_INIT (inner_for_stmt)); i++)
+	  if (OMP_FOR_ORIG_DECLS (inner_for_stmt)
+	      && TREE_CODE (TREE_VEC_ELT (OMP_FOR_ORIG_DECLS (inner_for_stmt),
+					  i)) == TREE_LIST
+	      && TREE_CHAIN (TREE_VEC_ELT (OMP_FOR_ORIG_DECLS (inner_for_stmt),
+					   i)))
+	    {
+	      tree orig
+		= TREE_VEC_ELT (OMP_FOR_ORIG_DECLS (inner_for_stmt), i);
+	      tree v = TREE_CHAIN (orig);
+	      tree c = build_omp_clause (UNKNOWN_LOCATION,
+					 OMP_CLAUSE_FIRSTPRIVATE);
+	      /* First add firstprivate clause for the __for_end artificial
+		 decl.  */
+	      OMP_CLAUSE_DECL (c) = TREE_VEC_ELT (v, 1);
+	      if (TREE_CODE (TREE_TYPE (OMP_CLAUSE_DECL (c)))
+		  == REFERENCE_TYPE)
+		OMP_CLAUSE_FIRSTPRIVATE_NO_REFERENCE (c) = 1;
+	      OMP_CLAUSE_CHAIN (c) = OMP_PARALLEL_CLAUSES (*data[1]);
+	      OMP_PARALLEL_CLAUSES (*data[1]) = c;
+	      if (TREE_VEC_ELT (v, 0))
+		{
+		  /* And now the same for __for_range artificial decl if it
+		     exists.  */
+		  c = build_omp_clause (UNKNOWN_LOCATION,
+					OMP_CLAUSE_FIRSTPRIVATE);
+		  OMP_CLAUSE_DECL (c) = TREE_VEC_ELT (v, 0);
+		  if (TREE_CODE (TREE_TYPE (OMP_CLAUSE_DECL (c)))
+		      == REFERENCE_TYPE)
+		    OMP_CLAUSE_FIRSTPRIVATE_NO_REFERENCE (c) = 1;
+		  OMP_CLAUSE_CHAIN (c) = OMP_PARALLEL_CLAUSES (*data[1]);
+		  OMP_PARALLEL_CLAUSES (*data[1]) = c;
+		}
+	    }
+    }
+
+  switch (TREE_CODE (for_stmt))
+    {
+    case OMP_FOR:
+    case OMP_DISTRIBUTE:
+      break;
+    case OACC_LOOP:
+      ort = ORT_ACC;
+      break;
+    case OMP_TASKLOOP:
+      if (omp_find_clause (OMP_FOR_CLAUSES (for_stmt), OMP_CLAUSE_UNTIED))
+	ort = ORT_UNTIED_TASKLOOP;
+      else
+	ort = ORT_TASKLOOP;
+      break;
+    case OMP_SIMD:
+      ort = ORT_SIMD;
+      break;
+    default:
+      gcc_unreachable ();
+    }
+
+  /* Set OMP_CLAUSE_LINEAR_NO_COPYIN flag on explicit linear
+     clause for the IV.  */
+  if (ort == ORT_SIMD && TREE_VEC_LENGTH (OMP_FOR_INIT (for_stmt)) == 1)
+    {
+      t = TREE_VEC_ELT (OMP_FOR_INIT (for_stmt), 0);
+      gcc_assert (TREE_CODE (t) == MODIFY_EXPR);
+      decl = TREE_OPERAND (t, 0);
+      for (tree c = OMP_FOR_CLAUSES (for_stmt); c; c = OMP_CLAUSE_CHAIN (c))
+	if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_LINEAR
+	    && OMP_CLAUSE_DECL (c) == decl)
+	  {
+	    OMP_CLAUSE_LINEAR_NO_COPYIN (c) = 1;
+	    break;
+	  }
+    }
+
+  if (TREE_CODE (for_stmt) != OMP_TASKLOOP)
+    gimplify_scan_omp_clauses (&OMP_FOR_CLAUSES (for_stmt), pre_p, ort,
+			       loop_p && TREE_CODE (for_stmt) != OMP_SIMD
+			       ? OMP_LOOP : TREE_CODE (for_stmt));
+
+  if (TREE_CODE (for_stmt) == OMP_DISTRIBUTE)
+    gimplify_omp_ctxp->distribute = true;
+
+  /* Handle OMP_FOR_INIT.  */
+  for_pre_body = NULL;
+  if ((ort == ORT_SIMD
+       || (inner_for_stmt && TREE_CODE (inner_for_stmt) == OMP_SIMD))
+      && OMP_FOR_PRE_BODY (for_stmt))
+    {
+      has_decl_expr = BITMAP_ALLOC (NULL);
+      if (TREE_CODE (OMP_FOR_PRE_BODY (for_stmt)) == DECL_EXPR
+	  && TREE_CODE (DECL_EXPR_DECL (OMP_FOR_PRE_BODY (for_stmt)))
+	     == VAR_DECL)
+	{
+	  t = OMP_FOR_PRE_BODY (for_stmt);
+	  bitmap_set_bit (has_decl_expr, DECL_UID (DECL_EXPR_DECL (t)));
+	}
+      else if (TREE_CODE (OMP_FOR_PRE_BODY (for_stmt)) == STATEMENT_LIST)
+	{
+	  tree_stmt_iterator si;
+	  for (si = tsi_start (OMP_FOR_PRE_BODY (for_stmt)); !tsi_end_p (si);
+	       tsi_next (&si))
+	    {
+	      t = tsi_stmt (si);
+	      if (TREE_CODE (t) == DECL_EXPR
+		  && TREE_CODE (DECL_EXPR_DECL (t)) == VAR_DECL)
+		bitmap_set_bit (has_decl_expr, DECL_UID (DECL_EXPR_DECL (t)));
+	    }
+	}
+    }
+  if (OMP_FOR_PRE_BODY (for_stmt))
+    {
+      if (TREE_CODE (for_stmt) != OMP_TASKLOOP || gimplify_omp_ctxp)
+	gimplify_and_add (OMP_FOR_PRE_BODY (for_stmt), &for_pre_body);
+      else
+	{
+	  struct gimplify_omp_ctx ctx;
+	  memset (&ctx, 0, sizeof (ctx));
+	  ctx.region_type = ORT_NONE;
+	  gimplify_omp_ctxp = &ctx;
+	  gimplify_and_add (OMP_FOR_PRE_BODY (for_stmt), &for_pre_body);
+	  gimplify_omp_ctxp = NULL;
+	}
+    }
+  OMP_FOR_PRE_BODY (for_stmt) = NULL_TREE;
+
+  if (OMP_FOR_INIT (for_stmt) == NULL_TREE)
+    for_stmt = inner_for_stmt;
+
+  /* For taskloop, need to gimplify the start, end and step before the
+     taskloop, outside of the taskloop omp context.  */
+  if (TREE_CODE (orig_for_stmt) == OMP_TASKLOOP)
+    {
+      for (i = 0; i < TREE_VEC_LENGTH (OMP_FOR_INIT (for_stmt)); i++)
+	{
+	  t = TREE_VEC_ELT (OMP_FOR_INIT (for_stmt), i);
+	  if (!is_gimple_constant (TREE_OPERAND (t, 1)))
+	    {
+	      tree type = TREE_TYPE (TREE_OPERAND (t, 0));
+	      TREE_OPERAND (t, 1)
+		= get_initialized_tmp_var (TREE_OPERAND (t, 1),
+					   gimple_seq_empty_p (for_pre_body)
+					   ? pre_p : &for_pre_body, NULL,
+					   false);
+	      /* Reference to pointer conversion is considered useless,
+		 but is significant for firstprivate clause.  Force it
+		 here.  */
+	      if (TREE_CODE (type) == POINTER_TYPE
+		  && (TREE_CODE (TREE_TYPE (TREE_OPERAND (t, 1)))
+		      == REFERENCE_TYPE))
+		{
+		  tree v = create_tmp_var (TYPE_MAIN_VARIANT (type));
+		  tree m = build2 (INIT_EXPR, TREE_TYPE (v), v,
+				   TREE_OPERAND (t, 1));
+		  gimplify_and_add (m, gimple_seq_empty_p (for_pre_body)
+				       ? pre_p : &for_pre_body);
+		  TREE_OPERAND (t, 1) = v;
+		}
+	      tree c = build_omp_clause (input_location,
+					 OMP_CLAUSE_FIRSTPRIVATE);
+	      OMP_CLAUSE_DECL (c) = TREE_OPERAND (t, 1);
+	      OMP_CLAUSE_CHAIN (c) = OMP_FOR_CLAUSES (orig_for_stmt);
+	      OMP_FOR_CLAUSES (orig_for_stmt) = c;
+	    }
+
+	  /* Handle OMP_FOR_COND.  */
+	  t = TREE_VEC_ELT (OMP_FOR_COND (for_stmt), i);
+	  if (!is_gimple_constant (TREE_OPERAND (t, 1)))
+	    {
+	      tree type = TREE_TYPE (TREE_OPERAND (t, 0));
+	      TREE_OPERAND (t, 1)
+		= get_initialized_tmp_var (TREE_OPERAND (t, 1),
+					   gimple_seq_empty_p (for_pre_body)
+					   ? pre_p : &for_pre_body, NULL,
+					   false);
+	      /* Reference to pointer conversion is considered useless,
+		 but is significant for firstprivate clause.  Force it
+		 here.  */
+	      if (TREE_CODE (type) == POINTER_TYPE
+		  && (TREE_CODE (TREE_TYPE (TREE_OPERAND (t, 1)))
+		      == REFERENCE_TYPE))
+		{
+		  tree v = create_tmp_var (TYPE_MAIN_VARIANT (type));
+		  tree m = build2 (INIT_EXPR, TREE_TYPE (v), v,
+				   TREE_OPERAND (t, 1));
+		  gimplify_and_add (m, gimple_seq_empty_p (for_pre_body)
+				       ? pre_p : &for_pre_body);
+		  TREE_OPERAND (t, 1) = v;
+		}
+	      tree c = build_omp_clause (input_location,
+					 OMP_CLAUSE_FIRSTPRIVATE);
+	      OMP_CLAUSE_DECL (c) = TREE_OPERAND (t, 1);
+	      OMP_CLAUSE_CHAIN (c) = OMP_FOR_CLAUSES (orig_for_stmt);
+	      OMP_FOR_CLAUSES (orig_for_stmt) = c;
+	    }
+
+	  /* Handle OMP_FOR_INCR.  */
+	  t = TREE_VEC_ELT (OMP_FOR_INCR (for_stmt), i);
+	  if (TREE_CODE (t) == MODIFY_EXPR)
+	    {
+	      decl = TREE_OPERAND (t, 0);
+	      t = TREE_OPERAND (t, 1);
+	      tree *tp = &TREE_OPERAND (t, 1);
+	      if (TREE_CODE (t) == PLUS_EXPR && *tp == decl)
+		tp = &TREE_OPERAND (t, 0);
+
+	      if (!is_gimple_constant (*tp))
+		{
+		  gimple_seq *seq = gimple_seq_empty_p (for_pre_body)
+				    ? pre_p : &for_pre_body;
+		  *tp = get_initialized_tmp_var (*tp, seq, NULL, false);
+		  tree c = build_omp_clause (input_location,
+					     OMP_CLAUSE_FIRSTPRIVATE);
+		  OMP_CLAUSE_DECL (c) = *tp;
+		  OMP_CLAUSE_CHAIN (c) = OMP_FOR_CLAUSES (orig_for_stmt);
+		  OMP_FOR_CLAUSES (orig_for_stmt) = c;
+		}
+	    }
+	}
+
+      gimplify_scan_omp_clauses (&OMP_FOR_CLAUSES (orig_for_stmt), pre_p, ort,
+				 OMP_TASKLOOP);
+    }
+
+  if (orig_for_stmt != for_stmt)
+    gimplify_omp_ctxp->combined_loop = true;
+
+  for_body = NULL;
+  gcc_assert (TREE_VEC_LENGTH (OMP_FOR_INIT (for_stmt))
+	      == TREE_VEC_LENGTH (OMP_FOR_COND (for_stmt)));
+  gcc_assert (TREE_VEC_LENGTH (OMP_FOR_INIT (for_stmt))
+	      == TREE_VEC_LENGTH (OMP_FOR_INCR (for_stmt)));
+
+  tree c = omp_find_clause (OMP_FOR_CLAUSES (for_stmt), OMP_CLAUSE_ORDERED);
+  bool is_doacross = false;
+  if (c && OMP_CLAUSE_ORDERED_EXPR (c))
+    {
+      is_doacross = true;
+      gimplify_omp_ctxp->loop_iter_var.create (TREE_VEC_LENGTH
+						 (OMP_FOR_INIT (for_stmt))
+					       * 2);
+    }
+  int collapse = 1, tile = 0;
+  c = omp_find_clause (OMP_FOR_CLAUSES (for_stmt), OMP_CLAUSE_COLLAPSE);
+  if (c)
+    collapse = tree_to_shwi (OMP_CLAUSE_COLLAPSE_EXPR (c));
+  c = omp_find_clause (OMP_FOR_CLAUSES (for_stmt), OMP_CLAUSE_TILE);
+  if (c)
+    tile = list_length (OMP_CLAUSE_TILE_LIST (c));
+  for (i = 0; i < TREE_VEC_LENGTH (OMP_FOR_INIT (for_stmt)); i++)
+    {
+      t = TREE_VEC_ELT (OMP_FOR_INIT (for_stmt), i);
+      gcc_assert (TREE_CODE (t) == MODIFY_EXPR);
+      decl = TREE_OPERAND (t, 0);
+      gcc_assert (DECL_P (decl));
+      gcc_assert (INTEGRAL_TYPE_P (TREE_TYPE (decl))
+		  || POINTER_TYPE_P (TREE_TYPE (decl)));
+      if (is_doacross)
+	{
+	  if (TREE_CODE (for_stmt) == OMP_FOR && OMP_FOR_ORIG_DECLS (for_stmt))
+	    {
+	      tree orig_decl = TREE_VEC_ELT (OMP_FOR_ORIG_DECLS (for_stmt), i);
+	      if (TREE_CODE (orig_decl) == TREE_LIST)
+		{
+		  orig_decl = TREE_PURPOSE (orig_decl);
+		  if (!orig_decl)
+		    orig_decl = decl;
+		}
+	      gimplify_omp_ctxp->loop_iter_var.quick_push (orig_decl);
+	    }
+	  else
+	    gimplify_omp_ctxp->loop_iter_var.quick_push (decl);
+	  gimplify_omp_ctxp->loop_iter_var.quick_push (decl);
+	}
+
+      /* Make sure the iteration variable is private.  */
+      tree c = NULL_TREE;
+      tree c2 = NULL_TREE;
+      if (orig_for_stmt != for_stmt)
+	{
+	  /* Preserve this information until we gimplify the inner simd.  */
+	  if (has_decl_expr
+	      && bitmap_bit_p (has_decl_expr, DECL_UID (decl)))
+	    TREE_PRIVATE (t) = 1;
+	}
+      else if (ort == ORT_SIMD)
+	{
+	  splay_tree_node n = splay_tree_lookup (gimplify_omp_ctxp->variables,
+						 (splay_tree_key) decl);
+	  omp_is_private (gimplify_omp_ctxp, decl,
+			  1 + (TREE_VEC_LENGTH (OMP_FOR_INIT (for_stmt))
+			       != 1));
+	  if (n != NULL && (n->value & GOVD_DATA_SHARE_CLASS) != 0)
+	    {
+	      omp_notice_variable (gimplify_omp_ctxp, decl, true);
+	      if (n->value & GOVD_LASTPRIVATE_CONDITIONAL)
+		for (tree c3 = omp_find_clause (OMP_FOR_CLAUSES (for_stmt),
+						OMP_CLAUSE_LASTPRIVATE);
+		     c3; c3 = omp_find_clause (OMP_CLAUSE_CHAIN (c3),
+					       OMP_CLAUSE_LASTPRIVATE))
+		  if (OMP_CLAUSE_DECL (c3) == decl)
+		    {
+		      warning_at (OMP_CLAUSE_LOCATION (c3), 0,
+				  "conditional %<lastprivate%> on loop "
+				  "iterator %qD ignored", decl);
+		      OMP_CLAUSE_LASTPRIVATE_CONDITIONAL (c3) = 0;
+		      n->value &= ~GOVD_LASTPRIVATE_CONDITIONAL;
+		    }
+	    }
+	  else if (TREE_VEC_LENGTH (OMP_FOR_INIT (for_stmt)) == 1 && !loop_p)
+	    {
+	      c = build_omp_clause (input_location, OMP_CLAUSE_LINEAR);
+	      OMP_CLAUSE_LINEAR_NO_COPYIN (c) = 1;
+	      unsigned int flags = GOVD_LINEAR | GOVD_EXPLICIT | GOVD_SEEN;
+	      if ((has_decl_expr
+		   && bitmap_bit_p (has_decl_expr, DECL_UID (decl)))
+		  || TREE_PRIVATE (t))
+		{
+		  OMP_CLAUSE_LINEAR_NO_COPYOUT (c) = 1;
+		  flags |= GOVD_LINEAR_LASTPRIVATE_NO_OUTER;
+		}
+	      struct gimplify_omp_ctx *outer
+		= gimplify_omp_ctxp->outer_context;
+	      if (outer && !OMP_CLAUSE_LINEAR_NO_COPYOUT (c))
+		{
+		  if (outer->region_type == ORT_WORKSHARE
+		      && outer->combined_loop)
+		    {
+		      n = splay_tree_lookup (outer->variables,
+					     (splay_tree_key)decl);
+		      if (n != NULL && (n->value & GOVD_LOCAL) != 0)
+			{
+			  OMP_CLAUSE_LINEAR_NO_COPYOUT (c) = 1;
+			  flags |= GOVD_LINEAR_LASTPRIVATE_NO_OUTER;
+			}
+		      else
+			{
+			  struct gimplify_omp_ctx *octx = outer->outer_context;
+			  if (octx
+			      && octx->region_type == ORT_COMBINED_PARALLEL
+			      && octx->outer_context
+			      && (octx->outer_context->region_type
+				  == ORT_WORKSHARE)
+			      && octx->outer_context->combined_loop)
+			    {
+			      octx = octx->outer_context;
+			      n = splay_tree_lookup (octx->variables,
+						     (splay_tree_key)decl);
+			      if (n != NULL && (n->value & GOVD_LOCAL) != 0)
+				{
+				  OMP_CLAUSE_LINEAR_NO_COPYOUT (c) = 1;
+				  flags |= GOVD_LINEAR_LASTPRIVATE_NO_OUTER;
+				}
+			    }
+			}
+		    }
+		}
+
+	      OMP_CLAUSE_DECL (c) = decl;
+	      OMP_CLAUSE_CHAIN (c) = OMP_FOR_CLAUSES (for_stmt);
+	      OMP_FOR_CLAUSES (for_stmt) = c;
+	      omp_add_variable (gimplify_omp_ctxp, decl, flags);
+	      if (outer && !OMP_CLAUSE_LINEAR_NO_COPYOUT (c))
+		{
+		  if (outer->region_type == ORT_WORKSHARE
+		      && outer->combined_loop)
+		    {
+		      if (outer->outer_context
+			  && (outer->outer_context->region_type
+			      == ORT_COMBINED_PARALLEL))
+			outer = outer->outer_context;
+		      else if (omp_check_private (outer, decl, false))
+			outer = NULL;
+		    }
+		  else if (((outer->region_type & ORT_TASKLOOP)
+			    == ORT_TASKLOOP)
+			   && outer->combined_loop
+			   && !omp_check_private (gimplify_omp_ctxp,
+						  decl, false))
+		    ;
+		  else if (outer->region_type != ORT_COMBINED_PARALLEL)
+		    {
+		      omp_notice_variable (outer, decl, true);
+		      outer = NULL;
+		    }
+		  if (outer)
+		    {
+		      n = splay_tree_lookup (outer->variables,
+					     (splay_tree_key)decl);
+		      if (n == NULL || (n->value & GOVD_DATA_SHARE_CLASS) == 0)
+			{
+			  omp_add_variable (outer, decl,
+					    GOVD_LASTPRIVATE | GOVD_SEEN);
+			  if (outer->region_type == ORT_COMBINED_PARALLEL
+			      && outer->outer_context
+			      && (outer->outer_context->region_type
+				  == ORT_WORKSHARE)
+			      && outer->outer_context->combined_loop)
+			    {
+			      outer = outer->outer_context;
+			      n = splay_tree_lookup (outer->variables,
+						     (splay_tree_key)decl);
+			      if (omp_check_private (outer, decl, false))
+				outer = NULL;
+			      else if (n == NULL
+				       || ((n->value & GOVD_DATA_SHARE_CLASS)
+					   == 0))
+				omp_add_variable (outer, decl,
+						  GOVD_LASTPRIVATE
+						  | GOVD_SEEN);
+			      else
+				outer = NULL;
+			    }
+			  if (outer && outer->outer_context
+			      && ((outer->outer_context->region_type
+				   & ORT_COMBINED_TEAMS) == ORT_COMBINED_TEAMS
+				  || (((outer->region_type & ORT_TASKLOOP)
+				       == ORT_TASKLOOP)
+				      && (outer->outer_context->region_type
+					  == ORT_COMBINED_PARALLEL))))
+			    {
+			      outer = outer->outer_context;
+			      n = splay_tree_lookup (outer->variables,
+						     (splay_tree_key)decl);
+			      if (n == NULL
+				  || (n->value & GOVD_DATA_SHARE_CLASS) == 0)
+				omp_add_variable (outer, decl,
+						  GOVD_SHARED | GOVD_SEEN);
+			      else
+				outer = NULL;
+			    }
+			  if (outer && outer->outer_context)
+			    omp_notice_variable (outer->outer_context, decl,
+						 true);
+			}
+		    }
+		}
+	    }
+	  else
+	    {
+	      bool lastprivate
+		= (!has_decl_expr
+		   || !bitmap_bit_p (has_decl_expr, DECL_UID (decl)));
+	      if (TREE_PRIVATE (t))
+		lastprivate = false;
+	      if (loop_p && OMP_FOR_ORIG_DECLS (for_stmt))
+		{
+		  tree elt = TREE_VEC_ELT (OMP_FOR_ORIG_DECLS (for_stmt), i);
+		  if (TREE_CODE (elt) == TREE_LIST && TREE_PURPOSE (elt))
+		    lastprivate = false;
+		}
+
+	      struct gimplify_omp_ctx *outer
+		= gimplify_omp_ctxp->outer_context;
+	      if (outer && lastprivate)
+		{
+		  if (outer->region_type == ORT_WORKSHARE
+		      && outer->combined_loop)
+		    {
+		      n = splay_tree_lookup (outer->variables,
+					     (splay_tree_key)decl);
+		      if (n != NULL && (n->value & GOVD_LOCAL) != 0)
+			{
+			  lastprivate = false;
+			  outer = NULL;
+			}
+		      else if (outer->outer_context
+			       && (outer->outer_context->region_type
+				   == ORT_COMBINED_PARALLEL))
+			outer = outer->outer_context;
+		      else if (omp_check_private (outer, decl, false))
+			outer = NULL;
+		    }
+		  else if (((outer->region_type & ORT_TASKLOOP)
+			    == ORT_TASKLOOP)
+			   && outer->combined_loop
+			   && !omp_check_private (gimplify_omp_ctxp,
+						  decl, false))
+		    ;
+		  else if (outer->region_type != ORT_COMBINED_PARALLEL)
+		    {
+		      omp_notice_variable (outer, decl, true);
+		      outer = NULL;
+		    }
+		  if (outer)
+		    {
+		      n = splay_tree_lookup (outer->variables,
+					     (splay_tree_key)decl);
+		      if (n == NULL || (n->value & GOVD_DATA_SHARE_CLASS) == 0)
+			{
+			  omp_add_variable (outer, decl,
+					    GOVD_LASTPRIVATE | GOVD_SEEN);
+			  if (outer->region_type == ORT_COMBINED_PARALLEL
+			      && outer->outer_context
+			      && (outer->outer_context->region_type
+				  == ORT_WORKSHARE)
+			      && outer->outer_context->combined_loop)
+			    {
+			      outer = outer->outer_context;
+			      n = splay_tree_lookup (outer->variables,
+						     (splay_tree_key)decl);
+			      if (omp_check_private (outer, decl, false))
+				outer = NULL;
+			      else if (n == NULL
+				       || ((n->value & GOVD_DATA_SHARE_CLASS)
+					   == 0))
+				omp_add_variable (outer, decl,
+						  GOVD_LASTPRIVATE
+						  | GOVD_SEEN);
+			      else
+				outer = NULL;
+			    }
+			  if (outer && outer->outer_context
+			      && ((outer->outer_context->region_type
+				   & ORT_COMBINED_TEAMS) == ORT_COMBINED_TEAMS
+				  || (((outer->region_type & ORT_TASKLOOP)
+				       == ORT_TASKLOOP)
+				      && (outer->outer_context->region_type
+					  == ORT_COMBINED_PARALLEL))))
+			    {
+			      outer = outer->outer_context;
+			      n = splay_tree_lookup (outer->variables,
+						     (splay_tree_key)decl);
+			      if (n == NULL
+				  || (n->value & GOVD_DATA_SHARE_CLASS) == 0)
+				omp_add_variable (outer, decl,
+						  GOVD_SHARED | GOVD_SEEN);
+			      else
+				outer = NULL;
+			    }
+			  if (outer && outer->outer_context)
+			    omp_notice_variable (outer->outer_context, decl,
+						 true);
+			}
+		    }
+		}
+
+	      c = build_omp_clause (input_location,
+				    lastprivate ? OMP_CLAUSE_LASTPRIVATE
+						: OMP_CLAUSE_PRIVATE);
+	      OMP_CLAUSE_DECL (c) = decl;
+	      OMP_CLAUSE_CHAIN (c) = OMP_FOR_CLAUSES (for_stmt);
+	      OMP_FOR_CLAUSES (for_stmt) = c;
+	      omp_add_variable (gimplify_omp_ctxp, decl,
+				(lastprivate ? GOVD_LASTPRIVATE : GOVD_PRIVATE)
+				| GOVD_EXPLICIT | GOVD_SEEN);
+	      c = NULL_TREE;
+	    }
+	}
+      else if (omp_is_private (gimplify_omp_ctxp, decl, 0))
+	{
+	  omp_notice_variable (gimplify_omp_ctxp, decl, true);
+	  splay_tree_node n = splay_tree_lookup (gimplify_omp_ctxp->variables,
+						 (splay_tree_key) decl);
+	  if (n && (n->value & GOVD_LASTPRIVATE_CONDITIONAL))
+	    for (tree c3 = omp_find_clause (OMP_FOR_CLAUSES (for_stmt),
+					    OMP_CLAUSE_LASTPRIVATE);
+		 c3; c3 = omp_find_clause (OMP_CLAUSE_CHAIN (c3),
+					   OMP_CLAUSE_LASTPRIVATE))
+	      if (OMP_CLAUSE_DECL (c3) == decl)
+		{
+		  warning_at (OMP_CLAUSE_LOCATION (c3), 0,
+			      "conditional %<lastprivate%> on loop "
+			      "iterator %qD ignored", decl);
+		  OMP_CLAUSE_LASTPRIVATE_CONDITIONAL (c3) = 0;
+		  n->value &= ~GOVD_LASTPRIVATE_CONDITIONAL;
+		}
+	}
+      else
+	omp_add_variable (gimplify_omp_ctxp, decl, GOVD_PRIVATE | GOVD_SEEN);
+
+      /* If DECL is not a gimple register, create a temporary variable to act
+	 as an iteration counter.  This is valid, since DECL cannot be
+	 modified in the body of the loop.  Similarly for any iteration vars
+	 in simd with collapse > 1 where the iterator vars must be
+	 lastprivate.  */
+      if (orig_for_stmt != for_stmt)
+	var = decl;
+      else if (!is_gimple_reg (decl)
+	       || (ort == ORT_SIMD
+		   && TREE_VEC_LENGTH (OMP_FOR_INIT (for_stmt)) > 1))
+	{
+	  struct gimplify_omp_ctx *ctx = gimplify_omp_ctxp;
+	  /* Make sure omp_add_variable is not called on it prematurely.
+	     We call it ourselves a few lines later.  */
+	  gimplify_omp_ctxp = NULL;
+	  var = create_tmp_var (TREE_TYPE (decl), get_name (decl));
+	  gimplify_omp_ctxp = ctx;
+	  TREE_OPERAND (t, 0) = var;
+
+	  gimplify_seq_add_stmt (&for_body, gimple_build_assign (decl, var));
+
+	  if (ort == ORT_SIMD
+	      && TREE_VEC_LENGTH (OMP_FOR_INIT (for_stmt)) == 1)
+	    {
+	      c2 = build_omp_clause (input_location, OMP_CLAUSE_LINEAR);
+	      OMP_CLAUSE_LINEAR_NO_COPYIN (c2) = 1;
+	      OMP_CLAUSE_LINEAR_NO_COPYOUT (c2) = 1;
+	      OMP_CLAUSE_DECL (c2) = var;
+	      OMP_CLAUSE_CHAIN (c2) = OMP_FOR_CLAUSES (for_stmt);
+	      OMP_FOR_CLAUSES (for_stmt) = c2;
+	      omp_add_variable (gimplify_omp_ctxp, var,
+				GOVD_LINEAR | GOVD_EXPLICIT | GOVD_SEEN);
+	      if (c == NULL_TREE)
+		{
+		  c = c2;
+		  c2 = NULL_TREE;
+		}
+	    }
+	  else
+	    omp_add_variable (gimplify_omp_ctxp, var,
+			      GOVD_PRIVATE | GOVD_SEEN);
+	}
+      else
+	var = decl;
+
+      gimplify_omp_ctxp->in_for_exprs = true;
+      tret = gimplify_expr (&TREE_OPERAND (t, 1), &for_pre_body, NULL,
+			    is_gimple_val, fb_rvalue, false);
+      gimplify_omp_ctxp->in_for_exprs = false;
+      ret = MIN (ret, tret);
+      if (ret == GS_ERROR)
+	return ret;
+
+      /* Handle OMP_FOR_COND.  */
+      t = TREE_VEC_ELT (OMP_FOR_COND (for_stmt), i);
+      gcc_assert (COMPARISON_CLASS_P (t));
+      gcc_assert (TREE_OPERAND (t, 0) == decl);
+
+      gimplify_omp_ctxp->in_for_exprs = true;
+      tret = gimplify_expr (&TREE_OPERAND (t, 1), &for_pre_body, NULL,
+			    is_gimple_val, fb_rvalue, false);
+      gimplify_omp_ctxp->in_for_exprs = false;
+      ret = MIN (ret, tret);
+
+      /* Handle OMP_FOR_INCR.  */
+      t = TREE_VEC_ELT (OMP_FOR_INCR (for_stmt), i);
+      switch (TREE_CODE (t))
+	{
+	case PREINCREMENT_EXPR:
+	case POSTINCREMENT_EXPR:
+	  {
+	    tree decl = TREE_OPERAND (t, 0);
+	    /* c_omp_for_incr_canonicalize_ptr() should have been
+	       called to massage things appropriately.  */
+	    gcc_assert (!POINTER_TYPE_P (TREE_TYPE (decl)));
+
+	    if (orig_for_stmt != for_stmt)
+	      break;
+	    t = build_int_cst (TREE_TYPE (decl), 1);
+	    if (c)
+	      OMP_CLAUSE_LINEAR_STEP (c) = t;
+	    t = build2 (PLUS_EXPR, TREE_TYPE (decl), var, t);
+	    t = build2 (MODIFY_EXPR, TREE_TYPE (var), var, t);
+	    TREE_VEC_ELT (OMP_FOR_INCR (for_stmt), i) = t;
+	    break;
+	  }
+
+	case PREDECREMENT_EXPR:
+	case POSTDECREMENT_EXPR:
+	  /* c_omp_for_incr_canonicalize_ptr() should have been
+	     called to massage things appropriately.  */
+	  gcc_assert (!POINTER_TYPE_P (TREE_TYPE (decl)));
+	  if (orig_for_stmt != for_stmt)
+	    break;
+	  t = build_int_cst (TREE_TYPE (decl), -1);
+	  if (c)
+	    OMP_CLAUSE_LINEAR_STEP (c) = t;
+	  t = build2 (PLUS_EXPR, TREE_TYPE (decl), var, t);
+	  t = build2 (MODIFY_EXPR, TREE_TYPE (var), var, t);
+	  TREE_VEC_ELT (OMP_FOR_INCR (for_stmt), i) = t;
+	  break;
+
+	case MODIFY_EXPR:
+	  gcc_assert (TREE_OPERAND (t, 0) == decl);
+	  TREE_OPERAND (t, 0) = var;
+
+	  t = TREE_OPERAND (t, 1);
+	  switch (TREE_CODE (t))
+	    {
+	    case PLUS_EXPR:
+	      if (TREE_OPERAND (t, 1) == decl)
+		{
+		  TREE_OPERAND (t, 1) = TREE_OPERAND (t, 0);
+		  TREE_OPERAND (t, 0) = var;
+		  break;
+		}
+
+	      /* Fallthru.  */
+	    case MINUS_EXPR:
+	    case POINTER_PLUS_EXPR:
+	      gcc_assert (TREE_OPERAND (t, 0) == decl);
+	      TREE_OPERAND (t, 0) = var;
+	      break;
+	    default:
+	      gcc_unreachable ();
+	    }
+
+	  gimplify_omp_ctxp->in_for_exprs = true;
+	  tret = gimplify_expr (&TREE_OPERAND (t, 1), &for_pre_body, NULL,
+				is_gimple_val, fb_rvalue, false);
+	  ret = MIN (ret, tret);
+	  if (c)
+	    {
+	      tree step = TREE_OPERAND (t, 1);
+	      tree stept = TREE_TYPE (decl);
+	      if (POINTER_TYPE_P (stept))
+		stept = sizetype;
+	      step = fold_convert (stept, step);
+	      if (TREE_CODE (t) == MINUS_EXPR)
+		step = fold_build1 (NEGATE_EXPR, stept, step);
+	      OMP_CLAUSE_LINEAR_STEP (c) = step;
+	      if (step != TREE_OPERAND (t, 1))
+		{
+		  tret = gimplify_expr (&OMP_CLAUSE_LINEAR_STEP (c),
+					&for_pre_body, NULL,
+					is_gimple_val, fb_rvalue, false);
+		  ret = MIN (ret, tret);
+		}
+	    }
+	  gimplify_omp_ctxp->in_for_exprs = false;
+	  break;
+
+	default:
+	  gcc_unreachable ();
+	}
+
+      if (c2)
+	{
+	  gcc_assert (c);
+	  OMP_CLAUSE_LINEAR_STEP (c2) = OMP_CLAUSE_LINEAR_STEP (c);
+	}
+
+      if ((var != decl || collapse > 1 || tile) && orig_for_stmt == for_stmt)
+	{
+	  for (c = OMP_FOR_CLAUSES (for_stmt); c ; c = OMP_CLAUSE_CHAIN (c))
+	    if (((OMP_CLAUSE_CODE (c) == OMP_CLAUSE_LASTPRIVATE
+		  && OMP_CLAUSE_LASTPRIVATE_GIMPLE_SEQ (c) == NULL)
+		 || (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_LINEAR
+		     && !OMP_CLAUSE_LINEAR_NO_COPYOUT (c)
+		     && OMP_CLAUSE_LINEAR_GIMPLE_SEQ (c) == NULL))
+		&& OMP_CLAUSE_DECL (c) == decl)
+	      {
+		if (is_doacross && (collapse == 1 || i >= collapse))
+		  t = var;
+		else
+		  {
+		    t = TREE_VEC_ELT (OMP_FOR_INCR (for_stmt), i);
+		    gcc_assert (TREE_CODE (t) == MODIFY_EXPR);
+		    gcc_assert (TREE_OPERAND (t, 0) == var);
+		    t = TREE_OPERAND (t, 1);
+		    gcc_assert (TREE_CODE (t) == PLUS_EXPR
+				|| TREE_CODE (t) == MINUS_EXPR
+				|| TREE_CODE (t) == POINTER_PLUS_EXPR);
+		    gcc_assert (TREE_OPERAND (t, 0) == var);
+		    t = build2 (TREE_CODE (t), TREE_TYPE (decl),
+				is_doacross ? var : decl,
+				TREE_OPERAND (t, 1));
+		  }
+		gimple_seq *seq;
+		if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_LASTPRIVATE)
+		  seq = &OMP_CLAUSE_LASTPRIVATE_GIMPLE_SEQ (c);
+		else
+		  seq = &OMP_CLAUSE_LINEAR_GIMPLE_SEQ (c);
+		push_gimplify_context ();
+		gimplify_assign (decl, t, seq);
+		gimple *bind = NULL;
+		if (gimplify_ctxp->temps)
+		  {
+		    bind = gimple_build_bind (NULL_TREE, *seq, NULL_TREE);
+		    *seq = NULL;
+		    gimplify_seq_add_stmt (seq, bind);
+		  }
+		pop_gimplify_context (bind);
+	      }
+	}
+    }
+
+  BITMAP_FREE (has_decl_expr);
+
+  if (TREE_CODE (orig_for_stmt) == OMP_TASKLOOP
+      || (loop_p && orig_for_stmt == for_stmt))
+    {
+      push_gimplify_context ();
+      if (TREE_CODE (OMP_FOR_BODY (orig_for_stmt)) != BIND_EXPR)
+	{
+	  OMP_FOR_BODY (orig_for_stmt)
+	    = build3 (BIND_EXPR, void_type_node, NULL,
+		      OMP_FOR_BODY (orig_for_stmt), NULL);
+	  TREE_SIDE_EFFECTS (OMP_FOR_BODY (orig_for_stmt)) = 1;
+	}
+    }
+
+  gimple *g = gimplify_and_return_first (OMP_FOR_BODY (orig_for_stmt),
+					 &for_body);
+
+  if (TREE_CODE (orig_for_stmt) == OMP_TASKLOOP
+      || (loop_p && orig_for_stmt == for_stmt))
+    {
+      if (gimple_code (g) == GIMPLE_BIND)
+	pop_gimplify_context (g);
+      else
+	pop_gimplify_context (NULL);
+    }
+
+  if (orig_for_stmt != for_stmt)
+    for (i = 0; i < TREE_VEC_LENGTH (OMP_FOR_INIT (for_stmt)); i++)
+      {
+	t = TREE_VEC_ELT (OMP_FOR_INIT (for_stmt), i);
+	decl = TREE_OPERAND (t, 0);
+	struct gimplify_omp_ctx *ctx = gimplify_omp_ctxp;
+	if (TREE_CODE (orig_for_stmt) == OMP_TASKLOOP)
+	  gimplify_omp_ctxp = ctx->outer_context;
+	var = create_tmp_var (TREE_TYPE (decl), get_name (decl));
+	gimplify_omp_ctxp = ctx;
+	omp_add_variable (gimplify_omp_ctxp, var, GOVD_PRIVATE | GOVD_SEEN);
+	TREE_OPERAND (t, 0) = var;
+	t = TREE_VEC_ELT (OMP_FOR_INCR (for_stmt), i);
+	TREE_OPERAND (t, 1) = copy_node (TREE_OPERAND (t, 1));
+	TREE_OPERAND (TREE_OPERAND (t, 1), 0) = var;
+      }
+
+
+// Source: gimplify.c
+// Lines 11028-11992

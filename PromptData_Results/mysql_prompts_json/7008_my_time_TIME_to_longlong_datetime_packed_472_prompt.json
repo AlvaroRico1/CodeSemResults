@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'tmp' at line 4\n2. Pointer 'my_time' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nlonglong TIME_to_longlong_datetime_packed(const MYSQL_TIME &my_time) {\n  longlong ymd = ((my_time.year * 13 + my_time.month) << 5) | my_time.day;\n  longlong hms = (my_time.hour << 12) | (my_time.minute << 6) | my_time.second;\n  longlong tmp = my_packed_time_make(((ymd << 17) | hms), my_time.second_part);\n  assert(!check_datetime_range(my_time)); /* Make sure no overflow */\n  return my_time.neg ? -tmp : tmp;\n}\n\n\n// Source: my_time.cc\n// Lines 1870-1876\n",
+  "ANSWER": "MUST-NOT"
+}

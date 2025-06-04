@@ -1,0 +1,138 @@
+static int detect_regular_renames(struct merge_options *opt,
+				  unsigned side_index)
+{
+	struct diff_options diff_opts;
+	struct rename_info *renames = &opt->priv->renames;
+
+	prune_cached_from_relevant(renames, side_index);
+	if (!possible_side_renames(renames, side_index)) {
+		/*
+		 * No rename detection needed for this side, but we still need
+		 * to make sure 'adds' are marked correctly in case the other
+		 * side had directory renames.
+		 */
+		resolve_diffpair_statuses(&renames->pairs[side_index]);
+		return 0;
+	}
+
+	partial_clear_dir_rename_count(&renames->dir_rename_count[side_index]);
+	repo_diff_setup(opt->repo, &diff_opts);
+	diff_opts.flags.recursive = 1;
+	diff_opts.flags.rename_empty = 0;
+	diff_opts.detect_rename = DIFF_DETECT_RENAME;
+	diff_opts.rename_limit = opt->rename_limit;
+	if (opt->rename_limit <= 0)
+		diff_opts.rename_limit = 7000;
+	diff_opts.rename_score = opt->rename_score;
+	diff_opts.show_rename_progress = opt->show_rename_progress;
+	diff_opts.output_format = DIFF_FORMAT_NO_OUTPUT;
+	diff_setup_done(&diff_opts);
+
+	diff_queued_diff = renames->pairs[side_index];
+	trace2_region_enter("diff", "diffcore_rename", opt->repo);
+	diffcore_rename_extended(&diff_opts,
+				 &opt->priv->pool,
+				 &renames->relevant_sources[side_index],
+				 &renames->dirs_removed[side_index],
+				 &renames->dir_rename_count[side_index],
+				 &renames->cached_pairs[side_index]);
+	trace2_region_leave("diff", "diffcore_rename", opt->repo);
+	resolve_diffpair_statuses(&diff_queued_diff);
+
+	if (diff_opts.needed_rename_limit > 0)
+		renames->redo_after_renames = 0;
+	if (diff_opts.needed_rename_limit > renames->needed_limit)
+		renames->needed_limit = diff_opts.needed_rename_limit;
+
+	renames->pairs[side_index] = diff_queued_diff;
+
+	diff_opts.output_format = DIFF_FORMAT_NO_OUTPUT;
+	diff_queued_diff.nr = 0;
+	diff_queued_diff.queue = NULL;
+	diff_flush(&diff_opts);
+
+	return 1;
+}
+
+/*
+ * Get information of all renames which occurred in 'side_pairs', making use
+ * of any implicit directory renames in side_dir_renames (also making use of
+ * implicit directory renames rename_exclusions as needed by
+ * check_for_directory_rename()).  Add all (updated) renames into result.
+ */
+static int collect_renames(struct merge_options *opt,
+			   struct diff_queue_struct *result,
+			   unsigned side_index,
+			   struct strmap *dir_renames_for_side,
+			   struct strmap *rename_exclusions)
+{
+	int i, clean = 1;
+	struct strmap collisions;
+	struct diff_queue_struct *side_pairs;
+	struct hashmap_iter iter;
+	struct strmap_entry *entry;
+	struct rename_info *renames = &opt->priv->renames;
+
+	side_pairs = &renames->pairs[side_index];
+	compute_collisions(&collisions, dir_renames_for_side, side_pairs);
+
+	for (i = 0; i < side_pairs->nr; ++i) {
+		struct diff_filepair *p = side_pairs->queue[i];
+		char *new_path; /* non-NULL only with directory renames */
+
+		if (p->status != 'A' && p->status != 'R') {
+			possibly_cache_new_pair(renames, p, side_index, NULL);
+			pool_diff_free_filepair(&opt->priv->pool, p);
+			continue;
+		}
+
+		new_path = check_for_directory_rename(opt, p->two->path,
+						      side_index,
+						      dir_renames_for_side,
+						      rename_exclusions,
+						      &collisions,
+						      &clean);
+
+		possibly_cache_new_pair(renames, p, side_index, new_path);
+		if (p->status != 'R' && !new_path) {
+			pool_diff_free_filepair(&opt->priv->pool, p);
+			continue;
+		}
+
+		if (new_path)
+			apply_directory_rename_modifications(opt, p, new_path);
+
+		/*
+		 * p->score comes back from diffcore_rename_extended() with
+		 * the similarity of the renamed file.  The similarity is
+		 * was used to determine that the two files were related
+		 * and are a rename, which we have already used, but beyond
+		 * that we have no use for the similarity.  So p->score is
+		 * now irrelevant.  However, process_renames() will need to
+		 * know which side of the merge this rename was associated
+		 * with, so overwrite p->score with that value.
+		 */
+		p->score = side_index;
+		result->queue[result->nr++] = p;
+	}
+
+	/* Free each value in the collisions map */
+	strmap_for_each_entry(&collisions, &iter, entry) {
+		struct collision_info *info = entry->value;
+		string_list_clear(&info->source_files, 0);
+	}
+	/*
+	 * In compute_collisions(), we set collisions.strdup_strings to 0
+	 * so that we wouldn't have to make another copy of the new_path
+	 * allocated by apply_dir_rename().  But now that we've used them
+	 * and have no other references to these strings, it is time to
+	 * deallocate them.
+	 */
+	free_strmap_strings(&collisions);
+	strmap_clear(&collisions, 1);
+	return clean;
+}
+
+
+// Source: merge-ort.c
+// Lines 2921-3054

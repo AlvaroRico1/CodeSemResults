@@ -1,0 +1,72 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'bb' at line 5
+2. Pointer 'bb_refs' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+prepare_data_references (class loop *loop, vec<data_reference_p> *datarefs)
+{
+  class loop *loop_nest = loop;
+  vec<data_reference_p> *bb_refs;
+  basic_block bb, *bbs = get_loop_body_in_dom_order (loop);
+
+  for (unsigned i = 0; i < loop->num_nodes; i++)
+    bbs[i]->aux = NULL;
+
+  /* Find data references for all basic blocks.  Shrink loop nest on difficult
+     data reference.  */
+  for (unsigned i = 0; loop_nest && i < loop->num_nodes; ++i)
+    {
+      bb = bbs[i];
+      if (!flow_bb_inside_loop_p (loop_nest, bb))
+	continue;
+
+      bb_refs = new vec<data_reference_p> ();
+      if (find_data_references_in_bb (loop, bb, bb_refs) == chrec_dont_know)
+        {
+	  loop_nest = bb->loop_father->inner;
+	  if (loop_nest && !loop_nest->inner)
+	    loop_nest = NULL;
+
+	  free_data_refs (*bb_refs);
+          delete bb_refs;
+        }
+      else if (bb_refs->is_empty ())
+	delete bb_refs;
+      else
+	bb->aux = bb_refs;
+    }
+
+  /* Collect all data references in loop nest.  */
+  for (unsigned i = 0; i < loop->num_nodes; i++)
+    {
+      bb = bbs[i];
+      if (!bb->aux)
+	continue;
+
+      bb_refs = (vec<data_reference_p> *) bb->aux;
+      if (loop_nest && flow_bb_inside_loop_p (loop_nest, bb))
+	datarefs->safe_splice (*bb_refs);
+      else
+	free_data_refs (*bb_refs);
+
+      delete bb_refs;
+      bb->aux = NULL;
+    }
+  free (bbs);
+
+  return loop_nest;
+}
+
+
+// Source: gimple-loop-interchange.cc
+// Lines 1915-1967
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'cgn' at line 3\n2. Pointer 'cgn' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nunvisit_body (tree fndecl)\n{\n  struct cgraph_node *cgn = cgraph_node::get (fndecl);\n\n  unmark_visited (&DECL_SAVED_TREE (fndecl));\n  unmark_visited (&DECL_SIZE (DECL_RESULT (fndecl)));\n  unmark_visited (&DECL_SIZE_UNIT (DECL_RESULT (fndecl)));\n\n  if (cgn)\n    for (cgn = cgn->nested; cgn; cgn = cgn->next_nested)\n      unvisit_body (cgn->decl);\n}\n\n\n// Source: gimplify.c\n// Lines 1003-1014\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,1 @@
+filter,libgit2/tests/clar/clar.c,1,matchlen,libgit2/tests/clar/clar.c,4,0

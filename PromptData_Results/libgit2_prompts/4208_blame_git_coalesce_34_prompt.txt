@@ -1,0 +1,39 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'next' at line 3
+2. Pointer 'next' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void coalesce(git_blame *blame)
+{
+	git_blame__entry *ent, *next;
+
+	for (ent=blame->ent; ent && (next = ent->next); ent = next) {
+		if (same_suspect(ent->suspect, next->suspect) &&
+		    ent->guilty == next->guilty &&
+		    ent->s_lno + ent->num_lines == next->s_lno)
+		{
+			ent->num_lines += next->num_lines;
+			ent->next = next->next;
+			if (ent->next)
+				ent->next->prev = ent;
+			origin_decref(next->suspect);
+			git__free(next);
+			ent->score = 0;
+			next = ent; /* again */
+		}
+	}
+}
+
+
+// Source: blame_git.c
+// Lines 620-639
+
+
+[ANSWER]
+MUST

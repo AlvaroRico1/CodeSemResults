@@ -1,0 +1,29 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'entry' at line 8
+2. Pointer 'index' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void write_hash_cache(struct hashfile *f,
+			     struct pack_idx_entry **index,
+			     uint32_t index_nr)
+{
+	uint32_t i;
+
+	for (i = 0; i < index_nr; ++i) {
+		struct object_entry *entry = (struct object_entry *)index[i];
+		hashwrite_be32(f, entry->hash);
+	}
+
+
+// Source: pack-bitmap-write.c
+// Lines 673-682
+
+
+[ANSWER]
+MUST

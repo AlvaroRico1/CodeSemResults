@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'selected_pathconf' at line 3
+2. Pointer 'candidate' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void setup_pathconf(h2o_req_t *req, h2o_hostconf_t *hostconf)
+{
+    h2o_pathconf_t *selected_pathconf = &hostconf->fallback_path;
+    size_t i;
+
+    /* setup pathconf, or redirect to "path/" */
+    for (i = 0; i != hostconf->paths.size; ++i) {
+        h2o_pathconf_t *candidate = hostconf->paths.entries[i];
+        if (req->path_normalized.len >= candidate->path.len &&
+            memcmp(req->path_normalized.base, candidate->path.base, candidate->path.len) == 0 &&
+            (candidate->path.base[candidate->path.len - 1] == '/' || req->path_normalized.len == candidate->path.len ||
+             req->path_normalized.base[candidate->path.len] == '/')) {
+            selected_pathconf = candidate;
+            break;
+        }
+    }
+
+
+// Source: request.c
+// Lines 172-187
+
+
+[ANSWER]
+MUST

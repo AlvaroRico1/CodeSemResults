@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'e' at line 7\n2. Pointer 'e' at line 7\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint git_blame__get_origin(\n\t\tgit_blame__origin **out,\n\t\tgit_blame *blame,\n\t\tgit_commit *commit,\n\t\tconst char *path)\n{\n\tgit_blame__entry *e;\n\n\tfor (e = blame->ent; e; e = e->next) {\n\t\tif (e->suspect->commit == commit && !strcmp(e->suspect->path, path)) {\n\t\t\t*out = origin_incref(e->suspect);\n\t\t}\n\t}\n\treturn make_origin(out, commit, path);\n}\n\n\n// Source: blame_git.c\n// Lines 65-79\n",
+  "ANSWER": "MUST"
+}

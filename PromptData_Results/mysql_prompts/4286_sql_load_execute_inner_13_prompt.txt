@@ -1,0 +1,503 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'insert_table_ref' at line 58
+2. Pointer 'table_list' at line 15
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool Sql_cmd_load_table::execute_inner(THD *thd,
+                                       enum enum_duplicates handle_duplicates) {
+  char name[FN_REFLEN];
+  File file;
+  bool error = false;
+  const String *field_term = m_exchange.field.field_term;
+  const String *escaped = m_exchange.field.escaped;
+  const String *enclosed = m_exchange.field.enclosed;
+  bool is_fifo = false;
+  Query_block *select = thd->lex->query_block;
+  LOAD_FILE_INFO lf_info;
+  THD::killed_state killed_status = THD::NOT_KILLED;
+  bool is_concurrent;
+  bool transactional_table;
+  TABLE_LIST *const table_list = thd->lex->query_tables;
+  const char *db = table_list->db;  // This is never null
+  /*
+    If path for file is not defined, we will use the current database.
+    If this is not set, we will use the directory where the table to be
+    loaded is located
+  */
+  const char *tdb = thd->db().str ? thd->db().str : db;  // Result is never null
+  ulong skip_lines = m_exchange.skip_lines;
+  DBUG_TRACE;
+
+  /*
+    Bug #34283
+    mysqlbinlog leaves tmpfile after termination if binlog contains
+    load data infile, so in mixed mode we go to row-based for
+    avoiding the problem.
+  */
+  thd->set_current_stmt_binlog_format_row_if_mixed();
+
+  if (escaped->length() > 1 || enclosed->length() > 1) {
+    my_error(ER_WRONG_FIELD_TERMINATORS, MYF(0));
+    return true;
+  }
+
+  /* Report problems with non-ascii separators */
+  if (!escaped->is_ascii() || !enclosed->is_ascii() ||
+      !field_term->is_ascii() || !m_exchange.line.line_term->is_ascii() ||
+      !m_exchange.line.line_start->is_ascii()) {
+    push_warning(thd, Sql_condition::SL_WARNING,
+                 WARN_NON_ASCII_SEPARATOR_NOT_IMPLEMENTED,
+                 ER_THD(thd, WARN_NON_ASCII_SEPARATOR_NOT_IMPLEMENTED));
+  }
+
+  if (open_and_lock_tables(thd, table_list, 0)) return true;
+
+  THD_STAGE_INFO(thd, stage_executing);
+  if (select->setup_tables(thd, table_list, false)) return true;
+
+  if (run_before_dml_hook(thd)) return true;
+
+  if (table_list->is_view() && select->resolve_placeholder_tables(thd, false))
+    return true; /* purecov: inspected */
+
+  TABLE_LIST *const insert_table_ref =
+      table_list->is_updatable() &&  // View must be updatable
+              !table_list
+                   ->is_multiple_tables() &&  // Multi-table view not allowed
+              !table_list->is_derived()
+          ?  // derived tables not allowed
+          table_list->updatable_base_table()
+          : nullptr;
+
+  if (insert_table_ref == nullptr ||
+      check_key_in_view(thd, table_list, insert_table_ref)) {
+    my_error(ER_NON_UPDATABLE_TABLE, MYF(0), table_list->alias, "LOAD");
+    return true;
+  }
+  if (select->derived_table_count &&
+      select->check_view_privileges(thd, INSERT_ACL, SELECT_ACL))
+    return true; /* purecov: inspected */
+
+  if (table_list->is_merged()) {
+    if (table_list->prepare_check_option(thd)) return true;
+
+    if (handle_duplicates == DUP_REPLACE &&
+        table_list->prepare_replace_filter(thd))
+      return true;
+  }
+
+  // Pass the check option down to the underlying table:
+  insert_table_ref->check_option = table_list->check_option;
+  /*
+    Let us emit an error if we are loading data to table which is used
+    in subselect in SET clause like we do it for INSERT.
+
+    The main thing to fix to remove this restriction is to ensure that the
+    table is marked to be 'used for insert' in which case we should never
+    mark this table as 'const table' (ie, one that has only one row).
+  */
+  if (unique_table(insert_table_ref, table_list->next_global, false)) {
+    my_error(ER_UPDATE_TABLE_USED, MYF(0), table_list->table_name);
+    return true;
+  }
+
+  TABLE *const table = insert_table_ref->table;
+
+  for (Field **cur_field = table->field; *cur_field; ++cur_field)
+    (*cur_field)->reset_warnings();
+
+  transactional_table = table->file->has_transactions();
+  is_concurrent =
+      (table_list->lock_descriptor().type == TL_WRITE_CONCURRENT_INSERT);
+
+  if (m_opt_fields_or_vars.empty()) {
+    Field_iterator_table_ref field_iterator;
+    field_iterator.set(table_list);
+    for (; !field_iterator.end_of_fields(); field_iterator.next()) {
+      // Do not include user hidden fields.
+      if (field_iterator.field() != nullptr &&
+          field_iterator.field()->is_hidden())
+        continue;
+
+      Item *item;
+      if (!(item = field_iterator.create_item(thd))) return true;
+
+      if (item->field_for_view_update() == nullptr) {
+        my_error(ER_NONUPDATEABLE_COLUMN, MYF(0), item->item_name.ptr());
+        return true;
+      }
+      m_opt_fields_or_vars.push_back(item->real_item());
+    }
+    bitmap_set_all(table->write_set);
+    /*
+      Let us also prepare SET clause, altough it is probably empty
+      in this case.
+    */
+    if (setup_fields(thd, /*want_privilege=*/INSERT_ACL,
+                     /*allow_sum_func=*/false, /*split_sum_funcs=*/false,
+                     /*column_update=*/true, /*typed_items=*/nullptr,
+                     &m_opt_set_fields, Ref_item_array()) ||
+        setup_fields(thd, /*want_privilege=*/SELECT_ACL,
+                     /*allow_sum_func=*/false, /*split_sum_funcs=*/false,
+                     /*column_update=*/false, /*typed_items=*/nullptr,
+                     &m_opt_set_exprs, Ref_item_array()))
+      return true;
+  } else {  // Part field list
+    /*
+      Because m_opt_fields_or_vars may contain user variables,
+      pass false for column_update in first call below.
+    */
+    if (setup_fields(thd, /*want_privilege=*/INSERT_ACL,
+                     /*allow_sum_func=*/false, /*split_sum_funcs=*/false,
+                     /*column_update=*/false, /*typed_items=*/nullptr,
+                     &m_opt_fields_or_vars, Ref_item_array()) ||
+        setup_fields(thd, /*want_privilege=*/INSERT_ACL,
+                     /*allow_sum_func=*/false, /*split_sum_funcs=*/false,
+                     /*column_update=*/true, /*typed_items=*/nullptr,
+                     &m_opt_set_fields, Ref_item_array()))
+      return true;
+
+    /*
+      Special updatability test is needed because m_opt_fields_or_vars may
+      contain a mix of column references and user variables.
+    */
+    for (Item *item : m_opt_fields_or_vars) {
+      if ((item->type() == Item::FIELD_ITEM ||
+           item->type() == Item::REF_ITEM) &&
+          item->field_for_view_update() == nullptr) {
+        my_error(ER_NONUPDATEABLE_COLUMN, MYF(0), item->item_name.ptr());
+        return true;
+      }
+      if (item->type() == Item::STRING_ITEM) {
+        /*
+          This item represents a user variable. Create a new item with the
+          same name that can be added to LEX::set_var_list. This ensures
+          that corresponding Item_func_get_user_var items are resolved as
+          non-const items.
+        */
+        Item_func_set_user_var *user_var =
+            new (thd->mem_root) Item_func_set_user_var(item->item_name, item);
+        if (user_var == nullptr) return true;
+        thd->lex->set_var_list.push_back(user_var);
+      }
+    }
+
+    // Consider the following table:
+    //
+    //   CREATE TABLE t1 (x DOUBLE, y DOUBLE, g POINT SRID 4326 NOT NULL);
+    //
+    // If the user wants to load a file which only contains two values (x and y
+    // coordinates), it is possible to do it by executing the following
+    // statement:
+    //
+    //  LOAD DATA INFILE 'data' (@x, @y)
+    //    SET x = @x, y = @y, g = ST_SRID(POINT(@x, @y));
+    //
+    // However, the columns that are specified in the SET clause are only marked
+    // in the write set, and not in fields_set_during_insert. The latter is the
+    // bitmap used during check_that_all_fields_are_given_values(), so we need
+    // to copy the bits from the write set over to said bitmap. If not, the
+    // server will return an error saying that column 'g' doesn't have a default
+    // value.
+    bitmap_union(table->fields_set_during_insert, table->write_set);
+
+    if (check_that_all_fields_are_given_values(thd, table, table_list))
+      return true;
+    /* Fix the expressions in SET clause */
+    if (setup_fields(thd, /*want_privilege=*/SELECT_ACL,
+                     /*allow_sum_func=*/false, /*split_sum_funcs=*/false,
+                     /*column_update=*/false, /*typed_items=*/nullptr,
+                     &m_opt_set_exprs, Ref_item_array()))
+      return true;
+  }
+
+  const int escape_char =
+      (escaped->length() &&
+       (m_exchange.escaped_given() ||
+        !(thd->variables.sql_mode & MODE_NO_BACKSLASH_ESCAPES)))
+          ? (*escaped)[0]
+          : INT_MAX;
+
+  /*
+    * LOAD DATA INFILE fff INTO TABLE xxx SET columns2
+    sets all columns, except if file's row lacks some: in that case,
+    defaults are set by read_fixed_length() and read_sep_field(),
+    not by COPY_INFO.
+    * LOAD DATA INFILE fff INTO TABLE xxx (columns1) SET columns2=
+    may need a default for columns other than columns1 and columns2.
+  */
+  const bool manage_defaults = !m_opt_fields_or_vars.empty();
+  COPY_INFO info(COPY_INFO::INSERT_OPERATION, &m_opt_fields_or_vars,
+                 &m_opt_set_fields, manage_defaults, handle_duplicates,
+                 escape_char);
+
+  if (info.add_function_default_columns(table, table->write_set)) return true;
+
+  if (table->triggers) {
+    if (table->triggers->mark_fields(TRG_EVENT_INSERT)) return true;
+  }
+
+  prepare_triggers_for_insert_stmt(thd, table);
+
+  size_t tot_length = 0;
+  bool use_blobs = false, use_vars = false;
+
+  for (Item *item : m_opt_fields_or_vars) {
+    const Item *real_item = item->real_item();
+
+    if (real_item->type() == Item::FIELD_ITEM) {
+      const Field *field = down_cast<const Item_field *>(real_item)->field;
+      if (field->is_flag_set(BLOB_FLAG)) {
+        use_blobs = true;
+        tot_length += 4096;  // Will be extended if needed
+      } else {
+        tot_length += field->field_length;
+      }
+    } else if (item->type() == Item::STRING_ITEM) {
+      use_vars = true;
+    }
+  }
+  if (use_blobs && m_exchange.line.line_term->is_empty() &&
+      field_term->is_empty()) {
+    my_error(ER_BLOBS_AND_NO_TERMINATED, MYF(0));
+    return true;
+  }
+  if (use_vars && !field_term->length() && !enclosed->length()) {
+    my_error(ER_LOAD_FROM_FIXED_SIZE_ROWS_TO_VAR, MYF(0));
+    return true;
+  }
+
+  if (m_is_local_file) {
+    (void)net_request_file(thd->get_protocol_classic()->get_net(),
+                           m_exchange.file_name);
+    file = -1;
+  } else {
+    if (!dirname_length(m_exchange.file_name)) {
+      strxnmov(name, FN_REFLEN - 1, mysql_real_data_home, tdb, NullS);
+      (void)fn_format(name, m_exchange.file_name, name, "",
+                      MY_RELATIVE_PATH | MY_UNPACK_FILENAME);
+    } else {
+      (void)fn_format(
+          name, m_exchange.file_name, mysql_real_data_home, "",
+          MY_RELATIVE_PATH | MY_UNPACK_FILENAME | MY_RETURN_REAL_PATH);
+    }
+
+    if ((thd->system_thread &
+         (SYSTEM_THREAD_SLAVE_SQL | SYSTEM_THREAD_SLAVE_WORKER)) != 0) {
+      Relay_log_info *rli = thd->rli_slave->get_c_rli();
+
+      if (strncmp(rli->slave_patternload_file, name,
+                  rli->slave_patternload_file_size)) {
+        /*
+          LOAD DATA INFILE in the slave SQL Thread can only read from
+          --slave-load-tmpdir". This should never happen. Please, report a bug.
+        */
+        LogErr(ERROR_LEVEL, ER_LOAD_DATA_INFILE_FAILED_IN_UNEXPECTED_WAY);
+        my_error(ER_OPTION_PREVENTS_STATEMENT, MYF(0), "--slave-load-tmpdir");
+        return true;
+      }
+    } else if (!is_secure_file_path(name)) {
+      /* Read only allowed from within dir specified by secure_file_priv */
+      my_error(ER_OPTION_PREVENTS_STATEMENT, MYF(0), "--secure-file-priv");
+      return true;
+    }
+
+#if !defined(_WIN32)
+    MY_STAT stat_info;
+    if (!my_stat(name, &stat_info, MYF(MY_WME))) return true;
+
+    // if we are not in slave thread, the file must be:
+    if (!thd->slave_thread &&
+        !((stat_info.st_mode & S_IFLNK) != S_IFLNK &&   // symlink
+          ((stat_info.st_mode & S_IFREG) == S_IFREG ||  // regular file
+           (stat_info.st_mode & S_IFIFO) == S_IFIFO)))  // named pipe
+    {
+      my_error(ER_TEXTFILE_NOT_READABLE, MYF(0), name);
+      return true;
+    }
+    if ((stat_info.st_mode & S_IFIFO) == S_IFIFO) is_fifo = true;
+#endif
+    if ((file = mysql_file_open(key_file_load, name, O_RDONLY, MYF(MY_WME))) <
+        0)
+
+      return true;
+  }
+
+  READ_INFO read_info(
+      file, tot_length,
+      m_exchange.cs ? m_exchange.cs : thd->variables.collation_database,
+      *field_term, *m_exchange.line.line_start, *m_exchange.line.line_term,
+      *enclosed, info.escape_char, m_is_local_file, is_fifo);
+  if (read_info.error) {
+    if (file >= 0) mysql_file_close(file, MYF(0));  // no files in net reading
+    return true;                                    // Can't allocate buffers
+  }
+
+  if (mysql_bin_log.is_open()) {
+    lf_info.thd = thd;
+    lf_info.logged_data_file = false;
+    lf_info.last_pos_in_file = HA_POS_ERROR;
+    lf_info.log_delayed = transactional_table;
+    read_info.set_io_cache_arg((void *)&lf_info);
+  }
+
+  thd->check_for_truncated_fields = CHECK_FIELD_WARN;
+  thd->num_truncated_fields = 0L;
+  /* Skip lines if there is a line terminator */
+  if (m_exchange.line.line_term->length() &&
+      m_exchange.filetype != FILETYPE_XML) {
+    /* m_exchange.skip_lines needs to be preserved for logging */
+    while (skip_lines > 0) {
+      skip_lines--;
+      if (read_info.next_line()) break;
+    }
+  }
+
+  if (!(error = read_info.error)) {
+    table->next_number_field = table->found_next_number_field;
+    if (thd->lex->is_ignore() || handle_duplicates == DUP_REPLACE)
+      table->file->ha_extra(HA_EXTRA_IGNORE_DUP_KEY);
+    if (handle_duplicates == DUP_REPLACE &&
+        (!table->triggers || !table->triggers->has_delete_triggers()))
+      table->file->ha_extra(HA_EXTRA_WRITE_CAN_REPLACE);
+    if (thd->locked_tables_mode <= LTM_LOCK_TABLES)
+      table->file->ha_start_bulk_insert((ha_rows)0);
+    table->copy_blobs = true;
+
+    if (m_exchange.filetype == FILETYPE_XML) /* load xml */
+      error =
+          read_xml_field(thd, info, insert_table_ref, read_info, skip_lines);
+    else if (!field_term->length() && !enclosed->length())
+      error =
+          read_fixed_length(thd, info, insert_table_ref, read_info, skip_lines);
+    else
+      error = read_sep_field(thd, info, insert_table_ref, read_info, *enclosed,
+                             skip_lines);
+    if (thd->locked_tables_mode <= LTM_LOCK_TABLES &&
+        table->file->ha_end_bulk_insert() && !error) {
+      table->file->print_error(my_errno(), MYF(0));
+      error = true;
+    }
+    table->next_number_field = nullptr;
+  }
+  if (file >= 0) mysql_file_close(file, MYF(0));
+  free_blobs(table); /* if pack_blob was used */
+  table->copy_blobs = false;
+  thd->check_for_truncated_fields = CHECK_FIELD_IGNORE;
+  /*
+     simulated killing in the middle of per-row loop
+     must be effective for binlogging
+  */
+  DBUG_EXECUTE_IF("simulate_kill_bug27571", {
+    error = true;
+    thd->killed = THD::KILL_QUERY;
+  };);
+
+  killed_status = error ? thd->killed.load() : THD::NOT_KILLED;
+
+  if (error) {
+    if (m_is_local_file) read_info.skip_data_till_eof();
+
+    if (mysql_bin_log.is_open()) {
+      {
+        /*
+          Make sure last block (the one which caused the error) gets
+          logged.  This is needed because otherwise after write of (to
+          the binlog, not to read_info (which is a cache))
+          Delete_file_log_event the bad block will remain in read_info
+          (because pre_read is not called at the end of the last
+          block; remember pre_read is called whenever a new block is
+          read from disk).  At the end of Sql_cmd_load_table::execute_inner(),
+          the destructor of read_info will call end_io_cache() which will flush
+          read_info, so we will finally have this in the binlog:
+
+          Append_block # The last successful block
+          Delete_file
+          Append_block # The failing block
+          which is nonsense.
+          Or could also be (for a small file)
+          Create_file  # The failing block
+          which is nonsense (Delete_file is not written in this case, because:
+          Create_file has not been written, so Delete_file is not written, then
+          when read_info is destroyed end_io_cache() is called which writes
+          Create_file.
+        */
+        read_info.end_io_cache();
+        /* If the file was not empty, wrote_create_file is true */
+        if (lf_info.logged_data_file) {
+          int errcode = query_error_code(thd, killed_status == THD::NOT_KILLED);
+
+          /* since there is already an error, the possible error of
+             writing binary log will be ignored */
+          if (thd->get_transaction()->cannot_safely_rollback(
+                  Transaction_ctx::STMT))
+            (void)write_execute_load_query_log_event(
+                thd, table_list->db, table_list->table_name, is_concurrent,
+                handle_duplicates, transactional_table, errcode);
+          else {
+            Delete_file_log_event d(thd, db, transactional_table);
+            (void)mysql_bin_log.write_event(&d);
+          }
+        }
+      }
+    }
+    error = true;  // Error on read
+    goto err;
+  }
+
+  snprintf(name, sizeof(name), ER_THD(thd, ER_LOAD_INFO),
+           (long)info.stats.records, (long)info.stats.deleted,
+           (long)(info.stats.records - info.stats.copied),
+           (long)thd->get_stmt_da()->current_statement_cond_count());
+
+  if (mysql_bin_log.is_open()) {
+    /*
+      We need to do the job that is normally done inside
+      binlog_query() here, which is to ensure that the pending event
+      is written before tables are unlocked and before any other
+      events are written.  We also need to update the table map
+      version for the binary log to mark that table maps are invalid
+      after this point.
+     */
+    if (thd->is_current_stmt_binlog_format_row())
+      error = thd->binlog_flush_pending_rows_event(true, transactional_table);
+    else {
+      /*
+        As already explained above, we need to call end_io_cache() or the last
+        block will be logged only after Execute_load_query_log_event (which is
+        wrong), when read_info is destroyed.
+      */
+      read_info.end_io_cache();
+      if (lf_info.logged_data_file) {
+        int errcode = query_error_code(thd, killed_status == THD::NOT_KILLED);
+        error = write_execute_load_query_log_event(
+            thd, table_list->db, table_list->table_name, is_concurrent,
+            handle_duplicates, transactional_table, errcode);
+      }
+    }
+    if (error) goto err;
+  }
+
+  /* ok to client sent only after binlog write and engine commit */
+  my_ok(thd, info.stats.copied + info.stats.deleted, 0L, name);
+err:
+  assert(table->file->has_transactions() ||
+         !(info.stats.copied || info.stats.deleted) ||
+         thd->get_transaction()->cannot_safely_rollback(Transaction_ctx::STMT));
+  table->file->ha_release_auto_increment();
+  return error;
+}
+
+
+// Source: sql_load.cc
+// Lines 201-684
+
+
+[ANSWER]
+MUST

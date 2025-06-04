@@ -1,0 +1,578 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'i' at line 4
+2. Pointer 'j' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static double my_strtod_int(const char *s00, const char **se, int *error,
+                            char *buf, size_t buf_size) {
+  int scale;
+  int bb2, bb5, bbe, bd2, bd5, bbbits, bs2, c = 0, dsign, e, e1, esign, i, j, k,
+                                            nd, nd0, nf, nz, nz0, sign;
+  const char *s, *s0, *s1, *end = *se;
+  double aadj, aadj1;
+  U aadj2, adj, rv, rv0;
+  Long L;
+  ULong y, z;
+  Bigint *bb = nullptr, *bb1, *bd = nullptr, *bd0, *bs = nullptr,
+         *delta = nullptr;
+#ifdef Honor_FLT_ROUNDS
+  int rounding;
+#endif
+  Stack_alloc alloc;
+
+  *error = 0;
+
+  alloc.begin = alloc.free = buf;
+  alloc.end = buf + buf_size;
+  memset(alloc.freelist, 0, sizeof(alloc.freelist));
+
+  sign = nz0 = nz = 0;
+  dval(&rv) = 0.;
+  for (s = s00; s < end; s++) switch (*s) {
+      case '-':
+        sign = 1;
+        // Fall through.
+      case '+':
+        s++;
+        goto break2;
+      case '\t':
+      case '\n':
+      case '\v':
+      case '\f':
+      case '\r':
+      case ' ':
+        continue;
+      default:
+        goto break2;
+    }
+break2:
+  if (s >= end) goto ret0;
+
+  if (*s == '0') {
+    nz0 = 1;
+    while (++s < end && *s == '0')
+      ;
+    if (s >= end) goto ret;
+  }
+  s0 = s;
+  y = z = 0;
+  for (nd = nf = 0; s < end && (c = *s) >= '0' && c <= '9'; nd++, s++)
+    if (nd < 9)
+      y = 10 * y + c - '0';
+    else if (nd < 16)
+      z = 10 * z + c - '0';
+  nd0 = nd;
+  if (s < end && c == '.') {
+    if (++s < end) c = *s;
+    if (!nd) {
+      for (; s < end; ++s) {
+        c = *s;
+        if (c != '0') break;
+        nz++;
+      }
+      if (s < end && c > '0' && c <= '9') {
+        s0 = s;
+        nf += nz;
+        nz = 0;
+      } else
+        goto dig_done;
+    }
+    for (; s < end; ++s) {
+      c = *s;
+      if (c < '0' || c > '9') break;
+      /*
+        Here we are parsing the fractional part.
+        We can stop counting digits after a while: the extra digits
+        will not contribute to the actual result produced by s2b().
+        We have to continue scanning, in case there is an exponent part.
+       */
+      if (nd < 2 * DBL_DIG) {
+        nz++;
+        if (c -= '0') {
+          nf += nz;
+          for (i = 1; i < nz; i++)
+            if (nd++ < 9)
+              y *= 10;
+            else if (nd <= DBL_DIG + 1)
+              z *= 10;
+          if (nd++ < 9)
+            y = 10 * y + c;
+          else if (nd <= DBL_DIG + 1)
+            z = 10 * z + c;
+          nz = 0;
+        }
+      }
+    }
+  }
+dig_done:
+  e = 0;
+  if (s < end && (c == 'e' || c == 'E')) {
+    if (!nd && !nz && !nz0) goto ret0;
+    s00 = s;
+    esign = 0;
+    if (++s < end) switch (c = *s) {
+        case '-':
+          esign = 1;
+          // Fall through.
+        case '+':
+          if (++s < end) c = *s;
+      }
+    if (s < end && c >= '0' && c <= '9') {
+      while (s < end && c == '0') c = *++s;
+      if (s < end && c > '0' && c <= '9') {
+        L = c - '0';
+        s1 = s;
+        // Avoid overflow in loop body below.
+        while (++s < end && (c = *s) >= '0' && c <= '9' &&
+               L < (std::numeric_limits<Long>::max() - 255) / 10) {
+          L = 10 * L + c - '0';
+        }
+        if (s - s1 > 8 || L > 19999)
+          /* Avoid confusion from exponents
+           * so large that e might overflow.
+           */
+          e = 19999; /* safe for 16 bit ints */
+        else
+          e = (int)L;
+        if (esign) e = -e;
+      } else
+        e = 0;
+    } else
+      s = s00;
+  }
+  if (!nd) {
+    if (!nz && !nz0) {
+    ret0:
+      s = s00;
+      sign = 0;
+    }
+    goto ret;
+  }
+  e1 = e -= nf;
+
+  /*
+    Now we have nd0 digits, starting at s0, followed by a
+    decimal point, followed by nd-nd0 digits.  The number we're
+    after is the integer represented by those digits times
+    10**e
+   */
+
+  if (!nd0) nd0 = nd;
+  k = nd < DBL_DIG + 1 ? nd : DBL_DIG + 1;
+  dval(&rv) = y;
+  if (k > 9) {
+    dval(&rv) = tens[k - 9] * dval(&rv) + z;
+  }
+  bd0 = nullptr;
+  if (nd <= DBL_DIG
+#ifndef Honor_FLT_ROUNDS
+      && Flt_Rounds == 1
+#endif
+  ) {
+    if (!e) goto ret;
+    if (e > 0) {
+      if (e <= Ten_pmax) {
+#ifdef Honor_FLT_ROUNDS
+        /* round correctly FLT_ROUNDS = 2 or 3 */
+        if (sign) {
+          rv.d = -rv.d;
+          sign = 0;
+        }
+#endif
+        /* rv = */ rounded_product(dval(&rv), tens[e]);
+        goto ret;
+      }
+      i = DBL_DIG - nd;
+      if (e <= Ten_pmax + i) {
+        /*
+          A fancier test would sometimes let us do
+          this for larger i values.
+        */
+#ifdef Honor_FLT_ROUNDS
+        /* round correctly FLT_ROUNDS = 2 or 3 */
+        if (sign) {
+          rv.d = -rv.d;
+          sign = 0;
+        }
+#endif
+        e -= i;
+        dval(&rv) *= tens[i];
+        /* rv = */ rounded_product(dval(&rv), tens[e]);
+        goto ret;
+      }
+    }
+#ifndef Inaccurate_Divide
+    else if (e >= -Ten_pmax) {
+#ifdef Honor_FLT_ROUNDS
+      /* round correctly FLT_ROUNDS = 2 or 3 */
+      if (sign) {
+        rv.d = -rv.d;
+        sign = 0;
+      }
+#endif
+      /* rv = */ rounded_quotient(dval(&rv), tens[-e]);
+      goto ret;
+    }
+#endif
+  }
+  e1 += nd - k;
+
+  scale = 0;
+#ifdef Honor_FLT_ROUNDS
+  if ((rounding = Flt_Rounds) >= 2) {
+    if (sign)
+      rounding = rounding == 2 ? 0 : 2;
+    else if (rounding != 2)
+      rounding = 0;
+  }
+#endif
+
+  /* Get starting approximation = rv * 10**e1 */
+
+  if (e1 > 0) {
+    if ((i = e1 & 15)) dval(&rv) *= tens[i];
+    if (e1 &= ~15) {
+      if (e1 > DBL_MAX_10_EXP) {
+      ovfl:
+        *error = EOVERFLOW;
+        /* Can't trust HUGE_VAL */
+#ifdef Honor_FLT_ROUNDS
+        switch (rounding) {
+          case 0: /* toward 0 */
+          case 3: /* toward -infinity */
+            word0(&rv) = Big0;
+            word1(&rv) = Big1;
+            break;
+          default:
+            word0(&rv) = Exp_mask;
+            word1(&rv) = 0;
+        }
+#else  /*Honor_FLT_ROUNDS*/
+        word0(&rv) = Exp_mask;
+        word1(&rv) = 0;
+#endif /*Honor_FLT_ROUNDS*/
+        if (bd0) goto retfree;
+        goto ret;
+      }
+      e1 >>= 4;
+      for (j = 0; e1 > 1; j++, e1 >>= 1)
+        if (e1 & 1) dval(&rv) *= bigtens[j];
+      /* The last multiplication could overflow. */
+      word0(&rv) -= P * Exp_msk1;
+      dval(&rv) *= bigtens[j];
+      if ((z = word0(&rv) & Exp_mask) > Exp_msk1 * (DBL_MAX_EXP + Bias - P))
+        goto ovfl;
+      if (z > Exp_msk1 * (DBL_MAX_EXP + Bias - 1 - P)) {
+        /* set to largest number (Can't trust DBL_MAX) */
+        word0(&rv) = Big0;
+        word1(&rv) = Big1;
+      } else
+        word0(&rv) += P * Exp_msk1;
+    }
+  } else if (e1 < 0) {
+    e1 = -e1;
+    if ((i = e1 & 15)) dval(&rv) /= tens[i];
+    if ((e1 >>= 4)) {
+      if (e1 >= 1 << n_bigtens) goto undfl;
+      if (e1 & Scale_Bit) scale = 2 * P;
+      for (j = 0; e1 > 0; j++, e1 >>= 1)
+        if (e1 & 1) dval(&rv) *= tinytens[j];
+      if (scale &&
+          (j = 2 * P + 1 - ((word0(&rv) & Exp_mask) >> Exp_shift)) > 0) {
+        /* scaled rv is denormal; zap j low bits */
+        if (j >= 32) {
+          word1(&rv) = 0;
+          if (j >= 53)
+            word0(&rv) = (P + 2) * Exp_msk1;
+          else
+            word0(&rv) &= 0xffffffff << (j - 32);
+        } else
+          word1(&rv) &= 0xffffffff << j;
+      }
+      if (!dval(&rv)) {
+      undfl:
+        dval(&rv) = 0.;
+        if (bd0) goto retfree;
+        goto ret;
+      }
+    }
+  }
+
+  /* Now the hard part -- adjusting rv to the correct value.*/
+
+  /* Put digits into bd: true value = bd * 10^e */
+
+  bd0 = s2b(s0, nd0, nd, y, &alloc);
+
+  for (;;) {
+    bd = Balloc(bd0->k, &alloc);
+    Bcopy(bd, bd0);
+    bb = d2b(&rv, &bbe, &bbbits, &alloc); /* rv = bb * 2^bbe */
+    bs = i2b(1, &alloc);
+
+    if (e >= 0) {
+      bb2 = bb5 = 0;
+      bd2 = bd5 = e;
+    } else {
+      bb2 = bb5 = -e;
+      bd2 = bd5 = 0;
+    }
+    if (bbe >= 0)
+      bb2 += bbe;
+    else
+      bd2 -= bbe;
+    bs2 = bb2;
+#ifdef Honor_FLT_ROUNDS
+    if (rounding != 1) bs2++;
+#endif
+    j = bbe - scale;
+    i = j + bbbits - 1; /* logb(rv) */
+    if (i < Emin)       /* denormal */
+      j += P - Emin;
+    else
+      j = P + 1 - bbbits;
+    bb2 += j;
+    bd2 += j;
+    bd2 += scale;
+    i = bb2 < bd2 ? bb2 : bd2;
+    if (i > bs2) i = bs2;
+    if (i > 0) {
+      bb2 -= i;
+      bd2 -= i;
+      bs2 -= i;
+    }
+    if (bb5 > 0) {
+      bs = pow5mult(bs, bb5, &alloc);
+      bb1 = mult(bs, bb, &alloc);
+      Bfree(bb, &alloc);
+      bb = bb1;
+    }
+    if (bb2 > 0) bb = lshift(bb, bb2, &alloc);
+    if (bd5 > 0) bd = pow5mult(bd, bd5, &alloc);
+    if (bd2 > 0) bd = lshift(bd, bd2, &alloc);
+    if (bs2 > 0) bs = lshift(bs, bs2, &alloc);
+    delta = diff(bb, bd, &alloc);
+    dsign = delta->sign;
+    delta->sign = 0;
+    i = cmp(delta, bs);
+#ifdef Honor_FLT_ROUNDS
+    if (rounding != 1) {
+      if (i < 0) {
+        /* Error is less than an ulp */
+        if (!delta->p.x[0] && delta->wds <= 1) {
+          /* exact */
+          break;
+        }
+        if (rounding) {
+          if (dsign) {
+            adj.d = 1.;
+            goto apply_adj;
+          }
+        } else if (!dsign) {
+          adj.d = -1.;
+          if (!word1(&rv) && !(word0(&rv) & Frac_mask)) {
+            y = word0(&rv) & Exp_mask;
+            if (!scale || y > 2 * P * Exp_msk1) {
+              delta = lshift(delta, Log2P, &alloc);
+              if (cmp(delta, bs) <= 0) adj.d = -0.5;
+            }
+          }
+        apply_adj:
+          if (scale && (y = word0(&rv) & Exp_mask) <= 2 * P * Exp_msk1)
+            word0(&adj) += (2 * P + 1) * Exp_msk1 - y;
+          dval(&rv) += adj.d * ulp(&rv);
+        }
+        break;
+      }
+      adj.d = ratio(delta, bs);
+      if (adj.d < 1.) adj.d = 1.;
+      if (adj.d <= 0x7ffffffe) {
+        /* adj = rounding ? ceil(adj) : floor(adj); */
+        y = adj.d;
+        if (y != adj.d) {
+          if (!((rounding >> 1) ^ dsign)) y++;
+          adj.d = y;
+        }
+      }
+      if (scale && (y = word0(&rv) & Exp_mask) <= 2 * P * Exp_msk1)
+        word0(&adj) += (2 * P + 1) * Exp_msk1 - y;
+      adj.d *= ulp(&rv);
+      if (dsign)
+        dval(&rv) += adj.d;
+      else
+        dval(&rv) -= adj.d;
+      goto cont;
+    }
+#endif /*Honor_FLT_ROUNDS*/
+
+    if (i < 0) {
+      /*
+        Error is less than half an ulp -- check for special case of mantissa
+        a power of two.
+      */
+      if (dsign || word1(&rv) || word0(&rv) & Bndry_mask ||
+          (word0(&rv) & Exp_mask) <= (2 * P + 1) * Exp_msk1) {
+        break;
+      }
+      if (!delta->p.x[0] && delta->wds <= 1) {
+        /* exact result */
+        break;
+      }
+      delta = lshift(delta, Log2P, &alloc);
+      if (cmp(delta, bs) > 0) goto drop_down;
+      break;
+    }
+    if (i == 0) {
+      /* exactly half-way between */
+      if (dsign) {
+        if ((word0(&rv) & Bndry_mask1) == Bndry_mask1 &&
+            word1(&rv) ==
+                ((scale && (y = word0(&rv) & Exp_mask) <= 2 * P * Exp_msk1)
+                     ? (0xffffffff &
+                        (0xffffffff << (2 * P + 1 - (y >> Exp_shift))))
+                     : 0xffffffff)) {
+          /*boundary case -- increment exponent*/
+          word0(&rv) = (word0(&rv) & Exp_mask) + Exp_msk1;
+          word1(&rv) = 0;
+          dsign = 0;
+          break;
+        }
+      } else if (!(word0(&rv) & Bndry_mask) && !word1(&rv)) {
+      drop_down:
+        /* boundary case -- decrement exponent */
+        if (scale) {
+          L = word0(&rv) & Exp_mask;
+          if (L <= (2 * P + 1) * Exp_msk1) {
+            if (L > (P + 2) * Exp_msk1) /* round even ==> accept rv */
+              break;
+            /* rv = smallest denormal */
+            goto undfl;
+          }
+        }
+        L = (word0(&rv) & Exp_mask) - Exp_msk1;
+        word0(&rv) = L | Bndry_mask1;
+        word1(&rv) = 0xffffffff;
+        break;
+      }
+      if (!(word1(&rv) & LSB)) break;
+      if (dsign)
+        dval(&rv) += ulp(&rv);
+      else {
+        dval(&rv) -= ulp(&rv);
+        if (!dval(&rv)) goto undfl;
+      }
+      dsign = 1 - dsign;
+      break;
+    }
+    if ((aadj = ratio(delta, bs)) <= 2.) {
+      if (dsign)
+        aadj = aadj1 = 1.;
+      else if (word1(&rv) || word0(&rv) & Bndry_mask) {
+        if (word1(&rv) == Tiny1 && !word0(&rv)) goto undfl;
+        aadj = 1.;
+        aadj1 = -1.;
+      } else {
+        /* special case -- power of FLT_RADIX to be rounded down... */
+        if (aadj < 2. / FLT_RADIX)
+          aadj = 1. / FLT_RADIX;
+        else
+          aadj *= 0.5;
+        aadj1 = -aadj;
+      }
+    } else {
+      aadj *= 0.5;
+      aadj1 = dsign ? aadj : -aadj;
+#ifdef Check_FLT_ROUNDS
+      switch (Rounding) {
+        case 2: /* towards +infinity */
+          aadj1 -= 0.5;
+          break;
+        case 0: /* towards 0 */
+        case 3: /* towards -infinity */
+          aadj1 += 0.5;
+      }
+#else
+      if (Flt_Rounds == 0) aadj1 += 0.5;
+#endif /*Check_FLT_ROUNDS*/
+    }
+    y = word0(&rv) & Exp_mask;
+
+    /* Check for overflow */
+
+    if (y == Exp_msk1 * (DBL_MAX_EXP + Bias - 1)) {
+      dval(&rv0) = dval(&rv);
+      word0(&rv) -= P * Exp_msk1;
+      adj.d = aadj1 * ulp(&rv);
+      dval(&rv) += adj.d;
+      if ((word0(&rv) & Exp_mask) >= Exp_msk1 * (DBL_MAX_EXP + Bias - P)) {
+        if (word0(&rv0) == Big0 && word1(&rv0) == Big1) goto ovfl;
+        word0(&rv) = Big0;
+        word1(&rv) = Big1;
+        goto cont;
+      } else
+        word0(&rv) += P * Exp_msk1;
+    } else {
+      if (scale && y <= 2 * P * Exp_msk1) {
+        if (aadj <= 0x7fffffff) {
+          if ((z = (ULong)aadj) <= 0) z = 1;
+          aadj = z;
+          aadj1 = dsign ? aadj : -aadj;
+        }
+        dval(&aadj2) = aadj1;
+        word0(&aadj2) += (2 * P + 1) * Exp_msk1 - y;
+        aadj1 = dval(&aadj2);
+        adj.d = aadj1 * ulp(&rv);
+        dval(&rv) += adj.d;
+        if (rv.d == 0.) goto undfl;
+      } else {
+        adj.d = aadj1 * ulp(&rv);
+        dval(&rv) += adj.d;
+      }
+    }
+    z = word0(&rv) & Exp_mask;
+    if (!scale)
+      if (y == z) {
+        /* Can we stop now? */
+        L = (Long)aadj;
+        aadj -= L;
+        /* The tolerances below are conservative. */
+        if (dsign || word1(&rv) || word0(&rv) & Bndry_mask) {
+          if (aadj < .4999999 || aadj > .5000001) break;
+        } else if (aadj < .4999999 / FLT_RADIX)
+          break;
+      }
+  cont:
+    Bfree(bb, &alloc);
+    Bfree(bd, &alloc);
+    Bfree(bs, &alloc);
+    Bfree(delta, &alloc);
+  }
+  if (scale) {
+    word0(&rv0) = Exp_1 - 2 * P * Exp_msk1;
+    word1(&rv0) = 0;
+    dval(&rv) *= dval(&rv0);
+  }
+retfree:
+  Bfree(bb, &alloc);
+  Bfree(bd, &alloc);
+  Bfree(bs, &alloc);
+  Bfree(bd0, &alloc);
+  Bfree(delta, &alloc);
+ret:
+  *se = s;
+  return sign ? -dval(&rv) : dval(&rv);
+}
+
+
+// Source: dtoa.cc
+// Lines 1270-1828
+
+
+[ANSWER]
+MAY

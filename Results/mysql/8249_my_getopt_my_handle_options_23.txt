@@ -1,0 +1,1 @@
+pos,mysql/mysys/my_getopt.cc,6,error,mysql/mysys/my_getopt.cc,132,2

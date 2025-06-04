@@ -1,0 +1,1 @@
+num_literals,h2o/deps/brotli/c/enc/encode.c,56,storage,h2o/deps/brotli/c/enc/encode.c,60,2

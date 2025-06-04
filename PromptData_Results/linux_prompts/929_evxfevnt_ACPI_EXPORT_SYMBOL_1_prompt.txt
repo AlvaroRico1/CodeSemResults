@@ -1,0 +1,88 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'event_status' at line 8
+2. Pointer 'in_byte' at line 20
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+ACPI_EXPORT_SYMBOL(acpi_clear_event)
+
+/*******************************************************************************
+ *
+ * FUNCTION:    acpi_get_event_status
+ *
+ * PARAMETERS:  event           - The fixed event
+ *              event_status    - Where the current status of the event will
+ *                                be returned
+ *
+ * RETURN:      Status
+ *
+ * DESCRIPTION: Obtains and returns the current status of the event
+ *
+ ******************************************************************************/
+acpi_status acpi_get_event_status(u32 event, acpi_event_status * event_status)
+{
+	acpi_status status;
+	acpi_event_status local_event_status = 0;
+	u32 in_byte;
+
+	ACPI_FUNCTION_TRACE(acpi_get_event_status);
+
+	if (!event_status) {
+		return_ACPI_STATUS(AE_BAD_PARAMETER);
+	}
+
+	/* Decode the Fixed Event */
+
+	if (event > ACPI_EVENT_MAX) {
+		return_ACPI_STATUS(AE_BAD_PARAMETER);
+	}
+
+	/* Fixed event currently can be dispatched? */
+
+	if (acpi_gbl_fixed_event_handlers[event].handler) {
+		local_event_status |= ACPI_EVENT_FLAG_HAS_HANDLER;
+	}
+
+	/* Fixed event currently enabled? */
+
+	status =
+	    acpi_read_bit_register(acpi_gbl_fixed_event_info[event].
+				   enable_register_id, &in_byte);
+	if (ACPI_FAILURE(status)) {
+		return_ACPI_STATUS(status);
+	}
+
+	if (in_byte) {
+		local_event_status |=
+		    (ACPI_EVENT_FLAG_ENABLED | ACPI_EVENT_FLAG_ENABLE_SET);
+	}
+
+	/* Fixed event currently active? */
+
+	status =
+	    acpi_read_bit_register(acpi_gbl_fixed_event_info[event].
+				   status_register_id, &in_byte);
+	if (ACPI_FAILURE(status)) {
+		return_ACPI_STATUS(status);
+	}
+
+	if (in_byte) {
+		local_event_status |= ACPI_EVENT_FLAG_STATUS_SET;
+	}
+
+	(*event_status) = local_event_status;
+	return_ACPI_STATUS(AE_OK);
+}
+
+
+// Source: evxfevnt.c
+// Lines 294-362
+
+
+[ANSWER]
+MAY

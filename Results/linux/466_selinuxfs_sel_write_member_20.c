@@ -1,0 +1,67 @@
+static ssize_t sel_write_member(struct file *file, char *buf, size_t size)
+{
+	struct selinux_fs_info *fsi = file_inode(file)->i_sb->s_fs_info;
+	struct selinux_state *state = fsi->state;
+	char *scon = NULL, *tcon = NULL;
+	u32 ssid, tsid, newsid;
+	u16 tclass;
+	ssize_t length;
+	char *newcon = NULL;
+	u32 len;
+
+	length = avc_has_perm(&selinux_state,
+			      current_sid(), SECINITSID_SECURITY,
+			      SECCLASS_SECURITY, SECURITY__COMPUTE_MEMBER,
+			      NULL);
+	if (length)
+		goto out;
+
+	length = -ENOMEM;
+	scon = kzalloc(size + 1, GFP_KERNEL);
+	if (!scon)
+		goto out;
+
+	length = -ENOMEM;
+	tcon = kzalloc(size + 1, GFP_KERNEL);
+	if (!tcon)
+		goto out;
+
+	length = -EINVAL;
+	if (sscanf(buf, "%s %s %hu", scon, tcon, &tclass) != 3)
+		goto out;
+
+	length = security_context_str_to_sid(state, scon, &ssid, GFP_KERNEL);
+	if (length)
+		goto out;
+
+	length = security_context_str_to_sid(state, tcon, &tsid, GFP_KERNEL);
+	if (length)
+		goto out;
+
+	length = security_member_sid(state, ssid, tsid, tclass, &newsid);
+	if (length)
+		goto out;
+
+	length = security_sid_to_context(state, newsid, &newcon, &len);
+	if (length)
+		goto out;
+
+	length = -ERANGE;
+	if (len > SIMPLE_TRANSACTION_LIMIT) {
+		pr_err("SELinux: %s:  context size (%u) exceeds "
+			"payload max\n", __func__, len);
+		goto out;
+	}
+
+	memcpy(buf, newcon, len);
+	length = len;
+out:
+	kfree(newcon);
+	kfree(tcon);
+	kfree(scon);
+	return length;
+}
+
+
+// Source: selinuxfs.c
+// Lines 1093-1155

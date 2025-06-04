@@ -1,0 +1,112 @@
+gimple_fold_builtin_printf (gimple_stmt_iterator *gsi, tree fmt,
+			    tree arg, enum built_in_function fcode)
+{
+  gcall *stmt = as_a <gcall *> (gsi_stmt (*gsi));
+  tree fn_putchar, fn_puts, newarg;
+  const char *fmt_str = NULL;
+
+  /* If the return value is used, don't do the transformation.  */
+  if (gimple_call_lhs (stmt) != NULL_TREE)
+    return false;
+
+  /* Check whether the format is a literal string constant.  */
+  fmt_str = c_getstr (fmt);
+  if (fmt_str == NULL)
+    return false;
+
+  if (fcode == BUILT_IN_PRINTF_UNLOCKED)
+    {
+      /* If we're using an unlocked function, assume the other
+	 unlocked functions exist explicitly.  */
+      fn_putchar = builtin_decl_explicit (BUILT_IN_PUTCHAR_UNLOCKED);
+      fn_puts = builtin_decl_explicit (BUILT_IN_PUTS_UNLOCKED);
+    }
+  else
+    {
+      fn_putchar = builtin_decl_implicit (BUILT_IN_PUTCHAR);
+      fn_puts = builtin_decl_implicit (BUILT_IN_PUTS);
+    }
+
+  if (!init_target_chars ())
+    return false;
+
+  if (strcmp (fmt_str, target_percent_s) == 0
+      || strchr (fmt_str, target_percent) == NULL)
+    {
+      const char *str;
+
+      if (strcmp (fmt_str, target_percent_s) == 0)
+	{
+	  if (fcode == BUILT_IN_VPRINTF || fcode == BUILT_IN_VPRINTF_CHK)
+	    return false;
+
+	  if (!arg || ! POINTER_TYPE_P (TREE_TYPE (arg)))
+	    return false;
+
+	  str = c_getstr (arg);
+	  if (str == NULL)
+	    return false;
+	}
+      else
+	{
+	  /* The format specifier doesn't contain any '%' characters.  */
+	  if (fcode != BUILT_IN_VPRINTF && fcode != BUILT_IN_VPRINTF_CHK
+	      && arg)
+	    return false;
+	  str = fmt_str;
+	}
+
+      /* If the string was "", printf does nothing.  */
+      if (str[0] == '\0')
+	{
+	  replace_call_with_value (gsi, NULL_TREE);
+	  return true;
+	}
+
+      /* If the string has length of 1, call putchar.  */
+      if (str[1] == '\0')
+	{
+	  /* Given printf("c"), (where c is any one character,)
+	     convert "c"[0] to an int and pass that to the replacement
+	     function.  */
+	  newarg = build_int_cst (integer_type_node, str[0]);
+	  if (fn_putchar)
+	    {
+	      gcall *repl = gimple_build_call (fn_putchar, 1, newarg);
+	      replace_call_with_call_and_fold (gsi, repl);
+	      return true;
+	    }
+	}
+      else
+	{
+	  /* If the string was "string\n", call puts("string").  */
+	  size_t len = strlen (str);
+	  if ((unsigned char)str[len - 1] == target_newline
+	      && (size_t) (int) len == len
+	      && (int) len > 0)
+	    {
+	      char *newstr;
+
+	      /* Create a NUL-terminated string that's one char shorter
+		 than the original, stripping off the trailing '\n'.  */
+	      newstr = xstrdup (str);
+	      newstr[len - 1] = '\0';
+	      newarg = build_string_literal (len, newstr);
+	      free (newstr);
+	      if (fn_puts)
+		{
+		  gcall *repl = gimple_build_call (fn_puts, 1, newarg);
+		  replace_call_with_call_and_fold (gsi, repl);
+		  return true;
+		}
+	    }
+	  else
+	    /* We'd like to arrange to call fputs(string,stdout) here,
+	       but we need stdout and don't have a way to get it yet.  */
+	    return false;
+	}
+    }
+
+
+// Source: gimple-fold.c
+// Lines 3647-3754

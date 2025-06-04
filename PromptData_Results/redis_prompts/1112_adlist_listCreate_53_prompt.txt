@@ -1,0 +1,32 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'list' at line 1
+2. Pointer 'list' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+list *listCreate(void)
+{
+    struct list *list;
+
+    if ((list = zmalloc(sizeof(*list))) == NULL)
+        return NULL;
+    list->head = list->tail = NULL;
+    list->len = 0;
+    list->dup = NULL;
+    list->free = NULL;
+    list->match = NULL;
+    return list;
+}
+
+
+// Source: adlist.c
+// Lines 42-54
+
+
+[ANSWER]
+MUST

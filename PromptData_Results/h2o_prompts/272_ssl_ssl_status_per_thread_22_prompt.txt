@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ssc' at line 3
+2. Pointer '_ssc' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void ssl_status_per_thread(void *_ssc, h2o_context_t *ctx)
+{
+    struct st_ssl_status_ctx_t *ssc = _ssc;
+
+    pthread_mutex_lock(&ssc->mutex);
+
+    ssc->alpn_h1 += ctx->ssl.alpn_h1;
+    ssc->alpn_h2 += ctx->ssl.alpn_h2;
+    ssc->handshake_full += ctx->ssl.handshake_full;
+    ssc->handshake_resume += ctx->ssl.handshake_resume;
+    ssc->handshake_accum_time_full += ctx->ssl.handshake_accum_time_full;
+    ssc->handshake_accum_time_resume += ctx->ssl.handshake_accum_time_resume;
+
+    pthread_mutex_unlock(&ssc->mutex);
+}
+
+
+// Source: ssl.c
+// Lines 36-50
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ccat' at line 3\n2. Pointer 'last_char' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void print_help_item(MYSQL_ROW *cur, int num_name, int num_cat,\n                            char *last_char) {\n  char ccat = (*cur)[num_cat][0];\n  if (*last_char != ccat) {\n    put_info(ccat == 'Y' ? \"categories:\" : \"topics:\", INFO_INFO);\n    *last_char = ccat;\n  }\n  tee_fprintf(PAGER, \"   %s\\n\", (*cur)[num_name]);\n}\n\n\n// Source: mysql.cc\n// Lines 3108-3116\n",
+  "ANSWER": "MUST-NOT"
+}

@@ -1,0 +1,1 @@
+nr_cpus,linux/kernel/smp.c,3,str,linux/kernel/smp.c,1,2

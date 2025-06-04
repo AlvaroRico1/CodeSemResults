@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'pwc' at line 1\n2. Pointer 's' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\n  int operator()(my_wc_t *pwc, const uchar *s, const uchar *e) const {\n    return my_mb_wc_utf8mb4(pwc, s, e);\n  }\n};\n\n\n// Source: mb_wc.h\n// Lines 84-87\n",
+  "ANSWER": "MAY"
+}

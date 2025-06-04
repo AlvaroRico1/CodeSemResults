@@ -1,0 +1,1 @@
+argc,libgit2/tests/clar/main.c,1,err,libgit2/tests/clar/main.c,13,0

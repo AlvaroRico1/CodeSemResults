@@ -1,0 +1,45 @@
+static int git_message__prettify(
+	git_str *message_out,
+	const char *message,
+	int strip_comments,
+	char comment_char)
+{
+	const size_t message_len = strlen(message);
+
+	int consecutive_empty_lines = 0;
+	size_t i, line_length, rtrimmed_line_length;
+	char *next_newline;
+
+	for (i = 0; i < strlen(message); i += line_length) {
+		next_newline = memchr(message + i, '\n', message_len - i);
+
+		if (next_newline != NULL) {
+			line_length = next_newline - (message + i) + 1;
+		} else {
+			line_length = message_len - i;
+		}
+
+		if (strip_comments && line_length && message[i] == comment_char)
+			continue;
+
+		rtrimmed_line_length = line_length_without_trailing_spaces(message + i, line_length);
+
+		if (!rtrimmed_line_length) {
+			consecutive_empty_lines++;
+			continue;
+		}
+
+		if (consecutive_empty_lines > 0 && message_out->size > 0)
+			git_str_putc(message_out, '\n');
+
+		consecutive_empty_lines = 0;
+		git_str_put(message_out, message + i, rtrimmed_line_length);
+		git_str_putc(message_out, '\n');
+	}
+
+	return git_str_oom(message_out) ? -1 : 0;
+}
+
+
+// Source: message.c
+// Lines 26-66

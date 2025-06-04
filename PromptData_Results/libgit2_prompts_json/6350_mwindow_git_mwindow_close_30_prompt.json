@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'w' at line 3\n2. Pointer 'window' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid git_mwindow_close(git_mwindow **window)\n{\n\tgit_mwindow *w = *window;\n\tif (w) {\n\t\tif (git_mutex_lock(&git__mwindow_mutex)) {\n\t\t\tgit_error_set(GIT_ERROR_THREAD, \"unable to lock mwindow mutex\");\n\t\t\treturn;\n\t\t}\n\n\t\tw->inuse_cnt--;\n\t\tgit_mutex_unlock(&git__mwindow_mutex);\n\t\t*window = NULL;\n\t}\n}\n\n\n// Source: mwindow.c\n// Lines 528-541\n",
+  "ANSWER": "MUST"
+}

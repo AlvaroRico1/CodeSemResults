@@ -1,0 +1,1 @@
+sy,tmux/resize.c,3,sx,tmux/resize.c,3,2

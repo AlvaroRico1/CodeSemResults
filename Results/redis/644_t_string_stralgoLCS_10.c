@@ -1,0 +1,61 @@
+void stralgoLCS(client *c) {
+    uint32_t i, j;
+    long long minmatchlen = 0;
+    sds a = NULL, b = NULL;
+    int getlen = 0, getidx = 0, withmatchlen = 0;
+    robj *obja = NULL, *objb = NULL;
+
+    for (j = 2; j < (uint32_t)c->argc; j++) {
+        char *opt = c->argv[j]->ptr;
+        int moreargs = (c->argc-1) - j;
+
+        if (!strcasecmp(opt,"IDX")) {
+            getidx = 1;
+        } else if (!strcasecmp(opt,"LEN")) {
+            getlen = 1;
+        } else if (!strcasecmp(opt,"WITHMATCHLEN")) {
+            withmatchlen = 1;
+        } else if (!strcasecmp(opt,"MINMATCHLEN") && moreargs) {
+            if (getLongLongFromObjectOrReply(c,c->argv[j+1],&minmatchlen,NULL)
+                != C_OK) goto cleanup;
+            if (minmatchlen < 0) minmatchlen = 0;
+            j++;
+        } else if (!strcasecmp(opt,"STRINGS") && moreargs > 1) {
+            if (a != NULL) {
+                addReplyError(c,"Either use STRINGS or KEYS");
+                goto cleanup;
+            }
+            a = c->argv[j+1]->ptr;
+            b = c->argv[j+2]->ptr;
+            j += 2;
+        } else if (!strcasecmp(opt,"KEYS") && moreargs > 1) {
+            if (a != NULL) {
+                addReplyError(c,"Either use STRINGS or KEYS");
+                goto cleanup;
+            }
+            obja = lookupKeyRead(c->db,c->argv[j+1]);
+            objb = lookupKeyRead(c->db,c->argv[j+2]);
+            if ((obja && obja->type != OBJ_STRING) ||
+                (objb && objb->type != OBJ_STRING))
+            {
+                addReplyError(c,
+                    "The specified keys must contain string values");
+                /* Don't cleanup the objects, we need to do that
+                 * only after calling getDecodedObject(). */
+                obja = NULL;
+                objb = NULL;
+                goto cleanup;
+            }
+            obja = obja ? getDecodedObject(obja) : createStringObject("",0);
+            objb = objb ? getDecodedObject(objb) : createStringObject("",0);
+            a = obja->ptr;
+            b = objb->ptr;
+            j += 2;
+        } else {
+            addReplyErrorObject(c,shared.syntaxerr);
+            goto cleanup;
+        }
+
+
+// Source: t_string.c
+// Lines 729-785

@@ -1,0 +1,25 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'seconds' at line 2
+2. Pointer 'nanos' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+Timestamp TimeUtil::GetCurrentTime() {
+  int64_t seconds;
+  int32_t nanos;
+  CurrentTime(&seconds, &nanos);
+  return CreateNormalized<Timestamp>(seconds, nanos);
+}
+
+
+// Source: time_util.cc
+// Lines 171-176
+
+
+[ANSWER]
+MAY

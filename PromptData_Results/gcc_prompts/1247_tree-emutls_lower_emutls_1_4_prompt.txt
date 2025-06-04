@@ -1,0 +1,119 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'd' at line 4
+2. Pointer 'wi' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+lower_emutls_1 (tree *ptr, int *walk_subtrees, void *cb_data)
+{
+  struct walk_stmt_info *wi = (struct walk_stmt_info *) cb_data;
+  struct lower_emutls_data *d = (struct lower_emutls_data *) wi->info;
+  tree t = *ptr;
+  bool is_addr = false;
+  tree addr;
+
+  *walk_subtrees = 0;
+
+  switch (TREE_CODE (t))
+    {
+    case ADDR_EXPR:
+      /* If this is not a straight-forward "&var", but rather something
+	 like "&var.a", then we may need special handling.  */
+      if (TREE_CODE (TREE_OPERAND (t, 0)) != VAR_DECL)
+	{
+	  bool save_changed;
+
+	  /* Gimple invariants are shareable trees, so before changing
+	     anything in them if we will need to change anything, unshare
+	     them.  */
+	  if (is_gimple_min_invariant (t)
+	      && walk_tree (&TREE_OPERAND (t, 0), lower_emutls_2, NULL, NULL))
+	    *ptr = t = unshare_expr (t);
+
+	  /* If we're allowed more than just is_gimple_val, continue.  */
+	  if (!wi->val_only)
+	    {
+	      *walk_subtrees = 1;
+	      return NULL_TREE;
+	    }
+
+	  /* See if any substitution would be made.  */
+	  save_changed = wi->changed;
+	  wi->changed = false;
+	  wi->val_only = false;
+	  walk_tree (&TREE_OPERAND (t, 0), lower_emutls_1, wi, NULL);
+	  wi->val_only = true;
+
+	  /* If so, then extract this entire sub-expression "&p->a" into a
+	     new assignment statement, and substitute yet another SSA_NAME.  */
+	  if (wi->changed)
+	    {
+	      gimple *x;
+
+	      addr = create_tmp_var (TREE_TYPE (t));
+	      x = gimple_build_assign (addr, t);
+	      gimple_set_location (x, d->loc);
+
+	      addr = make_ssa_name (addr, x);
+	      gimple_assign_set_lhs (x, addr);
+
+	      gimple_seq_add_stmt (&d->seq, x);
+
+	      *ptr = addr;
+	    }
+	  else
+	    wi->changed = save_changed;
+
+	  return NULL_TREE;
+	}
+
+      t = TREE_OPERAND (t, 0);
+      is_addr = true;
+      /* FALLTHRU */
+
+    case VAR_DECL:
+      if (!DECL_THREAD_LOCAL_P (t))
+	return NULL_TREE;
+      break;
+
+    default:
+      /* We're not interested in other decls or types, only subexpressions.  */
+      if (EXPR_P (t))
+        *walk_subtrees = 1;
+      /* FALLTHRU */
+
+    case SSA_NAME:
+      /* Special-case the return of SSA_NAME, since it's so common.  */
+      return NULL_TREE;
+    }
+
+  addr = gen_emutls_addr (t, d);
+  if (is_addr)
+    {
+      /* Replace "&var" with "addr" in the statement.  */
+      *ptr = addr;
+    }
+  else
+    {
+      /* Replace "var" with "*addr" in the statement.  */
+      t = build2 (MEM_REF, TREE_TYPE (t), addr,
+	          build_int_cst (TREE_TYPE (addr), 0));
+      *ptr = t;
+    }
+
+  wi->changed = true;
+  return NULL_TREE;
+}
+
+
+// Source: tree-emutls.c
+// Lines 456-555
+
+
+[ANSWER]
+MUST

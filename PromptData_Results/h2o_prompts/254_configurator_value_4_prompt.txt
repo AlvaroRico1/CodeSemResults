@@ -1,0 +1,108 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'pair' at line 81
+2. Pointer 'deferred' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+        yoml_t *value;
+    };
+    H2O_VECTOR(struct st_cmd_value_t) deferred = {NULL}, semi_deferred = {NULL};
+    int ret = -1;
+
+    if (node != NULL && node->type != YOML_TYPE_MAPPING) {
+        h2o_configurator_errprintf(NULL, node, "node must be a MAPPING");
+        goto Exit;
+    }
+
+    /* call on_enter of every configurator */
+    if (setup_configurators(ctx, 1, node) != 0)
+        goto Exit;
+
+    /* handle the configuration commands */
+    if (node != NULL) {
+        size_t i;
+        for (i = 0; i != node->data.mapping.size; ++i) {
+            yoml_t *key = node->data.mapping.elements[i].key, *value = node->data.mapping.elements[i].value;
+            h2o_configurator_command_t *cmd;
+            /* obtain the target command */
+            if (key->type != YOML_TYPE_SCALAR) {
+                h2o_configurator_errprintf(NULL, key, "command must be a string");
+                goto Exit;
+            }
+            if (ignore_commands != NULL) {
+                size_t i;
+                for (i = 0; ignore_commands[i] != NULL; ++i)
+                    if (strcmp(ignore_commands[i], key->data.scalar) == 0)
+                        goto SkipCommand;
+            }
+            if ((cmd = h2o_configurator_get_command(ctx->globalconf, key->data.scalar)) == NULL) {
+                h2o_configurator_errprintf(NULL, key, "unknown command: %s", key->data.scalar);
+                goto Exit;
+            }
+            if ((cmd->flags & flags_mask) == 0) {
+                h2o_configurator_errprintf(cmd, key, "the command cannot be used at this level");
+                goto Exit;
+            }
+            /* check value type */
+            if ((cmd->flags & (H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE |
+                               H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING)) != 0) {
+                switch (value->type) {
+                case YOML_TYPE_SCALAR:
+                    if ((cmd->flags & H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR) == 0) {
+                        h2o_configurator_errprintf(cmd, value, "argument cannot be a scalar");
+                        goto Exit;
+                    }
+                    break;
+                case YOML_TYPE_SEQUENCE:
+                    if ((cmd->flags & H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE) == 0) {
+                        h2o_configurator_errprintf(cmd, value, "argument cannot be a sequence");
+                        goto Exit;
+                    }
+                    break;
+                case YOML_TYPE_MAPPING:
+                    if ((cmd->flags & H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING) == 0) {
+                        h2o_configurator_errprintf(cmd, value, "argument cannot be a mapping");
+                        goto Exit;
+                    }
+                    break;
+                default:
+                    assert(!"unreachable");
+                    break;
+                }
+            }
+            /* handle the command (or keep it for later execution) */
+            if ((cmd->flags & H2O_CONFIGURATOR_FLAG_SEMI_DEFERRED) != 0) {
+                h2o_vector_reserve(NULL, &semi_deferred, semi_deferred.size + 1);
+                semi_deferred.entries[semi_deferred.size++] = (struct st_cmd_value_t){cmd, value};
+            } else if ((cmd->flags & H2O_CONFIGURATOR_FLAG_DEFERRED) != 0) {
+                h2o_vector_reserve(NULL, &deferred, deferred.size + 1);
+                deferred.entries[deferred.size++] = (struct st_cmd_value_t){cmd, value};
+            } else {
+                if (cmd->cb(cmd, ctx, value) != 0)
+                    goto Exit;
+            }
+        SkipCommand:;
+        }
+        for (i = 0; i != semi_deferred.size; ++i) {
+            struct st_cmd_value_t *pair = semi_deferred.entries + i;
+            if (pair->cmd->cb(pair->cmd, ctx, pair->value) != 0)
+                goto Exit;
+        }
+        for (i = 0; i != deferred.size; ++i) {
+            struct st_cmd_value_t *pair = deferred.entries + i;
+            if (pair->cmd->cb(pair->cmd, ctx, pair->value) != 0)
+                goto Exit;
+        }
+
+
+// Source: configurator.c
+// Lines 142-230
+
+
+[ANSWER]
+MUST

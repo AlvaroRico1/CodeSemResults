@@ -1,0 +1,1 @@
+sm,libgit2/tests/libgit2/submodule/lookup.c,3,smrepo,libgit2/tests/libgit2/submodule/lookup.c,4,2

@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'inode' at line 11
+2. Pointer 'filp' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+loff_t nfs_file_llseek(struct file *filp, loff_t offset, int whence)
+{
+	dprintk("NFS: llseek file(%pD2, %lld, %d)\n",
+			filp, offset, whence);
+
+	/*
+	 * whence == SEEK_END || SEEK_DATA || SEEK_HOLE => we must revalidate
+	 * the cached file length
+	 */
+	if (whence != SEEK_SET && whence != SEEK_CUR) {
+		struct inode *inode = filp->f_mapping->host;
+
+		int retval = nfs_revalidate_file_size(inode, filp);
+		if (retval < 0)
+			return (loff_t)retval;
+	}
+
+
+// Source: file.c
+// Lines 115-130
+
+
+[ANSWER]
+MUST

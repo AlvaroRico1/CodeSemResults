@@ -1,0 +1,40 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'line_end' at line 9
+2. Pointer 'line_end' at line 9
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_commit_parse__header(void)
+{
+	git_oid oid;
+
+	parse_test_case *testcase;
+	for (testcase = passing_header_cases; testcase->line != NULL; testcase++)
+	{
+		const char *line = testcase->line;
+		const char *line_end = line + strlen(line);
+
+		cl_git_pass(git_oid__parse(&oid, &line, line_end, testcase->header));
+		cl_assert(line == line_end);
+	}
+
+	for (testcase = failing_header_cases; testcase->line != NULL; testcase++)
+	{
+		const char *line = testcase->line;
+		const char *line_end = line + strlen(line);
+
+		cl_git_fail(git_oid__parse(&oid, &line, line_end, testcase->header));
+	}
+
+
+// Source: parse.c
+// Lines 49-69
+
+
+[ANSWER]
+MUST-NOT

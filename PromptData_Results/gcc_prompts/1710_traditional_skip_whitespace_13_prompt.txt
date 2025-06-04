@@ -1,0 +1,46 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'out' at line 3
+2. Pointer 'cur' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+skip_whitespace (cpp_reader *pfile, const uchar *cur, int skip_comments)
+{
+  uchar *out = pfile->out.cur;
+
+  for (;;)
+    {
+      unsigned int c = *cur++;
+      *out++ = c;
+
+      if (is_nvspace (c))
+	continue;
+
+      if (c == '/' && *cur == '*' && skip_comments)
+	{
+	  pfile->out.cur = out;
+	  cur = copy_comment (pfile, cur, false /* in_define */);
+	  out = pfile->out.cur;
+	  continue;
+	}
+
+      out--;
+      break;
+    }
+
+  pfile->out.cur = out;
+  return cur - 1;
+}
+
+
+// Source: traditional.c
+// Lines 224-250
+
+
+[ANSWER]
+MAY

@@ -1,0 +1,32 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'diff' at line 3
+2. Pointer 'd' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void diff_generated_free(git_diff *d)
+{
+	git_diff_generated *diff = (git_diff_generated *)d;
+
+	git_attr_session__free(&diff->base.attrsession);
+	git_vector_free_deep(&diff->base.deltas);
+
+	git_pathspec__vfree(&diff->pathspec);
+	git_pool_clear(&diff->base.pool);
+
+	git__memzero(diff, sizeof(*diff));
+	git__free(diff);
+}
+
+
+// Source: diff_generate.c
+// Lines 413-425
+
+
+[ANSWER]
+MUST

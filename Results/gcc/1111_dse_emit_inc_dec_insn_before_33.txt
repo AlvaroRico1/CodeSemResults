@@ -1,0 +1,1 @@
+insn,gcc/gcc/dse.c,6,insn_info,gcc/gcc/dse.c,5,1

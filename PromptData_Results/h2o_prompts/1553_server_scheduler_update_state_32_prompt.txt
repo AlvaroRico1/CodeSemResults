@@ -1,0 +1,68 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'stream' at line 35
+2. Pointer 'qs' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int scheduler_update_state(struct st_quicly_stream_scheduler_t *sched, quicly_stream_t *qs)
+{
+    struct st_h2o_http3_server_conn_t *conn =
+        H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, *quicly_get_data(qs->conn));
+    enum { DEACTIVATE, ACTIVATE, CONN_BLOCKED } new_state;
+
+    if (quicly_stream_can_send(qs, 1)) {
+        if (quicly_is_blocked(conn->h3.super.quic) && !quicly_stream_can_send(qs, 0)) {
+            new_state = CONN_BLOCKED;
+        } else {
+            new_state = ACTIVATE;
+        }
+    } else {
+        new_state = DEACTIVATE;
+    }
+
+    if (quicly_stream_is_unidirectional(qs->stream_id)) {
+        assert(qs->stream_id < sizeof(uint16_t) * 8);
+        uint16_t mask = (uint16_t)1 << qs->stream_id;
+        switch (new_state) {
+        case DEACTIVATE:
+            conn->scheduler.uni.active &= ~mask;
+            conn->scheduler.uni.conn_blocked &= ~mask;
+            break;
+        case ACTIVATE:
+            conn->scheduler.uni.active |= mask;
+            conn->scheduler.uni.conn_blocked &= ~mask;
+            break;
+        case CONN_BLOCKED:
+            conn->scheduler.uni.active &= ~mask;
+            conn->scheduler.uni.conn_blocked |= mask;
+            break;
+        }
+    } else {
+        struct st_h2o_http3_server_stream_t *stream = qs->data;
+        if (stream->proceed_while_sending)
+            return 0;
+        switch (new_state) {
+        case DEACTIVATE:
+            req_scheduler_deactivate(&conn->scheduler.reqs, &stream->scheduler);
+            break;
+        case ACTIVATE:
+            req_scheduler_activate(&conn->scheduler.reqs, &stream->scheduler, req_scheduler_compare_stream_id);
+            break;
+        case CONN_BLOCKED:
+            req_scheduler_conn_blocked(&conn->scheduler.reqs, &stream->scheduler);
+            break;
+        }
+    }
+
+
+// Source: server.c
+// Lines 1673-1721
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'path' at line 1\n2. Pointer 'ret' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic char *dirname(const char *path)\n{\n    const char *last_slash = strrchr(path, '/');\n    char *ret;\n\n    if (last_slash == NULL) {\n        errno = 0;\n        dief(\"dirname: no slash in given path:%s\", path);\n    }\n    if ((ret = malloc(last_slash + 1 - path)) == NULL)\n        dief(\"no memory\");\n    memcpy(ret, path, last_slash - path);\n    ret[last_slash - path] = '\\0';\n    return ret;\n}\n\n\n// Source: neverbleed.c\n// Lines 164-178\n",
+  "ANSWER": "MAY"
+}

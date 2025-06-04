@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ip' at line 3\n2. Pointer 'op' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nuni16_to_x8(unsigned char *ascii, __be16 *uni, int len, struct nls_table *nls)\n{\n\t__be16 *ip, ch;\n\tunsigned char *op;\n\n\tip = uni;\n\top = ascii;\n\n\twhile ((ch = get_unaligned(ip)) && len) {\n\t\tint llen;\n\t\tllen = nls->uni2char(be16_to_cpu(ch), op, NLS_MAX_CHARSET_SIZE);\n\t\tif (llen > 0)\n\t\t\top += llen;\n\t\telse\n\t\t\t*op++ = '?';\n\t\tip++;\n\n\t\tlen--;\n\t}\n\t*op = 0;\n\treturn (op - ascii);\n}\n\n\n// Source: joliet.c\n// Lines 18-39\n",
+  "ANSWER": "MAY"
+}

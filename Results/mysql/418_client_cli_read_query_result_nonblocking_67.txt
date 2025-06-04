@@ -1,0 +1,1 @@
+error,mysql/sql-common/client.cc,57,field_count,mysql/sql-common/client.cc,7,0

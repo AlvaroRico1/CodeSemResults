@@ -1,0 +1,1 @@
+negNumberStylePattern,mysql/extra/icu/source/i18n/currpinf.cpp,31,numberStylePattern,mysql/extra/icu/source/i18n/currpinf.cpp,22,1

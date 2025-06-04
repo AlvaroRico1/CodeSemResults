@@ -1,0 +1,1 @@
+cfg,libgit2/tests/libgit2/diff/rename.c,7,tree2,libgit2/tests/libgit2/diff/rename.c,6,0

@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'new_lineno' at line 3
+2. Pointer 'i' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+const git_blame_hunk *git_blame_get_hunk_byline(git_blame *blame, size_t lineno)
+{
+	size_t i, new_lineno = lineno;
+
+	GIT_ASSERT_ARG_WITH_RETVAL(blame, NULL);
+
+	if (!git_vector_bsearch2(&i, &blame->hunks, hunk_byfinalline_search_cmp, &new_lineno)) {
+		return git_blame_get_hunk_byindex(blame, (uint32_t)i);
+	}
+
+	return NULL;
+}
+
+
+// Source: blame.c
+// Lines 189-200
+
+
+[ANSWER]
+MAY

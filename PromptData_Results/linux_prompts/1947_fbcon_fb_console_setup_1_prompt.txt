@@ -1,0 +1,102 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'options' at line 3
+2. Pointer 'this_opt' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int __init fb_console_setup(char *this_opt)
+{
+	char *options;
+	int i, j;
+
+	if (!this_opt || !*this_opt)
+		return 1;
+
+	while ((options = strsep(&this_opt, ",")) != NULL) {
+		if (!strncmp(options, "font:", 5)) {
+			strlcpy(fontname, options + 5, sizeof(fontname));
+			continue;
+		}
+		
+		if (!strncmp(options, "scrollback:", 11)) {
+			options += 11;
+			if (*options) {
+				fbcon_softback_size = simple_strtoul(options, &options, 0);
+				if (*options == 'k' || *options == 'K') {
+					fbcon_softback_size *= 1024;
+				}
+			}
+			continue;
+		}
+		
+		if (!strncmp(options, "map:", 4)) {
+			options += 4;
+			if (*options) {
+				for (i = 0, j = 0; i < MAX_NR_CONSOLES; i++) {
+					if (!options[j])
+						j = 0;
+					con2fb_map_boot[i] =
+						(options[j++]-'0') % FB_MAX;
+				}
+
+				fbcon_map_override();
+			}
+			continue;
+		}
+
+		if (!strncmp(options, "vc:", 3)) {
+			options += 3;
+			if (*options)
+				first_fb_vc = simple_strtoul(options, &options, 10) - 1;
+			if (first_fb_vc < 0)
+				first_fb_vc = 0;
+			if (*options++ == '-')
+				last_fb_vc = simple_strtoul(options, &options, 10) - 1;
+			fbcon_is_default = 0; 
+			continue;
+		}
+
+		if (!strncmp(options, "rotate:", 7)) {
+			options += 7;
+			if (*options)
+				initial_rotation = simple_strtoul(options, &options, 0);
+			if (initial_rotation > 3)
+				initial_rotation = 0;
+			continue;
+		}
+
+		if (!strncmp(options, "margin:", 7)) {
+			options += 7;
+			if (*options)
+				margin_color = simple_strtoul(options, &options, 0);
+			continue;
+		}
+#ifdef CONFIG_FRAMEBUFFER_CONSOLE_DEFERRED_TAKEOVER
+		if (!strcmp(options, "nodefer")) {
+			deferred_takeover = false;
+			continue;
+		}
+#endif
+
+		if (!strncmp(options, "logo-pos:", 9)) {
+			options += 9;
+			if (!strcmp(options, "center"))
+				fb_center_logo = true;
+			continue;
+		}
+	}
+	return 1;
+}
+
+
+// Source: fbcon.c
+// Lines 459-541
+
+
+[ANSWER]
+MAY

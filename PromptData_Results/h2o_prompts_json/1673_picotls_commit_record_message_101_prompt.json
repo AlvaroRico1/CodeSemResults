@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'self' at line 3\n2. Pointer '_self' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int commit_record_message(ptls_message_emitter_t *_self)\n{\n    struct st_ptls_record_message_emitter_t *self = (void *)_self;\n    int ret;\n\n    if (self->super.enc->aead != NULL) {\n        ret = buffer_encrypt_record(self->super.buf, self->rec_start, self->super.enc);\n    } else {\n        /* TODO allow CH,SH,HRR above 16KB */\n        size_t sz = self->super.buf->off - self->rec_start - 5;\n        assert(sz <= PTLS_MAX_PLAINTEXT_RECORD_SIZE);\n        self->super.buf->base[self->rec_start + 3] = (uint8_t)(sz >> 8);\n        self->super.buf->base[self->rec_start + 4] = (uint8_t)(sz);\n        ret = 0;\n    }\n\n    return ret;\n}\n\n\n// Source: picotls.c\n// Lines 746-763\n",
+  "ANSWER": "MUST"
+}

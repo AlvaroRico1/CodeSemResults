@@ -1,0 +1,42 @@
+static const struct object_id *get_rev(struct negotiation_state *ns)
+{
+	struct commit *commit = NULL;
+
+	while (commit == NULL) {
+		unsigned int mark;
+		struct commit_list *parents;
+
+		if (ns->rev_list.nr == 0 || ns->non_common_revs == 0)
+			return NULL;
+
+		commit = prio_queue_get(&ns->rev_list);
+		parse_commit(commit);
+		parents = commit->parents;
+
+		commit->object.flags |= POPPED;
+		if (!(commit->object.flags & COMMON))
+			ns->non_common_revs--;
+
+		if (commit->object.flags & COMMON) {
+			/* do not send "have", and ignore ancestors */
+			commit = NULL;
+			mark = COMMON | SEEN;
+		} else if (commit->object.flags & COMMON_REF)
+			/* send "have", and ignore ancestors */
+			mark = COMMON | SEEN;
+		else
+			/* send "have", also for its ancestors */
+			mark = SEEN;
+
+		while (parents) {
+			if (!(parents->item->object.flags & SEEN))
+				rev_list_push(ns, parents->item, mark);
+			if (mark & COMMON)
+				mark_common(ns, parents->item, 1, 0);
+			parents = parents->next;
+		}
+	}
+
+
+// Source: default.c
+// Lines 86-123

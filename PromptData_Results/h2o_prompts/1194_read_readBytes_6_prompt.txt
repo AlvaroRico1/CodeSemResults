@@ -1,0 +1,28 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'p' at line 2
+2. Pointer 'r' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static char *readBytes(redisReader *r, unsigned int bytes) {
+    char *p;
+    if (r->len-r->pos >= bytes) {
+        p = r->buf+r->pos;
+        r->pos += bytes;
+        return p;
+    }
+    return NULL;
+}
+
+
+// Source: read.c
+// Lines 109-117
+
+
+[ANSWER]
+MUST

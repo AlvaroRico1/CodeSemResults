@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'val' at line 3\n2. Pointer 'name' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint nfs_map_string_to_numeric(const char *name, size_t namelen, __u32 *res)\n{\n\tunsigned long val;\n\tchar buf[16];\n\n\tif (memchr(name, '@', namelen) != NULL || namelen >= sizeof(buf))\n\t\treturn 0;\n\tmemcpy(buf, name, namelen);\n\tbuf[namelen] = '\\0';\n\tif (kstrtoul(buf, 0, &val) != 0)\n\t\treturn 0;\n\t*res = val;\n\treturn 1;\n}\n\n\n// Source: nfs4idmap.c\n// Lines 164-177\n",
+  "ANSWER": "MAY"
+}

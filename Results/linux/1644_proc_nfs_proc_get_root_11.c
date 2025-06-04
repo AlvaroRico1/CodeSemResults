@@ -1,0 +1,46 @@
+nfs_proc_get_root(struct nfs_server *server, struct nfs_fh *fhandle,
+		  struct nfs_fsinfo *info)
+{
+	struct nfs_fattr *fattr = info->fattr;
+	struct nfs2_fsstat fsinfo;
+	struct rpc_message msg = {
+		.rpc_proc	= &nfs_procedures[NFSPROC_GETATTR],
+		.rpc_argp	= fhandle,
+		.rpc_resp	= fattr,
+	};
+	int status;
+
+	dprintk("%s: call getattr\n", __func__);
+	nfs_fattr_init(fattr);
+	status = rpc_call_sync(server->client, &msg, 0);
+	/* Retry with default authentication if different */
+	if (status && server->nfs_client->cl_rpcclient != server->client)
+		status = rpc_call_sync(server->nfs_client->cl_rpcclient, &msg, 0);
+	dprintk("%s: reply getattr: %d\n", __func__, status);
+	if (status)
+		return status;
+	dprintk("%s: call statfs\n", __func__);
+	msg.rpc_proc = &nfs_procedures[NFSPROC_STATFS];
+	msg.rpc_resp = &fsinfo;
+	status = rpc_call_sync(server->client, &msg, 0);
+	/* Retry with default authentication if different */
+	if (status && server->nfs_client->cl_rpcclient != server->client)
+		status = rpc_call_sync(server->nfs_client->cl_rpcclient, &msg, 0);
+	dprintk("%s: reply statfs: %d\n", __func__, status);
+	if (status)
+		return status;
+	info->rtmax  = NFS_MAXDATA;
+	info->rtpref = fsinfo.tsize;
+	info->rtmult = fsinfo.bsize;
+	info->wtmax  = NFS_MAXDATA;
+	info->wtpref = fsinfo.tsize;
+	info->wtmult = fsinfo.bsize;
+	info->dtpref = fsinfo.tsize;
+	info->maxfilesize = 0x7FFFFFFF;
+	info->lease_time = 0;
+	return 0;
+}
+
+
+// Source: proc.c
+// Lines 54-95

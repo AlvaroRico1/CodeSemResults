@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'x' at line 5
+2. Pointer 'klen' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void oidtree_each(struct oidtree *ot, const struct object_id *oid,
+			size_t oidhexsz, oidtree_iter fn, void *arg)
+{
+	size_t klen = oidhexsz / 2;
+	struct oidtree_iter_data x = { 0 };
+	assert(oidhexsz <= GIT_MAX_HEXSZ);
+
+	x.fn = fn;
+	x.arg = arg;
+	x.algo = oid->algo;
+	if (oidhexsz & 1) {
+		x.last_byte = oid->hash[klen];
+		x.last_nibble_at = &klen;
+	}
+	cb_each(&ot->tree, (const uint8_t *)oid, klen, iter, &x);
+}
+
+
+// Source: oidtree.c
+// Lines 94-109
+
+
+[ANSWER]
+MUST

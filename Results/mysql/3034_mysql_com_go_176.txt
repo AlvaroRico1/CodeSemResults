@@ -1,0 +1,1 @@
+pos,mysql/client/mysql.cc,51,batchmode,mysql/client/mysql.cc,52,0

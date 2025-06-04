@@ -1,0 +1,1 @@
+pagpoint,mysql/client/mysql.cc,2,argv,mysql/client/mysql.cc,1,0

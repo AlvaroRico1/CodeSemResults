@@ -1,0 +1,90 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'p' at line None
+2. Pointer 'm' at line 9
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int midx_repack(struct repository *r, const char *object_dir, size_t batch_size, unsigned flags)
+{
+	int result = 0;
+	uint32_t i;
+	unsigned char *include_pack;
+	struct child_process cmd = CHILD_PROCESS_INIT;
+	FILE *cmd_in;
+	struct strbuf base_name = STRBUF_INIT;
+	struct multi_pack_index *m = load_multi_pack_index(object_dir, 1);
+
+	/*
+	 * When updating the default for these configuration
+	 * variables in builtin/repack.c, these must be adjusted
+	 * to match.
+	 */
+	int delta_base_offset = 1;
+	int use_delta_islands = 0;
+
+	if (!m)
+		return 0;
+
+	CALLOC_ARRAY(include_pack, m->num_packs);
+
+	if (batch_size) {
+		if (fill_included_packs_batch(r, m, include_pack, batch_size))
+			goto cleanup;
+	} else if (fill_included_packs_all(r, m, include_pack))
+		goto cleanup;
+
+	repo_config_get_bool(r, "repack.usedeltabaseoffset", &delta_base_offset);
+	repo_config_get_bool(r, "repack.usedeltaislands", &use_delta_islands);
+
+	strvec_push(&cmd.args, "pack-objects");
+
+	strbuf_addstr(&base_name, object_dir);
+	strbuf_addstr(&base_name, "/pack/pack");
+	strvec_push(&cmd.args, base_name.buf);
+
+	if (delta_base_offset)
+		strvec_push(&cmd.args, "--delta-base-offset");
+	if (use_delta_islands)
+		strvec_push(&cmd.args, "--delta-islands");
+
+	if (flags & MIDX_PROGRESS)
+		strvec_push(&cmd.args, "--progress");
+	else
+		strvec_push(&cmd.args, "-q");
+
+	strbuf_release(&base_name);
+
+	cmd.git_cmd = 1;
+	cmd.in = cmd.out = -1;
+
+	if (start_command(&cmd)) {
+		error(_("could not start pack-objects"));
+		result = 1;
+		goto cleanup;
+	}
+
+	cmd_in = xfdopen(cmd.in, "w");
+
+	for (i = 0; i < m->num_objects; i++) {
+		struct object_id oid;
+		uint32_t pack_int_id = nth_midxed_pack_int_id(m, i);
+
+		if (!include_pack[pack_int_id])
+			continue;
+
+		nth_midxed_object_oid(&oid, m, i);
+		fprintf(cmd_in, "%s\n", oid_to_hex(&oid));
+	}
+
+
+// Source: midx.c
+// Lines 1764-1834
+
+
+[ANSWER]
+MUST

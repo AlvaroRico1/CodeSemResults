@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'lf' at line 3\n2. Pointer 'content' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int format_header_field(git_str *out, const char *field, const char *content)\n{\n\tconst char *lf;\n\n\tGIT_ASSERT_ARG(out);\n\tGIT_ASSERT_ARG(field);\n\tGIT_ASSERT_ARG(content);\n\n\tgit_str_puts(out, field);\n\tgit_str_putc(out, ' ');\n\n\twhile ((lf = strchr(content, '\\n')) != NULL) {\n\t\tgit_str_put(out, content, lf - content);\n\t\tgit_str_puts(out, \"\\n \");\n\t\tcontent = lf + 1;\n\t}\n\n\tgit_str_puts(out, content);\n\tgit_str_putc(out, '\\n');\n\n\treturn git_str_oom(out) ? -1 : 0;\n}\n\n\n// Source: commit.c\n// Lines 937-958\n",
+  "ANSWER": "MUST"
+}

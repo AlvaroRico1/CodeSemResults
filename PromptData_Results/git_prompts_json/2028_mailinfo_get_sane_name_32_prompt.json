@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'src' at line 3\n2. Pointer 'name' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void get_sane_name(struct strbuf *out, struct strbuf *name, struct strbuf *email)\n{\n\tstruct strbuf *src = name;\n\tif (!name->len || 60 < name->len || strpbrk(name->buf, \"@<>\"))\n\t\tsrc = email;\n\telse if (name == out)\n\t\treturn;\n\tstrbuf_reset(out);\n\tstrbuf_addbuf(out, src);\n}\n\n\n// Source: mailinfo.c\n// Lines 19-28\n",
+  "ANSWER": "MUST"
+}

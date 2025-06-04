@@ -1,0 +1,1 @@
+str,protobuf/src/google/protobuf/util/internal/utility.cc,1,double_value,protobuf/src/google/protobuf/util/internal/utility.cc,2,2

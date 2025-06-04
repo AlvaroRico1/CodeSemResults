@@ -1,0 +1,95 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'range_array' at line 4
+2. Pointer 'part_info' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static uint32 get_partition_id_range_for_endpoint(partition_info *part_info,
+                                                  bool left_endpoint,
+                                                  bool include_endpoint) {
+  longlong *range_array = part_info->range_int_array;
+  longlong part_end_val;
+  uint max_partition = part_info->num_parts - 1;
+  uint min_part_id = 0, max_part_id = max_partition, loc_part_id;
+  /* Get the partitioning function value for the endpoint */
+  longlong part_func_value =
+      part_info->part_expr->val_int_endpoint(left_endpoint, &include_endpoint);
+
+  bool unsigned_flag = part_info->part_expr->unsigned_flag;
+  DBUG_TRACE;
+
+  if (part_info->part_expr->null_value) {
+    /*
+      Special handling for MONOTONIC functions that can return NULL for
+      values that are comparable. I.e.
+      '2000-00-00' can be compared to '2000-01-01' but TO_DAYS('2000-00-00')
+      returns NULL which cannot be compared used <, >, <=, >= etc.
+
+      Otherwise, just return the first partition
+      (may be included if not left endpoint)
+    */
+    enum_monotonicity_info monotonic;
+    monotonic = part_info->part_expr->get_monotonicity_info();
+    if (monotonic != MONOTONIC_INCREASING_NOT_NULL &&
+        monotonic != MONOTONIC_STRICT_INCREASING_NOT_NULL) {
+      /* F(col) can not return NULL, return partition with lowest value */
+      if (!left_endpoint && include_endpoint) return 1;
+      return 0;
+    }
+  }
+
+  if (unsigned_flag) part_func_value -= 0x8000000000000000ULL;
+  if (left_endpoint && !include_endpoint) part_func_value++;
+
+  /*
+    Search for the partition containing part_func_value
+    (including the right endpoint).
+  */
+  while (max_part_id > min_part_id) {
+    loc_part_id = (max_part_id + min_part_id) / 2;
+    if (range_array[loc_part_id] < part_func_value)
+      min_part_id = loc_part_id + 1;
+    else
+      max_part_id = loc_part_id;
+  }
+  loc_part_id = max_part_id;
+
+  /* Adjust for endpoints */
+  part_end_val = range_array[loc_part_id];
+  if (left_endpoint) {
+    assert(part_func_value > part_end_val
+               ? (loc_part_id == max_partition && !part_info->defined_max_value)
+               : 1);
+    /*
+      In case of PARTITION p VALUES LESS THAN MAXVALUE
+      the maximum value is in the current (last) partition.
+      If value is equal or greater than the endpoint,
+      the range starts from the next partition.
+    */
+    if (part_func_value >= part_end_val &&
+        (loc_part_id < max_partition || !part_info->defined_max_value))
+      loc_part_id++;
+  } else {
+    /* if 'WHERE <= X' and partition is LESS THAN (X) include next partition */
+    if (include_endpoint && loc_part_id < max_partition &&
+        part_func_value == part_end_val)
+      loc_part_id++;
+
+    /* Right endpoint, set end after correct partition */
+    loc_part_id++;
+  }
+  return loc_part_id;
+}
+
+
+// Source: sql_partition.cc
+// Lines 3158-3233
+
+
+[ANSWER]
+MUST

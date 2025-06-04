@@ -1,0 +1,68 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'data' at line 1
+2. Pointer 'value' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int acpi_ec_query(struct acpi_ec *ec, u8 *data)
+{
+	u8 value = 0;
+	int result;
+	struct acpi_ec_query *q;
+
+	q = acpi_ec_create_query(&value);
+	if (!q)
+		return -ENOMEM;
+
+	/*
+	 * Query the EC to find out which _Qxx method we need to evaluate.
+	 * Note that successful completion of the query causes the ACPI_EC_SCI
+	 * bit to be cleared (and thus clearing the interrupt source).
+	 */
+	result = acpi_ec_transaction(ec, &q->transaction);
+	if (!value)
+		result = -ENODATA;
+	if (result)
+		goto err_exit;
+
+	q->handler = acpi_ec_get_query_handler_by_value(ec, value);
+	if (!q->handler) {
+		result = -ENODATA;
+		goto err_exit;
+	}
+
+	/*
+	 * It is reported that _Qxx are evaluated in a parallel way on
+	 * Windows:
+	 * https://bugzilla.kernel.org/show_bug.cgi?id=94411
+	 *
+	 * Put this log entry before schedule_work() in order to make
+	 * it appearing before any other log entries occurred during the
+	 * work queue execution.
+	 */
+	ec_dbg_evt("Query(0x%02x) scheduled", value);
+	if (!queue_work(ec_query_wq, &q->work)) {
+		ec_dbg_evt("Query(0x%02x) overlapped", value);
+		result = -EBUSY;
+	}
+
+err_exit:
+	if (result)
+		acpi_ec_delete_query(q);
+	if (data)
+		*data = value;
+	return result;
+}
+
+
+// Source: ec.c
+// Lines 1195-1243
+
+
+[ANSWER]
+MAY

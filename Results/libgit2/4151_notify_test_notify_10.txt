@@ -1,0 +1,1 @@
+searched_pathspecs,libgit2/tests/libgit2/diff/notify.c,2,diff,libgit2/tests/libgit2/diff/notify.c,8,0

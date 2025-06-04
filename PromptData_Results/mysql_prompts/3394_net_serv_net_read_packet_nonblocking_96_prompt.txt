@@ -1,0 +1,122 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'net_async' at line 3
+2. Pointer 'err' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static net_async_status net_read_packet_nonblocking(NET *net, ulong *ret) {
+  DBUG_TRACE;
+  NET_ASYNC *net_async = NET_ASYNC_DATA(net);
+  size_t pkt_data_len;
+  size_t async_packet_uncompressed_length = 0;
+  bool err;
+
+  switch (net_async->async_packet_read_state) {
+    case NET_ASYNC_PACKET_READ_IDLE:
+      net_async->async_packet_read_state = NET_ASYNC_PACKET_READ_HEADER;
+      net->reading_or_writing = 0;
+      /* fallthrough */
+    case NET_ASYNC_PACKET_READ_HEADER:
+      if (net_read_packet_header_nonblocking(net, &err) ==
+          NET_ASYNC_NOT_READY) {
+        return NET_ASYNC_NOT_READY;
+      }
+      /* Retrieve packet length and number. */
+      if (err) goto error;
+
+      net->compress_pkt_nr = net->pkt_nr;
+
+      /* The length of the packet that follows. */
+      net_async->async_packet_length = uint3korr(net->buff + net->where_b);
+      DBUG_PRINT("info",
+                 ("async packet len: %zu", net_async->async_packet_length));
+
+      /*
+        If this is using the compressed protocol, the next 3 bytes contain
+        the length of the uncompressed contents of the payload.
+      */
+      if (net->compress) {
+        /*
+          The following uint3korr() may read 4 bytes, so make sure we don't
+          read unallocated or uninitialized memory. The right-hand expression
+          must match the size of the buffer allocated in net_realloc().
+        */
+        assert(net->where_b + NET_HEADER_SIZE + sizeof(uint32) <=
+               net->max_packet + NET_HEADER_SIZE + COMP_HEADER_SIZE + 1);
+        async_packet_uncompressed_length =
+            uint3korr(net->buff + net->where_b + NET_HEADER_SIZE);
+      }
+
+      /* End of big multi-packet. */
+      if (!net_async->async_packet_length) goto end;
+
+      pkt_data_len = max(net_async->async_packet_length,
+                         async_packet_uncompressed_length) +
+                     net->where_b;
+
+      /* Expand packet buffer if necessary. */
+      if ((pkt_data_len >= net->max_packet) && net_realloc(net, pkt_data_len))
+        goto error;
+
+      net_async->async_packet_read_state = NET_ASYNC_PACKET_READ_BODY;
+      /* fallthrough */
+    case NET_ASYNC_PACKET_READ_BODY:
+      if (net_read_data_nonblocking(net, net_async->async_packet_length,
+                                    &err) == NET_ASYNC_NOT_READY) {
+        return NET_ASYNC_NOT_READY;
+      }
+
+      if (err) goto error;
+
+      net_async->async_packet_read_state = NET_ASYNC_PACKET_READ_COMPLETE;
+      /* fallthrough */
+
+    case NET_ASYNC_PACKET_READ_COMPLETE:
+      net_async->async_packet_read_state = NET_ASYNC_PACKET_READ_IDLE;
+      break;
+  }
+
+end:
+  *ret = net_async->async_packet_length;
+  net->read_pos = net->buff + net->where_b;
+#ifdef DEBUG_DATA_PACKETS
+  DBUG_DUMP("async read output", net->read_pos, *ret);
+#endif
+
+  net->read_pos[*ret] = 0;
+  net->reading_or_writing = 0;
+  if (net->compress) {
+    mysql_compress_context *mysql_compress_ctx = compress_context(net);
+    if (my_uncompress(mysql_compress_ctx, net->buff + net->where_b,
+                      net_async->async_packet_length,
+                      &(async_packet_uncompressed_length))) {
+#ifdef MYSQL_SERVER
+      my_error(ER_NET_UNCOMPRESS_ERROR, MYF(0));
+#else
+      net->error = NET_ERROR_SOCKET_UNUSABLE;  // caller will close socket
+      net->last_errno = ER_NET_UNCOMPRESS_ERROR;
+#endif
+      goto error;
+    }
+    *ret = async_packet_uncompressed_length;
+  }
+  return NET_ASYNC_COMPLETE;
+
+error:
+  *ret = packet_error;
+  net->reading_or_writing = 0;
+  return NET_ASYNC_COMPLETE;
+}
+
+
+// Source: net_serv.cc
+// Lines 1656-1758
+
+
+[ANSWER]
+MUST-NOT

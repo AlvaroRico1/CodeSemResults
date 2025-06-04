@@ -1,0 +1,1 @@
+insn,gcc/gcc/hsa-brig.c,4,insn,gcc/gcc/hsa-brig.c,4,1

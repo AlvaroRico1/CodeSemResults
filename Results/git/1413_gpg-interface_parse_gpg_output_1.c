@@ -1,0 +1,101 @@
+static void parse_gpg_output(struct signature_check *sigc)
+{
+	const char *buf = sigc->gpg_status;
+	const char *line, *next;
+	int i, j;
+	int seen_exclusive_status = 0;
+
+	/* Iterate over all lines */
+	for (line = buf; *line; line = strchrnul(line+1, '\n')) {
+		while (*line == '\n')
+			line++;
+		if (!*line)
+			break;
+
+		/* Skip lines that don't start with GNUPG status */
+		if (!skip_prefix(line, "[GNUPG:] ", &line))
+			continue;
+
+		/* Iterate over all search strings */
+		for (i = 0; i < ARRAY_SIZE(sigcheck_gpg_status); i++) {
+			if (skip_prefix(line, sigcheck_gpg_status[i].check, &line)) {
+				/*
+				 * GOODSIG, BADSIG etc. can occur only once for
+				 * each signature.  Therefore, if we had more
+				 * than one then we're dealing with multiple
+				 * signatures.  We don't support them
+				 * currently, and they're rather hard to
+				 * create, so something is likely fishy and we
+				 * should reject them altogether.
+				 */
+				if (sigcheck_gpg_status[i].flags & GPG_STATUS_EXCLUSIVE) {
+					if (seen_exclusive_status++)
+						goto error;
+				}
+
+				if (sigcheck_gpg_status[i].result)
+					sigc->result = sigcheck_gpg_status[i].result;
+				/* Do we have key information? */
+				if (sigcheck_gpg_status[i].flags & GPG_STATUS_KEYID) {
+					next = strchrnul(line, ' ');
+					replace_cstring(&sigc->key, line, next);
+					/* Do we have signer information? */
+					if (*next && (sigcheck_gpg_status[i].flags & GPG_STATUS_UID)) {
+						line = next + 1;
+						next = strchrnul(line, '\n');
+						replace_cstring(&sigc->signer, line, next);
+					}
+				}
+
+				/* Do we have trust level? */
+				if (sigcheck_gpg_status[i].flags & GPG_STATUS_TRUST_LEVEL) {
+					/*
+					 * GPG v1 and v2 differs in how the
+					 * TRUST_ lines are written.  Some
+					 * trust lines contain no additional
+					 * space-separated information for v1.
+					 */
+					size_t trust_size = strcspn(line, " \n");
+					char *trust = xmemdupz(line, trust_size);
+
+					if (parse_gpg_trust_level(trust, &sigc->trust_level)) {
+						free(trust);
+						goto error;
+					}
+					free(trust);
+				}
+
+				/* Do we have fingerprint? */
+				if (sigcheck_gpg_status[i].flags & GPG_STATUS_FINGERPRINT) {
+					const char *limit;
+					char **field;
+
+					next = strchrnul(line, ' ');
+					replace_cstring(&sigc->fingerprint, line, next);
+
+					/*
+					 * Skip interim fields.  The search is
+					 * limited to the same line since only
+					 * OpenPGP signatures has a field with
+					 * the primary fingerprint.
+					 */
+					limit = strchrnul(line, '\n');
+					for (j = 9; j > 0; j--) {
+						if (!*next || limit <= next)
+							break;
+						line = next + 1;
+						next = strchrnul(line, ' ');
+					}
+
+					field = &sigc->primary_key_fingerprint;
+					if (!j) {
+						next = strchrnul(line, '\n');
+						replace_cstring(field, line, next);
+					} else {
+						replace_cstring(field, NULL, NULL);
+					}
+				}
+
+
+// Source: gpg-interface.c
+// Lines 147-243

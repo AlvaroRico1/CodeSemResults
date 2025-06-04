@@ -1,0 +1,29 @@
+static int assert_called_notifications(
+	const git_diff *diff_so_far,
+	const git_diff_delta *delta_to_add,
+	const char *matched_pathspec,
+	void *payload)
+{
+	bool found = false;
+	notify_expected *exp = (notify_expected*)payload;
+	notify_expected *e;
+
+	GIT_UNUSED(diff_so_far);
+
+	for (e = exp; e->path != NULL; e++) {
+		if (strcmp(e->path, delta_to_add->new_file.path))
+			continue;
+
+		cl_assert_equal_s(e->matched_pathspec, matched_pathspec);
+
+		found = true;
+		break;
+	}
+
+	cl_assert(found);
+	return 0;
+}
+
+
+// Source: notify.c
+// Lines 15-39

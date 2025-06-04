@@ -1,0 +1,1 @@
+new_sha,libgit2/tests/libgit2/diff/rename.c,4,err,libgit2/tests/libgit2/diff/rename.c,9,0

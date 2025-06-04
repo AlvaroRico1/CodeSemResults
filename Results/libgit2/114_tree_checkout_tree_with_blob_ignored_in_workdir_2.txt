@@ -1,0 +1,1 @@
+isdir,libgit2/tests/libgit2/checkout/tree.c,1,ignored,libgit2/tests/libgit2/checkout/tree.c,6,0

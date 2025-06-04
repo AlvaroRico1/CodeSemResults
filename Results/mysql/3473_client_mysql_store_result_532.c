@@ -1,0 +1,52 @@
+MYSQL_RES *STDCALL mysql_store_result(MYSQL *mysql) {
+  MYSQL_RES *result;
+  DBUG_TRACE;
+
+  /*
+    Some queries (e.g. "CALL") may return an empty resultset.
+    mysql->field_count is 0 in such cases.
+  */
+  if (!mysql->field_count) return nullptr;
+  if (mysql->status != MYSQL_STATUS_GET_RESULT) {
+    set_mysql_error(mysql, CR_COMMANDS_OUT_OF_SYNC, unknown_sqlstate);
+    return nullptr;
+  }
+  mysql->status = MYSQL_STATUS_READY; /* server is ready */
+  if (!(result = (MYSQL_RES *)my_malloc(
+            key_memory_MYSQL_RES,
+            (uint)(sizeof(MYSQL_RES) + sizeof(ulong) * mysql->field_count),
+            MYF(MY_WME | MY_ZEROFILL)))) {
+    set_mysql_error(mysql, CR_OUT_OF_MEMORY, unknown_sqlstate);
+    return nullptr;
+  }
+  if (!(result->field_alloc = (MEM_ROOT *)my_malloc(
+            key_memory_MYSQL, sizeof(MEM_ROOT), MYF(MY_WME | MY_ZEROFILL)))) {
+    set_mysql_error(mysql, CR_OUT_OF_MEMORY, unknown_sqlstate);
+    my_free(result);
+    return nullptr;
+  }
+  result->methods = mysql->methods;
+  result->eof = true; /* Marker for buffered */
+  result->lengths = (ulong *)(result + 1);
+  if (!(result->data = (*mysql->methods->read_rows)(mysql, mysql->fields,
+                                                    mysql->field_count))) {
+    my_free(result->field_alloc);
+    my_free(result);
+    return nullptr;
+  }
+  mysql->affected_rows = result->row_count = result->data->rows;
+  result->data_cursor = result->data->data;
+  result->fields = mysql->fields;
+  *result->field_alloc = std::move(*mysql->field_alloc);
+  result->field_count = mysql->field_count;
+  result->metadata = mysql->resultset_metadata;
+  /* The rest of result members is zerofilled in my_malloc */
+  mysql->fields = nullptr; /* fields is now in result */
+  /* just in case this was mistakenly called after mysql_stmt_execute() */
+  mysql->unbuffered_fetch_owner = nullptr;
+  return result; /* Data fetched */
+}
+
+
+// Source: client.cc
+// Lines 7523-7570

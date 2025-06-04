@@ -1,0 +1,34 @@
+int git_config_get_multivar_foreach(
+	const git_config *cfg, const char *name, const char *regexp,
+	git_config_foreach_cb cb, void *payload)
+{
+	int err, found;
+	git_config_iterator *iter;
+	git_config_entry *entry;
+
+	if ((err = git_config_multivar_iterator_new(&iter, cfg, name, regexp)) < 0)
+		return err;
+
+	found = 0;
+	while ((err = iter->next(&entry, iter)) == 0) {
+		found = 1;
+
+		if ((err = cb(entry, payload)) != 0) {
+			git_error_set_after_callback(err);
+			break;
+		}
+	}
+
+	iter->free(iter);
+	if (err == GIT_ITEROVER)
+		err = 0;
+
+	if (found == 0 && err == 0)
+		err = config_error_notfound(name);
+
+	return err;
+}
+
+
+// Source: config.c
+// Lines 988-1017

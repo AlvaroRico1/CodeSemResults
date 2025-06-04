@@ -1,0 +1,110 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'atom' at line 3
+2. Pointer 'ep' at line 76
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+handle_braces (const char *p)
+{
+  const char *atom, *end_atom;
+  const char *d_atom = NULL, *d_end_atom = NULL;
+  char *esc_buf = NULL, *d_esc_buf = NULL;
+  int esc;
+  const char *orig = p;
+
+  bool a_is_suffix;
+  bool a_is_spectype;
+  bool a_is_starred;
+  bool a_is_negated;
+  bool a_matched;
+
+  bool a_must_be_last = false;
+  bool ordered_set    = false;
+  bool disjunct_set   = false;
+  bool disj_matched   = false;
+  bool disj_starred   = true;
+  bool n_way_choice   = false;
+  bool n_way_matched  = false;
+
+#define SKIP_WHITE() do { while (*p == ' ' || *p == '\t') p++; } while (0)
+
+  do
+    {
+      if (a_must_be_last)
+	goto invalid;
+
+      /* Scan one "atom" (S in the description above of %{}, possibly
+	 with '!', '.', '@', ',', or '*' modifiers).  */
+      a_matched = false;
+      a_is_suffix = false;
+      a_is_starred = false;
+      a_is_negated = false;
+      a_is_spectype = false;
+
+      SKIP_WHITE ();
+      if (*p == '!')
+	p++, a_is_negated = true;
+
+      SKIP_WHITE ();
+      if (*p == '%' && p[1] == ':')
+	{
+	  atom = NULL;
+	  end_atom = NULL;
+	  p = handle_spec_function (p + 2, &a_matched, NULL);
+	}
+      else
+	{
+	  if (*p == '.')
+	    p++, a_is_suffix = true;
+	  else if (*p == ',')
+	    p++, a_is_spectype = true;
+
+	  atom = p;
+	  esc = 0;
+	  while (ISIDNUM (*p) || *p == '-' || *p == '+' || *p == '='
+		 || *p == ',' || *p == '.' || *p == '@' || *p == '\\')
+	    {
+	      if (*p == '\\')
+		{
+		  p++;
+		  if (!*p)
+		    fatal_error (input_location,
+				 "braced spec %qs ends in escape", orig);
+		  esc++;
+		}
+	      p++;
+	    }
+	  end_atom = p;
+
+	  if (esc)
+	    {
+	      const char *ap;
+	      char *ep;
+
+	      if (esc_buf && esc_buf != d_esc_buf)
+		free (esc_buf);
+	      esc_buf = NULL;
+	      ep = esc_buf = (char *) xmalloc (end_atom - atom - esc + 1);
+	      for (ap = atom; ap != end_atom; ap++, ep++)
+		{
+		  if (*ap == '\\')
+		    ap++;
+		  *ep = *ap;
+		}
+	      *ep = '\0';
+	      atom = esc_buf;
+	      end_atom = ep;
+	    }
+
+
+// Source: gcc.c
+// Lines 6367-6457
+
+
+[ANSWER]
+MAY

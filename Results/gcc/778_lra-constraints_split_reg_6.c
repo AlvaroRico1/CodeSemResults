@@ -1,0 +1,196 @@
+split_reg (bool before_p, int original_regno, rtx_insn *insn,
+	   rtx next_usage_insns, rtx_insn *to)
+{
+  enum reg_class rclass;
+  rtx original_reg;
+  int hard_regno, nregs;
+  rtx new_reg, usage_insn;
+  rtx_insn *restore, *save;
+  bool after_p;
+  bool call_save_p;
+  machine_mode mode;
+
+  if (original_regno < FIRST_PSEUDO_REGISTER)
+    {
+      rclass = ira_allocno_class_translate[REGNO_REG_CLASS (original_regno)];
+      hard_regno = original_regno;
+      call_save_p = false;
+      nregs = 1;
+      mode = lra_reg_info[hard_regno].biggest_mode;
+      machine_mode reg_rtx_mode = GET_MODE (regno_reg_rtx[hard_regno]);
+      /* A reg can have a biggest_mode of VOIDmode if it was only ever seen
+	 as part of a multi-word register.  In that case, or if the biggest
+	 mode was larger than a register, just use the reg_rtx.  Otherwise,
+	 limit the size to that of the biggest access in the function.  */
+      if (mode == VOIDmode
+	  || paradoxical_subreg_p (mode, reg_rtx_mode))
+	{
+	  original_reg = regno_reg_rtx[hard_regno];
+	  mode = reg_rtx_mode;
+	}
+      else
+	original_reg = gen_rtx_REG (mode, hard_regno);
+    }
+  else
+    {
+      mode = PSEUDO_REGNO_MODE (original_regno);
+      hard_regno = reg_renumber[original_regno];
+      nregs = hard_regno_nregs (hard_regno, mode);
+      rclass = lra_get_allocno_class (original_regno);
+      original_reg = regno_reg_rtx[original_regno];
+      call_save_p = need_for_call_save_p (original_regno);
+    }
+  lra_assert (hard_regno >= 0);
+  if (lra_dump_file != NULL)
+    fprintf (lra_dump_file,
+	     "	  ((((((((((((((((((((((((((((((((((((((((((((((((\n");
+	  
+  if (call_save_p)
+    {
+      mode = HARD_REGNO_CALLER_SAVE_MODE (hard_regno,
+					  hard_regno_nregs (hard_regno, mode),
+					  mode);
+      new_reg = lra_create_new_reg (mode, NULL_RTX, NO_REGS, "save");
+    }
+  else
+    {
+      rclass = choose_split_class (rclass, hard_regno, mode);
+      if (rclass == NO_REGS)
+	{
+	  if (lra_dump_file != NULL)
+	    {
+	      fprintf (lra_dump_file,
+		       "    Rejecting split of %d(%s): "
+		       "no good reg class for %d(%s)\n",
+		       original_regno,
+		       reg_class_names[lra_get_allocno_class (original_regno)],
+		       hard_regno,
+		       reg_class_names[REGNO_REG_CLASS (hard_regno)]);
+	      fprintf
+		(lra_dump_file,
+		 "    ))))))))))))))))))))))))))))))))))))))))))))))))\n");
+	    }
+	  return false;
+	}
+      /* Split_if_necessary can split hard registers used as part of a
+	 multi-register mode but splits each register individually.  The
+	 mode used for each independent register may not be supported
+	 so reject the split.  Splitting the wider mode should theoretically
+	 be possible but is not implemented.  */
+      if (!targetm.hard_regno_mode_ok (hard_regno, mode))
+	{
+	  if (lra_dump_file != NULL)
+	    {
+	      fprintf (lra_dump_file,
+		       "    Rejecting split of %d(%s): unsuitable mode %s\n",
+		       original_regno,
+		       reg_class_names[lra_get_allocno_class (original_regno)],
+		       GET_MODE_NAME (mode));
+	      fprintf
+		(lra_dump_file,
+		 "    ))))))))))))))))))))))))))))))))))))))))))))))))\n");
+	    }
+	  return false;
+	}
+      new_reg = lra_create_new_reg (mode, original_reg, rclass, "split");
+      reg_renumber[REGNO (new_reg)] = hard_regno;
+    }
+  int new_regno = REGNO (new_reg);
+  save = emit_spill_move (true, new_reg, original_reg);
+  if (NEXT_INSN (save) != NULL_RTX && !call_save_p)
+    {
+      if (lra_dump_file != NULL)
+	{
+	  fprintf
+	    (lra_dump_file,
+	     "	  Rejecting split %d->%d resulting in > 2 save insns:\n",
+	     original_regno, new_regno);
+	  dump_rtl_slim (lra_dump_file, save, NULL, -1, 0);
+	  fprintf (lra_dump_file,
+		   "	))))))))))))))))))))))))))))))))))))))))))))))))\n");
+	}
+      return false;
+    }
+  restore = emit_spill_move (false, new_reg, original_reg);
+  if (NEXT_INSN (restore) != NULL_RTX && !call_save_p)
+    {
+      if (lra_dump_file != NULL)
+	{
+	  fprintf (lra_dump_file,
+		   "	Rejecting split %d->%d "
+		   "resulting in > 2 restore insns:\n",
+		   original_regno, new_regno);
+	  dump_rtl_slim (lra_dump_file, restore, NULL, -1, 0);
+	  fprintf (lra_dump_file,
+		   "	))))))))))))))))))))))))))))))))))))))))))))))))\n");
+	}
+      return false;
+    }
+  /* Transfer equivalence information to the spill register, so that
+     if we fail to allocate the spill register, we have the option of
+     rematerializing the original value instead of spilling to the stack.  */
+  if (!HARD_REGISTER_NUM_P (original_regno)
+      && mode == PSEUDO_REGNO_MODE (original_regno))
+    lra_copy_reg_equiv (new_regno, original_regno);
+  lra_reg_info[new_regno].restore_rtx = regno_reg_rtx[original_regno];
+  bitmap_set_bit (&lra_split_regs, new_regno);
+  if (to != NULL)
+    {
+      lra_assert (next_usage_insns == NULL);
+      usage_insn = to;
+      after_p = TRUE;
+    }
+  else
+    {
+      /* We need check_only_regs only inside the inheritance pass.  */
+      bitmap_set_bit (&check_only_regs, new_regno);
+      bitmap_set_bit (&check_only_regs, original_regno);
+      after_p = usage_insns[original_regno].after_p;
+      for (;;)
+	{
+	  if (GET_CODE (next_usage_insns) != INSN_LIST)
+	    {
+	      usage_insn = next_usage_insns;
+	      break;
+	    }
+	  usage_insn = XEXP (next_usage_insns, 0);
+	  lra_assert (DEBUG_INSN_P (usage_insn));
+	  next_usage_insns = XEXP (next_usage_insns, 1);
+	  lra_substitute_pseudo (&usage_insn, original_regno, new_reg, false,
+				 true);
+	  lra_update_insn_regno_info (as_a <rtx_insn *> (usage_insn));
+	  if (lra_dump_file != NULL)
+	    {
+	      fprintf (lra_dump_file, "    Split reuse change %d->%d:\n",
+		       original_regno, new_regno);
+	      dump_insn_slim (lra_dump_file, as_a <rtx_insn *> (usage_insn));
+	    }
+	}
+    }
+  lra_assert (NOTE_P (usage_insn) || NONDEBUG_INSN_P (usage_insn));
+  lra_assert (usage_insn != insn || (after_p && before_p));
+  lra_process_new_insns (as_a <rtx_insn *> (usage_insn),
+			 after_p ? NULL : restore,
+			 after_p ? restore : NULL,
+			 call_save_p
+			 ?  "Add reg<-save" : "Add reg<-split");
+  lra_process_new_insns (insn, before_p ? save : NULL,
+			 before_p ? NULL : save,
+			 call_save_p
+			 ?  "Add save<-reg" : "Add split<-reg");
+  if (nregs > 1)
+    /* If we are trying to split multi-register.  We should check
+       conflicts on the next assignment sub-pass.  IRA can allocate on
+       sub-register levels, LRA do this on pseudos level right now and
+       this discrepancy may create allocation conflicts after
+       splitting.  */
+    check_and_force_assignment_correctness_p = true;
+  if (lra_dump_file != NULL)
+    fprintf (lra_dump_file,
+	     "	  ))))))))))))))))))))))))))))))))))))))))))))))))\n");
+  return true;
+}
+
+
+// Source: lra-constraints.c
+// Lines 5651-5842

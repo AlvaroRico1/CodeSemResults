@@ -1,0 +1,155 @@
+acpi_ds_resolve_package_element(union acpi_operand_object **element_ptr)
+{
+	acpi_status status;
+	acpi_status status2;
+	union acpi_generic_state scope_info;
+	union acpi_operand_object *element = *element_ptr;
+	struct acpi_namespace_node *resolved_node;
+	struct acpi_namespace_node *original_node;
+	char *external_path = "";
+	acpi_object_type type;
+
+	ACPI_FUNCTION_TRACE(ds_resolve_package_element);
+
+	/* Check if reference element is already resolved */
+
+	if (element->reference.resolved) {
+		ACPI_DEBUG_PRINT_RAW((ACPI_DB_PARSE,
+				      "%s: Package element is already resolved\n",
+				      ACPI_GET_FUNCTION_NAME));
+
+		return_VOID;
+	}
+
+	/* Element must be a reference object of correct type */
+
+	scope_info.scope.node = element->reference.node;	/* Prefix node */
+
+	status = acpi_ns_lookup(&scope_info, (char *)element->reference.aml,
+				ACPI_TYPE_ANY, ACPI_IMODE_EXECUTE,
+				ACPI_NS_SEARCH_PARENT | ACPI_NS_DONT_OPEN_SCOPE,
+				NULL, &resolved_node);
+	if (ACPI_FAILURE(status)) {
+		if ((status == AE_NOT_FOUND)
+		    && acpi_gbl_ignore_package_resolution_errors) {
+			/*
+			 * Optionally be silent about the NOT_FOUND case for the referenced
+			 * name. Although this is potentially a serious problem,
+			 * it can generate a lot of noise/errors on platforms whose
+			 * firmware carries around a bunch of unused Package objects.
+			 * To disable these errors, set this global to TRUE:
+			 *     acpi_gbl_ignore_package_resolution_errors
+			 *
+			 * If the AML actually tries to use such a package, the unresolved
+			 * element(s) will be replaced with NULL elements.
+			 */
+
+			/* Referenced name not found, set the element to NULL */
+
+			acpi_ut_remove_reference(*element_ptr);
+			*element_ptr = NULL;
+			return_VOID;
+		}
+
+		status2 = acpi_ns_externalize_name(ACPI_UINT32_MAX,
+						   (char *)element->reference.
+						   aml, NULL, &external_path);
+
+		ACPI_EXCEPTION((AE_INFO, status,
+				"While resolving a named reference package element - %s",
+				external_path));
+		if (ACPI_SUCCESS(status2)) {
+			ACPI_FREE(external_path);
+		}
+
+		/* Could not resolve name, set the element to NULL */
+
+		acpi_ut_remove_reference(*element_ptr);
+		*element_ptr = NULL;
+		return_VOID;
+	} else if (resolved_node->type == ACPI_TYPE_ANY) {
+
+		/* Named reference not resolved, return a NULL package element */
+
+		ACPI_ERROR((AE_INFO,
+			    "Could not resolve named package element [%4.4s] in [%4.4s]",
+			    resolved_node->name.ascii,
+			    scope_info.scope.node->name.ascii));
+		*element_ptr = NULL;
+		return_VOID;
+	}
+
+	/*
+	 * Special handling for Alias objects. We need resolved_node to point
+	 * to the Alias target. This effectively "resolves" the alias.
+	 */
+	if (resolved_node->type == ACPI_TYPE_LOCAL_ALIAS) {
+		resolved_node = ACPI_CAST_PTR(struct acpi_namespace_node,
+					      resolved_node->object);
+	}
+
+	/* Update the reference object */
+
+	element->reference.resolved = TRUE;
+	element->reference.node = resolved_node;
+	type = element->reference.node->type;
+
+	/*
+	 * Attempt to resolve the node to a value before we insert it into
+	 * the package. If this is a reference to a common data type,
+	 * resolve it immediately. According to the ACPI spec, package
+	 * elements can only be "data objects" or method references.
+	 * Attempt to resolve to an Integer, Buffer, String or Package.
+	 * If cannot, return the named reference (for things like Devices,
+	 * Methods, etc.) Buffer Fields and Fields will resolve to simple
+	 * objects (int/buf/str/pkg).
+	 *
+	 * NOTE: References to things like Devices, Methods, Mutexes, etc.
+	 * will remain as named references. This behavior is not described
+	 * in the ACPI spec, but it appears to be an oversight.
+	 */
+	original_node = resolved_node;
+	status = acpi_ex_resolve_node_to_value(&resolved_node, NULL);
+	if (ACPI_FAILURE(status)) {
+		return_VOID;
+	}
+
+	switch (type) {
+		/*
+		 * These object types are a result of named references, so we will
+		 * leave them as reference objects. In other words, these types
+		 * have no intrinsic "value".
+		 */
+	case ACPI_TYPE_DEVICE:
+	case ACPI_TYPE_THERMAL:
+	case ACPI_TYPE_METHOD:
+		break;
+
+	case ACPI_TYPE_MUTEX:
+	case ACPI_TYPE_POWER:
+	case ACPI_TYPE_PROCESSOR:
+	case ACPI_TYPE_EVENT:
+	case ACPI_TYPE_REGION:
+
+		/* acpi_ex_resolve_node_to_value gave these an extra reference */
+
+		acpi_ut_remove_reference(original_node->object);
+		break;
+
+	default:
+		/*
+		 * For all other types - the node was resolved to an actual
+		 * operand object with a value, return the object. Remove
+		 * a reference on the existing object.
+		 */
+		acpi_ut_remove_reference(element);
+		*element_ptr = (union acpi_operand_object *)resolved_node;
+		break;
+	}
+
+	return_VOID;
+}
+
+
+// Source: dspkginit.c
+// Lines 381-531

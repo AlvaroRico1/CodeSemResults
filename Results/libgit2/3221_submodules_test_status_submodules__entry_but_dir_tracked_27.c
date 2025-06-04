@@ -1,0 +1,35 @@
+void test_status_submodules__entry_but_dir_tracked(void)
+{
+	git_repository *repo;
+	git_status_list *status;
+	git_diff *diff;
+	git_index *index;
+	git_tree *tree;
+
+	cl_git_pass(git_repository_init(&repo, "mixed-submodule", 0));
+	cl_git_mkfile("mixed-submodule/.gitmodules", "[submodule \"sub\"]\n path = sub\n url = ../foo\n");
+	cl_git_pass(p_mkdir("mixed-submodule/sub", 0777));
+	cl_git_mkfile("mixed-submodule/sub/file", "");
+
+	/* Create the commit with sub/file as a file, and an entry for sub in the modules list */
+	{
+		git_oid tree_id, commit_id;
+		git_signature *sig;
+		git_reference *ref;
+
+		cl_git_pass(git_repository_index(&index, repo));
+		cl_git_pass(git_index_add_bypath(index, ".gitmodules"));
+		cl_git_pass(git_index_add_bypath(index, "sub/file"));
+		cl_git_pass(git_index_write(index));
+		cl_git_pass(git_index_write_tree(&tree_id, index));
+		cl_git_pass(git_signature_now(&sig, "Sloppy Submoduler", "sloppy@example.com"));
+		cl_git_pass(git_tree_lookup(&tree, repo, &tree_id));
+		cl_git_pass(git_commit_create(&commit_id, repo, NULL, sig, sig, NULL, "message", tree, 0, NULL));
+		cl_git_pass(git_reference_create(&ref, repo, "refs/heads/master", &commit_id, 1, "commit: foo"));
+		git_reference_free(ref);
+		git_signature_free(sig);
+	}
+
+
+// Source: submodules.c
+// Lines 479-509

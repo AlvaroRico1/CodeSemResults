@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'b' at line 16\n2. Pointer 'internal' at line 15\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int odb_freshen_1(\n\tgit_odb *db,\n\tconst git_oid *id,\n\tbool only_refreshed)\n{\n\tsize_t i;\n\tbool found = false;\n\tint error;\n\n\tif ((error = git_mutex_lock(&db->lock)) < 0) {\n\t\tgit_error_set(GIT_ERROR_ODB, \"failed to acquire the odb lock\");\n\t\treturn error;\n\t}\n\tfor (i = 0; i < db->backends.length && !found; ++i) {\n\t\tbackend_internal *internal = git_vector_get(&db->backends, i);\n\t\tgit_odb_backend *b = internal->backend;\n\n\t\tif (only_refreshed && !b->refresh)\n\t\t\tcontinue;\n\n\t\tif (b->freshen != NULL)\n\t\t\tfound = !b->freshen(b, id);\n\t\telse if (b->exists != NULL)\n\t\t\tfound = b->exists(b, id);\n\t}\n\n\n// Source: odb.c\n// Lines 837-861\n",
+  "ANSWER": "MUST"
+}

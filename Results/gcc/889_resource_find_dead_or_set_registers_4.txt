@@ -1,0 +1,1 @@
+insn,gcc/gcc/resource.c,6,target,gcc/gcc/resource.c,1,1

@@ -1,0 +1,151 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 's_wc' at line 55
+2. Pointer 's_wc' at line 55
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int my_wildcmp_uca_impl(const CHARSET_INFO *cs, const char *str,
+                               const char *str_end, const char *wildstr,
+                               const char *wildend, int escape, int w_one,
+                               int w_many, int recurse_level) {
+  if (my_string_stack_guard && my_string_stack_guard(recurse_level)) return 1;
+  while (wildstr != wildend) {
+    int result = -1; /* Not found, using wildcards */
+    auto mb_wc = cs->cset->mb_wc;
+
+    /*
+      Compare the expression and pattern strings character-by-character until
+      we find a '%' (w_many) in the pattern string. Once we do, we break out
+      of the loop and try increasingly large widths for the '%' match,
+      calling ourselves recursively until we find a match. (As an
+      optimization, we test for the character immediately after '%' before we
+      recurse.) This takes exponential time in the worst case.
+
+      Example: Say we are trying to match the pattern 'ab%cd' against the
+      string 'ab..c.cd'. We first match the initial 'ab' against each other,
+      and then see the '%' in the pattern. Since the first character after
+      '%' is 'c', we skip to the first 'c' in the expression string, and try
+      to match 'c.cd' against 'cd' by a recursive call. Since this failed, we
+      scan for the next 'c', and try to match 'cd' against 'cd', which works.
+    */
+    my_wc_t w_wc;
+    while (true) {
+      int mb_len;
+      if ((mb_len = mb_wc(cs, &w_wc, (const uchar *)wildstr,
+                          (const uchar *)wildend)) <= 0)
+        return 1;
+
+      wildstr += mb_len;
+      // If we found '%' (w_many), break out this loop.
+      if (w_wc == (my_wc_t)w_many) {
+        result = 1;
+        break;
+      }
+
+      /*
+        If the character we just read was an escape character, skip it and
+        read the next character instead. This character is used verbatim
+        without checking if it is a wildcard (% or _). However, as a
+        special exception, a lone escape character at the end of a string is
+        treated as itself.
+      */
+      bool escaped = false;
+      if (w_wc == (my_wc_t)escape && wildstr < wildend) {
+        if ((mb_len = mb_wc(cs, &w_wc, (const uchar *)wildstr,
+                            (const uchar *)wildend)) <= 0)
+          return 1;
+        wildstr += mb_len;
+        escaped = true;
+      }
+
+      my_wc_t s_wc;
+      if ((mb_len = mb_wc(cs, &s_wc, (const uchar *)str,
+                          (const uchar *)str_end)) <= 0)
+        return 1;
+      str += mb_len;
+
+      // If we found '_' (w_one), skip one character in expression string.
+      if (!escaped && w_wc == (my_wc_t)w_one) {
+        result = 1;
+      } else {
+        if (my_uca_charcmp(cs, s_wc, w_wc)) return 1;
+      }
+      if (wildstr == wildend)
+        return (str != str_end); /* Match if both are at end */
+    }
+
+    if (w_wc == (my_wc_t)w_many) {
+      // Remove any '%' and '_' following w_many in the pattern string.
+      for (;;) {
+        if (wildstr == wildend) {
+          /*
+            The previous w_many (%) was the last character in the pattern
+            string, so we have a match no matter what the rest of the
+            expression string looks like (even empty).
+          */
+          return 0;
+        }
+        int mb_len_wild =
+            mb_wc(cs, &w_wc, (const uchar *)wildstr, (const uchar *)wildend);
+        if (mb_len_wild <= 0) return 1;
+        wildstr += mb_len_wild;
+        if (w_wc == (my_wc_t)w_many) continue;
+
+        if (w_wc == (my_wc_t)w_one) {
+          /*
+            Skip one character in expression string because '_' needs to
+            match one.
+          */
+          my_wc_t s_wc;
+          int mb_len =
+              mb_wc(cs, &s_wc, (const uchar *)str, (const uchar *)str_end);
+          if (mb_len <= 0) return 1;
+          str += mb_len;
+          continue;
+        }
+        break; /* Not a wild character */
+      }
+
+      // No character in the expression string to match w_wc.
+      if (str == str_end) return -1;
+
+      // Skip the escape character ('\') in the pattern if needed.
+      if (w_wc == (my_wc_t)escape && wildstr < wildend) {
+        int mb_len =
+            mb_wc(cs, &w_wc, (const uchar *)wildstr, (const uchar *)wildend);
+        if (mb_len <= 0) return 1;
+        wildstr += mb_len;
+      }
+
+      /*
+        w_wc is now the character following w_many (e.g., if the pattern is
+        "a%c", w_wc is 'c').
+      */
+      while (true) {
+        /*
+          Skip until we find a character in the expression string that is
+          equal to w_wc.
+        */
+        int mb_len = 0;
+        while (str != str_end) {
+          my_wc_t s_wc;
+          if ((mb_len = mb_wc(cs, &s_wc, (const uchar *)str,
+                              (const uchar *)str_end)) <= 0)
+            return 1;
+
+          if (!my_uca_charcmp(cs, s_wc, w_wc)) break;
+          str += mb_len;
+        }
+
+
+// Source: ctype-uca.cc
+// Lines 2201-2332
+
+
+[ANSWER]
+MAY

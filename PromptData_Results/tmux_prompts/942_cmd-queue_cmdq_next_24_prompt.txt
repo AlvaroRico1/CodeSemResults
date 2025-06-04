@@ -1,0 +1,98 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'item' at line 5
+2. Pointer 'queue' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+cmdq_next(struct client *c)
+{
+	struct cmdq_list	*queue = cmdq_get(c);
+	const char		*name = cmdq_name(c);
+	struct cmdq_item	*item;
+	enum cmd_retval		 retval;
+	u_int			 items = 0;
+	static u_int		 number;
+
+	if (TAILQ_EMPTY(&queue->list)) {
+		log_debug("%s %s: empty", __func__, name);
+		return (0);
+	}
+	if (TAILQ_FIRST(&queue->list)->flags & CMDQ_WAITING) {
+		log_debug("%s %s: waiting", __func__, name);
+		return (0);
+	}
+
+	log_debug("%s %s: enter", __func__, name);
+	for (;;) {
+		item = queue->item = TAILQ_FIRST(&queue->list);
+		if (item == NULL)
+			break;
+		log_debug("%s %s: %s (%d), flags %x", __func__, name,
+		    item->name, item->type, item->flags);
+
+		/*
+		 * Any item with the waiting flag set waits until an external
+		 * event clears the flag (for example, a job - look at
+		 * run-shell).
+		 */
+		if (item->flags & CMDQ_WAITING)
+			goto waiting;
+
+		/*
+		 * Items are only fired once, once the fired flag is set, a
+		 * waiting flag can only be cleared by an external event.
+		 */
+		if (~item->flags & CMDQ_FIRED) {
+			item->time = time(NULL);
+			item->number = ++number;
+
+			switch (item->type) {
+			case CMDQ_COMMAND:
+				retval = cmdq_fire_command(item);
+
+				/*
+				 * If a command returns an error, remove any
+				 * subsequent commands in the same group.
+				 */
+				if (retval == CMD_RETURN_ERROR)
+					cmdq_remove_group(item);
+				break;
+			case CMDQ_CALLBACK:
+				retval = cmdq_fire_callback(item);
+				break;
+			default:
+				retval = CMD_RETURN_ERROR;
+				break;
+			}
+			item->flags |= CMDQ_FIRED;
+
+			if (retval == CMD_RETURN_WAIT) {
+				item->flags |= CMDQ_WAITING;
+				goto waiting;
+			}
+			items++;
+		}
+		cmdq_remove(item);
+	}
+	queue->item = NULL;
+
+	log_debug("%s %s: exit (empty)", __func__, name);
+	return (items);
+
+waiting:
+	log_debug("%s %s: exit (wait)", __func__, name);
+	return (items);
+}
+
+
+// Source: cmd-queue.c
+// Lines 703-781
+
+
+[ANSWER]
+MUST

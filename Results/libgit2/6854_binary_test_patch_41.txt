@@ -1,0 +1,1 @@
+two,libgit2/tests/libgit2/diff/binary.c,3,diff,libgit2/tests/libgit2/diff/binary.c,11,0

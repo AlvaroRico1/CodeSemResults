@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'path' at line 4\n2. Pointer 'url_or_path' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint git_clone__should_clone_local(const char *url_or_path, git_clone_local_t local)\n{\n\tgit_str fromurl = GIT_STR_INIT;\n\tconst char *path = url_or_path;\n\tbool is_url, is_local;\n\n\tif (local == GIT_CLONE_NO_LOCAL)\n\t\treturn 0;\n\n\tif ((is_url = git_fs_path_is_local_file_url(url_or_path)) != 0) {\n\t\tif (git_fs_path_fromurl(&fromurl, url_or_path) < 0) {\n\t\t\tis_local = -1;\n\t\t\tgoto done;\n\t\t}\n\n\t\tpath = fromurl.ptr;\n\t}\n\n\tis_local = (!is_url || local != GIT_CLONE_LOCAL_AUTO) &&\n\t\tgit_fs_path_isdir(path);\n\ndone:\n\tgit_str_dispose(&fromurl);\n\treturn is_local;\n}\n\n\n// Source: clone.c\n// Lines 427-451\n",
+  "ANSWER": "MUST"
+}

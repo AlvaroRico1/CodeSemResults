@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'cfg' at line 1
+2. Pointer 'n' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void check_get_multivar(git_config *cfg, int expected)
+{
+	git_config_iterator *iter;
+	git_config_entry *entry;
+	int n = 0;
+
+	cl_git_pass(git_config_multivar_iterator_new(&iter, cfg, _name, NULL));
+
+	while (git_config_next(&entry, iter) == 0)
+		n++;
+
+	cl_assert_equal_i(expected, n);
+	git_config_iterator_free(iter);
+
+}
+
+
+// Source: multivar.c
+// Lines 73-87
+
+
+[ANSWER]
+MUST-NOT

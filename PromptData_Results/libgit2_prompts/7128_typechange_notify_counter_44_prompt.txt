@@ -1,0 +1,45 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'baseline' at line 4
+2. Pointer 'cts' at line 9
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int notify_counter(
+	git_checkout_notify_t why,
+	const char *path,
+	const git_diff_file *baseline,
+	const git_diff_file *target,
+	const git_diff_file *workdir,
+	void *payload)
+{
+	notify_counts *cts = payload;
+
+	GIT_UNUSED(path);
+	GIT_UNUSED(baseline);
+	GIT_UNUSED(target);
+	GIT_UNUSED(workdir);
+
+	switch (why) {
+	case GIT_CHECKOUT_NOTIFY_CONFLICT:  cts->conflicts++; break;
+	case GIT_CHECKOUT_NOTIFY_DIRTY:     cts->dirty++;     break;
+	case GIT_CHECKOUT_NOTIFY_UPDATED:   cts->updates++;   break;
+	case GIT_CHECKOUT_NOTIFY_UNTRACKED: cts->untracked++; break;
+	case GIT_CHECKOUT_NOTIFY_IGNORED:   cts->ignored++;   break;
+	default: break;
+	}
+
+	return 0;
+}
+
+
+// Source: typechange.c
+// Lines 191-216
+
+
+[ANSWER]
+MUST-NOT

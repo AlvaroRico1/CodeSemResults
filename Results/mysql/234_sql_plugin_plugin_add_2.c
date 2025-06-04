@@ -1,0 +1,78 @@
+static bool plugin_add(MEM_ROOT *tmp_root, LEX_CSTRING name,
+                       const LEX_STRING *dl, int *argc, char **argv, int report,
+                       bool load_early) {
+  st_plugin_int tmp;
+  st_mysql_plugin *plugin;
+  DBUG_TRACE;
+
+  mysql_mutex_assert_owner(&LOCK_plugin);
+  if (plugin_find_internal(name, MYSQL_ANY_PLUGIN)) {
+    mysql_rwlock_unlock(&LOCK_system_variables_hash);
+    mysql_mutex_unlock(&LOCK_plugin);
+    report_error(report, ER_UDF_EXISTS, name.str);
+    return true;
+  }
+  if (!(tmp.plugin_dl = plugin_dl_add(dl, report, load_early))) return true;
+  /* Find plugin by name */
+  for (plugin = tmp.plugin_dl->plugins; plugin->info; plugin++) {
+    size_t name_len = strlen(plugin->name);
+    if (plugin->type >= 0 && plugin->type < MYSQL_MAX_PLUGIN_TYPE_NUM &&
+        !my_strnncoll(system_charset_info,
+                      pointer_cast<const uchar *>(name.str), name.length,
+                      pointer_cast<const uchar *>(plugin->name), name_len)) {
+      st_plugin_int *tmp_plugin_ptr;
+      if (*(int *)plugin->info <
+              min_plugin_info_interface_version[plugin->type] ||
+          ((*(int *)plugin->info) >> 8) >
+              (cur_plugin_info_interface_version[plugin->type] >> 8)) {
+        char buf[256], dl_name[FN_REFLEN];
+        strxnmov(buf, sizeof(buf) - 1, "API version for ",
+                 plugin_type_names[plugin->type].str,
+                 " plugin is too different", NullS);
+        /* copy the library name so we can release the mutex */
+        strncpy(dl_name, dl->str, sizeof(dl_name) - 1);
+        dl_name[sizeof(dl_name) - 1] = 0;
+        plugin_dl_del(dl);
+        mysql_rwlock_unlock(&LOCK_system_variables_hash);
+        mysql_mutex_unlock(&LOCK_plugin);
+        report_error(report, ER_CANT_OPEN_LIBRARY, dl_name, 0, buf);
+        return true;
+      }
+      tmp.plugin = plugin;
+      tmp.name.str = plugin->name;
+      tmp.name.length = name_len;
+      tmp.ref_count = 0;
+      tmp.state = PLUGIN_IS_UNINITIALIZED;
+      tmp.load_option = PLUGIN_ON;
+      if (test_plugin_options(tmp_root, &tmp, argc, argv))
+        tmp.state = PLUGIN_IS_DISABLED;
+
+      if ((tmp_plugin_ptr = plugin_insert_or_reuse(&tmp))) {
+        plugin_array_version++;
+        if (plugin_hash[plugin->type]
+                ->emplace(to_string(tmp_plugin_ptr->name), tmp_plugin_ptr)
+                .second) {
+          init_alloc_root(key_memory_plugin_int_mem_root,
+                          &tmp_plugin_ptr->mem_root, 4096, 4096);
+          return false;
+        }
+        tmp_plugin_ptr->state = PLUGIN_IS_FREED;
+      }
+      mysql_del_sys_var_chain(tmp.system_vars);
+      restore_pluginvar_names(tmp.system_vars);
+      plugin_dl_del(dl);
+      mysql_rwlock_unlock(&LOCK_system_variables_hash);
+      mysql_mutex_unlock(&LOCK_plugin);
+      return true;
+    }
+  }
+  plugin_dl_del(dl);
+  mysql_rwlock_unlock(&LOCK_system_variables_hash);
+  mysql_mutex_unlock(&LOCK_plugin);
+  report_error(report, ER_CANT_FIND_DL_ENTRY, name.str);
+  return true;
+}
+
+
+// Source: sql_plugin.cc
+// Lines 1028-1101

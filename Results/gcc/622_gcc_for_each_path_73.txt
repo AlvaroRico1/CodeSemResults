@@ -1,0 +1,1 @@
+this_multi,gcc/gcc/gcc.c,95,multi_suffix,gcc/gcc/gcc.c,11,2

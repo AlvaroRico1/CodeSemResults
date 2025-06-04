@@ -1,0 +1,1 @@
+binary_cb,libgit2/tests/libgit2/diff/diff_helpers.c,4,delta,libgit2/tests/libgit2/diff/diff_helpers.c,15,0

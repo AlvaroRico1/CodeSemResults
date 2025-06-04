@@ -1,0 +1,1 @@
+four_bytes,mysql/strings/ctype-uca.cc,52,s_res2,mysql/strings/ctype-uca.cc,59,2

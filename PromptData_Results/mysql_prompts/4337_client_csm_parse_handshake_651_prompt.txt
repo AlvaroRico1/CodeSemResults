@@ -1,0 +1,129 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'server_version_end' at line 8
+2. Pointer 'pkt_end' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static mysql_state_machine_status csm_parse_handshake(
+    mysql_async_connect *ctx) {
+  DBUG_TRACE;
+  MYSQL *mysql = ctx->mysql;
+  NET *net = &mysql->net;
+  int pkt_length = ctx->pkt_length;
+  int pkt_scramble_len = 0;
+  char *end, *server_version_end, *pkt_end;
+  pkt_end = (char *)net->read_pos + pkt_length;
+  /* Check if version of protocol matches current one */
+  mysql->protocol_version = net->read_pos[0];
+  DBUG_DUMP("packet", (uchar *)net->read_pos, 10);
+  DBUG_PRINT("info", ("mysql protocol version %d, server=%d", PROTOCOL_VERSION,
+                      mysql->protocol_version));
+  if (mysql->protocol_version != PROTOCOL_VERSION) {
+    set_mysql_extended_error(mysql, CR_VERSION_ERROR, unknown_sqlstate,
+                             ER_CLIENT(CR_VERSION_ERROR),
+                             mysql->protocol_version, PROTOCOL_VERSION);
+    return STATE_MACHINE_FAILED;
+  }
+  server_version_end = end = strend((char *)net->read_pos + 1);
+  mysql->thread_id = uint4korr((uchar *)end + 1);
+  end += 5;
+  /*
+    Scramble is split into two parts because old clients do not understand
+    long scrambles; here goes the first part.
+  */
+  ctx->scramble_data = end;
+  ctx->scramble_data_len = AUTH_PLUGIN_DATA_PART_1_LENGTH + 1;
+  ctx->scramble_plugin = nullptr;
+  end += ctx->scramble_data_len;
+
+  if (pkt_end >= end + 1) mysql->server_capabilities = uint2korr((uchar *)end);
+  if (pkt_end >= end + 18) {
+    /* New protocol with 16 bytes to describe server characteristics */
+    mysql->server_language = end[2];
+    mysql->server_status = uint2korr((uchar *)end + 3);
+    mysql->server_capabilities |= uint2korr((uchar *)end + 5) << 16;
+    pkt_scramble_len = end[7];
+    if (pkt_scramble_len < 0) {
+      set_mysql_error(mysql, CR_MALFORMED_PACKET,
+                      unknown_sqlstate); /* purecov: inspected */
+      return STATE_MACHINE_FAILED;
+    }
+  }
+  end += 18;
+
+  if (mysql_init_character_set(mysql)) return STATE_MACHINE_FAILED;
+
+  /* Save connection information */
+  if (!my_multi_malloc(
+          key_memory_MYSQL, MYF(0), &mysql->host_info,
+          (uint)strlen(ctx->host_info) + 1, &mysql->host,
+          (uint)strlen(ctx->host) + 1, &mysql->unix_socket,
+          ctx->unix_socket ? (uint)strlen(ctx->unix_socket) + 1 : (uint)1,
+          &mysql->server_version,
+          (uint)(server_version_end - (char *)net->read_pos + 1), NullS) ||
+      !(mysql->user = my_strdup(key_memory_MYSQL, ctx->user, MYF(0))) ||
+      !(mysql->passwd = my_strdup(key_memory_MYSQL, ctx->passwd, MYF(0)))) {
+    set_mysql_error(mysql, CR_OUT_OF_MEMORY, unknown_sqlstate);
+    return STATE_MACHINE_FAILED;
+  }
+  my_stpcpy(mysql->host_info, ctx->host_info);
+  my_stpcpy(mysql->host, ctx->host);
+  if (ctx->unix_socket)
+    my_stpcpy(mysql->unix_socket, ctx->unix_socket);
+  else
+    mysql->unix_socket = nullptr;
+  my_stpcpy(mysql->server_version, (char *)net->read_pos + 1);
+  mysql->port = ctx->port;
+
+  if (pkt_end >= end + SCRAMBLE_LENGTH - AUTH_PLUGIN_DATA_PART_1_LENGTH + 1)
+
+  {
+    /*
+     move the first scramble part - directly in the NET buffer -
+     to get a full continuous scramble. We've read all the header,
+     and can overwrite it now.
+    */
+    memmove(end - AUTH_PLUGIN_DATA_PART_1_LENGTH, ctx->scramble_data,
+            AUTH_PLUGIN_DATA_PART_1_LENGTH);
+    ctx->scramble_data = end - AUTH_PLUGIN_DATA_PART_1_LENGTH;
+    if (mysql->server_capabilities & CLIENT_PLUGIN_AUTH) {
+      ctx->scramble_data_len = pkt_scramble_len;
+      ctx->scramble_plugin = ctx->scramble_data + ctx->scramble_data_len;
+      /*
+       There is a possibility that we did not get a correct plugin name
+       for some reason. For example, the packet was malformed and some
+       of the fields had incorrect values. In such cases, we keep the
+       plugin name empty so that the default authentication plugin
+       gets used later on. Since we don't really know the plugin for which
+       the scramble_data was prepared, we can discard it and set it's length
+       to 0.
+      */
+      if (ctx->scramble_data + ctx->scramble_data_len > pkt_end) {
+        ctx->scramble_data = 0;
+        ctx->scramble_data_len = 0;
+        ctx->scramble_plugin = const_cast<char *>("");
+      }
+    } else {
+      ctx->scramble_data_len = (int)(pkt_end - ctx->scramble_data);
+      ctx->scramble_plugin = caching_sha2_password_plugin_name;
+    }
+  } else {
+    set_mysql_error(mysql, CR_MALFORMED_PACKET, unknown_sqlstate);
+    return STATE_MACHINE_FAILED;
+  }
+  ctx->state_function = csm_establish_ssl;
+  return STATE_MACHINE_CONTINUE;
+}
+
+
+// Source: client.cc
+// Lines 6276-6385
+
+
+[ANSWER]
+MUST-NOT

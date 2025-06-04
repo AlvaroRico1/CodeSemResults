@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'p' at line None\n2. Pointer 'word_end' at line None\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic enum bisect_error bisect_log(void)\n{\n\tint fd, status;\n\tconst char* filename = git_path_bisect_log();\n\n\tif (is_empty_or_missing_file(filename))\n\t\treturn error(_(\"We are not bisecting.\"));\n\n\tfd = open(filename, O_RDONLY);\n\tif (fd < 0)\n\t\treturn BISECT_FAILED;\n\n\tstatus = copy_fd(fd, STDOUT_FILENO);\n\tclose(fd);\n\treturn status ? BISECT_FAILED : BISECT_OK;\n}\n\n\n// Source: bisect--helper.c\n// Lines 930-945\n",
+  "ANSWER": "MUST-NOT"
+}

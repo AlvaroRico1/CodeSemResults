@@ -1,0 +1,48 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'type' at line 7
+2. Pointer 'size' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static char *grab_blob(struct repository *r,
+		       const struct object_id *oid, unsigned int mode,
+		       unsigned long *size, struct userdiff_driver *textconv,
+		       const char *path)
+{
+	char *blob;
+	enum object_type type;
+
+	if (S_ISGITLINK(mode)) {
+		struct strbuf buf = STRBUF_INIT;
+		strbuf_addf(&buf, "Subproject commit %s\n", oid_to_hex(oid));
+		*size = buf.len;
+		blob = strbuf_detach(&buf, NULL);
+	} else if (is_null_oid(oid)) {
+		/* deleted blob */
+		*size = 0;
+		return xcalloc(1, 1);
+	} else if (textconv) {
+		struct diff_filespec *df = alloc_filespec(path);
+		fill_filespec(df, oid, 1, mode);
+		*size = fill_textconv(r, textconv, df, &blob);
+		free_filespec(df);
+	} else {
+		blob = read_object_file(oid, &type, size);
+		if (type != OBJ_BLOB)
+			die("object '%s' is not a blob!", oid_to_hex(oid));
+	}
+	return blob;
+}
+
+
+// Source: combine-diff.c
+// Lines 312-340
+
+
+[ANSWER]
+MAY

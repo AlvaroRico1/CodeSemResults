@@ -1,0 +1,91 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'store_info' at line 27
+2. Pointer 'store_info' at line 27
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+dse_step5 (void)
+{
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, cfun)
+    {
+      bb_info_t bb_info = bb_table[bb->index];
+      insn_info_t insn_info = bb_info->last_insn;
+      bitmap v = bb_info->out;
+
+      while (insn_info)
+	{
+	  bool deleted = false;
+	  if (dump_file && insn_info->insn)
+	    {
+	      fprintf (dump_file, "starting to process insn %d\n",
+		       INSN_UID (insn_info->insn));
+	      bitmap_print (dump_file, v, "  v:  ", "\n");
+	    }
+
+	  /* There may have been code deleted by the dce pass run before
+	     this phase.  */
+	  if (insn_info->insn
+	      && INSN_P (insn_info->insn)
+	      && (!insn_info->cannot_delete)
+	      && (!bitmap_empty_p (v)))
+	    {
+	      store_info *store_info = insn_info->store_rec;
+
+	      /* Try to delete the current insn.  */
+	      deleted = true;
+
+	      /* Skip the clobbers.  */
+	      while (!store_info->is_set)
+		store_info = store_info->next;
+
+	      HOST_WIDE_INT i, offset, width;
+	      group_info *group_info = rtx_group_vec[store_info->group_id];
+
+	      if (!store_info->offset.is_constant (&offset)
+		  || !store_info->width.is_constant (&width))
+		deleted = false;
+	      else
+		{
+		  HOST_WIDE_INT end = offset + width;
+		  for (i = offset; i < end; i++)
+		    {
+		      int index = get_bitmap_index (group_info, i);
+
+		      if (dump_file && (dump_flags & TDF_DETAILS))
+			fprintf (dump_file, "i = %d, index = %d\n",
+				 (int) i, index);
+		      if (index == 0 || !bitmap_bit_p (v, index))
+			{
+			  if (dump_file && (dump_flags & TDF_DETAILS))
+			    fprintf (dump_file, "failing at i = %d\n",
+				     (int) i);
+			  deleted = false;
+			  break;
+			}
+		    }
+		}
+	      if (deleted)
+		{
+		  if (dbg_cnt (dse)
+		      && check_for_inc_dec_1 (insn_info))
+		    {
+		      delete_insn (insn_info->insn);
+		      insn_info->insn = NULL;
+		      globally_deleted++;
+		    }
+		}
+	    }
+
+
+// Source: dse.c
+// Lines 3453-3524
+
+
+[ANSWER]
+MUST

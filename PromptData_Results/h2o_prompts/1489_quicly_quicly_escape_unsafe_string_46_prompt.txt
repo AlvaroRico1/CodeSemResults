@@ -1,0 +1,38 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'end' at line 4
+2. Pointer 'src' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+char *quicly_escape_unsafe_string(char *buf, const void *bytes, size_t len)
+{
+    char *dst = buf;
+    const char *src = bytes, *end = src + len;
+
+    for (; src != end; ++src) {
+        if ((0x20 <= *src && *src <= 0x7e) && !(*src == '"' || *src == '\'' || *src == '\\')) {
+            *dst++ = *src;
+        } else {
+            *dst++ = '\\';
+            *dst++ = 'x';
+            quicly_byte_to_hex(dst, (uint8_t)*src);
+            dst += 2;
+        }
+    }
+    *dst = '\0';
+
+    return buf;
+}
+
+
+// Source: quicly.c
+// Lines 6156-6174
+
+
+[ANSWER]
+MUST

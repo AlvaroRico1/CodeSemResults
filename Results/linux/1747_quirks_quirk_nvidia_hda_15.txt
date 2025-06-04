@@ -1,0 +1,1 @@
+val,linux/drivers/pci/quirks.c,4,hdr_type,linux/drivers/pci/quirks.c,3,2

@@ -1,0 +1,37 @@
+static int diff_delta__from_two(
+	git_diff_generated *diff,
+	git_delta_t status,
+	const git_index_entry *old_entry,
+	uint32_t old_mode,
+	const git_index_entry *new_entry,
+	uint32_t new_mode,
+	const git_oid *new_id,
+	const char *matched_pathspec)
+{
+	const git_oid *old_id = &old_entry->id;
+	git_diff_delta *delta;
+	const char *canonical_path = old_entry->path;
+
+	if (status == GIT_DELTA_UNMODIFIED &&
+		DIFF_FLAG_ISNT_SET(diff, GIT_DIFF_INCLUDE_UNMODIFIED))
+		return 0;
+
+	if (!new_id)
+		new_id = &new_entry->id;
+
+	if (DIFF_FLAG_IS_SET(diff, GIT_DIFF_REVERSE)) {
+		uint32_t temp_mode = old_mode;
+		const git_index_entry *temp_entry = old_entry;
+		const git_oid *temp_id = old_id;
+
+		old_entry = new_entry;
+		new_entry = temp_entry;
+		old_mode = new_mode;
+		new_mode = temp_mode;
+		old_id = new_id;
+		new_id = temp_id;
+	}
+
+
+// Source: diff_generate.c
+// Lines 210-242

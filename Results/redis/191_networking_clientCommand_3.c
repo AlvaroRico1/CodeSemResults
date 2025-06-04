@@ -1,0 +1,201 @@
+void clientCommand(client *c) {
+    listNode *ln;
+    listIter li;
+
+    if (c->argc == 2 && !strcasecmp(c->argv[1]->ptr,"help")) {
+        const char *help[] = {
+"CACHING (YES|NO)",
+"    Enable/disable tracking of the keys for next command in OPTIN/OPTOUT modes.",
+"GETREDIR",
+"    Return the client ID we are redirecting to when tracking is enabled.",
+"GETNAME",
+"    Return the name of the current connection.",
+"ID",
+"    Return the ID of the current connection.",
+"INFO",
+"    Return information about the current client connection.",
+"KILL <ip:port>",
+"    Kill connection made from <ip:port>.",
+"KILL <option> <value> [<option> <value> [...]]",
+"    Kill connections. Options are:",
+"    * ADDR (<ip:port>|<unixsocket>:0)",
+"      Kill connections made from the specified address",
+"    * LADDR (<ip:port>|<unixsocket>:0)",
+"      Kill connections made to specified local address",
+"    * TYPE (normal|master|replica|pubsub)",
+"      Kill connections by type.",
+"    * USER <username>",
+"      Kill connections authenticated by <username>.",
+"    * SKIPME (YES|NO)",
+"      Skip killing current connection (default: yes).",
+"LIST [options ...]",
+"    Return information about client connections. Options:",
+"    * TYPE (NORMAL|MASTER|REPLICA|PUBSUB)",
+"      Return clients of specified type.",
+"UNPAUSE",
+"    Stop the current client pause, resuming traffic.",
+"PAUSE <timeout> [WRITE|ALL]",
+"    Suspend all, or just write, clients for <timout> milliseconds.",
+"REPLY (ON|OFF|SKIP)",
+"    Control the replies sent to the current connection.",
+"SETNAME <name>",
+"    Assign the name <name> to the current connection.",
+"UNBLOCK <clientid> [TIMEOUT|ERROR]",
+"    Unblock the specified blocked client.",
+"TRACKING (ON|OFF) [REDIRECT <id>] [BCAST] [PREFIX <prefix> [...]]",
+"         [OPTIN] [OPTOUT]",
+"    Control server assisted client side caching.",
+"TRACKINGINFO",
+"    Report tracking status for the current connection.",
+NULL
+        };
+        addReplyHelp(c, help);
+    } else if (!strcasecmp(c->argv[1]->ptr,"id") && c->argc == 2) {
+        /* CLIENT ID */
+        addReplyLongLong(c,c->id);
+    } else if (!strcasecmp(c->argv[1]->ptr,"info") && c->argc == 2) {
+        /* CLIENT INFO */
+        sds o = catClientInfoString(sdsempty(), c);
+        o = sdscatlen(o,"\n",1);
+        addReplyVerbatim(c,o,sdslen(o),"txt");
+        sdsfree(o);
+    } else if (!strcasecmp(c->argv[1]->ptr,"list")) {
+        /* CLIENT LIST */
+        int type = -1;
+        sds o = NULL;
+        if (c->argc == 4 && !strcasecmp(c->argv[2]->ptr,"type")) {
+            type = getClientTypeByName(c->argv[3]->ptr);
+            if (type == -1) {
+                addReplyErrorFormat(c,"Unknown client type '%s'",
+                    (char*) c->argv[3]->ptr);
+                return;
+            }
+        } else if (c->argc > 3 && !strcasecmp(c->argv[2]->ptr,"id")) {
+            int j;
+            o = sdsempty();
+            for (j = 3; j < c->argc; j++) {
+                long long cid;
+                if (getLongLongFromObjectOrReply(c, c->argv[j], &cid,
+                            "Invalid client ID")) {
+                    sdsfree(o);
+                    return;
+                }
+                client *cl = lookupClientByID(cid);
+                if (cl) {
+                    o = catClientInfoString(o, cl);
+                    o = sdscatlen(o, "\n", 1);
+                }
+            }
+        } else if (c->argc != 2) {
+            addReplyErrorObject(c,shared.syntaxerr);
+            return;
+        }
+
+        if (!o)
+            o = getAllClientsInfoString(type);
+        addReplyVerbatim(c,o,sdslen(o),"txt");
+        sdsfree(o);
+    } else if (!strcasecmp(c->argv[1]->ptr,"reply") && c->argc == 3) {
+        /* CLIENT REPLY ON|OFF|SKIP */
+        if (!strcasecmp(c->argv[2]->ptr,"on")) {
+            c->flags &= ~(CLIENT_REPLY_SKIP|CLIENT_REPLY_OFF);
+            addReply(c,shared.ok);
+        } else if (!strcasecmp(c->argv[2]->ptr,"off")) {
+            c->flags |= CLIENT_REPLY_OFF;
+        } else if (!strcasecmp(c->argv[2]->ptr,"skip")) {
+            if (!(c->flags & CLIENT_REPLY_OFF))
+                c->flags |= CLIENT_REPLY_SKIP_NEXT;
+        } else {
+            addReplyErrorObject(c,shared.syntaxerr);
+            return;
+        }
+    } else if (!strcasecmp(c->argv[1]->ptr,"kill")) {
+        /* CLIENT KILL <ip:port>
+         * CLIENT KILL <option> [value] ... <option> [value] */
+        char *addr = NULL;
+        char *laddr = NULL;
+        user *user = NULL;
+        int type = -1;
+        uint64_t id = 0;
+        int skipme = 1;
+        int killed = 0, close_this_client = 0;
+
+        if (c->argc == 3) {
+            /* Old style syntax: CLIENT KILL <addr> */
+            addr = c->argv[2]->ptr;
+            skipme = 0; /* With the old form, you can kill yourself. */
+        } else if (c->argc > 3) {
+            int i = 2; /* Next option index. */
+
+            /* New style syntax: parse options. */
+            while(i < c->argc) {
+                int moreargs = c->argc > i+1;
+
+                if (!strcasecmp(c->argv[i]->ptr,"id") && moreargs) {
+                    long long tmp;
+
+                    if (getLongLongFromObjectOrReply(c,c->argv[i+1],&tmp,NULL)
+                        != C_OK) return;
+                    id = tmp;
+                } else if (!strcasecmp(c->argv[i]->ptr,"type") && moreargs) {
+                    type = getClientTypeByName(c->argv[i+1]->ptr);
+                    if (type == -1) {
+                        addReplyErrorFormat(c,"Unknown client type '%s'",
+                            (char*) c->argv[i+1]->ptr);
+                        return;
+                    }
+                } else if (!strcasecmp(c->argv[i]->ptr,"addr") && moreargs) {
+                    addr = c->argv[i+1]->ptr;
+                } else if (!strcasecmp(c->argv[i]->ptr,"laddr") && moreargs) {
+                    laddr = c->argv[i+1]->ptr;
+                } else if (!strcasecmp(c->argv[i]->ptr,"user") && moreargs) {
+                    user = ACLGetUserByName(c->argv[i+1]->ptr,
+                                            sdslen(c->argv[i+1]->ptr));
+                    if (user == NULL) {
+                        addReplyErrorFormat(c,"No such user '%s'",
+                            (char*) c->argv[i+1]->ptr);
+                        return;
+                    }
+                } else if (!strcasecmp(c->argv[i]->ptr,"skipme") && moreargs) {
+                    if (!strcasecmp(c->argv[i+1]->ptr,"yes")) {
+                        skipme = 1;
+                    } else if (!strcasecmp(c->argv[i+1]->ptr,"no")) {
+                        skipme = 0;
+                    } else {
+                        addReplyErrorObject(c,shared.syntaxerr);
+                        return;
+                    }
+                } else {
+                    addReplyErrorObject(c,shared.syntaxerr);
+                    return;
+                }
+                i += 2;
+            }
+        } else {
+            addReplyErrorObject(c,shared.syntaxerr);
+            return;
+        }
+
+        /* Iterate clients killing all the matching clients. */
+        listRewind(server.clients,&li);
+        while ((ln = listNext(&li)) != NULL) {
+            client *client = listNodeValue(ln);
+            if (addr && strcmp(getClientPeerId(client),addr) != 0) continue;
+            if (laddr && strcmp(getClientSockname(client),laddr) != 0) continue;
+            if (type != -1 && getClientType(client) != type) continue;
+            if (id != 0 && client->id != id) continue;
+            if (user && client->user != user) continue;
+            if (c == client && skipme) continue;
+
+            /* Kill it. */
+            if (c == client) {
+                close_this_client = 1;
+            } else {
+                freeClient(client);
+            }
+            killed++;
+        }
+
+
+// Source: networking.c
+// Lines 2469-2665

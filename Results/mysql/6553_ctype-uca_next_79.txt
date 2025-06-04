@@ -1,0 +1,1 @@
+chars_skipped,mysql/strings/ctype-uca.cc,49,mblen,mysql/strings/ctype-uca.cc,15,2

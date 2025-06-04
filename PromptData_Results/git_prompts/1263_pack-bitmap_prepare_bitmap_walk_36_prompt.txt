@@ -1,0 +1,133 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'bitmap_git' at line 13
+2. Pointer 'haves_bitmap' at line 11
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+struct bitmap_index *prepare_bitmap_walk(struct rev_info *revs,
+					 struct list_objects_filter_options *filter,
+					 int filter_provided_objects)
+{
+	unsigned int i;
+
+	struct object_list *wants = NULL;
+	struct object_list *haves = NULL;
+
+	struct bitmap *wants_bitmap = NULL;
+	struct bitmap *haves_bitmap = NULL;
+
+	struct bitmap_index *bitmap_git;
+
+	/*
+	 * We can't do pathspec limiting with bitmaps, because we don't know
+	 * which commits are associated with which object changes (let alone
+	 * even which objects are associated with which paths).
+	 */
+	if (revs->prune)
+		return NULL;
+
+	if (!can_filter_bitmap(filter))
+		return NULL;
+
+	/* try to open a bitmapped pack, but don't parse it yet
+	 * because we may not need to use it */
+	CALLOC_ARRAY(bitmap_git, 1);
+	if (open_bitmap(revs->repo, bitmap_git) < 0)
+		goto cleanup;
+
+	for (i = 0; i < revs->pending.nr; ++i) {
+		struct object *object = revs->pending.objects[i].item;
+
+		if (object->type == OBJ_NONE)
+			parse_object_or_die(&object->oid, NULL);
+
+		while (object->type == OBJ_TAG) {
+			struct tag *tag = (struct tag *) object;
+
+			if (object->flags & UNINTERESTING)
+				object_list_insert(object, &haves);
+			else
+				object_list_insert(object, &wants);
+
+			object = parse_object_or_die(get_tagged_oid(tag), NULL);
+			object->flags |= (tag->object.flags & UNINTERESTING);
+		}
+
+		if (object->flags & UNINTERESTING)
+			object_list_insert(object, &haves);
+		else
+			object_list_insert(object, &wants);
+	}
+
+	/*
+	 * if we have a HAVES list, but none of those haves is contained
+	 * in the packfile that has a bitmap, we don't have anything to
+	 * optimize here
+	 */
+	if (haves && !in_bitmapped_pack(bitmap_git, haves))
+		goto cleanup;
+
+	/* if we don't want anything, we're done here */
+	if (!wants)
+		goto cleanup;
+
+	/*
+	 * now we're going to use bitmaps, so load the actual bitmap entries
+	 * from disk. this is the point of no return; after this the rev_list
+	 * becomes invalidated and we must perform the revwalk through bitmaps
+	 */
+	if (load_bitmap(bitmap_git) < 0)
+		goto cleanup;
+
+	object_array_clear(&revs->pending);
+
+	if (haves) {
+		revs->ignore_missing_links = 1;
+		haves_bitmap = find_objects(bitmap_git, revs, haves, NULL,
+					    filter);
+		reset_revision_walk();
+		revs->ignore_missing_links = 0;
+
+		if (haves_bitmap == NULL)
+			BUG("failed to perform bitmap walk");
+	}
+
+	wants_bitmap = find_objects(bitmap_git, revs, wants, haves_bitmap,
+				    filter);
+
+	if (!wants_bitmap)
+		BUG("failed to perform bitmap walk");
+
+	if (haves_bitmap)
+		bitmap_and_not(wants_bitmap, haves_bitmap);
+
+	filter_bitmap(bitmap_git, (filter && filter_provided_objects) ? NULL : wants,
+		      wants_bitmap, filter);
+
+	bitmap_git->result = wants_bitmap;
+	bitmap_git->haves = haves_bitmap;
+
+	object_list_free(&wants);
+	object_list_free(&haves);
+
+	return bitmap_git;
+
+cleanup:
+	free_bitmap_index(bitmap_git);
+	object_list_free(&wants);
+	object_list_free(&haves);
+	return NULL;
+}
+
+
+// Source: pack-bitmap.c
+// Lines 1212-1325
+
+
+[ANSWER]
+MUST

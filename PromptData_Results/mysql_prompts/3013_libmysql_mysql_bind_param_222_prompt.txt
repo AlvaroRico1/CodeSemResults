@@ -1,0 +1,56 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ext' at line 3
+2. Pointer 'binds' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool STDCALL mysql_bind_param(MYSQL *mysql, unsigned n_params,
+                              MYSQL_BIND *binds, const char **names) {
+  MYSQL_EXTENSION *ext = MYSQL_EXTENSION_PTR(mysql);
+
+  mysql_extension_bind_free(ext);
+
+  /* if any of the above is empty our work here is done */
+  if (!n_params || !binds || !names) return false;
+
+  ext->bind_info.n_params = n_params;
+  ext->bind_info.bind = (MYSQL_BIND *)my_malloc(
+      PSI_NOT_INSTRUMENTED, sizeof(MYSQL_BIND) * n_params, MYF(0));
+  ext->bind_info.names = (char **)my_malloc(PSI_NOT_INSTRUMENTED,
+                                            sizeof(char *) * n_params, MYF(0));
+
+  memcpy(ext->bind_info.bind, binds, sizeof(MYSQL_BIND) * n_params);
+
+  MYSQL_BIND *param = ext->bind_info.bind;
+  for (uint idx = 0; idx < n_params; idx++, param++) {
+    ext->bind_info.names[idx] =
+        names[idx] ? my_strdup(PSI_NOT_INSTRUMENTED, names[idx], MYF(0))
+                   : nullptr;
+    if (fix_param_bind(param, idx)) {
+      my_stpcpy(mysql->net.sqlstate, unknown_sqlstate);
+      sprintf(mysql->net.last_error,
+              ER_CLIENT(mysql->net.last_errno = CR_UNSUPPORTED_PARAM_TYPE),
+              param->buffer_type, idx);
+      for (uint idx2 = 0; idx2 <= idx; idx2++)
+        my_free(ext->bind_info.names[idx]);
+      my_free(ext->bind_info.names);
+      my_free(ext->bind_info.bind);
+      memset(&ext->bind_info, 0, sizeof(ext->bind_info));
+      return true;
+    }
+  }
+  return false;
+}
+
+
+// Source: libmysql.cc
+// Lines 2456-2492
+
+
+[ANSWER]
+MUST-NOT

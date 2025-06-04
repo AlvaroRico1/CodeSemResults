@@ -1,0 +1,34 @@
+server_client_attached_lost(struct client *c)
+{
+	struct session	*s;
+	struct window	*w;
+	struct client	*loop;
+	struct client	*found;
+
+	log_debug("lost attached client %p", c);
+
+	/*
+	 * By this point the session in the client has been cleared so walk all
+	 * windows to find any with this client as the latest.
+	 */
+	RB_FOREACH(w, windows, &windows) {
+		if (w->latest != c)
+			continue;
+
+		found = NULL;
+		TAILQ_FOREACH(loop, &clients, entry) {
+			s = loop->session;
+			if (loop == c || s == NULL || s->curw->window != w)
+				continue;
+			if (found == NULL || timercmp(&loop->activity_time,
+			    &found->activity_time, >))
+				found = loop;
+		}
+		if (found != NULL)
+			server_client_update_latest(found);
+	}
+}
+
+
+// Source: server-client.c
+// Lines 326-355

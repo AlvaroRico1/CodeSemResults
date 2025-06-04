@@ -1,0 +1,130 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'remote' at line 3
+2. Pointer 'found' at line 9
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_remote_lookup(git_remote **out, git_repository *repo, const char *name)
+{
+	git_remote *remote = NULL;
+	git_str buf = GIT_STR_INIT;
+	const char *val;
+	int error = 0;
+	git_config *config;
+	struct refspec_cb_data data = { NULL };
+	bool optional_setting_found = false, found;
+
+	GIT_ASSERT_ARG(out);
+	GIT_ASSERT_ARG(repo);
+	GIT_ASSERT_ARG(name);
+
+	if ((error = ensure_remote_name_is_valid(name)) < 0)
+		return error;
+
+	if ((error = git_repository_config_snapshot(&config, repo)) < 0)
+		return error;
+
+	remote = git__calloc(1, sizeof(git_remote));
+	GIT_ERROR_CHECK_ALLOC(remote);
+
+	remote->name = git__strdup(name);
+	GIT_ERROR_CHECK_ALLOC(remote->name);
+
+	if (git_vector_init(&remote->refs, 32, NULL) < 0 ||
+	    git_vector_init(&remote->refspecs, 2, NULL) < 0 ||
+	    git_vector_init(&remote->passive_refspecs, 2, NULL) < 0 ||
+	    git_vector_init(&remote->active_refspecs, 2, NULL) < 0) {
+		error = -1;
+		goto cleanup;
+	}
+
+	if ((error = git_str_printf(&buf, "remote.%s.url", name)) < 0)
+		goto cleanup;
+
+	if ((error = get_optional_config(&found, config, &buf, NULL, (void *)&val)) < 0)
+		goto cleanup;
+
+	optional_setting_found |= found;
+
+	remote->repo = repo;
+	remote->download_tags = GIT_REMOTE_DOWNLOAD_TAGS_AUTO;
+
+	if (found && strlen(val) > 0) {
+		if ((error = apply_insteadof(&remote->url, config, val, GIT_DIRECTION_FETCH, true)) < 0 ||
+		    (error = apply_insteadof(&remote->pushurl, config, val, GIT_DIRECTION_PUSH, false)) < 0)
+			goto cleanup;
+	}
+
+	val = NULL;
+	git_str_clear(&buf);
+	git_str_printf(&buf, "remote.%s.pushurl", name);
+
+	if ((error = get_optional_config(&found, config, &buf, NULL, (void *)&val)) < 0)
+		goto cleanup;
+
+	optional_setting_found |= found;
+
+	if (!optional_setting_found) {
+		error = GIT_ENOTFOUND;
+		git_error_set(GIT_ERROR_CONFIG, "remote '%s' does not exist", name);
+		goto cleanup;
+	}
+
+	if (found && strlen(val) > 0) {
+		if (remote->pushurl)
+			git__free(remote->pushurl);
+
+		if ((error = apply_insteadof(&remote->pushurl, config, val, GIT_DIRECTION_FETCH, true)) < 0)
+			goto cleanup;
+	}
+
+	data.remote = remote;
+	data.fetch = true;
+
+	git_str_clear(&buf);
+	git_str_printf(&buf, "remote.%s.fetch", name);
+
+	if ((error = get_optional_config(NULL, config, &buf, refspec_cb, &data)) < 0)
+		goto cleanup;
+
+	data.fetch = false;
+	git_str_clear(&buf);
+	git_str_printf(&buf, "remote.%s.push", name);
+
+	if ((error = get_optional_config(NULL, config, &buf, refspec_cb, &data)) < 0)
+		goto cleanup;
+
+	if ((error = download_tags_value(remote, config)) < 0)
+		goto cleanup;
+
+	if ((error = lookup_remote_prune_config(remote, config, name)) < 0)
+		goto cleanup;
+
+	/* Move the data over to where the matching functions can find them */
+	if ((error = dwim_refspecs(&remote->active_refspecs, &remote->refspecs, &remote->refs)) < 0)
+		goto cleanup;
+
+	*out = remote;
+
+cleanup:
+	git_config_free(config);
+	git_str_dispose(&buf);
+
+	if (error < 0)
+		git_remote_free(remote);
+
+	return error;
+}
+
+
+// Source: remote.c
+// Lines 458-568
+
+
+[ANSWER]
+MAY

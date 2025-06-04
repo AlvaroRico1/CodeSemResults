@@ -1,0 +1,43 @@
+h2o_file_handler_t *h2o_file_register(h2o_pathconf_t *pathconf, const char *real_path, const char **index_files,
+                                      h2o_mimemap_t *mimemap, int flags)
+{
+    h2o_file_handler_t *self;
+    size_t i;
+
+    if (index_files == NULL)
+        index_files = default_index_files;
+
+    /* allocate memory */
+    for (i = 0; index_files[i] != NULL; ++i)
+        ;
+    self =
+        (void *)h2o_create_handler(pathconf, offsetof(h2o_file_handler_t, index_files[0]) + sizeof(self->index_files[0]) * (i + 1));
+
+    /* setup callbacks */
+    self->super.on_context_init = on_context_init;
+    self->super.on_context_dispose = on_context_dispose;
+    self->super.dispose = on_handler_dispose;
+    self->super.on_req = on_req;
+
+    /* setup attributes */
+    self->conf_path = h2o_strdup_slashed(NULL, pathconf->path.base, pathconf->path.len);
+    self->real_path = h2o_strdup_slashed(NULL, real_path, SIZE_MAX);
+    if (mimemap != NULL) {
+        h2o_mem_addref_shared(mimemap);
+        self->mimemap = mimemap;
+    } else {
+        self->mimemap = h2o_mimemap_create();
+    }
+    self->flags = flags;
+    for (i = 0; index_files[i] != NULL; ++i) {
+        self->index_files[i] = h2o_strdup(NULL, index_files[i], SIZE_MAX);
+        if (self->max_index_file_len < self->index_files[i].len)
+            self->max_index_file_len = self->index_files[i].len;
+    }
+
+    return self;
+}
+
+
+// Source: file.c
+// Lines 886-924

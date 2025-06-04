@@ -1,0 +1,91 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'end' at line 15
+2. Pointer 'src' at line 15
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int client_collected_extensions(ptls_t *tls, ptls_handshake_properties_t *properties, ptls_raw_extension_t *slots)
+{
+    quicly_conn_t *conn = (void *)((char *)properties - offsetof(quicly_conn_t, crypto.handshake_properties));
+    int ret;
+
+    assert(properties->client.early_data_acceptance != PTLS_EARLY_DATA_ACCEPTANCE_UNKNOWN);
+
+    if (slots[0].type == UINT16_MAX) {
+        ret = PTLS_ALERT_MISSING_EXTENSION;
+        goto Exit;
+    }
+    assert(slots[0].type == get_transport_parameters_extension_id(conn->super.version));
+    assert(slots[1].type == UINT16_MAX);
+
+    const uint8_t *src = slots[0].data.base, *end = src + slots[0].data.len;
+    quicly_transport_parameters_t params;
+    quicly_cid_t original_dcid, initial_scid, retry_scid = {};
+
+    /* obtain pointer to initial CID of the peer. It is guaranteeed to exist in the first slot, as TP is received before any frame
+     * that updates the CID set. */
+    quicly_remote_cid_t *remote_cid = &conn->super.remote.cid_set.cids[0];
+    assert(remote_cid->sequence == 0);
+
+    /* decode */
+    if ((ret = quicly_decode_transport_parameter_list(&params, needs_cid_auth(conn) || is_retry(conn) ? &original_dcid : NULL,
+                                                      needs_cid_auth(conn) ? &initial_scid : &tp_cid_ignore,
+                                                      needs_cid_auth(conn) ? is_retry(conn) ? &retry_scid : NULL : &tp_cid_ignore,
+                                                      remote_cid->stateless_reset_token, src, end)) != 0)
+        goto Exit;
+
+    /* validate CIDs */
+    if (needs_cid_auth(conn) || is_retry(conn)) {
+        if (!quicly_cid_is_equal(&conn->super.original_dcid, ptls_iovec_init(original_dcid.cid, original_dcid.len))) {
+            ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;
+            goto Exit;
+        }
+    }
+    if (needs_cid_auth(conn)) {
+        if (!quicly_cid_is_equal(&remote_cid->cid, ptls_iovec_init(initial_scid.cid, initial_scid.len))) {
+            ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;
+            goto Exit;
+        }
+        if (is_retry(conn)) {
+            if (!quicly_cid_is_equal(&conn->retry_scid, ptls_iovec_init(retry_scid.cid, retry_scid.len))) {
+                ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;
+                goto Exit;
+            }
+        }
+    }
+
+    if (properties->client.early_data_acceptance == PTLS_EARLY_DATA_ACCEPTED) {
+#define ZERORTT_VALIDATE(x)                                                                                                        \
+    if (params.x < conn->super.remote.transport_params.x) {                                                                        \
+        ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;                                                                          \
+        goto Exit;                                                                                                                 \
+    }
+        ZERORTT_VALIDATE(max_data);
+        ZERORTT_VALIDATE(max_stream_data.bidi_local);
+        ZERORTT_VALIDATE(max_stream_data.bidi_remote);
+        ZERORTT_VALIDATE(max_stream_data.uni);
+        ZERORTT_VALIDATE(max_streams_bidi);
+        ZERORTT_VALIDATE(max_streams_uni);
+#undef ZERORTT_VALIDATE
+    }
+
+    /* store the results */
+    conn->super.remote.transport_params = params;
+    ack_frequency_set_next_update_at(conn);
+
+Exit:
+    return ret; /* negative error codes used to transmit QUIC errors through picotls */
+}
+
+
+// Source: quicly.c
+// Lines 2152-2223
+
+
+[ANSWER]
+MUST

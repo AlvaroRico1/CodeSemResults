@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'end' at line 3
+2. Pointer 'scan' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static size_t strip_cr_from_buf(char *start, size_t len)
+{
+	char *scan, *trail, *end = start + len;
+
+	for (scan = trail = start; scan < end; trail++, scan++) {
+		while (*scan == '\r')
+			scan++; /* skip '\r' */
+
+		if (trail != scan)
+			*trail = *scan;
+	}
+
+	*trail = '\0';
+
+	return (trail - start);
+}
+
+
+// Source: clar_libgit2.c
+// Lines 488-503
+
+
+[ANSWER]
+MUST-NOT

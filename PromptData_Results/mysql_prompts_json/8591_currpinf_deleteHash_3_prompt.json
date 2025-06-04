@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'value' at line 8\n2. Pointer 'valueTok' at line 8\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nCurrencyPluralInfo::deleteHash(Hashtable* hTable) {\n    if ( hTable == nullptr ) {\n        return;\n    }\n    int32_t pos = UHASH_FIRST;\n    const UHashElement* element = nullptr;\n    while ( (element = hTable->nextElement(pos)) != nullptr ) {\n        const UHashTok valueTok = element->value;\n        const UnicodeString* value = (UnicodeString*)valueTok.pointer;\n        delete value;\n    }\n\n\n// Source: currpinf.cpp\n// Lines 383-393\n",
+  "ANSWER": "MUST"
+}

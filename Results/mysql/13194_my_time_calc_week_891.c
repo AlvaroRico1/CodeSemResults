@@ -1,0 +1,39 @@
+uint calc_week(const MYSQL_TIME &my_time, uint week_behaviour, uint *year) {
+  uint days;
+  ulong daynr = calc_daynr(my_time.year, my_time.month, my_time.day);
+  ulong first_daynr = calc_daynr(my_time.year, 1, 1);
+  bool monday_first = (week_behaviour & WEEK_MONDAY_FIRST);
+  bool week_year = (week_behaviour & WEEK_YEAR);
+  bool first_weekday = (week_behaviour & WEEK_FIRST_WEEKDAY);
+
+  uint weekday = calc_weekday(first_daynr, !monday_first);
+  *year = my_time.year;
+
+  if (my_time.month == 1 && my_time.day <= 7 - weekday) {
+    if (!week_year &&
+        ((first_weekday && weekday != 0) || (!first_weekday && weekday >= 4)))
+      return 0;
+    week_year = true;
+    (*year)--;
+    first_daynr -= (days = calc_days_in_year(*year));
+    weekday = (weekday + 53 * 7 - days) % 7;
+  }
+
+  if ((first_weekday && weekday != 0) || (!first_weekday && weekday >= 4))
+    days = daynr - (first_daynr + (7 - weekday));
+  else
+    days = daynr - (first_daynr - weekday);
+
+  if (week_year && days >= 52 * 7) {
+    weekday = (weekday + calc_days_in_year(*year)) % 7;
+    if ((!first_weekday && weekday < 4) || (first_weekday && weekday == 0)) {
+      (*year)++;
+      return 1;
+    }
+  }
+  return days / 7 + 1;
+}
+
+
+// Source: my_time.cc
+// Lines 2204-2238

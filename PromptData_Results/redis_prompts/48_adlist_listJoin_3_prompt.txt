@@ -1,0 +1,36 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'o' at line 1
+2. Pointer 'l' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void listJoin(list *l, list *o) {
+    if (o->len == 0) return;
+
+    o->head->prev = l->tail;
+
+    if (l->tail)
+        l->tail->next = o->head;
+    else
+        l->head = o->head;
+
+    l->tail = o->tail;
+    l->len += o->len;
+
+    /* Setup other as an empty list. */
+    o->head = o->tail = NULL;
+    o->len = 0;
+}
+
+
+// Source: adlist.c
+// Lines 362-378
+
+
+[ANSWER]
+MUST

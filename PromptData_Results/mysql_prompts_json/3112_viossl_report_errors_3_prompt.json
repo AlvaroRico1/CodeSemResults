@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'flags' at line 5\n2. Pointer 'data' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void report_errors(SSL *ssl) {\n  unsigned long l;\n  const char *file;\n  const char *data;\n  int line, flags = 0;\n  char buf[512];\n\n  DBUG_TRACE;\n\n  while ((l = ERR_get_error_line_data(&file, &line, &data, &flags))) {\n    DBUG_PRINT(\"error\", (\"OpenSSL: %s:%s:%d:%s\\n\", ERR_error_string(l, buf),\n                         file, line, (flags & ERR_TXT_STRING) ? data : \"\"));\n  }\n\n  if (ssl)\n    DBUG_PRINT(\"error\",\n               (\"error: %s\", ERR_error_string(SSL_get_error(ssl, l), buf)));\n\n  DBUG_PRINT(\"info\", (\"socket_errno: %d\", socket_errno));\n}\n\n\n// Source: viossl.cc\n// Lines 123-142\n",
+  "ANSWER": "MAY"
+}

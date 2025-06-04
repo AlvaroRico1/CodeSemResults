@@ -1,0 +1,55 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'specific_field' at line 27
+2. Pointer 'repeated_field' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool MessageDifferencer::CompareMapField(
+    const Message& message1, const Message& message2,
+    const FieldDescriptor* repeated_field,
+    std::vector<SpecificField>* parent_fields) {
+  GOOGLE_DCHECK(repeated_field->is_map());
+
+  // the input FieldDescriptor is guaranteed to be repeated field.
+  const Reflection* reflection1 = message1.GetReflection();
+  const Reflection* reflection2 = message2.GetReflection();
+
+  // When both map fields are on map, do not sync to repeated field.
+  if (reflection1->GetMapData(message1, repeated_field)->IsMapValid() &&
+      reflection2->GetMapData(message2, repeated_field)->IsMapValid() &&
+      // TODO(jieluo): Add support for reporter
+      reporter_ == nullptr &&
+      // Users didn't set custom map field key comparator
+      map_field_key_comparator_.find(repeated_field) ==
+          map_field_key_comparator_.end() &&
+      // Users didn't set repeated field comparison
+      repeated_field_comparison_ == AS_LIST &&
+      // Users didn't set their own FieldComparator implementation
+      field_comparator_kind_ == kFCDefault) {
+    const FieldDescriptor* key_des = repeated_field->message_type()->map_key();
+    const FieldDescriptor* val_des =
+        repeated_field->message_type()->map_value();
+    std::vector<SpecificField> current_parent_fields(*parent_fields);
+    SpecificField specific_field;
+    specific_field.field = repeated_field;
+    current_parent_fields.push_back(specific_field);
+    if (!IsIgnored(message1, message2, key_des, current_parent_fields) &&
+        !IsIgnored(message1, message2, val_des, current_parent_fields)) {
+      return CompareMapFieldByMapReflection(message1, message2, repeated_field,
+                                            &current_parent_fields,
+                                            field_comparator_.default_impl);
+    }
+  }
+
+
+// Source: message_differencer.cc
+// Lines 1072-1107
+
+
+[ANSWER]
+MUST

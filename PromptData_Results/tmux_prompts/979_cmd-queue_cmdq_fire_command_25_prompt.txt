@@ -1,0 +1,95 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'item' at line 1
+2. Pointer 'saved' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+cmdq_fire_command(struct cmdq_item *item)
+{
+	const char		*name = cmdq_name(item->client);
+	struct cmdq_state	*state = item->state;
+	struct cmd		*cmd = item->cmd;
+	struct args		*args = cmd_get_args(cmd);
+	const struct cmd_entry	*entry = cmd_get_entry(cmd);
+	struct client		*tc, *saved = item->client;
+	enum cmd_retval		 retval;
+	struct cmd_find_state	*fsp, fs;
+	int			 flags, quiet = 0;
+	char			*tmp;
+
+	if (cfg_finished)
+		cmdq_add_message(item);
+	if (log_get_level() > 1) {
+		tmp = cmd_print(cmd);
+		log_debug("%s %s: (%u) %s", __func__, name, item->group, tmp);
+		free(tmp);
+	}
+
+	flags = !!(state->flags & CMDQ_STATE_CONTROL);
+	cmdq_guard(item, "begin", flags);
+
+	if (item->client == NULL)
+		item->client = cmd_find_client(item, NULL, 1);
+
+	if (entry->flags & CMD_CLIENT_CANFAIL)
+		quiet = 1;
+	if (entry->flags & CMD_CLIENT_CFLAG) {
+		tc = cmd_find_client(item, args_get(args, 'c'), quiet);
+		if (tc == NULL && !quiet) {
+			retval = CMD_RETURN_ERROR;
+			goto out;
+		}
+	} else if (entry->flags & CMD_CLIENT_TFLAG) {
+		tc = cmd_find_client(item, args_get(args, 't'), quiet);
+		if (tc == NULL && !quiet) {
+			retval = CMD_RETURN_ERROR;
+			goto out;
+		}
+	} else
+		tc = cmd_find_client(item, NULL, 1);
+	item->target_client = tc;
+
+	retval = cmdq_find_flag(item, &item->source, &entry->source);
+	if (retval == CMD_RETURN_ERROR)
+		goto out;
+	retval = cmdq_find_flag(item, &item->target, &entry->target);
+	if (retval == CMD_RETURN_ERROR)
+		goto out;
+
+	retval = entry->exec(cmd, item);
+	if (retval == CMD_RETURN_ERROR)
+		goto out;
+
+	if (entry->flags & CMD_AFTERHOOK) {
+		if (cmd_find_valid_state(&item->target))
+			fsp = &item->target;
+		else if (cmd_find_valid_state(&item->state->current))
+			fsp = &item->state->current;
+		else if (cmd_find_from_client(&fs, item->client, 0) == 0)
+			fsp = &fs;
+		else
+			goto out;
+		cmdq_insert_hook(fsp->s, item, fsp, "after-%s", entry->name);
+	}
+
+out:
+	item->client = saved;
+	if (retval == CMD_RETURN_ERROR)
+		cmdq_guard(item, "error", flags);
+	else
+		cmdq_guard(item, "end", flags);
+	return (retval);
+}
+
+
+// Source: cmd-queue.c
+// Lines 579-654
+
+
+[ANSWER]
+MUST

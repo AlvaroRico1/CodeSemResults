@@ -1,0 +1,1 @@
+tiop,tmux/cmd-new-session.c,10,tio,tmux/cmd-new-session.c,10,1

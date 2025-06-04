@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'n' at line 10\n2. Pointer 'buf' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid Prepared_statement::trace_parameter_types() {\n  if (param_count == 0) return;\n  Opt_trace_object anon(&thd->opt_trace);\n  Opt_trace_array typ(&thd->opt_trace, \"statement_parameters\");\n  Item_param **end = param_array + param_count;\n  char buf[50];\n\n  for (Item_param **it = param_array; it < end; ++it) {\n    enum_field_types t = (*it)->data_type();\n    const char *n = fieldtype2str(t);\n    switch (t) {\n      case MYSQL_TYPE_NEWDECIMAL:\n      case MYSQL_TYPE_TIME:\n      case MYSQL_TYPE_DATETIME:\n        snprintf(buf, sizeof(buf), \"%s decimals=%d\", n, (*it)->decimals);\n        n = buf;\n      default:;\n    }\n    typ.add_alnum(n);\n  }\n\n\n// Source: sql_prepare.cc\n// Lines 1471-1490\n",
+  "ANSWER": "MUST"
+}

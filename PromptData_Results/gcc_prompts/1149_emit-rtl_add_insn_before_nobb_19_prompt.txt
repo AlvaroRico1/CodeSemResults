@@ -1,0 +1,40 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'seq' at line 11
+2. Pointer 'insn' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+add_insn_before_nobb (rtx_insn *insn, rtx_insn *before)
+{
+  rtx_insn *prev = PREV_INSN (before);
+
+  gcc_assert (!optimize || !before->deleted ());
+
+  link_insn_into_chain (insn, prev, before);
+
+  if (prev == NULL)
+    {
+      struct sequence_stack *seq;
+
+      for (seq = get_current_sequence (); seq; seq = seq->next)
+	if (before == seq->first)
+	  {
+	    seq->first = insn;
+	    break;
+	  }
+
+      gcc_assert (seq);
+    }
+
+
+// Source: emit-rtl.c
+// Lines 4188-4208
+
+
+[ANSWER]
+MUST

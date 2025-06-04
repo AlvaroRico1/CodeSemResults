@@ -1,0 +1,100 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'store_info' at line 68
+2. Pointer 'store_info' at line 68
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+dse_step1 (void)
+{
+  basic_block bb;
+  bitmap regs_live = BITMAP_ALLOC (&reg_obstack);
+
+  cselib_init (0);
+  all_blocks = BITMAP_ALLOC (NULL);
+  bitmap_set_bit (all_blocks, ENTRY_BLOCK);
+  bitmap_set_bit (all_blocks, EXIT_BLOCK);
+
+  /* For -O1 reduce the maximum number of active local stores for RTL DSE
+     since this can consume huge amounts of memory (PR89115).  */
+  int max_active_local_stores = param_max_dse_active_local_stores;
+  if (optimize < 2)
+    max_active_local_stores /= 10;
+
+  FOR_ALL_BB_FN (bb, cfun)
+    {
+      insn_info_t ptr;
+      bb_info_t bb_info = dse_bb_info_type_pool.allocate ();
+
+      memset (bb_info, 0, sizeof (dse_bb_info_type));
+      bitmap_set_bit (all_blocks, bb->index);
+      bb_info->regs_live = regs_live;
+
+      bitmap_copy (regs_live, DF_LR_IN (bb));
+      df_simulate_initialize_forwards (bb, regs_live);
+
+      bb_table[bb->index] = bb_info;
+      cselib_discard_hook = remove_useless_values;
+
+      if (bb->index >= NUM_FIXED_BLOCKS)
+	{
+	  rtx_insn *insn;
+
+	  active_local_stores = NULL;
+	  active_local_stores_len = 0;
+	  cselib_clear_table ();
+
+	  /* Scan the insns.  */
+	  FOR_BB_INSNS (bb, insn)
+	    {
+	      if (INSN_P (insn))
+		scan_insn (bb_info, insn, max_active_local_stores);
+	      cselib_process_insn (insn);
+	      if (INSN_P (insn))
+		df_simulate_one_insn_forwards (bb, insn, regs_live);
+	    }
+
+	  /* This is something of a hack, because the global algorithm
+	     is supposed to take care of the case where stores go dead
+	     at the end of the function.  However, the global
+	     algorithm must take a more conservative view of block
+	     mode reads than the local alg does.  So to get the case
+	     where you have a store to the frame followed by a non
+	     overlapping block more read, we look at the active local
+	     stores at the end of the function and delete all of the
+	     frame and spill based ones.  */
+	  if (stores_off_frame_dead_at_return
+	      && (EDGE_COUNT (bb->succs) == 0
+		  || (single_succ_p (bb)
+		      && single_succ (bb) == EXIT_BLOCK_PTR_FOR_FN (cfun)
+		      && ! crtl->calls_eh_return)))
+	    {
+	      insn_info_t i_ptr = active_local_stores;
+	      while (i_ptr)
+		{
+		  store_info *store_info = i_ptr->store_rec;
+
+		  /* Skip the clobbers.  */
+		  while (!store_info->is_set)
+		    store_info = store_info->next;
+		  if (store_info->group_id >= 0)
+		    {
+		      group_info *group = rtx_group_vec[store_info->group_id];
+		      if (group->frame_related && !i_ptr->cannot_delete)
+			delete_dead_store_insn (i_ptr);
+		    }
+
+		  i_ptr = i_ptr->next_local_store;
+		}
+
+
+// Source: dse.c
+// Lines 2700-2780
+
+
+[ANSWER]
+MUST

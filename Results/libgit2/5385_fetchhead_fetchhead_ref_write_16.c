@@ -1,0 +1,42 @@
+static int fetchhead_ref_write(
+	git_filebuf *file,
+	git_fetchhead_ref *fetchhead_ref)
+{
+	char oid[GIT_OID_HEXSZ + 1];
+	const char *type, *name;
+	int head = 0;
+
+	GIT_ASSERT_ARG(file);
+	GIT_ASSERT_ARG(fetchhead_ref);
+
+	git_oid_fmt(oid, &fetchhead_ref->oid);
+	oid[GIT_OID_HEXSZ] = '\0';
+
+	if (git__prefixcmp(fetchhead_ref->ref_name, GIT_REFS_HEADS_DIR) == 0) {
+		type = "branch ";
+		name = fetchhead_ref->ref_name + strlen(GIT_REFS_HEADS_DIR);
+	} else if(git__prefixcmp(fetchhead_ref->ref_name,
+		GIT_REFS_TAGS_DIR) == 0) {
+		type = "tag ";
+		name = fetchhead_ref->ref_name + strlen(GIT_REFS_TAGS_DIR);
+	} else if (!git__strcmp(fetchhead_ref->ref_name, GIT_HEAD_FILE)) {
+		head = 1;
+	} else {
+		type = "";
+		name = fetchhead_ref->ref_name;
+	}
+
+	if (head)
+		return git_filebuf_printf(file, "%s\t\t%s\n", oid, fetchhead_ref->remote_url);
+
+	return git_filebuf_printf(file, "%s\t%s\t%s'%s' of %s\n",
+		oid,
+		(fetchhead_ref->is_merge) ? "" : "not-for-merge",
+		type,
+		name,
+		fetchhead_ref->remote_url);
+}
+
+
+// Source: fetchhead.c
+// Lines 104-141

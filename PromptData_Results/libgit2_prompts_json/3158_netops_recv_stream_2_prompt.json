@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'io' at line 3\n2. Pointer 'buf' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int recv_stream(gitno_buffer *buf)\n{\n\tgit_stream *io = (git_stream *) buf->cb_data;\n\tsize_t readlen = buf->len - buf->offset;\n\tssize_t ret;\n\n\treadlen = min(readlen, INT_MAX);\n\n\tret = git_stream_read(io, buf->data + buf->offset, (int)readlen);\n\tif (ret < 0)\n\t\treturn -1;\n\n\tbuf->offset += ret;\n\treturn (int)ret;\n}\n\n\n// Source: netops.c\n// Lines 36-50\n",
+  "ANSWER": "MUST"
+}

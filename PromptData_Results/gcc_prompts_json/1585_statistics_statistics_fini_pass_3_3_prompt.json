@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'counter' at line 4\n2. Pointer 'slot' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatistics_fini_pass_3 (statistics_counter **slot,\n\t\t\tvoid *data ATTRIBUTE_UNUSED)\n{\n  statistics_counter *counter = *slot;\n  counter->prev_dumped_count = counter->count;\n  return 1;\n}\n\n\n// Source: statistics.c\n// Lines 172-178\n",
+  "ANSWER": "MUST"
+}

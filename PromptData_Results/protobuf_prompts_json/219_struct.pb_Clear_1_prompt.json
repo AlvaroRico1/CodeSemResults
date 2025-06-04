@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer '_this' at line None\n2. Pointer 'object' at line None\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid Struct::Clear() {\n// @@protoc_insertion_point(message_clear_start:google.protobuf.Struct)\n  uint32_t cached_has_bits = 0;\n  // Prevent compiler warnings about cached_has_bits being unused\n  (void) cached_has_bits;\n\n  fields_.Clear();\n  _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();\n}\n\n\n// Source: struct.pb.cc\n// Lines 240-248\n",
+  "ANSWER": "MUST"
+}

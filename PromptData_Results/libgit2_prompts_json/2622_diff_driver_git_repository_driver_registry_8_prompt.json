@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'reg' at line 4\n2. Pointer 'newreg' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic git_diff_driver_registry *git_repository_driver_registry(\n\tgit_repository *repo)\n{\n\tgit_diff_driver_registry *reg = git_atomic_load(repo->diff_drivers), *newreg;\n\tif (reg)\n\t\treturn reg;\n\n\tnewreg = git_diff_driver_registry_new();\n\tif (!newreg) {\n\t\tgit_error_set(GIT_ERROR_REPOSITORY, \"unable to create diff driver registry\");\n\t\treturn newreg;\n\t}\n\treg = git_atomic_compare_and_swap(&repo->diff_drivers, NULL, newreg);\n\tif (!reg) {\n\t\treg = newreg;\n\t} else {\n\t\t/* if we race, free losing allocation */\n\t\tgit_diff_driver_registry_free(newreg);\n\t}\n\treturn reg;\n}\n\n\n// Source: diff_driver.c\n// Lines 139-159\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,29 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'netns' at line 1
+2. Pointer 'clp' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void nfs_netns_sysfs_setup(struct nfs_net *netns, struct net *net)
+{
+	struct nfs_netns_client *clp;
+
+	clp = nfs_netns_client_alloc(nfs_client_kobj, net);
+	if (clp) {
+		netns->nfs_client = clp;
+		kobject_uevent(&clp->kobject, KOBJ_ADD);
+	}
+}
+
+
+// Source: sysfs.c
+// Lines 166-175
+
+
+[ANSWER]
+MUST

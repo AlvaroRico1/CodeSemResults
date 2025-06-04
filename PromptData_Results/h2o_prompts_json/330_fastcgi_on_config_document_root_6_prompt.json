@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'self' at line 3\n2. Pointer 'cmd' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int on_config_document_root(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)\n{\n    struct fastcgi_configurator_t *self = (void *)cmd->configurator;\n\n    if (node->data.scalar[0] == '\\0') {\n        /* unset */\n        self->vars->document_root = h2o_iovec_init(NULL, 0);\n    } else if (node->data.scalar[0] == '/') {\n        /* set */\n        self->vars->document_root = h2o_iovec_init(node->data.scalar, strlen(node->data.scalar));\n    } else {\n        h2o_configurator_errprintf(cmd, node, \"value does not start from `/`\");\n        return -1;\n    }\n    return 0;\n}\n\n\n// Source: fastcgi.c\n// Lines 54-69\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,1 @@
+not_before,h2o/src/ssl.c,8,not_after,h2o/src/ssl.c,8,2

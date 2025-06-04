@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'hostconf' at line 3\n2. Pointer 'ctx' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int on_config_strict_match(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)\n{\n    h2o_hostconf_t *hostconf = ctx->hostconf;\n    ssize_t on;\n\n    if ((on = h2o_configurator_get_one_of(cmd, node, \"OFF,ON\")) == -1)\n        return -1;\n    hostconf->strict_match = (uint8_t)on;\n    return 0;\n}\n\n\n// Source: configurator.c\n// Lines 398-407\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,169 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'buff' at line 6
+2. Pointer 'mpvio' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static bool prep_client_reply_packet(MCPVIO_EXT *mpvio, const uchar *data,
+                                     int data_len, char **buff_out,
+                                     int *buff_len) {
+  DBUG_TRACE;
+  MYSQL *mysql = mpvio->mysql;
+  char *buff, *end;
+  size_t buff_size;
+  size_t connect_attrs_len =
+      (mysql->server_capabilities & CLIENT_CONNECT_ATTRS &&
+       mysql->options.extension)
+          ? mysql->options.extension->connection_attributes_length
+          : 0;
+  unsigned int compress_level = 0;
+  bool server_zstd =
+      (mysql->server_capabilities & CLIENT_ZSTD_COMPRESSION_ALGORITHM);
+  bool client_zstd =
+      (mysql->options.client_flag & CLIENT_ZSTD_COMPRESSION_ALGORITHM);
+
+  /* validate compression configuration */
+  ENSURE_EXTENSIONS_PRESENT(&mysql->options);
+  if (mysql->options.extension->compression_algorithm) {
+    std::string algorithm = mysql->options.extension->compression_algorithm;
+    if (!algorithm.empty() &&
+        validate_compression_attributes(algorithm, std::string(), true)) {
+      set_mysql_error(mysql, CR_COMPRESSION_WRONGLY_CONFIGURED,
+                      unknown_sqlstate);
+      return true;
+    }
+  }
+
+  /**
+    If server/client is configured to use zstd compression then set compression
+    level if specified, else set level to a default value.
+  */
+  if (server_zstd && client_zstd) {
+    if (mysql->options.extension &&
+        mysql->options.extension->zstd_compression_level)
+      compress_level = mysql->options.extension->zstd_compression_level;
+    else
+      compress_level = default_zstd_compression_level;
+  }
+  /* Remove those compression capabilities that server does not support. */
+  if (!(mysql->server_capabilities & CLIENT_COMPRESS))
+    mysql->client_flag &= ~CLIENT_COMPRESS;
+  if (!(mysql->server_capabilities & CLIENT_ZSTD_COMPRESSION_ALGORITHM))
+    mysql->client_flag &= ~CLIENT_ZSTD_COMPRESSION_ALGORITHM;
+  /*
+   If server and client have no compression algorithms in common, we must
+   fall back to uncompressed. In that case, check that uncompressed is
+   allowed by client.
+  */
+  if (!(mysql->client_flag & CLIENT_COMPRESS) &&
+      !(mysql->client_flag & CLIENT_ZSTD_COMPRESSION_ALGORITHM) &&
+      mysql->options.extension->connection_compressed) {
+    set_mysql_error(mysql, CR_COMPRESSION_WRONGLY_CONFIGURED, unknown_sqlstate);
+    return true;
+  }
+  assert(connect_attrs_len < MAX_CONNECTION_ATTR_STORAGE_LENGTH);
+
+  *buff_out = nullptr;
+  *buff_len = 0;
+
+  /*
+    Fixed size of the packet is 32 bytes. See mysql_fill_packet_header.
+    +9 because data is a length encoded binary where meta data size is max 9.
+  */
+  buff_size = 33 + USERNAME_LENGTH + data_len + 9 + NAME_LEN + NAME_LEN +
+              connect_attrs_len + 9 + ((server_zstd && client_zstd) ? 1 : 0);
+
+  buff = static_cast<char *>(
+      my_malloc(PSI_NOT_INSTRUMENTED, buff_size, MYF(MY_WME | MY_ZEROFILL)));
+
+  /* The client_flags is already calculated. Just fill in the packet header */
+  end = mysql_fill_packet_header(mysql, buff, buff_size);
+
+  DBUG_PRINT(
+      "info",
+      ("Server version = '%s'  capabilites: %lu  status: %u  client_flag: %lu",
+       mysql->server_version, mysql->server_capabilities, mysql->server_status,
+       mysql->client_flag));
+
+  static_assert(MYSQL_USERNAME_LENGTH == USERNAME_LENGTH, "");
+
+  /* This needs to be changed as it's not useful with big packets */
+  if (mysql->user[0])
+    strmake(end, mysql->user, USERNAME_LENGTH);
+  else {
+#if defined(KERBEROS_LIB_CONFIGURED)
+    /*
+      Kerberos user name should have already read inside LDAP SASL client
+      plugin. If it is still empty we should return error.
+    */
+    if (strcmp(mpvio->plugin->name, "authentication_ldap_sasl_client") == 0) {
+      if (!mysql->user[0]) {
+        set_mysql_error(mysql, CR_KERBEROS_USER_NOT_FOUND, unknown_sqlstate);
+        return true;
+      }
+    } else
+#endif
+      read_user_name(end);
+  }
+
+  /* We have to handle different version of handshake here */
+  DBUG_PRINT("info", ("user: %s", end));
+  end = strend(end) + 1;
+  if (data_len) {
+    /*
+      Since the older versions of server do not have
+      CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA capability,
+      a check is performed on this before sending auth data.
+      If lenenc support is not available, the data is sent
+      in the format of first byte representing the length of
+      the string followed by the actual string.
+      */
+    if (mysql->server_capabilities & CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA)
+      end = write_length_encoded_string4(end, (char *)(buff + buff_size), data,
+                                         data + data_len);
+    else
+      end =
+          write_string(end, (char *)(buff + buff_size), data, data + data_len);
+    if (end == nullptr) goto error;
+  } else
+    *end++ = 0;
+
+  /* Add database if needed */
+  if (mpvio->db && (mysql->server_capabilities & CLIENT_CONNECT_WITH_DB)) {
+    end = strmake(end, mpvio->db, NAME_LEN) + 1;
+    mysql->db = my_strdup(key_memory_MYSQL, mpvio->db, MYF(MY_WME));
+  }
+
+  if (mysql->server_capabilities & CLIENT_PLUGIN_AUTH)
+    end = strmake(end, mpvio->plugin->name, NAME_LEN) + 1;
+
+  end = (char *)send_client_connect_attrs(mysql, (uchar *)end);
+
+  if (server_zstd && client_zstd) {
+    /* send compression level if both client and server support it */
+    *end = static_cast<unsigned char>(compress_level);
+    end++;
+  }
+
+  *buff_out = buff;
+  *buff_len = end - buff;
+
+  return false;
+
+error:
+  my_free(buff);
+  return true;
+}
+
+
+// Source: client.cc
+// Lines 4711-4860
+
+
+[ANSWER]
+MUST-NOT

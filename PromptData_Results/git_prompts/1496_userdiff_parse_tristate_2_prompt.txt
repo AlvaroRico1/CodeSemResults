@@ -1,0 +1,27 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'namelen' at line None
+2. Pointer 'name' at line None
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int parse_tristate(int *b, const char *k, const char *v)
+{
+	if (v && !strcasecmp(v, "auto"))
+		*b = -1;
+	else
+		*b = git_config_bool(k, v);
+	return 0;
+}
+
+
+// Source: userdiff.c
+// Lines 323-330
+
+
+[ANSWER]
+MAY

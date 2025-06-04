@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'clp' at line 3\n2. Pointer 'server' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void show_lease(struct seq_file *m, struct nfs_server *server)\n{\n\tstruct nfs_client *clp = server->nfs_client;\n\tunsigned long expire;\n\n\tseq_printf(m, \",lease_time=%ld\", clp->cl_lease_time / HZ);\n\texpire = clp->cl_last_renewal + clp->cl_lease_time;\n\tseq_printf(m, \",lease_expired=%ld\",\n\t\t   time_after(expire, jiffies) ?  0 : (jiffies - expire) / HZ);\n}\n\n\n// Source: super.c\n// Lines 743-752\n",
+  "ANSWER": "MUST"
+}

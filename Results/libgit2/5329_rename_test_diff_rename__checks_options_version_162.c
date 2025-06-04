@@ -1,0 +1,35 @@
+void test_diff_rename__checks_options_version(void)
+{
+	const char *old_sha = INITIAL_COMMIT;
+	const char *new_sha = COPY_RENAME_COMMIT;
+	git_tree *old_tree, *new_tree;
+	git_diff *diff;
+	git_diff_options diffopts = GIT_DIFF_OPTIONS_INIT;
+	git_diff_find_options opts = GIT_DIFF_FIND_OPTIONS_INIT;
+	const git_error *err;
+
+	old_tree = resolve_commit_oid_to_tree(g_repo, old_sha);
+	new_tree = resolve_commit_oid_to_tree(g_repo, new_sha);
+	diffopts.flags |= GIT_DIFF_INCLUDE_UNMODIFIED;
+	cl_git_pass(git_diff_tree_to_tree(
+		&diff, g_repo, old_tree, new_tree, &diffopts));
+
+	opts.version = 0;
+	cl_git_fail(git_diff_find_similar(diff, &opts));
+	err = git_error_last();
+	cl_assert_equal_i(GIT_ERROR_INVALID, err->klass);
+
+	git_error_clear();
+	opts.version = 1024;
+	cl_git_fail(git_diff_find_similar(diff, &opts));
+	err = git_error_last();
+	cl_assert_equal_i(GIT_ERROR_INVALID, err->klass);
+
+	git_diff_free(diff);
+	git_tree_free(old_tree);
+	git_tree_free(new_tree);
+}
+
+
+// Source: rename.c
+// Lines 158-188

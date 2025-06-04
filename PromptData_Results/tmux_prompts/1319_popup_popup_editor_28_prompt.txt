@@ -1,0 +1,65 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'pe' at line 4
+2. Pointer 'arg' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+popup_editor(struct client *c, const char *buf, size_t len,
+    popup_finish_edit_cb cb, void *arg)
+{
+	struct popup_editor	*pe;
+	int			 fd;
+	FILE			*f;
+	char			*cmd;
+	char			 path[] = _PATH_TMP "tmux.XXXXXXXX";
+	const char		*editor;
+	u_int			 px, py, sx, sy;
+
+	editor = options_get_string(global_options, "editor");
+	if (*editor == '\0')
+		return (-1);
+
+	fd = mkstemp(path);
+	if (fd == -1)
+		return (-1);
+	f = fdopen(fd, "w");
+	if (fwrite(buf, len, 1, f) != 1) {
+		fclose(f);
+		return (-1);
+	}
+	fclose(f);
+
+	pe = xcalloc(1, sizeof *pe);
+	pe->path = xstrdup(path);
+	pe->cb = cb;
+	pe->arg = arg;
+
+	sx = c->tty.sx * 9 / 10;
+	sy = c->tty.sy * 9 / 10;
+	px = (c->tty.sx / 2) - (sx / 2);
+	py = (c->tty.sy / 2) - (sy / 2);
+
+	xasprintf(&cmd, "%s %s", editor, path);
+	if (popup_display(POPUP_INTERNAL|POPUP_CLOSEEXIT, BOX_LINES_DEFAULT,
+	    NULL, px, py, sx, sy, NULL, cmd, 0, NULL, _PATH_TMP, NULL, c, NULL,
+	    popup_editor_close_cb, pe) != 0) {
+		popup_editor_free(pe);
+		free(cmd);
+		return (-1);
+	}
+	free(cmd);
+	return (0);
+}
+
+
+// Source: popup.c
+// Lines 745-790
+
+
+[ANSWER]
+MUST

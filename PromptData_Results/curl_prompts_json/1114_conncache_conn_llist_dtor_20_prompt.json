@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'conn' at line 3\n2. Pointer 'element' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void conn_llist_dtor(void *user, void *element)\n{\n  struct connectdata *conn = element;\n  (void)user;\n  conn->bundle = NULL;\n}\n\n\n// Source: conncache.c\n// Lines 46-51\n",
+  "ANSWER": "MUST"
+}

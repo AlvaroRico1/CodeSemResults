@@ -1,0 +1,1 @@
+tmp,linux/fs/proc/vmcore.c,5,elfptr,linux/fs/proc/vmcore.c,1,1

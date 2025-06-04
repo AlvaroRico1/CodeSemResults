@@ -1,0 +1,1 @@
+has_errors,git/builtin/update-index.c,5,prefix,git/builtin/update-index.c,6,2

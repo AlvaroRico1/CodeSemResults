@@ -1,0 +1,34 @@
+static __be32 encode_getattr_res(struct svc_rqst *rqstp, struct xdr_stream *xdr,
+		const void *resp)
+{
+	const struct cb_getattrres *res = resp;
+	__be32 *savep = NULL;
+	__be32 status = res->status;
+	
+	if (unlikely(status != 0))
+		goto out;
+	status = encode_attr_bitmap(xdr, res->bitmap, ARRAY_SIZE(res->bitmap));
+	if (unlikely(status != 0))
+		goto out;
+	status = cpu_to_be32(NFS4ERR_RESOURCE);
+	savep = xdr_reserve_space(xdr, sizeof(*savep));
+	if (unlikely(!savep))
+		goto out;
+	status = encode_attr_change(xdr, res->bitmap, res->change_attr);
+	if (unlikely(status != 0))
+		goto out;
+	status = encode_attr_size(xdr, res->bitmap, res->size);
+	if (unlikely(status != 0))
+		goto out;
+	status = encode_attr_ctime(xdr, res->bitmap, &res->ctime);
+	if (unlikely(status != 0))
+		goto out;
+	status = encode_attr_mtime(xdr, res->bitmap, &res->mtime);
+	*savep = htonl((unsigned int)((char *)xdr->p - (char *)(savep+1)));
+out:
+	return status;
+}
+
+
+// Source: callback_xdr.c
+// Lines 684-713

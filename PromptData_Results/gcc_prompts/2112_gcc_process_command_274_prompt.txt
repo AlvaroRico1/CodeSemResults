@@ -1,0 +1,300 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'consumed' at line 245
+2. Pointer 'endp' at line 120
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+process_command (unsigned int decoded_options_count,
+		 struct cl_decoded_option *decoded_options)
+{
+  const char *temp;
+  char *temp1;
+  char *tooldir_prefix, *tooldir_prefix2;
+  char *(*get_relative_prefix) (const char *, const char *,
+				const char *) = NULL;
+  struct cl_option_handlers handlers;
+  unsigned int j;
+
+  gcc_exec_prefix = env.get ("GCC_EXEC_PREFIX");
+
+  n_switches = 0;
+  n_infiles = 0;
+  added_libraries = 0;
+
+  /* Figure compiler version from version string.  */
+
+  compiler_version = temp1 = xstrdup (version_string);
+
+  for (; *temp1; ++temp1)
+    {
+      if (*temp1 == ' ')
+	{
+	  *temp1 = '\0';
+	  break;
+	}
+    }
+
+  /* Handle any -no-canonical-prefixes flag early, to assign the function
+     that builds relative prefixes.  This function creates default search
+     paths that are needed later in normal option handling.  */
+
+  for (j = 1; j < decoded_options_count; j++)
+    {
+      if (decoded_options[j].opt_index == OPT_no_canonical_prefixes)
+	{
+	  get_relative_prefix = make_relative_prefix_ignore_links;
+	  break;
+	}
+    }
+  if (! get_relative_prefix)
+    get_relative_prefix = make_relative_prefix;
+
+  /* Set up the default search paths.  If there is no GCC_EXEC_PREFIX,
+     see if we can create it from the pathname specified in
+     decoded_options[0].arg.  */
+
+  gcc_libexec_prefix = standard_libexec_prefix;
+#ifndef VMS
+  /* FIXME: make_relative_prefix doesn't yet work for VMS.  */
+  if (!gcc_exec_prefix)
+    {
+      gcc_exec_prefix = get_relative_prefix (decoded_options[0].arg,
+					     standard_bindir_prefix,
+					     standard_exec_prefix);
+      gcc_libexec_prefix = get_relative_prefix (decoded_options[0].arg,
+					     standard_bindir_prefix,
+					     standard_libexec_prefix);
+      if (gcc_exec_prefix)
+	xputenv (concat ("GCC_EXEC_PREFIX=", gcc_exec_prefix, NULL));
+    }
+  else
+    {
+      /* make_relative_prefix requires a program name, but
+	 GCC_EXEC_PREFIX is typically a directory name with a trailing
+	 / (which is ignored by make_relative_prefix), so append a
+	 program name.  */
+      char *tmp_prefix = concat (gcc_exec_prefix, "gcc", NULL);
+      gcc_libexec_prefix = get_relative_prefix (tmp_prefix,
+						standard_exec_prefix,
+						standard_libexec_prefix);
+
+      /* The path is unrelocated, so fallback to the original setting.  */
+      if (!gcc_libexec_prefix)
+	gcc_libexec_prefix = standard_libexec_prefix;
+
+      free (tmp_prefix);
+    }
+#else
+#endif
+  /* From this point onward, gcc_exec_prefix is non-null if the toolchain
+     is relocated. The toolchain was either relocated using GCC_EXEC_PREFIX
+     or an automatically created GCC_EXEC_PREFIX from
+     decoded_options[0].arg.  */
+
+  /* Do language-specific adjustment/addition of flags.  */
+  lang_specific_driver (&decoded_options, &decoded_options_count,
+			&added_libraries);
+
+  if (gcc_exec_prefix)
+    {
+      int len = strlen (gcc_exec_prefix);
+
+      if (len > (int) sizeof ("/lib/gcc/") - 1
+	  && (IS_DIR_SEPARATOR (gcc_exec_prefix[len-1])))
+	{
+	  temp = gcc_exec_prefix + len - sizeof ("/lib/gcc/") + 1;
+	  if (IS_DIR_SEPARATOR (*temp)
+	      && filename_ncmp (temp + 1, "lib", 3) == 0
+	      && IS_DIR_SEPARATOR (temp[4])
+	      && filename_ncmp (temp + 5, "gcc", 3) == 0)
+	    len -= sizeof ("/lib/gcc/") - 1;
+	}
+
+      set_std_prefix (gcc_exec_prefix, len);
+      add_prefix (&exec_prefixes, gcc_libexec_prefix, "GCC",
+		  PREFIX_PRIORITY_LAST, 0, 0);
+      add_prefix (&startfile_prefixes, gcc_exec_prefix, "GCC",
+		  PREFIX_PRIORITY_LAST, 0, 0);
+    }
+
+  /* COMPILER_PATH and LIBRARY_PATH have values
+     that are lists of directory names with colons.  */
+
+  temp = env.get ("COMPILER_PATH");
+  if (temp)
+    {
+      const char *startp, *endp;
+      char *nstore = (char *) alloca (strlen (temp) + 3);
+
+      startp = endp = temp;
+      while (1)
+	{
+	  if (*endp == PATH_SEPARATOR || *endp == 0)
+	    {
+	      strncpy (nstore, startp, endp - startp);
+	      if (endp == startp)
+		strcpy (nstore, concat (".", dir_separator_str, NULL));
+	      else if (!IS_DIR_SEPARATOR (endp[-1]))
+		{
+		  nstore[endp - startp] = DIR_SEPARATOR;
+		  nstore[endp - startp + 1] = 0;
+		}
+	      else
+		nstore[endp - startp] = 0;
+	      add_prefix (&exec_prefixes, nstore, 0,
+			  PREFIX_PRIORITY_LAST, 0, 0);
+	      add_prefix (&include_prefixes, nstore, 0,
+			  PREFIX_PRIORITY_LAST, 0, 0);
+	      if (*endp == 0)
+		break;
+	      endp = startp = endp + 1;
+	    }
+	  else
+	    endp++;
+	}
+    }
+
+  temp = env.get (LIBRARY_PATH_ENV);
+  if (temp && *cross_compile == '0')
+    {
+      const char *startp, *endp;
+      char *nstore = (char *) alloca (strlen (temp) + 3);
+
+      startp = endp = temp;
+      while (1)
+	{
+	  if (*endp == PATH_SEPARATOR || *endp == 0)
+	    {
+	      strncpy (nstore, startp, endp - startp);
+	      if (endp == startp)
+		strcpy (nstore, concat (".", dir_separator_str, NULL));
+	      else if (!IS_DIR_SEPARATOR (endp[-1]))
+		{
+		  nstore[endp - startp] = DIR_SEPARATOR;
+		  nstore[endp - startp + 1] = 0;
+		}
+	      else
+		nstore[endp - startp] = 0;
+	      add_prefix (&startfile_prefixes, nstore, NULL,
+			  PREFIX_PRIORITY_LAST, 0, 1);
+	      if (*endp == 0)
+		break;
+	      endp = startp = endp + 1;
+	    }
+	  else
+	    endp++;
+	}
+    }
+
+  /* Use LPATH like LIBRARY_PATH (for the CMU build program).  */
+  temp = env.get ("LPATH");
+  if (temp && *cross_compile == '0')
+    {
+      const char *startp, *endp;
+      char *nstore = (char *) alloca (strlen (temp) + 3);
+
+      startp = endp = temp;
+      while (1)
+	{
+	  if (*endp == PATH_SEPARATOR || *endp == 0)
+	    {
+	      strncpy (nstore, startp, endp - startp);
+	      if (endp == startp)
+		strcpy (nstore, concat (".", dir_separator_str, NULL));
+	      else if (!IS_DIR_SEPARATOR (endp[-1]))
+		{
+		  nstore[endp - startp] = DIR_SEPARATOR;
+		  nstore[endp - startp + 1] = 0;
+		}
+	      else
+		nstore[endp - startp] = 0;
+	      add_prefix (&startfile_prefixes, nstore, NULL,
+			  PREFIX_PRIORITY_LAST, 0, 1);
+	      if (*endp == 0)
+		break;
+	      endp = startp = endp + 1;
+	    }
+	  else
+	    endp++;
+	}
+    }
+
+  /* Process the options and store input files and switches in their
+     vectors.  */
+
+  last_language_n_infiles = -1;
+
+  set_option_handlers (&handlers);
+
+  for (j = 1; j < decoded_options_count; j++)
+    {
+      switch (decoded_options[j].opt_index)
+	{
+	case OPT_S:
+	case OPT_c:
+	case OPT_E:
+	  have_c = 1;
+	  break;
+	}
+      if (have_c)
+	break;
+    }
+
+  for (j = 1; j < decoded_options_count; j++)
+    {
+      if (decoded_options[j].opt_index == OPT_SPECIAL_input_file)
+	{
+	  const char *arg = decoded_options[j].arg;
+          const char *p = strrchr (arg, '@');
+          char *fname;
+	  long offset;
+	  int consumed;
+#ifdef HAVE_TARGET_OBJECT_SUFFIX
+	  arg = convert_filename (arg, 0, access (arg, F_OK));
+#endif
+	  /* For LTO static archive support we handle input file
+	     specifications that are composed of a filename and
+	     an offset like FNAME@OFFSET.  */
+	  if (p
+	      && p != arg
+	      && sscanf (p, "@%li%n", &offset, &consumed) >= 1
+	      && strlen (p) == (unsigned int)consumed)
+	    {
+              fname = (char *)xmalloc (p - arg + 1);
+              memcpy (fname, arg, p - arg);
+              fname[p - arg] = '\0';
+	      /* Only accept non-stdin and existing FNAME parts, otherwise
+		 try with the full name.  */
+	      if (strcmp (fname, "-") == 0 || access (fname, F_OK) < 0)
+		{
+		  free (fname);
+		  fname = xstrdup (arg);
+		}
+	    }
+	  else
+	    fname = xstrdup (arg);
+
+          if (strcmp (fname, "-") != 0 && access (fname, F_OK) < 0)
+	    {
+	      bool resp = fname[0] == '@' && access (fname + 1, F_OK) < 0;
+	      error ("%s: %m", fname + resp);
+	    }
+          else
+	    add_infile (arg, spec_lang);
+
+          free (fname);
+	  continue;
+	}
+
+
+// Source: gcc.c
+// Lines 4326-4606
+
+
+[ANSWER]
+MAY

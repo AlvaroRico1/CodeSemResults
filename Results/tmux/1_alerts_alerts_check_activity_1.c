@@ -1,0 +1,38 @@
+alerts_check_activity(struct window *w)
+{
+	struct winlink	*wl;
+	struct session	*s;
+
+	if (~w->flags & WINDOW_ACTIVITY)
+		return (0);
+	if (!options_get_number(w->options, "monitor-activity"))
+		return (0);
+
+	TAILQ_FOREACH(wl, &w->winlinks, wentry)
+		wl->session->flags &= ~SESSION_ALERTED;
+
+	TAILQ_FOREACH(wl, &w->winlinks, wentry) {
+		if (wl->flags & WINLINK_ACTIVITY)
+			continue;
+		s = wl->session;
+		if (s->curw != wl || s->attached == 0) {
+			wl->flags |= WINLINK_ACTIVITY;
+			server_status_session(s);
+		}
+		if (!alerts_action_applies(wl, "activity-action"))
+			continue;
+		notify_winlink("alert-activity", wl);
+
+		if (s->flags & SESSION_ALERTED)
+			continue;
+		s->flags |= SESSION_ALERTED;
+
+		alerts_set_message(wl, "Activity", "visual-activity");
+	}
+
+	return (WINDOW_ACTIVITY);
+}
+
+
+// Source: alerts.c
+// Lines 221-254

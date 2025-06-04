@@ -1,0 +1,37 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'end' at line 3
+2. Pointer 'str' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool check_host_name(const LEX_CSTRING &str) {
+  const char *name = str.str;
+  const char *end = str.str + str.length;
+  if (check_string_byte_length(str, ER_THD(current_thd, ER_HOSTNAME),
+                               HOSTNAME_LENGTH))
+    return true;
+
+  while (name != end) {
+    if (*name == '@') {
+      my_printf_error(ER_UNKNOWN_ERROR,
+                      "Malformed hostname (illegal symbol: '%c')", MYF(0),
+                      *name);
+      return true;
+    }
+    name++;
+  }
+  return false;
+}
+
+
+// Source: sql_parse.cc
+// Lines 6631-6648
+
+
+[ANSWER]
+MUST

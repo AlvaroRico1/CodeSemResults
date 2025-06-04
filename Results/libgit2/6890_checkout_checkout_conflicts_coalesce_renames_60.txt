@@ -1,0 +1,1 @@
+ancestor_conflict,libgit2/src/libgit2/checkout.c,6,their_conflict,libgit2/src/libgit2/checkout.c,6,1

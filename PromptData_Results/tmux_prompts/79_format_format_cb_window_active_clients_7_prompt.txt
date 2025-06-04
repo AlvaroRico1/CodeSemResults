@@ -1,0 +1,43 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'client_session' at line 5
+2. Pointer 'loop' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+format_cb_window_active_clients(struct format_tree *ft)
+{
+	struct window	*w;
+	struct client	*loop;
+	struct session	*client_session;
+	u_int		 n = 0;
+	char		*value;
+
+	if (ft->wl == NULL)
+		return (NULL);
+	w = ft->wl->window;
+
+	TAILQ_FOREACH(loop, &clients, entry) {
+		client_session = loop->session;
+		if (client_session == NULL)
+			continue;
+
+		if (w == client_session->curw->window)
+			n++;
+	}
+
+	xasprintf(&value, "%u", n);
+	return (value);
+}
+
+
+// Source: format.c
+// Lines 702-725
+
+
+[ANSWER]
+MUST

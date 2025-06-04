@@ -1,0 +1,70 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'elt' at line 3
+2. Pointer 'elt' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bitmap_first_set_bit (const_bitmap a)
+{
+  const bitmap_element *elt = a->first;
+  unsigned bit_no;
+  BITMAP_WORD word;
+  unsigned ix;
+
+  gcc_checking_assert (elt);
+
+  if (a->tree_form)
+    while (elt->prev)
+      elt = elt->prev;
+
+  bit_no = elt->indx * BITMAP_ELEMENT_ALL_BITS;
+  for (ix = 0; ix != BITMAP_ELEMENT_WORDS; ix++)
+    {
+      word = elt->bits[ix];
+      if (word)
+	goto found_bit;
+    }
+  gcc_unreachable ();
+ found_bit:
+  bit_no += ix * BITMAP_WORD_BITS;
+
+#if GCC_VERSION >= 3004
+  gcc_assert (sizeof (long) == sizeof (word));
+  bit_no += __builtin_ctzl (word);
+#else
+  /* Binary search for the first set bit.  */
+#if BITMAP_WORD_BITS > 64
+#error "Fill out the table."
+#endif
+#if BITMAP_WORD_BITS > 32
+  if (!(word & 0xffffffff))
+    word >>= 32, bit_no += 32;
+#endif
+  if (!(word & 0xffff))
+    word >>= 16, bit_no += 16;
+  if (!(word & 0xff))
+    word >>= 8, bit_no += 8;
+  if (!(word & 0xf))
+    word >>= 4, bit_no += 4;
+  if (!(word & 0x3))
+    word >>= 2, bit_no += 2;
+  if (!(word & 0x1))
+    word >>= 1, bit_no += 1;
+
+ gcc_checking_assert (word & 1);
+#endif
+ return bit_no;
+}
+
+
+// Source: bitmap.c
+// Lines 1141-1191
+
+
+[ANSWER]
+MUST

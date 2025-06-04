@@ -1,0 +1,54 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'sql_cmd' at line 3
+2. Pointer 'lex' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static bool validate_use_secondary_engine(const LEX *lex) {
+  const THD *thd = lex->thd;
+  const Sql_cmd *sql_cmd = lex->m_sql_cmd;
+
+  // Validation can only be done after statement has been prepared.
+  assert(sql_cmd->is_prepared());
+
+  // Ensure that all read columns are in the secondary engine.
+  if (sql_cmd->using_secondary_storage_engine()) {
+    if (reads_not_secondary_columns(lex)) {
+      my_error(ER_SECONDARY_ENGINE, MYF(0),
+               "One or more read columns are marked as NOT SECONDARY");
+      return true;
+    }
+    return false;
+  }
+
+  // A query must be executed in secondary engine if all of these conditions are
+  // met:
+  //
+  // 1) use_secondary_engine is FORCED
+  // 2) Is a SELECT statement
+  // 3) Accesses one or more base tables.
+  if (thd->variables.use_secondary_engine == SECONDARY_ENGINE_FORCED &&  // 1
+      sql_cmd->sql_command_code() == SQLCOM_SELECT &&                    // 2
+      lex->table_count >= 1) {                                           // 3
+    my_error(
+        ER_SECONDARY_ENGINE, MYF(0),
+        "use_secondary_engine is FORCED but query could not be executed in "
+        "secondary engine");
+    return true;
+  }
+
+  return false;
+}
+
+
+// Source: sql_select.cc
+// Lines 281-315
+
+
+[ANSWER]
+MUST

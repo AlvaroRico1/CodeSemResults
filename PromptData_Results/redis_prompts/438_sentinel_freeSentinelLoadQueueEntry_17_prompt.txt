@@ -1,0 +1,25 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'entry' at line 2
+2. Pointer 'item' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void freeSentinelLoadQueueEntry(void *item) {
+    struct sentinelLoadQueueEntry *entry = item;
+    sdsfreesplitres(entry->argv,entry->argc);
+    sdsfree(entry->line);
+    zfree(entry);
+}
+
+
+// Source: sentinel.c
+// Lines 1803-1808
+
+
+[ANSWER]
+MUST

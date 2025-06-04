@@ -1,0 +1,39 @@
+std::pair<const char*, bool> EpsCopyInputStream::DoneFallback(int overrun,
+                                                              int depth) {
+  // Did we exceeded the limit (parse error).
+  if (PROTOBUF_PREDICT_FALSE(overrun > limit_)) return {nullptr, true};
+  GOOGLE_DCHECK(overrun != limit_);  // Guaranteed by caller.
+  GOOGLE_DCHECK(overrun < limit_);   // Follows from above
+  // TODO(gerbens) Instead of this dcheck we could just assign, and remove
+  // updating the limit_end from PopLimit, ie.
+  // limit_end_ = buffer_end_ + (std::min)(0, limit_);
+  // if (ptr < limit_end_) return {ptr, false};
+  GOOGLE_DCHECK(limit_end_ == buffer_end_ + (std::min)(0, limit_));
+  // At this point we know the following assertion holds.
+  GOOGLE_DCHECK_GT(limit_, 0);
+  GOOGLE_DCHECK(limit_end_ == buffer_end_);  // because limit_ > 0
+  const char* p;
+  do {
+    // We are past the end of buffer_end_, in the slop region.
+    GOOGLE_DCHECK_GE(overrun, 0);
+    p = NextBuffer(overrun, depth);
+    if (p == nullptr) {
+      // We are at the end of the stream
+      if (PROTOBUF_PREDICT_FALSE(overrun != 0)) return {nullptr, true};
+      GOOGLE_DCHECK_GT(limit_, 0);
+      limit_end_ = buffer_end_;
+      // Distinguish ending on a pushed limit or ending on end-of-stream.
+      SetEndOfStream();
+      return {buffer_end_, true};
+    }
+    limit_ -= buffer_end_ - p;  // Adjust limit_ relative to new anchor
+    p += overrun;
+    overrun = p - buffer_end_;
+  } while (overrun >= 0);
+  limit_end_ = buffer_end_ + std::min(0, limit_);
+  return {p, false};
+}
+
+
+// Source: parse_context.cc
+// Lines 171-205

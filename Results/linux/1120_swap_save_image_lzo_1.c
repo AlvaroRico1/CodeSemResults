@@ -1,0 +1,210 @@
+static int save_image_lzo(struct swap_map_handle *handle,
+                          struct snapshot_handle *snapshot,
+                          unsigned int nr_to_write)
+{
+	unsigned int m;
+	int ret = 0;
+	int nr_pages;
+	int err2;
+	struct hib_bio_batch hb;
+	ktime_t start;
+	ktime_t stop;
+	size_t off;
+	unsigned thr, run_threads, nr_threads;
+	unsigned char *page = NULL;
+	struct cmp_data *data = NULL;
+	struct crc_data *crc = NULL;
+
+	hib_init_batch(&hb);
+
+	/*
+	 * We'll limit the number of threads for compression to limit memory
+	 * footprint.
+	 */
+	nr_threads = num_online_cpus() - 1;
+	nr_threads = clamp_val(nr_threads, 1, LZO_THREADS);
+
+	page = (void *)__get_free_page(GFP_NOIO | __GFP_HIGH);
+	if (!page) {
+		pr_err("Failed to allocate LZO page\n");
+		ret = -ENOMEM;
+		goto out_clean;
+	}
+
+	data = vmalloc(array_size(nr_threads, sizeof(*data)));
+	if (!data) {
+		pr_err("Failed to allocate LZO data\n");
+		ret = -ENOMEM;
+		goto out_clean;
+	}
+	for (thr = 0; thr < nr_threads; thr++)
+		memset(&data[thr], 0, offsetof(struct cmp_data, go));
+
+	crc = kmalloc(sizeof(*crc), GFP_KERNEL);
+	if (!crc) {
+		pr_err("Failed to allocate crc\n");
+		ret = -ENOMEM;
+		goto out_clean;
+	}
+	memset(crc, 0, offsetof(struct crc_data, go));
+
+	/*
+	 * Start the compression threads.
+	 */
+	for (thr = 0; thr < nr_threads; thr++) {
+		init_waitqueue_head(&data[thr].go);
+		init_waitqueue_head(&data[thr].done);
+
+		data[thr].thr = kthread_run(lzo_compress_threadfn,
+		                            &data[thr],
+		                            "image_compress/%u", thr);
+		if (IS_ERR(data[thr].thr)) {
+			data[thr].thr = NULL;
+			pr_err("Cannot start compression threads\n");
+			ret = -ENOMEM;
+			goto out_clean;
+		}
+	}
+
+	/*
+	 * Start the CRC32 thread.
+	 */
+	init_waitqueue_head(&crc->go);
+	init_waitqueue_head(&crc->done);
+
+	handle->crc32 = 0;
+	crc->crc32 = &handle->crc32;
+	for (thr = 0; thr < nr_threads; thr++) {
+		crc->unc[thr] = data[thr].unc;
+		crc->unc_len[thr] = &data[thr].unc_len;
+	}
+
+	crc->thr = kthread_run(crc32_threadfn, crc, "image_crc32");
+	if (IS_ERR(crc->thr)) {
+		crc->thr = NULL;
+		pr_err("Cannot start CRC32 thread\n");
+		ret = -ENOMEM;
+		goto out_clean;
+	}
+
+	/*
+	 * Adjust the number of required free pages after all allocations have
+	 * been done. We don't want to run out of pages when writing.
+	 */
+	handle->reqd_free_pages = reqd_free_pages();
+
+	pr_info("Using %u thread(s) for compression\n", nr_threads);
+	pr_info("Compressing and saving image data (%u pages)...\n",
+		nr_to_write);
+	m = nr_to_write / 10;
+	if (!m)
+		m = 1;
+	nr_pages = 0;
+	start = ktime_get();
+	for (;;) {
+		for (thr = 0; thr < nr_threads; thr++) {
+			for (off = 0; off < LZO_UNC_SIZE; off += PAGE_SIZE) {
+				ret = snapshot_read_next(snapshot);
+				if (ret < 0)
+					goto out_finish;
+
+				if (!ret)
+					break;
+
+				memcpy(data[thr].unc + off,
+				       data_of(*snapshot), PAGE_SIZE);
+
+				if (!(nr_pages % m))
+					pr_info("Image saving progress: %3d%%\n",
+						nr_pages / m * 10);
+				nr_pages++;
+			}
+			if (!off)
+				break;
+
+			data[thr].unc_len = off;
+
+			atomic_set(&data[thr].ready, 1);
+			wake_up(&data[thr].go);
+		}
+
+		if (!thr)
+			break;
+
+		crc->run_threads = thr;
+		atomic_set(&crc->ready, 1);
+		wake_up(&crc->go);
+
+		for (run_threads = thr, thr = 0; thr < run_threads; thr++) {
+			wait_event(data[thr].done,
+			           atomic_read(&data[thr].stop));
+			atomic_set(&data[thr].stop, 0);
+
+			ret = data[thr].ret;
+
+			if (ret < 0) {
+				pr_err("LZO compression failed\n");
+				goto out_finish;
+			}
+
+			if (unlikely(!data[thr].cmp_len ||
+			             data[thr].cmp_len >
+			             lzo1x_worst_compress(data[thr].unc_len))) {
+				pr_err("Invalid LZO compressed length\n");
+				ret = -1;
+				goto out_finish;
+			}
+
+			*(size_t *)data[thr].cmp = data[thr].cmp_len;
+
+			/*
+			 * Given we are writing one page at a time to disk, we
+			 * copy that much from the buffer, although the last
+			 * bit will likely be smaller than full page. This is
+			 * OK - we saved the length of the compressed data, so
+			 * any garbage at the end will be discarded when we
+			 * read it.
+			 */
+			for (off = 0;
+			     off < LZO_HEADER + data[thr].cmp_len;
+			     off += PAGE_SIZE) {
+				memcpy(page, data[thr].cmp + off, PAGE_SIZE);
+
+				ret = swap_write_page(handle, page, &hb);
+				if (ret)
+					goto out_finish;
+			}
+		}
+
+		wait_event(crc->done, atomic_read(&crc->stop));
+		atomic_set(&crc->stop, 0);
+	}
+
+out_finish:
+	err2 = hib_wait_io(&hb);
+	stop = ktime_get();
+	if (!ret)
+		ret = err2;
+	if (!ret)
+		pr_info("Image saving done\n");
+	swsusp_show_speed(start, stop, nr_to_write, "Wrote");
+out_clean:
+	if (crc) {
+		if (crc->thr)
+			kthread_stop(crc->thr);
+		kfree(crc);
+	}
+	if (data) {
+		for (thr = 0; thr < nr_threads; thr++)
+			if (data[thr].thr)
+				kthread_stop(data[thr].thr);
+		vfree(data);
+	}
+	if (page) free_page((unsigned long)page);
+
+	return ret;
+}
+
+
+// Source: swap.c
+// Lines 666-871

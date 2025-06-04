@@ -1,0 +1,1 @@
+tmp,linux/drivers/acpi/sysfs.c,9,handle,linux/drivers/acpi/sysfs.c,7,2

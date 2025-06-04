@@ -1,0 +1,25 @@
+static int write_req(void *ctx, int is_end_stream)
+{
+    struct rp_generator_t *self = ctx;
+    h2o_httpclient_t *client = self->client;
+    h2o_iovec_t chunk = self->src_req->entity;
+
+    assert(chunk.len != 0 || is_end_stream);
+
+    if (client == NULL) {
+        return -1;
+    }
+
+    if (is_end_stream) {
+        self->src_req->write_req.cb = NULL;
+        self->req_done = 1;
+        if (self->res_done)
+            detach_client(self);
+    }
+
+    return client->write_req(client, chunk, is_end_stream);
+}
+
+
+// Source: proxy.c
+// Lines 572-592

@@ -1,0 +1,26 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'slen' at line 3
+2. Pointer 'tlen' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static inline int my_bincmp(const uchar *s, const uchar *se, const uchar *t,
+                            const uchar *te) {
+  int slen = (int)(se - s), tlen = (int)(te - t);
+  int len = std::min(slen, tlen);
+  int cmp = memcmp(s, t, len);
+  return cmp ? cmp : slen - tlen;
+}
+
+
+// Source: ctype-ucs2.cc
+// Lines 63-69
+
+
+[ANSWER]
+MAY

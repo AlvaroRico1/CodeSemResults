@@ -1,0 +1,39 @@
+static void close_pdeo(struct proc_dir_entry *pde, struct pde_opener *pdeo)
+{
+	/*
+	 * close() (proc_reg_release()) can't delete an entry and proceed:
+	 * ->release hook needs to be available at the right moment.
+	 *
+	 * rmmod (remove_proc_entry() et al) can't delete an entry and proceed:
+	 * "struct file" needs to be available at the right moment.
+	 *
+	 * Therefore, first process to enter this function does ->release() and
+	 * signals its completion to the other process which does nothing.
+	 */
+	if (pdeo->closing) {
+		/* somebody else is doing that, just wait */
+		DECLARE_COMPLETION_ONSTACK(c);
+		pdeo->c = &c;
+		spin_unlock(&pde->pde_unload_lock);
+		wait_for_completion(&c);
+	} else {
+		struct file *file;
+		struct completion *c;
+
+		pdeo->closing = true;
+		spin_unlock(&pde->pde_unload_lock);
+		file = pdeo->file;
+		pde->proc_fops->release(file_inode(file), file);
+		spin_lock(&pde->pde_unload_lock);
+		/* After ->release. */
+		list_del(&pdeo->lh);
+		c = pdeo->c;
+		spin_unlock(&pde->pde_unload_lock);
+		if (unlikely(c))
+			complete(c);
+		kmem_cache_free(pde_opener_cache, pdeo);
+	}
+
+
+// Source: inode.c
+// Lines 141-175

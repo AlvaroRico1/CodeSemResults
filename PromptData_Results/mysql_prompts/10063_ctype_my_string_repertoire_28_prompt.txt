@@ -1,0 +1,37 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'strend' at line 3
+2. Pointer 'str' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+uint my_string_repertoire(const CHARSET_INFO *cs, const char *str,
+                          size_t length) {
+  const char *strend = str + length;
+  if (cs->mbminlen == 1) {
+    for (; str < strend; str++) {
+      if (((uchar)*str) > 0x7F) return MY_REPERTOIRE_UNICODE30;
+    }
+  } else {
+    my_wc_t wc;
+    int chlen;
+    for (; (chlen = cs->cset->mb_wc(cs, &wc, pointer_cast<const uchar *>(str),
+                                    pointer_cast<const uchar *>(strend))) > 0;
+         str += chlen) {
+      if (wc > 0x7F) return MY_REPERTOIRE_UNICODE30;
+    }
+  }
+  return MY_REPERTOIRE_ASCII;
+}
+
+
+// Source: ctype.cc
+// Lines 768-785
+
+
+[ANSWER]
+MUST

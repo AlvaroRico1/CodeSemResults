@@ -1,0 +1,1 @@
+link,linux/drivers/acpi/pci_irq.c,16,triggering,linux/drivers/acpi/pci_irq.c,6,2

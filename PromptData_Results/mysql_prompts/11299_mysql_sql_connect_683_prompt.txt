@@ -1,0 +1,47 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'error' at line 5
+2. Pointer 'count' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int sql_connect(char *host, char *database, char *user, char *password,
+                       uint silent) {
+  bool message = false;
+  uint count = 0;
+  int error;
+  for (;;) {
+    if ((error = sql_real_connect(host, database, user, password, wait_flag)) >=
+        0) {
+      if (count) {
+        tee_fputs("\n", stderr);
+        (void)fflush(stderr);
+      }
+      return error;
+    }
+    if (!wait_flag) return ignore_errors ? -1 : 1;
+    if (!message && !silent) {
+      message = true;
+      tee_fputs("Waiting", stderr);
+      (void)fflush(stderr);
+    }
+    (void)sleep(wait_time);
+    if (!silent) {
+      putc('.', stderr);
+      (void)fflush(stderr);
+      count++;
+    }
+  }
+}
+
+
+// Source: mysql.cc
+// Lines 4702-4729
+
+
+[ANSWER]
+MUST-NOT

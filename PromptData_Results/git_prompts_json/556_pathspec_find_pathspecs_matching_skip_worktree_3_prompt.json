@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ce' at line 8\n2. Pointer 'istate' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nchar *find_pathspecs_matching_skip_worktree(const struct pathspec *pathspec)\n{\n\tstruct index_state *istate = the_repository->index;\n\tchar *seen = xcalloc(pathspec->nr, 1);\n\tint i;\n\n\tfor (i = 0; i < istate->cache_nr; i++) {\n\t\tstruct cache_entry *ce = istate->cache[i];\n\t\tif (ce_skip_worktree(ce) || !path_in_sparse_checkout(ce->name, istate))\n\t\t    ce_path_match(istate, ce, pathspec, seen);\n\t}\n\n\n// Source: pathspec.c\n// Lines 66-76\n",
+  "ANSWER": "MUST"
+}

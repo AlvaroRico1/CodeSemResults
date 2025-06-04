@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ptr' at line 2
+2. Pointer 'line' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int com_prompt(String *buffer MY_ATTRIBUTE((unused)), char *line) {
+  char *ptr = strchr(line, ' ');
+  prompt_counter = 0;
+  my_free(current_prompt);
+  current_prompt = my_strdup(PSI_NOT_INSTRUMENTED,
+                             ptr ? ptr + 1 : default_prompt, MYF(MY_WME));
+  if (!ptr)
+    tee_fprintf(stdout, "Returning to default PROMPT of %s\n", default_prompt);
+  else
+    tee_fprintf(stdout, "PROMPT set to '%s'\n", current_prompt);
+  return 0;
+}
+
+
+// Source: mysql.cc
+// Lines 5320-5331
+
+
+[ANSWER]
+MUST-NOT

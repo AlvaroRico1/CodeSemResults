@@ -1,0 +1,1 @@
+getHour,mysql/client/mysql.cc,84,host_info,mysql/client/mysql.cc,47,0

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'a' at line 1\n2. Pointer 'symlinks' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int symlink_or_fake(git_repository *repo, const char *a, const char *b)\n{\n\tint symlinks;\n\n\tcl_git_pass(git_repository__configmap_lookup(&symlinks, repo, GIT_CONFIGMAP_SYMLINKS));\n\n\tif (symlinks)\n\t\treturn p_symlink(a, b);\n\telse\n\t\treturn git_futils_fake_symlink(a, b);\n}\n\n\n// Source: icase.c\n// Lines 95-105\n",
+  "ANSWER": "MUST-NOT"
+}

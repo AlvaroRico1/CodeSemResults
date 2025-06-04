@@ -1,0 +1,1 @@
+old,redis/deps/lua/src/ltable.c,5,nold,redis/deps/lua/src/ltable.c,5,1

@@ -1,0 +1,1 @@
+walk,libgit2/src/libgit2/transports/smart_protocol.c,7,error,libgit2/src/libgit2/transports/smart_protocol.c,8,2

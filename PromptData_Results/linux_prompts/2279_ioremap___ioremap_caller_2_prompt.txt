@@ -1,0 +1,145 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'last_addr' at line 5
+2. Pointer 'phys_addr' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+__ioremap_caller(resource_size_t phys_addr, unsigned long size,
+		 enum page_cache_mode pcm, void *caller, bool encrypted)
+{
+	unsigned long offset, vaddr;
+	resource_size_t last_addr;
+	const resource_size_t unaligned_phys_addr = phys_addr;
+	const unsigned long unaligned_size = size;
+	struct ioremap_desc io_desc;
+	struct vm_struct *area;
+	enum page_cache_mode new_pcm;
+	pgprot_t prot;
+	int retval;
+	void __iomem *ret_addr;
+
+	/* Don't allow wraparound or zero size */
+	last_addr = phys_addr + size - 1;
+	if (!size || last_addr < phys_addr)
+		return NULL;
+
+	if (!phys_addr_valid(phys_addr)) {
+		printk(KERN_WARNING "ioremap: invalid physical address %llx\n",
+		       (unsigned long long)phys_addr);
+		WARN_ON_ONCE(1);
+		return NULL;
+	}
+
+	__ioremap_check_mem(phys_addr, size, &io_desc);
+
+	/*
+	 * Don't allow anybody to remap normal RAM that we're using..
+	 */
+	if (io_desc.flags & IORES_MAP_SYSTEM_RAM) {
+		WARN_ONCE(1, "ioremap on RAM at %pa - %pa\n",
+			  &phys_addr, &last_addr);
+		return NULL;
+	}
+
+	/*
+	 * Mappings have to be page-aligned
+	 */
+	offset = phys_addr & ~PAGE_MASK;
+	phys_addr &= PHYSICAL_PAGE_MASK;
+	size = PAGE_ALIGN(last_addr+1) - phys_addr;
+
+	retval = reserve_memtype(phys_addr, (u64)phys_addr + size,
+						pcm, &new_pcm);
+	if (retval) {
+		printk(KERN_ERR "ioremap reserve_memtype failed %d\n", retval);
+		return NULL;
+	}
+
+	if (pcm != new_pcm) {
+		if (!is_new_memtype_allowed(phys_addr, size, pcm, new_pcm)) {
+			printk(KERN_ERR
+		"ioremap error for 0x%llx-0x%llx, requested 0x%x, got 0x%x\n",
+				(unsigned long long)phys_addr,
+				(unsigned long long)(phys_addr + size),
+				pcm, new_pcm);
+			goto err_free_memtype;
+		}
+		pcm = new_pcm;
+	}
+
+	/*
+	 * If the page being mapped is in memory and SEV is active then
+	 * make sure the memory encryption attribute is enabled in the
+	 * resulting mapping.
+	 */
+	prot = PAGE_KERNEL_IO;
+	if ((io_desc.flags & IORES_MAP_ENCRYPTED) || encrypted)
+		prot = pgprot_encrypted(prot);
+
+	switch (pcm) {
+	case _PAGE_CACHE_MODE_UC:
+	default:
+		prot = __pgprot(pgprot_val(prot) |
+				cachemode2protval(_PAGE_CACHE_MODE_UC));
+		break;
+	case _PAGE_CACHE_MODE_UC_MINUS:
+		prot = __pgprot(pgprot_val(prot) |
+				cachemode2protval(_PAGE_CACHE_MODE_UC_MINUS));
+		break;
+	case _PAGE_CACHE_MODE_WC:
+		prot = __pgprot(pgprot_val(prot) |
+				cachemode2protval(_PAGE_CACHE_MODE_WC));
+		break;
+	case _PAGE_CACHE_MODE_WT:
+		prot = __pgprot(pgprot_val(prot) |
+				cachemode2protval(_PAGE_CACHE_MODE_WT));
+		break;
+	case _PAGE_CACHE_MODE_WB:
+		break;
+	}
+
+	/*
+	 * Ok, go for it..
+	 */
+	area = get_vm_area_caller(size, VM_IOREMAP, caller);
+	if (!area)
+		goto err_free_memtype;
+	area->phys_addr = phys_addr;
+	vaddr = (unsigned long) area->addr;
+
+	if (kernel_map_sync_memtype(phys_addr, size, pcm))
+		goto err_free_area;
+
+	if (ioremap_page_range(vaddr, vaddr + size, phys_addr, prot))
+		goto err_free_area;
+
+	ret_addr = (void __iomem *) (vaddr + offset);
+	mmiotrace_ioremap(unaligned_phys_addr, unaligned_size, ret_addr);
+
+	/*
+	 * Check if the request spans more than any BAR in the iomem resource
+	 * tree.
+	 */
+	if (iomem_map_sanity_check(unaligned_phys_addr, unaligned_size))
+		pr_warn("caller %pS mapping multiple BARs\n", caller);
+
+	return ret_addr;
+err_free_area:
+	free_vm_area(area);
+err_free_memtype:
+	free_memtype(phys_addr, phys_addr + size);
+	return NULL;
+}
+
+
+// Source: ioremap.c
+// Lines 154-279
+
+
+[ANSWER]
+MAY

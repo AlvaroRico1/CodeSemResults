@@ -1,0 +1,66 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 't' at line 4
+2. Pointer 'state' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+strnunvisx(char *dst, size_t dlen, const char *src, int flag)
+{
+	char c;
+	char t = '\0', *start = dst;
+	int state = 0;
+
+	_DIAGASSERT(src != NULL);
+	_DIAGASSERT(dst != NULL);
+#define CHECKSPACE() \
+	do { \
+		if (dlen-- == 0) { \
+			errno = ENOSPC; \
+			return -1; \
+		} \
+	} while (/*CONSTCOND*/0)
+
+	while ((c = *src++) != '\0') {
+ again:
+		switch (unvis(&t, c, &state, flag)) {
+		case UNVIS_VALID:
+			CHECKSPACE();
+			*dst++ = t;
+			break;
+		case UNVIS_VALIDPUSH:
+			CHECKSPACE();
+			*dst++ = t;
+			goto again;
+		case 0:
+		case UNVIS_NOCHAR:
+			break;
+		case UNVIS_SYNBAD:
+			errno = EINVAL;
+			return -1;
+		default:
+			_DIAGASSERT(/*CONSTCOND*/0);
+			errno = EINVAL;
+			return -1;
+		}
+	}
+	if (unvis(&t, c, &state, UNVIS_END) == UNVIS_VALID) {
+		CHECKSPACE();
+		*dst++ = t;
+	}
+	CHECKSPACE();
+	*dst = '\0';
+	return (int)(dst - start);
+}
+
+
+// Source: unvis.c
+// Lines 495-541
+
+
+[ANSWER]
+MAY

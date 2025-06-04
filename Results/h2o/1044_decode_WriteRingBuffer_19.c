@@ -1,0 +1,48 @@
+static BrotliDecoderErrorCode BROTLI_NOINLINE WriteRingBuffer(
+    BrotliDecoderState* s, size_t* available_out, uint8_t** next_out,
+    size_t* total_out, BROTLI_BOOL force) {
+  uint8_t* start =
+      s->ringbuffer + (s->partial_pos_out & (size_t)s->ringbuffer_mask);
+  size_t to_write = UnwrittenBytes(s, BROTLI_TRUE);
+  size_t num_written = *available_out;
+  if (num_written > to_write) {
+    num_written = to_write;
+  }
+  if (s->meta_block_remaining_len < 0) {
+    return BROTLI_FAILURE(BROTLI_DECODER_ERROR_FORMAT_BLOCK_LENGTH_1);
+  }
+  if (next_out && !*next_out) {
+    *next_out = start;
+  } else {
+    if (next_out) {
+      memcpy(*next_out, start, num_written);
+      *next_out += num_written;
+    }
+  }
+  *available_out -= num_written;
+  BROTLI_LOG_UINT(to_write);
+  BROTLI_LOG_UINT(num_written);
+  s->partial_pos_out += num_written;
+  if (total_out) {
+    *total_out = s->partial_pos_out;
+  }
+  if (num_written < to_write) {
+    if (s->ringbuffer_size == (1 << s->window_bits) || force) {
+      return BROTLI_DECODER_NEEDS_MORE_OUTPUT;
+    } else {
+      return BROTLI_DECODER_SUCCESS;
+    }
+  }
+  /* Wrap ring buffer only if it has reached its maximal size. */
+  if (s->ringbuffer_size == (1 << s->window_bits) &&
+      s->pos >= s->ringbuffer_size) {
+    s->pos -= s->ringbuffer_size;
+    s->rb_roundtrips++;
+    s->should_wrap_ringbuffer = (size_t)s->pos != 0 ? 1 : 0;
+  }
+  return BROTLI_DECODER_SUCCESS;
+}
+
+
+// Source: decode.c
+// Lines 1204-1247

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'len' at line 4\n2. Pointer 'buffer' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nlocation_get_source_line (const char *file_path, int line)\n{\n  char *buffer = NULL;\n  ssize_t len;\n\n  if (line == 0)\n    return char_span (NULL, 0);\n\n  fcache *c = lookup_or_add_file_to_cache_tab (file_path);\n  if (c == NULL)\n    return char_span (NULL, 0);\n\n  bool read = read_line_num (c, line, &buffer, &len);\n  if (!read)\n    return char_span (NULL, 0);\n\n  return char_span (buffer, len);\n}\n\n\n// Source: input.c\n// Lines 751-768\n",
+  "ANSWER": "MAY"
+}

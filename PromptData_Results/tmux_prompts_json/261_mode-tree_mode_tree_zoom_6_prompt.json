@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'wp' at line 3\n2. Pointer 'mtd' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nmode_tree_zoom(struct mode_tree_data *mtd, struct args *args)\n{\n\tstruct window_pane\t*wp = mtd->wp;\n\n\tif (args_has(args, 'Z')) {\n\t\tmtd->zoomed = (wp->window->flags & WINDOW_ZOOMED);\n\t\tif (!mtd->zoomed && window_zoom(wp) == 0)\n\t\t\tserver_redraw_window(wp->window);\n\t} else\n\t\tmtd->zoomed = -1;\n}\n\n\n// Source: mode-tree.c\n// Lines 443-453\n",
+  "ANSWER": "MUST"
+}

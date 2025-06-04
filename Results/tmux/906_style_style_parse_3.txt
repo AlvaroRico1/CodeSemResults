@@ -1,0 +1,1 @@
+cp,tmux/style.c,4,delimiters,tmux/style.c,4,2

@@ -1,0 +1,47 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ret' at line 25
+2. Pointer 'result' at line 24
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+Message* Reflection::UnsafeArenaReleaseMessage(Message* message,
+                                               const FieldDescriptor* field,
+                                               MessageFactory* factory) const {
+  USAGE_CHECK_ALL(ReleaseMessage, SINGULAR, MESSAGE);
+  CheckInvalidAccess(schema_, field);
+
+  if (factory == nullptr) factory = message_factory_;
+
+  if (field->is_extension()) {
+    return static_cast<Message*>(
+        MutableExtensionSet(message)->UnsafeArenaReleaseMessage(field,
+                                                                factory));
+  } else {
+    if (!(field->is_repeated() || schema_.InRealOneof(field))) {
+      ClearBit(message, field);
+    }
+    if (schema_.InRealOneof(field)) {
+      if (HasOneofField(*message, field)) {
+        *MutableOneofCase(message, field->containing_oneof()) = 0;
+      } else {
+        return nullptr;
+      }
+    }
+    Message** result = MutableRaw<Message*>(message, field);
+    Message* ret = *result;
+    *result = nullptr;
+    return ret;
+  }
+
+
+// Source: generated_message_reflection.cc
+// Lines 2104-2131
+
+
+[ANSWER]
+MUST

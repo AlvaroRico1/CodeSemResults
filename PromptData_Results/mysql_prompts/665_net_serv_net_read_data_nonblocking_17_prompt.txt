@@ -1,0 +1,63 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'net_async' at line 4
+2. Pointer 'net' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static net_async_status net_read_data_nonblocking(NET *net, size_t count,
+                                                  bool *err_ptr) {
+  DBUG_TRACE;
+  NET_ASYNC *net_async = NET_ASYNC_DATA(net);
+  size_t bytes_read = 0;
+  ulong rc;
+  switch (net_async->async_operation) {
+    case NET_ASYNC_OP_IDLE:
+      net_async->async_bytes_wanted = count;
+      net_async->async_operation = NET_ASYNC_OP_READING;
+      net_async->cur_pos = net->buff + net->where_b;
+      /* fallthrough */
+    case NET_ASYNC_OP_READING:
+      rc = net_read_available(net, net_async->async_bytes_wanted);
+      if (rc == packet_error) {
+        *err_ptr = true;
+        net_async->async_operation = NET_ASYNC_OP_IDLE;
+        return NET_ASYNC_COMPLETE;
+      }
+      bytes_read = (size_t)rc;
+      net_async->async_bytes_wanted -= bytes_read;
+      if (net_async->async_bytes_wanted != 0) {
+        DBUG_PRINT("partial read",
+                   ("wanted/remaining/read: %zu, %zu, %zu", count,
+                    net_async->async_bytes_wanted, bytes_read));
+        return NET_ASYNC_NOT_READY;
+      }
+      net_async->async_operation = NET_ASYNC_OP_COMPLETE;
+      /* fallthrough */
+    case NET_ASYNC_OP_COMPLETE:
+      net_async->async_bytes_wanted = 0;
+      net_async->async_operation = NET_ASYNC_OP_IDLE;
+      *err_ptr = false;
+      DBUG_PRINT("read complete", ("read: %zu", count));
+      return NET_ASYNC_COMPLETE;
+    default:
+      /* error, sure wish we could log something here */
+      assert(false);
+      net_async->async_bytes_wanted = 0;
+      net_async->async_operation = NET_ASYNC_OP_IDLE;
+      *err_ptr = true;
+      return NET_ASYNC_COMPLETE;
+  }
+}
+
+
+// Source: net_serv.cc
+// Lines 1561-1604
+
+
+[ANSWER]
+MUST-NOT

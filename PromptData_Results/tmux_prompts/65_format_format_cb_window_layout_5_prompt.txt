@@ -1,0 +1,30 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'w' at line 3
+2. Pointer 'ft' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+format_cb_window_layout(struct format_tree *ft)
+{
+	struct window	*w = ft->w;
+
+	if (w == NULL)
+		return (NULL);
+
+	if (w->saved_layout_root != NULL)
+		return (layout_dump(w->saved_layout_root));
+	return (layout_dump(w->layout_root));
+}
+
+
+// Source: format.c
+// Lines 766-776
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'wp' at line 3\n2. Pointer 'ft' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nformat_cb_pane_in_mode(struct format_tree *ft)\n{\n\tstruct window_pane\t\t*wp = ft->wp;\n\tu_int\t\t\t\t n = 0;\n\tstruct window_mode_entry\t*wme;\n\tchar\t\t\t\t*value;\n\n\tif (wp == NULL)\n\t\treturn (NULL);\n\n\tTAILQ_FOREACH(wme, &wp->modes, entry)\n\t\tn++;\n\txasprintf(&value, \"%u\", n);\n\treturn (value);\n}\n\n\n// Source: format.c\n// Lines 1028-1042\n",
+  "ANSWER": "MUST"
+}

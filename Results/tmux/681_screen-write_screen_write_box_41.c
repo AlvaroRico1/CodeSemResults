@@ -1,0 +1,60 @@
+screen_write_box(struct screen_write_ctx *ctx, u_int nx, u_int ny,
+    enum box_lines lines, const struct grid_cell *gcp, const char *title)
+{
+	struct screen		*s = ctx->s;
+	struct grid_cell         gc;
+	u_int			 cx, cy, i;
+
+	cx = s->cx;
+	cy = s->cy;
+
+	if (gcp != NULL)
+		memcpy(&gc, gcp, sizeof gc);
+	else
+		memcpy(&gc, &grid_default_cell, sizeof gc);
+
+	gc.attr |= GRID_ATTR_CHARSET;
+	gc.flags |= GRID_FLAG_NOPALETTE;
+
+	/* Draw top border */
+	screen_write_box_border_set(lines, CELL_TOPLEFT, &gc);
+	screen_write_cell(ctx, &gc);
+	screen_write_box_border_set(lines, CELL_LEFTRIGHT, &gc);
+	for (i = 1; i < nx - 1; i++)
+		screen_write_cell(ctx, &gc);
+	screen_write_box_border_set(lines, CELL_TOPRIGHT, &gc);
+	screen_write_cell(ctx, &gc);
+
+	/* Draw bottom border */
+	screen_write_set_cursor(ctx, cx, cy + ny - 1);
+	screen_write_box_border_set(lines, CELL_BOTTOMLEFT, &gc);
+	screen_write_cell(ctx, &gc);
+	screen_write_box_border_set(lines, CELL_LEFTRIGHT, &gc);
+	for (i = 1; i < nx - 1; i++)
+		screen_write_cell(ctx, &gc);
+	screen_write_box_border_set(lines, CELL_BOTTOMRIGHT, &gc);
+	screen_write_cell(ctx, &gc);
+
+	/* Draw sides */
+	screen_write_box_border_set(lines, CELL_TOPBOTTOM, &gc);
+	for (i = 1; i < ny - 1; i++) {
+		/* left side */
+		screen_write_set_cursor(ctx, cx, cy + i);
+		screen_write_cell(ctx, &gc);
+		/* right side */
+		screen_write_set_cursor(ctx, cx + nx - 1, cy + i);
+		screen_write_cell(ctx, &gc);
+	}
+
+	if (title != NULL) {
+		gc.attr &= ~GRID_ATTR_CHARSET;
+		screen_write_cursormove(ctx, cx + 2, cy, 0);
+		format_draw(ctx, &gc, nx - 4, title, NULL);
+	}
+
+	screen_write_set_cursor(ctx, cx, cy);
+}
+
+
+// Source: screen-write.c
+// Lines 714-769

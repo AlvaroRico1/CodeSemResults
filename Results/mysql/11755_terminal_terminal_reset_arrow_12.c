@@ -1,0 +1,48 @@
+terminal_reset_arrow(EditLine *el)
+{
+	funckey_t *arrow = el->el_terminal.t_fkey;
+	static const wchar_t strA[] = L"\033[A";
+	static const wchar_t strB[] = L"\033[B";
+	static const wchar_t strC[] = L"\033[C";
+	static const wchar_t strD[] = L"\033[D";
+	static const wchar_t strH[] = L"\033[H";
+	static const wchar_t strF[] = L"\033[F";
+	static const wchar_t stOA[] = L"\033OA";
+	static const wchar_t stOB[] = L"\033OB";
+	static const wchar_t stOC[] = L"\033OC";
+	static const wchar_t stOD[] = L"\033OD";
+	static const wchar_t stOH[] = L"\033OH";
+	static const wchar_t stOF[] = L"\033OF";
+
+	keymacro_add(el, strA, &arrow[A_K_UP].fun, arrow[A_K_UP].type);
+	keymacro_add(el, strB, &arrow[A_K_DN].fun, arrow[A_K_DN].type);
+	keymacro_add(el, strC, &arrow[A_K_RT].fun, arrow[A_K_RT].type);
+	keymacro_add(el, strD, &arrow[A_K_LT].fun, arrow[A_K_LT].type);
+	keymacro_add(el, strH, &arrow[A_K_HO].fun, arrow[A_K_HO].type);
+	keymacro_add(el, strF, &arrow[A_K_EN].fun, arrow[A_K_EN].type);
+	keymacro_add(el, stOA, &arrow[A_K_UP].fun, arrow[A_K_UP].type);
+	keymacro_add(el, stOB, &arrow[A_K_DN].fun, arrow[A_K_DN].type);
+	keymacro_add(el, stOC, &arrow[A_K_RT].fun, arrow[A_K_RT].type);
+	keymacro_add(el, stOD, &arrow[A_K_LT].fun, arrow[A_K_LT].type);
+	keymacro_add(el, stOH, &arrow[A_K_HO].fun, arrow[A_K_HO].type);
+	keymacro_add(el, stOF, &arrow[A_K_EN].fun, arrow[A_K_EN].type);
+
+	if (el->el_map.type != MAP_VI)
+		return;
+	keymacro_add(el, &strA[1], &arrow[A_K_UP].fun, arrow[A_K_UP].type);
+	keymacro_add(el, &strB[1], &arrow[A_K_DN].fun, arrow[A_K_DN].type);
+	keymacro_add(el, &strC[1], &arrow[A_K_RT].fun, arrow[A_K_RT].type);
+	keymacro_add(el, &strD[1], &arrow[A_K_LT].fun, arrow[A_K_LT].type);
+	keymacro_add(el, &strH[1], &arrow[A_K_HO].fun, arrow[A_K_HO].type);
+	keymacro_add(el, &strF[1], &arrow[A_K_EN].fun, arrow[A_K_EN].type);
+	keymacro_add(el, &stOA[1], &arrow[A_K_UP].fun, arrow[A_K_UP].type);
+	keymacro_add(el, &stOB[1], &arrow[A_K_DN].fun, arrow[A_K_DN].type);
+	keymacro_add(el, &stOC[1], &arrow[A_K_RT].fun, arrow[A_K_RT].type);
+	keymacro_add(el, &stOD[1], &arrow[A_K_LT].fun, arrow[A_K_LT].type);
+	keymacro_add(el, &stOH[1], &arrow[A_K_HO].fun, arrow[A_K_HO].type);
+	keymacro_add(el, &stOF[1], &arrow[A_K_EN].fun, arrow[A_K_EN].type);
+}
+
+
+// Source: terminal.c
+// Lines 1030-1073

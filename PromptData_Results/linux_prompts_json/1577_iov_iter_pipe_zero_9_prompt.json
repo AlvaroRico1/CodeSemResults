@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'idx' at line 5\n2. Pointer 'off' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic size_t pipe_zero(size_t bytes, struct iov_iter *i)\n{\n\tstruct pipe_inode_info *pipe = i->pipe;\n\tsize_t n, off;\n\tint idx;\n\n\tif (!sanity(i))\n\t\treturn 0;\n\n\tbytes = n = push_pipe(i, bytes, &idx, &off);\n\tif (unlikely(!n))\n\t\treturn 0;\n\n\tfor ( ; n; idx = next_idx(idx, pipe), off = 0) {\n\t\tsize_t chunk = min_t(size_t, n, PAGE_SIZE - off);\n\t\tmemzero_page(pipe->bufs[idx].page, off, chunk);\n\t\ti->idx = idx;\n\t\ti->iov_offset = off + chunk;\n\t\tn -= chunk;\n\t}\n\ti->count -= bytes;\n\treturn bytes;\n}\n\n\n// Source: iov_iter.c\n// Lines 925-947\n",
+  "ANSWER": "MAY"
+}

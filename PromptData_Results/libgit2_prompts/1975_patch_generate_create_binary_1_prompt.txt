@@ -1,0 +1,66 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'delta_data_len' at line 12
+2. Pointer 'delta_data' at line 29
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int create_binary(
+	git_diff_binary_t *out_type,
+	char **out_data,
+	size_t *out_datalen,
+	size_t *out_inflatedlen,
+	const char *a_data,
+	size_t a_datalen,
+	const char *b_data,
+	size_t b_datalen)
+{
+	git_str deflate = GIT_STR_INIT, delta = GIT_STR_INIT;
+	size_t delta_data_len = 0;
+	int error;
+
+	/* The git_delta function accepts unsigned long only */
+	if (!git__is_ulong(a_datalen) || !git__is_ulong(b_datalen))
+		return GIT_EBUFS;
+
+	if ((error = git_zstream_deflatebuf(&deflate, b_data, b_datalen)) < 0)
+		goto done;
+
+	/* The git_delta function accepts unsigned long only */
+	if (!git__is_ulong(deflate.size)) {
+		error = GIT_EBUFS;
+		goto done;
+	}
+
+	if (a_datalen && b_datalen) {
+		void *delta_data;
+
+		error = git_delta(&delta_data, &delta_data_len,
+			a_data, a_datalen,
+			b_data, b_datalen,
+			deflate.size);
+
+		if (error == 0) {
+			error = git_zstream_deflatebuf(
+				&delta, delta_data, delta_data_len);
+
+			git__free(delta_data);
+		} else if (error == GIT_EBUFS) {
+			error = 0;
+		}
+
+		if (error < 0)
+			goto done;
+	}
+
+
+// Source: patch_generate.c
+// Lines 254-300
+
+
+[ANSWER]
+MAY

@@ -1,0 +1,39 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'buffer' at line 2
+2. Pointer 'spelling' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+cpp_spell_token (cpp_reader *pfile, const cpp_token *token,
+		 unsigned char *buffer, bool forstring)
+{
+  switch (TOKEN_SPELL (token))
+    {
+    case SPELL_OPERATOR:
+      {
+	const unsigned char *spelling;
+	unsigned char c;
+
+	if (token->flags & DIGRAPH)
+	  spelling = cpp_digraph2name (token->type);
+	else if (token->flags & NAMED_OP)
+	  goto spell_ident;
+	else
+	  spelling = TOKEN_NAME (token);
+
+	while ((c = *spelling++) != '\0')
+	  *buffer++ = c;
+      }
+
+
+// Source: lex.c
+// Lines 3289-3308
+
+
+[ANSWER]
+MAY

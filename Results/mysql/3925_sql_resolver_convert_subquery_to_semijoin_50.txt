@@ -1,0 +1,1 @@
+outer_tbl,mysql/sql/sql_resolver.cc,55,wrap_nest,mysql/sql/sql_resolver.cc,65,1

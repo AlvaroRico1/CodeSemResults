@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'branch' at line 3\n2. Pointer 'payload' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int branch_is_checked_out(git_repository *worktree, void *payload)\n{\n\tgit_reference *branch = (git_reference *) payload;\n\tgit_reference *head = NULL;\n\tint error;\n\n\tif (git_repository_is_bare(worktree))\n\t\treturn 0;\n\n\tif ((error = git_reference_lookup(&head, worktree, GIT_HEAD_FILE)) < 0) {\n\t\tif (error == GIT_ENOTFOUND)\n\t\t\terror = 0;\n\t\tgoto out;\n\t}\n\n\tif (git_reference_type(head) != GIT_REFERENCE_SYMBOLIC)\n\t\tgoto out;\n\n\terror = !git__strcmp(head->target.symbolic, branch->name);\n\nout:\n\tgit_reference_free(head);\n\treturn error;\n}\n\n\n// Source: branch.c\n// Lines 143-166\n",
+  "ANSWER": "MUST"
+}

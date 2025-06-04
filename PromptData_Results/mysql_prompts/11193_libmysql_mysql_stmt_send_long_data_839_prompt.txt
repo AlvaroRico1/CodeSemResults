@@ -1,0 +1,76 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'param' at line 3
+2. Pointer 'param_number' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool STDCALL mysql_stmt_send_long_data(MYSQL_STMT *stmt, uint param_number,
+                                       const char *data, ulong length) {
+  MYSQL_BIND *param;
+  DBUG_TRACE;
+  assert(stmt != nullptr);
+  DBUG_PRINT("enter", ("param no: %d  data: %p, length : %ld", param_number,
+                       data, length));
+
+  /*
+    We only need to check for stmt->param_count, if it's not null
+    prepare was done.
+  */
+  if (param_number >= stmt->param_count) {
+    set_stmt_error(stmt, CR_INVALID_PARAMETER_NO, unknown_sqlstate, nullptr);
+    return true;
+  }
+
+  param = stmt->params + param_number;
+  if (!IS_LONGDATA(param->buffer_type)) {
+    /* Long data handling should be used only for string/binary types */
+    my_stpcpy(stmt->sqlstate, unknown_sqlstate);
+    sprintf(stmt->last_error,
+            ER_CLIENT(stmt->last_errno = CR_INVALID_BUFFER_USE),
+            param->param_number);
+    return true;
+  }
+
+  /*
+    Send long data packet if there is data or we're sending long data
+    for the first time.
+  */
+  if (length || param->long_data_used == 0) {
+    MYSQL *mysql = stmt->mysql;
+    /* Packet header: stmt id (4 bytes), param no (2 bytes) */
+    uchar buff[MYSQL_LONG_DATA_HEADER];
+
+    int4store(buff, stmt->stmt_id);
+    int2store(buff + 4, param_number);
+    param->long_data_used = true;
+
+    /*
+      Note that we don't get any ok packet from the server in this case
+      This is intentional to save bandwidth.
+    */
+    if ((*mysql->methods->advanced_command)(
+            mysql, COM_STMT_SEND_LONG_DATA, buff, sizeof(buff),
+            pointer_cast<const uchar *>(data), length, true, stmt)) {
+      /*
+        Don't set stmt error if stmt->mysql is NULL, as the error in this case
+        has already been set by mysql_prune_stmt_list().
+      */
+      if (stmt->mysql) set_stmt_errmsg(stmt, &mysql->net);
+      return true;
+    }
+  }
+  return false;
+}
+
+
+// Source: libmysql.cc
+// Lines 2537-2593
+
+
+[ANSWER]
+MUST-NOT

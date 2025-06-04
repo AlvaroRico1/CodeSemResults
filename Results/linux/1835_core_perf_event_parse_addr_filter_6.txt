@@ -1,0 +1,1 @@
+start,linux/kernel/events/core.c,5,fstr,linux/kernel/events/core.c,1,2

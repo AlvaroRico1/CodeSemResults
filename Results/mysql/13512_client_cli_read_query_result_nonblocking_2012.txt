@@ -1,0 +1,1 @@
+field_count,mysql/sql-common/client.cc,7,pos,mysql/sql-common/client.cc,6,0

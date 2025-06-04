@@ -1,0 +1,1 @@
+sz_method,libgit2/tests/clar/clar_libgit2_trace.c,4,sz_tests,libgit2/tests/clar/clar_libgit2_trace.c,5,0

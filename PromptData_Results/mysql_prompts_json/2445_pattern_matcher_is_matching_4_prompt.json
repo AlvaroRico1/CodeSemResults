@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'pattern' at line 6\n2. Pointer 'info' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nbool Pattern_matcher::is_matching(const std::string &text,\n                                  const CHARSET_INFO *info) const {\n  DBUG_TRACE;\n\n  // traverse all patterns, return true on first match\n  for (auto &pattern : m_patterns) {\n    if (info->coll->wildcmp(info, text.c_str(), text.c_str() + text.length(),\n                            pattern.c_str(), pattern.c_str() + pattern.length(),\n                            WILD_ESCAPE, WILD_ONE, WILD_MANY) == 0) {\n      return true;\n    }\n  }\n  // none of the patterns matched\n  return false;\n}\n\n\n// Source: pattern_matcher.cc\n// Lines 76-90\n",
+  "ANSWER": "MUST-NOT"
+}

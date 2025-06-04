@@ -1,0 +1,53 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'retval' at line 6
+2. Pointer 'brace' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int interpret_nth_prior_checkout(struct repository *r,
+					const char *name, int namelen,
+					struct strbuf *buf)
+{
+	long nth;
+	int retval;
+	struct grab_nth_branch_switch_cbdata cb;
+	const char *brace;
+	char *num_end;
+
+	if (namelen < 4)
+		return -1;
+	if (name[0] != '@' || name[1] != '{' || name[2] != '-')
+		return -1;
+	brace = memchr(name, '}', namelen);
+	if (!brace)
+		return -1;
+	nth = strtol(name + 3, &num_end, 10);
+	if (num_end != brace)
+		return -1;
+	if (nth <= 0)
+		return -1;
+	cb.remaining = nth;
+	cb.sb = buf;
+
+	retval = refs_for_each_reflog_ent_reverse(get_main_ref_store(r),
+			"HEAD", grab_nth_branch_switch, &cb);
+	if (0 < retval) {
+		retval = brace - name + 1;
+	} else
+		retval = 0;
+
+	return retval;
+}
+
+
+// Source: object-name.c
+// Lines 1315-1348
+
+
+[ANSWER]
+MUST

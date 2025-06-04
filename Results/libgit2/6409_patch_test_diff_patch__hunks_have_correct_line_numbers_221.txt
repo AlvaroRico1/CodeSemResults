@@ -1,0 +1,1 @@
+cfg,libgit2/tests/libgit2/diff/patch.c,3,new_content,libgit2/tests/libgit2/diff/patch.c,13,0

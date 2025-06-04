@@ -1,0 +1,77 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'regionOrLocale' at line 6
+2. Pointer 'key' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+    virtual void put(const char *key, ResourceValue &value, UBool /*noFallback*/,
+                     UErrorCode &errorCode) {
+        ResourceTable timeData = value.getTable(errorCode);
+        if (U_FAILURE(errorCode)) { return; }
+        for (int32_t i = 0; timeData.getKeyAndValue(i, key, value); ++i) {
+            const char *regionOrLocale = key;
+            ResourceTable formatList = value.getTable(errorCode);
+            if (U_FAILURE(errorCode)) { return; }
+            // below we construct a list[] that has an entry for the "preferred" value at [0],
+            // followed by 1 or more entries for the "allowed" values, terminated with an
+            // entry for ALLOWED_HOUR_FORMAT_UNKNOWN (not included in length below)
+            LocalMemory<int32_t> list;
+            int32_t length = 0;
+            int32_t preferredFormat = ALLOWED_HOUR_FORMAT_UNKNOWN;
+            for (int32_t j = 0; formatList.getKeyAndValue(j, key, value); ++j) {
+                if (uprv_strcmp(key, "allowed") == 0) {
+                    if (value.getType() == URES_STRING) {
+                        length = 2; // 1 preferred to add later, 1 allowed to add now
+                        if (list.allocateInsteadAndReset(length + 1) == nullptr) {
+                            errorCode = U_MEMORY_ALLOCATION_ERROR;
+                            return;
+                        }
+                        list[1] = getHourFormatFromUnicodeString(value.getUnicodeString(errorCode));
+                    }
+                    else {
+                        ResourceArray allowedFormats = value.getArray(errorCode);
+                        length = allowedFormats.getSize() + 1; // 1 preferred, getSize allowed
+                        if (list.allocateInsteadAndReset(length + 1) == nullptr) {
+                            errorCode = U_MEMORY_ALLOCATION_ERROR;
+                            return;
+                        }
+                        for (int32_t k = 1; k < length; ++k) {
+                            allowedFormats.getValue(k-1, value);
+                            list[k] = getHourFormatFromUnicodeString(value.getUnicodeString(errorCode));
+                        }
+                    }
+                } else if (uprv_strcmp(key, "preferred") == 0) {
+                    preferredFormat = getHourFormatFromUnicodeString(value.getUnicodeString(errorCode));
+                }
+            }
+            if (length > 1) {
+                list[0] = (preferredFormat!=ALLOWED_HOUR_FORMAT_UNKNOWN)? preferredFormat: list[1];
+            } else {
+                // fallback handling for missing data
+                length = 2; // 1 preferred, 1 allowed
+                if (list.allocateInsteadAndReset(length + 1) == nullptr) {
+                    errorCode = U_MEMORY_ALLOCATION_ERROR;
+                    return;
+                }
+                list[0] = (preferredFormat!=ALLOWED_HOUR_FORMAT_UNKNOWN)? preferredFormat: ALLOWED_HOUR_FORMAT_H;
+                list[1] = list[0];
+            }
+            list[length] = ALLOWED_HOUR_FORMAT_UNKNOWN;
+            // At this point list[] will have at least two non-ALLOWED_HOUR_FORMAT_UNKNOWN entries,
+            // followed by ALLOWED_HOUR_FORMAT_UNKNOWN.
+            uhash_put(localeToAllowedHourFormatsMap, const_cast<char *>(regionOrLocale), list.orphan(), &errorCode);
+            if (U_FAILURE(errorCode)) { return; }
+        }
+
+
+// Source: dtptngen.cpp
+// Lines 512-569
+
+
+[ANSWER]
+MUST

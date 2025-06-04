@@ -1,0 +1,96 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'word' at line 5
+2. Pointer 'data' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int compat_ptrace_request(struct task_struct *child, compat_long_t request,
+			  compat_ulong_t addr, compat_ulong_t data)
+{
+	compat_ulong_t __user *datap = compat_ptr(data);
+	compat_ulong_t word;
+	kernel_siginfo_t siginfo;
+	int ret;
+
+	switch (request) {
+	case PTRACE_PEEKTEXT:
+	case PTRACE_PEEKDATA:
+		ret = ptrace_access_vm(child, addr, &word, sizeof(word),
+				FOLL_FORCE);
+		if (ret != sizeof(word))
+			ret = -EIO;
+		else
+			ret = put_user(word, datap);
+		break;
+
+	case PTRACE_POKETEXT:
+	case PTRACE_POKEDATA:
+		ret = ptrace_access_vm(child, addr, &data, sizeof(data),
+				FOLL_FORCE | FOLL_WRITE);
+		ret = (ret != sizeof(data) ? -EIO : 0);
+		break;
+
+	case PTRACE_GETEVENTMSG:
+		ret = put_user((compat_ulong_t) child->ptrace_message, datap);
+		break;
+
+	case PTRACE_GETSIGINFO:
+		ret = ptrace_getsiginfo(child, &siginfo);
+		if (!ret)
+			ret = copy_siginfo_to_user32(
+				(struct compat_siginfo __user *) datap,
+				&siginfo);
+		break;
+
+	case PTRACE_SETSIGINFO:
+		ret = copy_siginfo_from_user32(
+			&siginfo, (struct compat_siginfo __user *) datap);
+		if (!ret)
+			ret = ptrace_setsiginfo(child, &siginfo);
+		break;
+#ifdef CONFIG_HAVE_ARCH_TRACEHOOK
+	case PTRACE_GETREGSET:
+	case PTRACE_SETREGSET:
+	{
+		struct iovec kiov;
+		struct compat_iovec __user *uiov =
+			(struct compat_iovec __user *) datap;
+		compat_uptr_t ptr;
+		compat_size_t len;
+
+		if (!access_ok(uiov, sizeof(*uiov)))
+			return -EFAULT;
+
+		if (__get_user(ptr, &uiov->iov_base) ||
+		    __get_user(len, &uiov->iov_len))
+			return -EFAULT;
+
+		kiov.iov_base = compat_ptr(ptr);
+		kiov.iov_len = len;
+
+		ret = ptrace_regset(child, request, addr, &kiov);
+		if (!ret)
+			ret = __put_user(kiov.iov_len, &uiov->iov_len);
+		break;
+	}
+#endif
+
+	default:
+		ret = ptrace_request(child, request, addr, data);
+	}
+
+	return ret;
+}
+
+
+// Source: ptrace.c
+// Lines 1306-1382
+
+
+[ANSWER]
+MAY

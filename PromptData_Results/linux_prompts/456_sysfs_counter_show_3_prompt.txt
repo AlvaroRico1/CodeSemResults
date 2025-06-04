@@ -1,0 +1,70 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'status' at line 7
+2. Pointer 'handle' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static ssize_t counter_show(struct kobject *kobj,
+			    struct kobj_attribute *attr, char *buf)
+{
+	int index = attr - counter_attrs;
+	int size;
+	acpi_handle handle;
+	acpi_event_status status;
+	int result = 0;
+
+	all_counters[num_gpes + ACPI_NUM_FIXED_EVENTS + COUNT_SCI].count =
+	    acpi_irq_handled;
+	all_counters[num_gpes + ACPI_NUM_FIXED_EVENTS + COUNT_SCI_NOT].count =
+	    acpi_irq_not_handled;
+	all_counters[num_gpes + ACPI_NUM_FIXED_EVENTS + COUNT_GPE].count =
+	    acpi_gpe_count;
+	size = sprintf(buf, "%8u", all_counters[index].count);
+
+	/* "gpe_all" or "sci" */
+	if (index >= num_gpes + ACPI_NUM_FIXED_EVENTS)
+		goto end;
+
+	result = get_status(index, &status, &handle);
+	if (result)
+		goto end;
+
+	if (status & ACPI_EVENT_FLAG_ENABLE_SET)
+		size += sprintf(buf + size, "  EN");
+	else
+		size += sprintf(buf + size, "    ");
+	if (status & ACPI_EVENT_FLAG_STATUS_SET)
+		size += sprintf(buf + size, " STS");
+	else
+		size += sprintf(buf + size, "    ");
+
+	if (!(status & ACPI_EVENT_FLAG_HAS_HANDLER))
+		size += sprintf(buf + size, " invalid     ");
+	else if (status & ACPI_EVENT_FLAG_ENABLED)
+		size += sprintf(buf + size, " enabled     ");
+	else if (status & ACPI_EVENT_FLAG_WAKE_ENABLED)
+		size += sprintf(buf + size, " wake_enabled");
+	else
+		size += sprintf(buf + size, " disabled    ");
+	if (status & ACPI_EVENT_FLAG_MASKED)
+		size += sprintf(buf + size, " masked  ");
+	else
+		size += sprintf(buf + size, " unmasked");
+
+end:
+	size += sprintf(buf + size, "\n");
+	return result ? result : size;
+}
+
+
+// Source: sysfs.c
+// Lines 676-726
+
+
+[ANSWER]
+MAY

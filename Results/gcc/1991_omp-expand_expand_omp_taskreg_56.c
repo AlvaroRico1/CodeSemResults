@@ -1,0 +1,113 @@
+expand_omp_taskreg (struct omp_region *region)
+{
+  basic_block entry_bb, exit_bb, new_bb;
+  struct function *child_cfun;
+  tree child_fn, block, t;
+  gimple_stmt_iterator gsi;
+  gimple *entry_stmt, *stmt;
+  edge e;
+  vec<tree, va_gc> *ws_args;
+
+  entry_stmt = last_stmt (region->entry);
+  if (gimple_code (entry_stmt) == GIMPLE_OMP_TASK
+      && gimple_omp_task_taskwait_p (entry_stmt))
+    {
+      new_bb = region->entry;
+      gsi = gsi_last_nondebug_bb (region->entry);
+      gcc_assert (gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_TASK);
+      gsi_remove (&gsi, true);
+      expand_taskwait_call (new_bb, as_a <gomp_task *> (entry_stmt));
+      return;
+    }
+
+  child_fn = gimple_omp_taskreg_child_fn (entry_stmt);
+  child_cfun = DECL_STRUCT_FUNCTION (child_fn);
+
+  entry_bb = region->entry;
+  if (gimple_code (entry_stmt) == GIMPLE_OMP_TASK)
+    exit_bb = region->cont;
+  else
+    exit_bb = region->exit;
+
+  if (is_combined_parallel (region))
+    ws_args = region->ws_args;
+  else
+    ws_args = NULL;
+
+  if (child_cfun->cfg)
+    {
+      /* Due to inlining, it may happen that we have already outlined
+	 the region, in which case all we need to do is make the
+	 sub-graph unreachable and emit the parallel call.  */
+      edge entry_succ_e, exit_succ_e;
+
+      entry_succ_e = single_succ_edge (entry_bb);
+
+      gsi = gsi_last_nondebug_bb (entry_bb);
+      gcc_assert (gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_PARALLEL
+		  || gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_TASK
+		  || gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_TEAMS);
+      gsi_remove (&gsi, true);
+
+      new_bb = entry_bb;
+      if (exit_bb)
+	{
+	  exit_succ_e = single_succ_edge (exit_bb);
+	  make_edge (new_bb, exit_succ_e->dest, EDGE_FALLTHRU);
+	}
+      remove_edge_and_dominated_blocks (entry_succ_e);
+    }
+  else
+    {
+      unsigned srcidx, dstidx, num;
+
+      /* If the parallel region needs data sent from the parent
+	 function, then the very first statement (except possible
+	 tree profile counter updates) of the parallel body
+	 is a copy assignment .OMP_DATA_I = &.OMP_DATA_O.  Since
+	 &.OMP_DATA_O is passed as an argument to the child function,
+	 we need to replace it with the argument as seen by the child
+	 function.
+
+	 In most cases, this will end up being the identity assignment
+	 .OMP_DATA_I = .OMP_DATA_I.  However, if the parallel body had
+	 a function call that has been inlined, the original PARM_DECL
+	 .OMP_DATA_I may have been converted into a different local
+	 variable.  In which case, we need to keep the assignment.  */
+      if (gimple_omp_taskreg_data_arg (entry_stmt))
+	{
+	  basic_block entry_succ_bb
+	    = single_succ_p (entry_bb) ? single_succ (entry_bb)
+				       : FALLTHRU_EDGE (entry_bb)->dest;
+	  tree arg;
+	  gimple *parcopy_stmt = NULL;
+
+	  for (gsi = gsi_start_bb (entry_succ_bb); ; gsi_next (&gsi))
+	    {
+	      gimple *stmt;
+
+	      gcc_assert (!gsi_end_p (gsi));
+	      stmt = gsi_stmt (gsi);
+	      if (gimple_code (stmt) != GIMPLE_ASSIGN)
+		continue;
+
+	      if (gimple_num_ops (stmt) == 2)
+		{
+		  tree arg = gimple_assign_rhs1 (stmt);
+
+		  /* We're ignore the subcode because we're
+		     effectively doing a STRIP_NOPS.  */
+
+		  if (TREE_CODE (arg) == ADDR_EXPR
+		      && (TREE_OPERAND (arg, 0)
+			  == gimple_omp_taskreg_data_arg (entry_stmt)))
+		    {
+		      parcopy_stmt = stmt;
+		      break;
+		    }
+		}
+	    }
+
+
+// Source: omp-expand.c
+// Lines 1234-1342

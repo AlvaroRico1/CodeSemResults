@@ -1,0 +1,1 @@
+crash_base,linux/arch/x86/kernel/setup.c,3,crash_size,linux/arch/x86/kernel/setup.c,3,2

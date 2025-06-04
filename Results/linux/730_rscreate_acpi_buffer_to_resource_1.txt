@@ -1,0 +1,1 @@
+current_resource_ptr,linux/drivers/acpi/acpica/rscreate.c,8,list_size_needed,linux/drivers/acpi/acpica/rscreate.c,6,2

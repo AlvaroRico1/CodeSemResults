@@ -1,0 +1,31 @@
+void mysql_sql_stmt_execute(THD *thd) {
+  LEX *lex = thd->lex;
+  const LEX_CSTRING &name = lex->prepared_stmt_name;
+  DBUG_TRACE;
+  DBUG_PRINT("info", ("EXECUTE: %.*s\n", (int)name.length, name.str));
+
+  Prepared_statement *stmt;
+  if (!(stmt = thd->stmt_map.find_by_name(name))) {
+    my_error(ER_UNKNOWN_STMT_HANDLER, MYF(0), static_cast<int>(name.length),
+             name.str, "EXECUTE");
+    return;
+  }
+
+  if (stmt->param_count != lex->prepared_stmt_params.elements) {
+    my_error(ER_WRONG_ARGUMENTS, MYF(0), "EXECUTE");
+    return;
+  }
+
+  DBUG_PRINT("info", ("stmt: %p", stmt));
+  MYSQL_EXECUTE_PS(thd->m_statement_psi, stmt->m_prepared_stmt);
+
+  // Query text for binary, general or slow log, if any of them is open
+  String expanded_query;
+  if (stmt->set_parameters(&expanded_query)) return;
+
+  stmt->execute_loop(&expanded_query, false);
+}
+
+
+// Source: sql_prepare.cc
+// Lines 1932-1958

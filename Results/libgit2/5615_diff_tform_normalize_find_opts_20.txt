@@ -1,0 +1,1 @@
+opts,libgit2/src/libgit2/diff_tform.c,3,hashsig_opts,libgit2/src/libgit2/diff_tform.c,7,1

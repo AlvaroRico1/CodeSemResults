@@ -1,0 +1,1 @@
+line_length,libgit2/src/libgit2/message.c,10,next_newline,libgit2/src/libgit2/message.c,11,1

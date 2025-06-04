@@ -1,0 +1,61 @@
+static void *run_index_diffs_with_modifier(void *arg)
+{
+	int thread = *(int *)arg;
+	git_diff_options opts = GIT_DIFF_OPTIONS_INIT;
+	git_diff *diff = NULL;
+	git_index *idx = NULL;
+	git_repository *repo;
+
+	cl_git_pass(git_repository_open(&repo, git_repository_path(_repo)));
+	cl_git_pass(git_repository_index(&idx, repo));
+
+	/* have first thread altering the index as we go */
+	if (thread == 0) {
+		int i;
+
+		for (i = 0; i < 300; ++i) {
+			switch (i & 0x03) {
+			case 0: (void)git_index_add_bypath(idx, "new_file"); break;
+			case 1: (void)git_index_remove_bypath(idx, "modified_file"); break;
+			case 2: (void)git_index_remove_bypath(idx, "new_file"); break;
+			case 3: (void)git_index_add_bypath(idx, "modified_file"); break;
+			}
+			git_thread_yield();
+		}
+
+		goto done;
+	}
+
+	/* only use explicit index in this test to prevent reloading */
+
+	switch (thread & 0x03) {
+	case 0: /* diff index to workdir */;
+		cl_git_pass(git_diff_index_to_workdir(&diff, repo, idx, &opts));
+		break;
+	case 1: /* diff tree 'a' to index */;
+		cl_git_pass(git_diff_tree_to_index(&diff, repo, _a, idx, &opts));
+		break;
+	case 2: /* diff tree 'b' to index */;
+		cl_git_pass(git_diff_tree_to_index(&diff, repo, _b, idx, &opts));
+		break;
+	case 3: /* diff index to workdir reversed */;
+		opts.flags |= GIT_DIFF_REVERSE;
+		cl_git_pass(git_diff_index_to_workdir(&diff, repo, idx, &opts));
+		break;
+	}
+
+	/* results will be unpredictable with index modifier thread running */
+
+	git_diff_free(diff);
+
+done:
+	git_index_free(idx);
+	git_repository_free(repo);
+	git_error_clear();
+
+	return arg;
+}
+
+
+// Source: diff.c
+// Lines 153-209

@@ -1,0 +1,25 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'from' at line 3
+2. Pointer 'from_param' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void ZeroFieldsBase::MergeImpl(Message* to_param, const Message& from_param) {
+  auto* to = static_cast<ZeroFieldsBase*>(to_param);
+  const auto* from = static_cast<const ZeroFieldsBase*>(&from_param);
+  GOOGLE_DCHECK_NE(from, to);
+  to->_internal_metadata_.MergeFrom<UnknownFieldSet>(from->_internal_metadata_);
+}
+
+
+// Source: generated_message_bases.cc
+// Lines 101-106
+
+
+[ANSWER]
+MUST

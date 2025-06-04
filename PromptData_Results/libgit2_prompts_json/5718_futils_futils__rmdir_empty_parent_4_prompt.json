@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'data' at line 3\n2. Pointer 'opaque' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int futils__rmdir_empty_parent(void *opaque, const char *path)\n{\n\tfutils__rmdir_data *data = opaque;\n\tint error = 0;\n\n\tif (strlen(path) <= data->baselen)\n\t\terror = GIT_ITEROVER;\n\n\telse if (p_rmdir(path) < 0) {\n\t\tint en = errno;\n\n\t\tif (en == ENOENT || en == ENOTDIR) {\n\t\t\t/* do nothing */\n\t\t} else if ((data->flags & GIT_RMDIR_SKIP_NONEMPTY) == 0 &&\n\t\t\ten == EBUSY) {\n\t\t\terror = git_fs_path_set_error(errno, path, \"rmdir\");\n\t\t} else if (en == ENOTEMPTY || en == EEXIST || en == EBUSY) {\n\t\t\terror = GIT_ITEROVER;\n\t\t} else {\n\t\t\terror = git_fs_path_set_error(errno, path, \"rmdir\");\n\t\t}\n\t}\n\n\treturn error;\n}\n\n\n// Source: futils.c\n// Lines 828-852\n",
+  "ANSWER": "MUST"
+}

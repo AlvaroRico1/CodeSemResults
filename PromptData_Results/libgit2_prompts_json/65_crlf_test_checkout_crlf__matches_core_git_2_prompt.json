@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'a' at line 8\n2. Pointer 'b' at line 8\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid test_checkout_crlf__matches_core_git(void)\n{\n\tconst char *autocrlf[] = { \"true\", \"false\", \"input\", NULL };\n\tconst char *attrs[] = { \"\", \"-crlf\", \"-text\", \"eol=crlf\", \"eol=lf\",\n\t\t\"text\", \"text eol=crlf\", \"text eol=lf\",\n\t\t\"text=auto\", \"text=auto eol=crlf\", \"text=auto eol=lf\",\n\t\tNULL };\n\tconst char **a, **b;\n\n\tfor (a = autocrlf; *a; a++) {\n\t\tfor (b = attrs; *b; b++) {\n\t\t\tempty_workdir(\"crlf\");\n\t\t\ttest_checkout(*a, *b);\n\t\t}\n\t}\n}\n\n\n// Source: crlf.c\n// Lines 203-218\n",
+  "ANSWER": "MUST-NOT"
+}

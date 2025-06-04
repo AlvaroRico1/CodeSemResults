@@ -1,0 +1,96 @@
+static int filesystem_iterator_advance_over(
+	const git_index_entry **out,
+	git_iterator_status_t *status,
+	git_iterator *i)
+{
+	filesystem_iterator *iter = GIT_CONTAINER_OF(i, filesystem_iterator, base);
+	filesystem_iterator_frame *current_frame;
+	filesystem_iterator_entry *current_entry;
+	const git_index_entry *entry = NULL;
+	const char *base;
+	int error = 0;
+
+	*out = NULL;
+	*status = GIT_ITERATOR_STATUS_NORMAL;
+
+	GIT_ASSERT(iterator__has_been_accessed(i));
+
+	current_frame = filesystem_iterator_current_frame(iter);
+	GIT_ASSERT(current_frame);
+
+	current_entry = filesystem_iterator_current_entry(current_frame);
+	GIT_ASSERT(current_entry);
+
+	if ((error = git_iterator_current(&entry, i)) < 0)
+		return error;
+
+	if (!S_ISDIR(entry->mode)) {
+		if (filesystem_iterator_current_is_ignored(iter))
+			*status = GIT_ITERATOR_STATUS_IGNORED;
+
+		return filesystem_iterator_advance(out, i);
+	}
+
+	git_str_clear(&iter->tmp_buf);
+	if ((error = git_str_puts(&iter->tmp_buf, entry->path)) < 0)
+		return error;
+
+	base = iter->tmp_buf.ptr;
+
+	/* scan inside the directory looking for files.  if we find nothing,
+	 * we will remain EMPTY.  if we find any ignored item, upgrade EMPTY to
+	 * IGNORED.  if we find a real actual item, upgrade all the way to NORMAL
+	 * and then stop.
+	 *
+	 * however, if we're here looking for a pathlist item (but are not
+	 * actually in the pathlist ourselves) then start at FILTERED instead of
+	 * EMPTY.  callers then know that this path was not something they asked
+	 * about.
+	 */
+	*status = current_entry->match == ITERATOR_PATHLIST_IS_PARENT ?
+		GIT_ITERATOR_STATUS_FILTERED : GIT_ITERATOR_STATUS_EMPTY;
+
+	while (entry && !iter->base.prefixcomp(entry->path, base)) {
+		if (filesystem_iterator_current_is_ignored(iter)) {
+			/* if we found an explicitly ignored item, then update from
+			 * EMPTY to IGNORED
+			 */
+			*status = GIT_ITERATOR_STATUS_IGNORED;
+		} else if (S_ISDIR(entry->mode)) {
+			error = filesystem_iterator_advance_into(&entry, i);
+
+			if (!error)
+				continue;
+
+			/* this directory disappeared, ignore it */
+			else if (error == GIT_ENOTFOUND)
+				error = 0;
+
+			/* a real error occurred */
+			else
+				break;
+		} else {
+			/* we found a non-ignored item, treat parent as untracked */
+			*status = GIT_ITERATOR_STATUS_NORMAL;
+			break;
+		}
+
+		if ((error = git_iterator_advance(&entry, i)) < 0)
+			break;
+	}
+
+	/* wrap up scan back to base directory */
+	while (entry && !iter->base.prefixcomp(entry->path, base)) {
+		if ((error = git_iterator_advance(&entry, i)) < 0)
+			break;
+	}
+
+	if (!error)
+		*out = entry;
+
+	return error;
+}
+
+
+// Source: iterator.c
+// Lines 1767-1858

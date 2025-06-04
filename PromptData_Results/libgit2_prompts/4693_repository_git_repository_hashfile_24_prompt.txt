@@ -1,0 +1,90 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'fl' at line 9
+2. Pointer 'len' at line 11
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_repository_hashfile(
+	git_oid *out,
+	git_repository *repo,
+	const char *path,
+	git_object_t type,
+	const char *as_path)
+{
+	int error;
+	git_filter_list *fl = NULL;
+	git_file fd = -1;
+	uint64_t len;
+	git_str full_path = GIT_STR_INIT;
+	const char *workdir = git_repository_workdir(repo);
+
+	 /* as_path can be NULL */
+	GIT_ASSERT_ARG(out);
+	GIT_ASSERT_ARG(path);
+	GIT_ASSERT_ARG(repo);
+
+	if ((error = git_fs_path_join_unrooted(&full_path, path, workdir, NULL)) < 0 ||
+	    (error = git_path_validate_str_length(repo, &full_path)) < 0)
+		return error;
+
+	/*
+	 * NULL as_path means that we should derive it from the
+	 * given path.
+	 */
+	if (!as_path) {
+		if (workdir && !git__prefixcmp(full_path.ptr, workdir))
+			as_path = full_path.ptr + strlen(workdir);
+		else
+			as_path = "";
+	}
+
+	/* passing empty string for "as_path" indicated --no-filters */
+	if (strlen(as_path) > 0) {
+		error = git_filter_list_load(
+			&fl, repo, NULL, as_path,
+			GIT_FILTER_TO_ODB, GIT_FILTER_DEFAULT);
+
+		if (error < 0)
+			return error;
+	}
+
+	/* at this point, error is a count of the number of loaded filters */
+
+	fd = git_futils_open_ro(full_path.ptr);
+	if (fd < 0) {
+		error = fd;
+		goto cleanup;
+	}
+
+	if ((error = git_futils_filesize(&len, fd)) < 0)
+		goto cleanup;
+
+	if (!git__is_sizet(len)) {
+		git_error_set(GIT_ERROR_OS, "file size overflow for 32-bit systems");
+		error = -1;
+		goto cleanup;
+	}
+
+	error = git_odb__hashfd_filtered(out, fd, (size_t)len, type, fl);
+
+cleanup:
+	if (fd >= 0)
+		p_close(fd);
+	git_filter_list_free(fl);
+	git_str_dispose(&full_path);
+
+	return error;
+}
+
+
+// Source: repository.c
+// Lines 2847-2917
+
+
+[ANSWER]
+MAY

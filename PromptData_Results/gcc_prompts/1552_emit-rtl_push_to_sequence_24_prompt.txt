@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'last' at line 3
+2. Pointer 'first' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+push_to_sequence (rtx_insn *first)
+{
+  rtx_insn *last;
+
+  start_sequence ();
+
+  for (last = first; last && NEXT_INSN (last); last = NEXT_INSN (last))
+    ;
+
+  set_first_insn (first);
+  set_last_insn (last);
+}
+
+
+// Source: emit-rtl.c
+// Lines 5523-5534
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,40 @@
+bool Query_block::check_column_privileges(THD *thd) {
+  Column_privilege_tracker tracker(thd, SELECT_ACL);
+
+  for (Item *item : visible_fields()) {
+    if (item->walk(&Item::check_column_privileges, enum_walk::PREFIX,
+                   pointer_cast<uchar *>(thd)))
+      return true;
+  }
+  if (join_list && check_privileges_for_join(thd, join_list)) return true;
+  if (where_cond() != nullptr &&
+      where_cond()->walk(&Item::check_column_privileges, enum_walk::PREFIX,
+                         pointer_cast<uchar *>(thd)))
+    return true;
+  for (ORDER *group = group_list.first; group; group = group->next) {
+    if ((*group->item)
+            ->walk(&Item::check_column_privileges, enum_walk::PREFIX,
+                   pointer_cast<uchar *>(thd)))
+      return true;
+  }
+  if (having_cond() != nullptr &&
+      having_cond()->walk(&Item::check_column_privileges, enum_walk::PREFIX,
+                          pointer_cast<uchar *>(thd)))
+    return true;
+  List_iterator<Window> wi(m_windows);
+  Window *w;
+  while ((w = wi++)) {
+    for (ORDER *wp = w->first_partition_by(); wp != nullptr; wp = wp->next)
+      if ((*wp->item)->walk(&Item::check_column_privileges, enum_walk::PREFIX,
+                            pointer_cast<uchar *>(thd)))
+        return true;
+
+    for (ORDER *wo = w->first_order_by(); wo != nullptr; wo = wo->next)
+      if ((*wo->item)->walk(&Item::check_column_privileges, enum_walk::PREFIX,
+                            pointer_cast<uchar *>(thd)))
+        return true;
+  }
+
+
+// Source: sql_select.cc
+// Lines 1846-1881

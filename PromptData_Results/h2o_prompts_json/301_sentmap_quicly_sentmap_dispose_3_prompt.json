@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'map' at line 1\n2. Pointer 'block' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid quicly_sentmap_dispose(quicly_sentmap_t *map)\n{\n    struct st_quicly_sent_block_t *block;\n\n    while ((block = map->head) != NULL) {\n        map->head = block->next;\n        free(block);\n    }\n}\n\n\n// Source: sentmap.c\n// Lines 85-93\n",
+  "ANSWER": "MUST"
+}

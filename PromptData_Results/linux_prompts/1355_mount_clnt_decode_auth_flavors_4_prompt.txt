@@ -1,0 +1,52 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'count' at line 4
+2. Pointer 'res' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int decode_auth_flavors(struct xdr_stream *xdr, struct mountres *res)
+{
+	rpc_authflavor_t *flavors = res->auth_flavors;
+	unsigned int *count = res->auth_count;
+	u32 entries, i;
+	__be32 *p;
+
+	if (*count == 0)
+		return 0;
+
+	p = xdr_inline_decode(xdr, 4);
+	if (unlikely(p == NULL))
+		return -EIO;
+	entries = be32_to_cpup(p);
+	dprintk("NFS: received %u auth flavors\n", entries);
+	if (entries > NFS_MAX_SECFLAVORS)
+		entries = NFS_MAX_SECFLAVORS;
+
+	p = xdr_inline_decode(xdr, 4 * entries);
+	if (unlikely(p == NULL))
+		return -EIO;
+
+	if (entries > *count)
+		entries = *count;
+
+	for (i = 0; i < entries; i++) {
+		flavors[i] = be32_to_cpup(p++);
+		dprintk("NFS:   auth flavor[%u]: %d\n", i, flavors[i]);
+	}
+	*count = i;
+
+	return 0;
+}
+
+
+// Source: mount_clnt.c
+// Lines 420-452
+
+
+[ANSWER]
+MUST

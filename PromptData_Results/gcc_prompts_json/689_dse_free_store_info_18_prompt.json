@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'cur' at line 3\n2. Pointer 'insn_info' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nfree_store_info (insn_info_t insn_info)\n{\n  store_info *cur = insn_info->store_rec;\n  while (cur)\n    {\n      store_info *next = cur->next;\n      if (cur->is_large)\n\tBITMAP_FREE (cur->positions_needed.large.bmap);\n      if (cur->cse_base)\n\tcse_store_info_pool.remove (cur);\n      else\n\trtx_store_info_pool.remove (cur);\n      cur = next;\n    }\n\n  insn_info->cannot_delete = true;\n  insn_info->contains_cselib_groups = false;\n  insn_info->store_rec = NULL;\n}\n\n\n// Source: dse.c\n// Lines 732-750\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'terminator' at line 3
+2. Pointer 'desc' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+strip_trailing_whitespace (char *desc)
+{
+  char *terminator = desc + strlen (desc);
+  while (desc < terminator)
+    {
+      terminator--;
+      if (ISSPACE (*terminator))
+	*terminator = '\0';
+      else
+	break;
+    }
+}
+
+
+// Source: read-rtl-function.c
+// Lines 307-318
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,41 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'skr' at line 7
+2. Pointer 'str' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void read_user_name(char *name) {
+  DBUG_TRACE;
+  if (geteuid() == 0)
+    (void)my_stpcpy(name, "root"); /* allow use of surun */
+  else {
+#ifdef HAVE_GETPWUID
+    struct passwd *skr;
+    const char *str;
+    if ((str = getlogin()) == nullptr) {
+      if ((skr = getpwuid(geteuid())) != nullptr)
+        str = skr->pw_name;
+      else if (!(str = getenv("USER")) && !(str = getenv("LOGNAME")) &&
+               !(str = getenv("LOGIN")))
+        str = "UNKNOWN_USER";
+    }
+    (void)strmake(name, str, USERNAME_LENGTH);
+#elif HAVE_CUSERID
+    (void)cuserid(name);
+#else
+    my_stpcpy(name, "UNKNOWN_USER");
+#endif
+  }
+
+
+// Source: libmysql.cc
+// Lines 333-354
+
+
+[ANSWER]
+MUST-NOT

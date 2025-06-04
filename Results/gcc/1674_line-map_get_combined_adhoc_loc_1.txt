@@ -1,0 +1,1 @@
+offset,gcc/libcpp/line-map.c,59,slot,gcc/libcpp/line-map.c,7,2

@@ -1,0 +1,99 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'same_page' at line 7
+2. Pointer 'pos' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+iomap_readpage_actor(struct inode *inode, loff_t pos, loff_t length, void *data,
+		struct iomap *iomap)
+{
+	struct iomap_readpage_ctx *ctx = data;
+	struct page *page = ctx->cur_page;
+	struct iomap_page *iop = iomap_page_create(inode, page);
+	bool same_page = false, is_contig = false;
+	loff_t orig_pos = pos;
+	unsigned poff, plen;
+	sector_t sector;
+
+	if (iomap->type == IOMAP_INLINE) {
+		WARN_ON_ONCE(pos);
+		iomap_read_inline_data(inode, page, iomap);
+		return PAGE_SIZE;
+	}
+
+	/* zero post-eof blocks as the page may be mapped */
+	iomap_adjust_read_range(inode, iop, &pos, length, &poff, &plen);
+	if (plen == 0)
+		goto done;
+
+	if (iomap->type != IOMAP_MAPPED || pos >= i_size_read(inode)) {
+		zero_user(page, poff, plen);
+		iomap_set_range_uptodate(page, poff, plen);
+		goto done;
+	}
+
+	ctx->cur_page_in_bio = true;
+
+	/*
+	 * Try to merge into a previous segment if we can.
+	 */
+	sector = iomap_sector(iomap, pos);
+	if (ctx->bio && bio_end_sector(ctx->bio) == sector)
+		is_contig = true;
+
+	if (is_contig &&
+	    __bio_try_merge_page(ctx->bio, page, plen, poff, &same_page)) {
+		if (!same_page && iop)
+			atomic_inc(&iop->read_count);
+		goto done;
+	}
+
+	/*
+	 * If we start a new segment we need to increase the read count, and we
+	 * need to do so before submitting any previous full bio to make sure
+	 * that we don't prematurely unlock the page.
+	 */
+	if (iop)
+		atomic_inc(&iop->read_count);
+
+	if (!ctx->bio || !is_contig || bio_full(ctx->bio, plen)) {
+		gfp_t gfp = mapping_gfp_constraint(page->mapping, GFP_KERNEL);
+		int nr_vecs = (length + PAGE_SIZE - 1) >> PAGE_SHIFT;
+
+		if (ctx->bio)
+			submit_bio(ctx->bio);
+
+		if (ctx->is_readahead) /* same as readahead_gfp_mask */
+			gfp |= __GFP_NORETRY | __GFP_NOWARN;
+		ctx->bio = bio_alloc(gfp, min(BIO_MAX_PAGES, nr_vecs));
+		ctx->bio->bi_opf = REQ_OP_READ;
+		if (ctx->is_readahead)
+			ctx->bio->bi_opf |= REQ_RAHEAD;
+		ctx->bio->bi_iter.bi_sector = sector;
+		bio_set_dev(ctx->bio, iomap->bdev);
+		ctx->bio->bi_end_io = iomap_read_end_io;
+	}
+
+	bio_add_page(ctx->bio, page, plen, poff);
+done:
+	/*
+	 * Move the caller beyond our range so that it keeps making progress.
+	 * For that we have to include any leading non-uptodate ranges, but
+	 * we can skip trailing ones as they will be handled in the next
+	 * iteration.
+	 */
+	return pos - orig_pos + plen;
+}
+
+
+// Source: buffered-io.c
+// Lines 207-286
+
+
+[ANSWER]
+MAY

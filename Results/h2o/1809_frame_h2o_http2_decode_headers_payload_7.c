@@ -1,0 +1,40 @@
+int h2o_http2_decode_headers_payload(h2o_http2_headers_payload_t *payload, const h2o_http2_frame_t *frame, const char **err_desc)
+{
+    const uint8_t *src = frame->payload, *src_end = frame->payload + frame->length;
+
+    if (frame->stream_id == 0) {
+        *err_desc = "invalid stream id in HEADERS frame";
+        return H2O_HTTP2_ERROR_PROTOCOL;
+    }
+
+    if ((frame->flags & H2O_HTTP2_FRAME_FLAG_PADDED) != 0) {
+        uint32_t padlen;
+        if (src == src_end) {
+            *err_desc = "invalid HEADERS frame";
+            return H2O_HTTP2_ERROR_PROTOCOL;
+        }
+        padlen = *src++;
+        if (src_end - src < padlen) {
+            *err_desc = "invalid HEADERS frame";
+            return H2O_HTTP2_ERROR_PROTOCOL;
+        }
+        src_end -= padlen;
+    }
+
+    if ((frame->flags & H2O_HTTP2_FRAME_FLAG_PRIORITY) != 0) {
+        if (src_end - src < 5)
+            return -1;
+        src = decode_priority(&payload->priority, src);
+    } else {
+        payload->priority = h2o_http2_default_priority;
+    }
+
+    payload->headers = src;
+    payload->headers_len = src_end - src;
+
+    return 0;
+}
+
+
+// Source: frame.c
+// Lines 180-215

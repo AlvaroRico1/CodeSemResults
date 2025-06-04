@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'next' at line 5\n2. Pointer 'p' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nremove_invalid_subreg_refs (unsigned int regno, poly_uint64 offset,\n\t\t\t    machine_mode mode)\n{\n  unsigned int i;\n  struct table_elt *p, *next;\n\n  for (i = 0; i < HASH_SIZE; i++)\n    for (p = table[i]; p; p = next)\n      {\n\trtx exp = p->exp;\n\tnext = p->next_same_hash;\n\n\tif (!REG_P (exp)\n\t    && (GET_CODE (exp) != SUBREG\n\t\t|| !REG_P (SUBREG_REG (exp))\n\t\t|| REGNO (SUBREG_REG (exp)) != regno\n\t\t|| ranges_maybe_overlap_p (SUBREG_BYTE (exp),\n\t\t\t\t\t   GET_MODE_SIZE (GET_MODE (exp)),\n\t\t\t\t\t   offset, GET_MODE_SIZE (mode)))\n\t    && refers_to_regno_p (regno, p->exp))\n\t  remove_from_table (p, i);\n      }\n}\n\n\n// Source: cse.c\n// Lines 2003-2025\n",
+  "ANSWER": "MUST"
+}

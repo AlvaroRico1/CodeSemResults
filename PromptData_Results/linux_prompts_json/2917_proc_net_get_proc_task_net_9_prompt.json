@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ns' at line 4\n2. Pointer 'task' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic struct net *get_proc_task_net(struct inode *dir)\n{\n\tstruct task_struct *task;\n\tstruct nsproxy *ns;\n\tstruct net *net = NULL;\n\n\trcu_read_lock();\n\ttask = pid_task(proc_pid(dir), PIDTYPE_PID);\n\tif (task != NULL) {\n\t\ttask_lock(task);\n\t\tns = task->nsproxy;\n\t\tif (ns != NULL)\n\t\t\tnet = get_net(ns->net_ns);\n\t\ttask_unlock(task);\n\t}\n\trcu_read_unlock();\n\n\treturn net;\n}\n\n\n// Source: proc_net.c\n// Lines 254-272\n",
+  "ANSWER": "MUST"
+}

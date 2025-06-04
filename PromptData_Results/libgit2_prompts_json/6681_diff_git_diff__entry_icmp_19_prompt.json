@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'entry_a' at line 3\n2. Pointer 'a' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint git_diff__entry_icmp(const void *a, const void *b)\n{\n\tconst git_index_entry *entry_a = a;\n\tconst git_index_entry *entry_b = b;\n\n\treturn strcasecmp(entry_a->path, entry_b->path);\n}\n\n\n// Source: diff.c\n// Lines 62-68\n",
+  "ANSWER": "MUST"
+}

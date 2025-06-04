@@ -1,0 +1,1 @@
+consumed,libgit2/src/libgit2/netops.c,3,ptr,libgit2/src/libgit2/netops.c,1,1

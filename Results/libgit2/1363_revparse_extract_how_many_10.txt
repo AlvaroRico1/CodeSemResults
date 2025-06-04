@@ -1,0 +1,1 @@
+parsed,libgit2/src/libgit2/revparse.c,4,end_ptr,libgit2/src/libgit2/revparse.c,3,2

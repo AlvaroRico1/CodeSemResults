@@ -1,0 +1,47 @@
+static int submodules_from_index(git_strmap *map, git_index *idx, git_config *cfg)
+{
+	int error;
+	git_iterator *i = NULL;
+	const git_index_entry *entry;
+	git_strmap *names;
+
+	if ((error = load_submodule_names(&names, git_index_owner(idx), cfg)))
+		goto done;
+
+	if ((error = git_iterator_for_index(&i, git_index_owner(idx), idx, NULL)) < 0)
+		goto done;
+
+	while (!(error = git_iterator_advance(&entry, i))) {
+		git_submodule *sm;
+
+		if ((sm = git_strmap_get(map, entry->path)) != NULL) {
+			if (S_ISGITLINK(entry->mode))
+				submodule_update_from_index_entry(sm, entry);
+			else
+				sm->flags |= GIT_SUBMODULE_STATUS__INDEX_NOT_SUBMODULE;
+		} else if (S_ISGITLINK(entry->mode)) {
+			const char *name;
+
+			if ((name = git_strmap_get(names, entry->path)) == NULL)
+				name = entry->path;
+
+			if (!submodule_get_or_create(&sm, git_index_owner(idx), map, name)) {
+				submodule_update_from_index_entry(sm, entry);
+				git_submodule_free(sm);
+			}
+		}
+	}
+
+	if (error == GIT_ITEROVER)
+		error = 0;
+
+done:
+	git_iterator_free(i);
+	free_submodule_names(names);
+
+	return error;
+}
+
+
+// Source: submodule.c
+// Lines 460-502

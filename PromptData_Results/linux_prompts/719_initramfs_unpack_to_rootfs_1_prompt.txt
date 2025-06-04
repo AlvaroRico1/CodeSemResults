@@ -1,0 +1,80 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'compress_name' at line 5
+2. Pointer 'buf' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static char * __init unpack_to_rootfs(char *buf, unsigned long len)
+{
+	long written;
+	decompress_fn decompress;
+	const char *compress_name;
+	static __initdata char msg_buf[64];
+
+	header_buf = kmalloc(110, GFP_KERNEL);
+	symlink_buf = kmalloc(PATH_MAX + N_ALIGN(PATH_MAX) + 1, GFP_KERNEL);
+	name_buf = kmalloc(N_ALIGN(PATH_MAX), GFP_KERNEL);
+
+	if (!header_buf || !symlink_buf || !name_buf)
+		panic("can't allocate buffers");
+
+	state = Start;
+	this_header = 0;
+	message = NULL;
+	while (!message && len) {
+		loff_t saved_offset = this_header;
+		if (*buf == '0' && !(this_header & 3)) {
+			state = Start;
+			written = write_buffer(buf, len);
+			buf += written;
+			len -= written;
+			continue;
+		}
+		if (!*buf) {
+			buf++;
+			len--;
+			this_header++;
+			continue;
+		}
+		this_header = 0;
+		decompress = decompress_method(buf, len, &compress_name);
+		pr_debug("Detected %s compressed data\n", compress_name);
+		if (decompress) {
+			int res = decompress(buf, len, NULL, flush_buffer, NULL,
+				   &my_inptr, error);
+			if (res)
+				error("decompressor failed");
+		} else if (compress_name) {
+			if (!message) {
+				snprintf(msg_buf, sizeof msg_buf,
+					 "compression method %s not configured",
+					 compress_name);
+				message = msg_buf;
+			}
+		} else
+			error("invalid magic at start of compressed archive");
+		if (state != Reset)
+			error("junk at the end of compressed archive");
+		this_header = saved_offset + my_inptr;
+		buf += my_inptr;
+		len -= my_inptr;
+	}
+	dir_utime();
+	kfree(name_buf);
+	kfree(symlink_buf);
+	kfree(header_buf);
+	return message;
+}
+
+
+// Source: initramfs.c
+// Lines 443-503
+
+
+[ANSWER]
+MAY

@@ -1,0 +1,1 @@
+a_length,mysql/strings/ctype-tis620.cc,2,b_length,mysql/strings/ctype-tis620.cc,3,2

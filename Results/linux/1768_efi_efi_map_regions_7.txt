@@ -1,0 +1,1 @@
+new_memmap,linux/arch/x86/platform/efi/efi.c,3,pg_shift,linux/arch/x86/platform/efi/efi.c,1,2

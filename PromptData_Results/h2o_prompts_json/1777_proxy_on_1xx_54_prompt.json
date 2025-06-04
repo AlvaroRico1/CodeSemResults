@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'self' at line 3\n2. Pointer 'client' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int on_1xx(h2o_httpclient_t *client, int version, int status, h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers)\n{\n    struct rp_generator_t *self = client->data;\n    size_t i;\n\n    for (i = 0; i != num_headers; ++i) {\n        if (headers[i].name == &H2O_TOKEN_LINK->buf)\n            h2o_push_path_in_link_header(self->src_req, headers[i].value.base, headers[i].value.len);\n    }\n\n    if (status != 101) {\n        self->src_req->res.status = status;\n        self->src_req->res.headers = (h2o_headers_t){headers, num_headers, num_headers};\n        h2o_send_informational(self->src_req);\n    }\n\n    return 0;\n}\n\n\n// Source: proxy.c\n// Lines 542-559\n",
+  "ANSWER": "MUST"
+}

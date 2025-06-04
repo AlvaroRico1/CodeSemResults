@@ -1,0 +1,62 @@
+void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t state)
+{
+    h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _ostr_final, self);
+    h2o_http2_conn_t *conn = (h2o_http2_conn_t *)req->conn;
+
+    assert(h2o_send_state_is_in_progress(stream->send_state));
+    assert(stream->_data.size == 0);
+
+    if (stream->blocked_by_server)
+        h2o_http2_stream_set_blocked_by_server(conn, stream, 0);
+
+    if (stream->req.res.status == 425 && stream->req.reprocess_if_too_early) {
+        assert(stream->state <= H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
+        h2o_http2_conn_register_for_replay(conn, stream);
+        return;
+    }
+
+
+    stream->send_state = state;
+
+    /* send headers */
+    switch (stream->state) {
+    case H2O_HTTP2_STREAM_STATE_RECV_BODY:
+        h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
+    /* fallthru */
+    case H2O_HTTP2_STREAM_STATE_REQ_PENDING:
+        h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
+    /* fallthru */
+    case H2O_HTTP2_STREAM_STATE_SEND_HEADERS:
+        if (stream->req.upstream_refused) {
+            send_refused_stream(conn, stream);
+            return;
+        }
+        h2o_probe_log_response(&stream->req, stream->stream_id);
+        if (send_headers(conn, stream) != 0)
+            return;
+    /* fallthru */
+    case H2O_HTTP2_STREAM_STATE_SEND_BODY:
+        if (state != H2O_SEND_STATE_IN_PROGRESS) {
+            h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL);
+        }
+        break;
+    case H2O_HTTP2_STREAM_STATE_END_STREAM:
+        /* might get set by h2o_http2_stream_reset */
+        return;
+    default:
+        assert(!"cannot be in a receiving state");
+    }
+
+    /* save the contents in queue */
+    if (bufcnt != 0) {
+        h2o_vector_reserve(&req->pool, &stream->_data, bufcnt);
+        memcpy(stream->_data.entries, bufs, sizeof(*bufs) * bufcnt);
+        stream->_data.size = bufcnt;
+    }
+
+    h2o_http2_conn_register_for_proceed_callback(conn, stream);
+}
+
+
+// Source: stream.c
+// Lines 330-387

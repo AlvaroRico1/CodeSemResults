@@ -1,0 +1,36 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'L' at line 1
+2. Pointer 'uv' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void luaF_close (lua_State *L, StkId level) {
+  UpVal *uv;
+  global_State *g = G(L);
+  while (L->openupval != NULL && (uv = ngcotouv(L->openupval))->v >= level) {
+    GCObject *o = obj2gco(uv);
+    lua_assert(!isblack(o) && uv->v != &uv->u.value);
+    L->openupval = uv->next;  /* remove from `open' list */
+    if (isdead(g, o))
+      luaF_freeupval(L, uv);  /* free upvalue */
+    else {
+      unlinkupval(uv);
+      setobj(L, &uv->u.value, uv->v);
+      uv->v = &uv->u.value;  /* now current value lives here */
+      luaC_linkupval(L, uv);  /* link upvalue into `gcroot' list */
+    }
+  }
+}
+
+
+// Source: lfunc.c
+// Lines 96-112
+
+
+[ANSWER]
+MUST

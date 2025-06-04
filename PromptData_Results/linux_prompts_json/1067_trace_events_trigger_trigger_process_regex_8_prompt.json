@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'command' at line 3\n2. Pointer 'next' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int trigger_process_regex(struct trace_event_file *file, char *buff)\n{\n\tchar *command, *next = buff;\n\tstruct event_command *p;\n\tint ret = -EINVAL;\n\n\tcommand = strsep(&next, \": \\t\");\n\tcommand = (command[0] != '!') ? command : command + 1;\n\n\tmutex_lock(&trigger_cmd_mutex);\n\tlist_for_each_entry(p, &trigger_commands, list) {\n\t\tif (strcmp(p->name, command) == 0) {\n\t\t\tret = p->func(p, file, buff, command, next);\n\t\t\tgoto out_unlock;\n\t\t}\n\t}\n out_unlock:\n\tmutex_unlock(&trigger_cmd_mutex);\n\n\treturn ret;\n}\n\n\n// Source: trace_events_trigger.c\n// Lines 211-231\n",
+  "ANSWER": "MAY"
+}

@@ -1,0 +1,38 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'insn' at line 1
+2. Pointer 'next' at line 11
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+next_insn_no_annul (rtx_insn *insn)
+{
+  if (insn)
+    {
+      /* If INSN is an annulled branch, skip any insns from the target
+	 of the branch.  */
+      if (JUMP_P (insn)
+	  && INSN_ANNULLED_BRANCH_P (insn)
+	  && NEXT_INSN (PREV_INSN (insn)) != insn)
+	{
+	  rtx_insn *next = NEXT_INSN (insn);
+
+	  while ((NONJUMP_INSN_P (next) || JUMP_P (next) || CALL_P (next))
+		 && INSN_FROM_TARGET_P (next))
+	    {
+	      insn = next;
+	      next = NEXT_INSN (insn);
+	    }
+	}
+
+
+// Source: resource.c
+// Lines 163-181
+
+
+[ANSWER]
+MUST

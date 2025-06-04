@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'cfgval' at line 14\n2. Pointer 'entry' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int attr_cache__lookup_path(\n\tchar **out, git_config *cfg, const char *key, const char *fallback)\n{\n\tgit_str buf = GIT_STR_INIT;\n\tint error;\n\tgit_config_entry *entry = NULL;\n\n\t*out = NULL;\n\n\tif ((error = git_config__lookup_entry(&entry, cfg, key, false)) < 0)\n\t\treturn error;\n\n\tif (entry) {\n\t\tconst char *cfgval = entry->value;\n\n\t\t/* expand leading ~/ as needed */\n\t\tif (cfgval && cfgval[0] == '~' && cfgval[1] == '/') {\n\t\t\tif (! (error = git_sysdir_expand_global_file(&buf, &cfgval[2])))\n\t\t\t\t*out = git_str_detach(&buf);\n\t\t} else if (cfgval) {\n\t\t\t*out = git__strdup(cfgval);\n\t\t}\n\t}\n\n\n// Source: attrcache.c\n// Lines 286-308\n",
+  "ANSWER": "MUST"
+}

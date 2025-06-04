@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ce' at line 7\n2. Pointer 'cep' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic const struct content_encoding *find_encoding(const char *name,\n                                                    size_t len)\n{\n  const struct content_encoding * const *cep;\n\n  for(cep = encodings; *cep; cep++) {\n    const struct content_encoding *ce = *cep;\n    if((strncasecompare(name, ce->name, len) && !ce->name[len]) ||\n       (ce->alias && strncasecompare(name, ce->alias, len) && !ce->alias[len]))\n      return ce;\n  }\n\n\n// Source: content_encoding.c\n// Lines 1014-1024\n",
+  "ANSWER": "MUST"
+}

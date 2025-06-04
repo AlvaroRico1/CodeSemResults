@@ -1,0 +1,116 @@
+my_time_t my_system_gmt_sec(const MYSQL_TIME &my_time, long *my_timezone,
+                            bool *in_dst_time_gap) {
+  uint loop;
+  time_t tmp = 0;
+  int shift = 0;
+  MYSQL_TIME tmp_time;
+  MYSQL_TIME *t = &tmp_time;
+  struct tm *l_time;
+  struct tm tm_tmp;
+  long diff, current_timezone;
+
+  /*
+    Use temp variable to avoid trashing input data, which could happen in
+    case of shift required for boundary dates processing.
+  */
+  // memcpy(&tmp_time, &my_time, sizeof(MYSQL_TIME));
+  tmp_time = my_time;
+
+  if (!validate_timestamp_range(*t)) return 0;
+
+  /*
+    Calculate the gmt time based on current time and timezone
+    The -1 on the end is to ensure that if have a date that exists twice
+    (like 2002-10-27 02:00:0 MET), we will find the initial date.
+
+    By doing -3600 we will have to call localtime_r() several times, but
+    I couldn't come up with a better way to get a repeatable result :(
+
+    We can't use mktime() as it's buggy on many platforms and not thread safe.
+
+    Note: this code assumes that our time_t estimation is not too far away
+    from real value (we assume that localtime_r(tmp) will return something
+    within 24 hrs from t) which is probably true for all current time zones.
+
+    Note2: For the dates, which have time_t representation close to
+    MAX_INT32 (efficient time_t limit for supported platforms), we should
+    do a small trick to avoid overflow. That is, convert the date, which is
+    two days earlier, and then add these days to the final value.
+
+    The same trick is done for the values close to 0 in time_t
+    representation for platfroms with unsigned time_t (QNX).
+
+    To be more verbose, here is a sample (extracted from the code below):
+    (calc_daynr(2038, 1, 19) - (long) days_at_timestart)*86400L + 4*3600L
+    would return -2147480896 because of the long type overflow. In result
+    we would get 1901 year in localtime_r(), which is an obvious error.
+
+    Alike problem raises with the dates close to Epoch. E.g.
+    (calc_daynr(1969, 12, 31) - (long) days_at_timestart)*86400L + 23*3600L
+    will give -3600.
+
+    On some platforms, (E.g. on QNX) time_t is unsigned and localtime(-3600)
+    wil give us a date around 2106 year. Which is no good.
+
+    Theoreticaly, there could be problems with the latter conversion:
+    there are at least two timezones, which had time switches near 1 Jan
+    of 1970 (because of political reasons). These are America/Hermosillo and
+    America/Mazatlan time zones. They changed their offset on
+    1970-01-01 08:00:00 UTC from UTC-8 to UTC-7. For these zones
+    the code below will give incorrect results for dates close to
+    1970-01-01, in the case OS takes into account these historical switches.
+    Luckily, it seems that we support only one platform with unsigned
+    time_t. It's QNX. And QNX does not support historical timezone data at all.
+    E.g. there are no /usr/share/zoneinfo/ files or any other mean to supply
+    historical information for localtime_r() etc. That is, the problem is not
+    relevant to QNX.
+
+    We are safe with shifts close to MAX_INT32, as there are no known
+    time switches on Jan 2038 yet :)
+  */
+  if ((t->year == TIMESTAMP_MAX_YEAR) && (t->month == 1) && (t->day > 4)) {
+    /*
+      Below we will pass static_cast<uint>(t->day - shift) to calc_daynr.
+      As we don't want to get an overflow here, we will shift
+      only safe dates. That's why we have (t->day > 4) above.
+    */
+    t->day -= 2;
+    shift = 2;
+  }
+
+  tmp = static_cast<time_t>(
+      ((calc_daynr(static_cast<uint>(t->year), static_cast<uint>(t->month),
+                   static_cast<uint>(t->day)) -
+        static_cast<long>(days_at_timestart)) *
+           SECONDS_IN_24H +
+       static_cast<long>(t->hour) * 3600L +
+       static_cast<long>(t->minute * 60 + t->second)) +
+      static_cast<time_t>(my_time_zone) - 3600);
+
+  current_timezone = my_time_zone;
+  localtime_r(&tmp, &tm_tmp);
+  l_time = &tm_tmp;
+  for (loop = 0; loop < 2 && (t->hour != static_cast<uint>(l_time->tm_hour) ||
+                              t->minute != static_cast<uint>(l_time->tm_min) ||
+                              t->second != static_cast<uint>(l_time->tm_sec));
+       loop++) { /* One check should be enough ? */
+    /* Get difference in days */
+    int days = t->day - l_time->tm_mday;
+    if (days < -1)
+      days = 1; /* Month has wrapped */
+    else if (days > 1)
+      days = -1;
+    diff = (3600L * static_cast<long>(days * 24 + (static_cast<int>(t->hour) -
+                                                   l_time->tm_hour)) +
+            static_cast<long>(60 *
+                              (static_cast<int>(t->minute) - l_time->tm_min)) +
+            static_cast<long>(static_cast<int>(t->second) - l_time->tm_sec));
+    current_timezone += diff + 3600; /* Compensate for -3600 above */
+    tmp += static_cast<time_t>(diff);
+    localtime_r(&tmp, &tm_tmp);
+    l_time = &tm_tmp;
+  }
+
+
+// Source: my_time.cc
+// Lines 1082-1193

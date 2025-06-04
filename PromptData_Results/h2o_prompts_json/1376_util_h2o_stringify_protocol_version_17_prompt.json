@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'p' at line 3\n2. Pointer 'dst' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nsize_t h2o_stringify_protocol_version(char *dst, int version)\n{\n    char *p = dst;\n\n    if (version < 0x200) {\n        assert(version <= 0x109);\n#define PREFIX \"HTTP/1.\"\n        memcpy(p, PREFIX, sizeof(PREFIX) - 1);\n        p += sizeof(PREFIX) - 1;\n#undef PREFIX\n        *p++ = '0' + (version & 0xff);\n    } else {\n#define PREFIX \"HTTP/\"\n        memcpy(p, PREFIX, sizeof(PREFIX) - 1);\n        p += sizeof(PREFIX) - 1;\n#undef PREFIX\n        *p++ = (version >> 8) + '0';\n    }\n\n    *p = '\\0';\n    return p - dst;\n}\n\n\n// Source: util.c\n// Lines 528-549\n",
+  "ANSWER": "MUST"
+}

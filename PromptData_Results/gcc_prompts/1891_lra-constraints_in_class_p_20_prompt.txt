@@ -1,0 +1,37 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'final_loc' at line 14
+2. Pointer 'final_reg' at line 13
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+in_class_p (rtx reg, enum reg_class cl, enum reg_class *new_class)
+{
+  enum reg_class rclass, common_class;
+  machine_mode reg_mode;
+  rtx src;
+  int class_size, hard_regno, nregs, i, j;
+  int regno = REGNO (reg);
+
+  if (new_class != NULL)
+    *new_class = NO_REGS;
+  if (regno < FIRST_PSEUDO_REGISTER)
+    {
+      rtx final_reg = reg;
+      rtx *final_loc = &final_reg;
+
+      lra_eliminate_reg_if_possible (final_loc);
+      return TEST_HARD_REG_BIT (reg_class_contents[cl], REGNO (*final_loc));
+    }
+
+
+// Source: lra-constraints.c
+// Lines 243-260
+
+
+[ANSWER]
+MUST

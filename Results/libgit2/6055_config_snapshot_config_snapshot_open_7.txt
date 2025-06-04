@@ -1,0 +1,1 @@
+entries,libgit2/src/libgit2/config_snapshot.c,4,it,libgit2/src/libgit2/config_snapshot.c,5,2

@@ -1,0 +1,23 @@
+static void *append(h2o_mem_pool_t *pool, iovec_vector_t *blocks, const void *s, size_t len)
+{
+    h2o_iovec_t *slot;
+
+    if (blocks->entries[blocks->size - 1].len + len > APPEND_BLOCKSIZE) {
+        h2o_vector_reserve(pool, blocks, blocks->size + 1);
+        slot = blocks->entries + blocks->size++;
+        slot->base = h2o_mem_alloc_pool(pool, char, len < APPEND_BLOCKSIZE ? APPEND_BLOCKSIZE : len);
+        slot->len = 0;
+    } else {
+        slot = blocks->entries + blocks->size - 1;
+    }
+
+    if (s != NULL)
+        memcpy(slot->base + slot->len, s, len);
+    slot->len += len;
+
+    return slot->base + slot->len - len;
+}
+
+
+// Source: fastcgi.c
+// Lines 134-152

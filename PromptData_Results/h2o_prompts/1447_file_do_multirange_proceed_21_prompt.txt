@@ -1,0 +1,70 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'self' at line 3
+2. Pointer '_self' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req)
+{
+    struct st_h2o_sendfile_generator_t *self = (void *)_self;
+    size_t rlen, used_buf = 0;
+    ssize_t rret, vecarrsize;
+    h2o_iovec_t vec[2];
+    h2o_send_state_t send_state;
+
+    if (self->bytesleft == 0) {
+        size_t *range_cur = self->ranged.range_infos + 2 * self->ranged.current_range;
+        size_t range_end = *range_cur + *(range_cur + 1) - 1;
+        if (H2O_LIKELY(self->ranged.current_range != 0))
+            used_buf =
+                sprintf(self->ranged.multirange_buf, "\r\n--%s\r\nContent-Type: %s\r\nContent-Range: bytes %zd-%zd/%zd\r\n\r\n",
+                        self->ranged.boundary.base, self->ranged.mimetype.base, *range_cur, range_end, self->ranged.filesize);
+        else
+            used_buf =
+                sprintf(self->ranged.multirange_buf, "--%s\r\nContent-Type: %s\r\nContent-Range: bytes %zd-%zd/%zd\r\n\r\n",
+                        self->ranged.boundary.base, self->ranged.mimetype.base, *range_cur, range_end, self->ranged.filesize);
+        self->ranged.current_range++;
+        self->file.off = *range_cur;
+        self->bytesleft = *++range_cur;
+    }
+    rlen = self->bytesleft;
+    if (rlen + used_buf > MAX_BUF_SIZE)
+        rlen = MAX_BUF_SIZE - used_buf;
+    while ((rret = pread(self->file.ref->fd, self->ranged.multirange_buf + used_buf, rlen, self->file.off)) == -1 && errno == EINTR)
+        ;
+    if (rret == -1)
+        goto Error;
+    self->file.off += rret;
+    self->bytesleft -= rret;
+
+    vec[0].base = self->ranged.multirange_buf;
+    vec[0].len = rret + used_buf;
+    if (self->ranged.current_range == self->ranged.range_count && self->bytesleft == 0) {
+        vec[1].base = h2o_mem_alloc_pool(&req->pool, char, sizeof("\r\n--") - 1 + BOUNDARY_SIZE + sizeof("--\r\n"));
+        vec[1].len = sprintf(vec[1].base, "\r\n--%s--\r\n", self->ranged.boundary.base);
+        vecarrsize = 2;
+        send_state = H2O_SEND_STATE_FINAL;
+    } else {
+        vecarrsize = 1;
+        send_state = H2O_SEND_STATE_IN_PROGRESS;
+    }
+    h2o_send(req, vec, vecarrsize, send_state);
+    return;
+
+Error:
+    h2o_send(req, NULL, 0, H2O_SEND_STATE_ERROR);
+    return;
+}
+
+
+// Source: file.c
+// Lines 186-236
+
+
+[ANSWER]
+MUST

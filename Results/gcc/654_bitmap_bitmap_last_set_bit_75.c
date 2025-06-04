@@ -1,0 +1,49 @@
+bitmap_last_set_bit (const_bitmap a)
+{
+  const bitmap_element *elt;
+  unsigned bit_no;
+  BITMAP_WORD word;
+  int ix;
+
+  if (a->tree_form)
+    elt = a->first;
+  else
+    elt = a->current ? a->current : a->first;
+  gcc_checking_assert (elt);
+
+  while (elt->next)
+    elt = elt->next;
+
+  bit_no = elt->indx * BITMAP_ELEMENT_ALL_BITS;
+  for (ix = BITMAP_ELEMENT_WORDS - 1; ix >= 1; ix--)
+    {
+      word = elt->bits[ix];
+      if (word)
+	goto found_bit;
+    }
+  gcc_assert (elt->bits[ix] != 0);
+ found_bit:
+  bit_no += ix * BITMAP_WORD_BITS;
+#if GCC_VERSION >= 3004
+  gcc_assert (sizeof (long) == sizeof (word));
+  bit_no += BITMAP_WORD_BITS - __builtin_clzl (word) - 1;
+#else
+  /* Hopefully this is a twos-complement host...  */
+  BITMAP_WORD x = word;
+  x |= (x >> 1);
+  x |= (x >> 2);
+  x |= (x >> 4);
+  x |= (x >> 8);
+  x |= (x >> 16);
+#if BITMAP_WORD_BITS > 32
+  x |= (x >> 32);
+#endif
+  bit_no += bitmap_popcount (x) - 1;
+#endif
+
+  return bit_no;
+}
+
+
+// Source: bitmap.c
+// Lines 1197-1241

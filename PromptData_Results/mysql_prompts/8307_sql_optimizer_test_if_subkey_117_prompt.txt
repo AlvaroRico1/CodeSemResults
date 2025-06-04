@@ -1,0 +1,44 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ref_key_part_end' at line 8
+2. Pointer 'ref_key_part' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static uint test_if_subkey(ORDER_with_src *order, JOIN_TAB *tab, uint ref,
+                           uint ref_key_parts, const Key_map *usable_keys) {
+  uint nr;
+  uint min_length = (uint)~0;
+  uint best = MAX_KEY;
+  TABLE *table = tab->table();
+  KEY_PART_INFO *ref_key_part = table->key_info[ref].key_part;
+  KEY_PART_INFO *ref_key_part_end = ref_key_part + ref_key_parts;
+
+  for (nr = 0; nr < table->s->keys; nr++) {
+    bool skip_quick;
+    if (usable_keys->is_set(nr) &&
+        table->key_info[nr].key_length < min_length &&
+        table->key_info[nr].user_defined_key_parts >= ref_key_parts &&
+        is_subkey(table->key_info[nr].key_part, ref_key_part,
+                  ref_key_part_end) &&
+        !is_ref_or_null_optimized(tab, nr) &&
+        test_if_order_by_key(order, table, nr, nullptr, &skip_quick) &&
+        !skip_quick) {
+      min_length = table->key_info[nr].key_length;
+      best = nr;
+    }
+  }
+  return best;
+}
+
+
+// Source: sql_optimizer.cc
+// Lines 1863-1887
+
+
+[ANSWER]
+MUST

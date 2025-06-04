@@ -1,0 +1,33 @@
+static void on_body_until_close(h2o_socket_t *sock, const char *err)
+{
+    struct st_h2o_http1client_t *client = sock->data;
+
+    h2o_timer_unlink(&client->super._timeout);
+
+    if (err != NULL) {
+        client->state.res = STREAM_STATE_CLOSED;
+        client->super.timings.response_end_at = h2o_gettimeofday(client->super.ctx->loop);
+        call_on_body(client, h2o_httpclient_error_is_eos);
+        close_response(client);
+        return;
+    }
+    uint64_t size = sock->bytes_read - client->_socket_bytes_processed;
+    client->_socket_bytes_processed = sock->bytes_read;
+
+    client->super.bytes_read.body += size;
+    client->super.bytes_read.total += size;
+
+    if (size != 0) {
+        if (call_on_body(client, NULL) != 0) {
+            close_client(client);
+            return;
+        }
+        do_update_window(&client->super);
+    }
+
+    h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
+}
+
+
+// Source: http1client.c
+// Lines 160-188

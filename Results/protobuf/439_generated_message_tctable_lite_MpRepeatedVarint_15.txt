@@ -1,0 +1,1 @@
+ptr2,protobuf/src/google/protobuf/generated_message_tctable_lite.cc,22,ptr2,protobuf/src/google/protobuf/generated_message_tctable_lite.cc,22,2

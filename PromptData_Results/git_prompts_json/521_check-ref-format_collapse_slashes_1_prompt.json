@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'refname' at line 1\n2. Pointer 'cp' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic char *collapse_slashes(const char *refname)\n{\n\tchar *ret = xmallocz(strlen(refname));\n\tchar ch;\n\tchar prev = '/';\n\tchar *cp = ret;\n\n\twhile ((ch = *refname++) != '\\0') {\n\t\tif (prev == '/' && ch == prev)\n\t\t\tcontinue;\n\n\t\t*cp++ = ch;\n\t\tprev = ch;\n\t}\n\t*cp = '\\0';\n\treturn ret;\n}\n\n\n// Source: check-ref-format.c\n// Lines 21-37\n",
+  "ANSWER": "MUST-NOT"
+}

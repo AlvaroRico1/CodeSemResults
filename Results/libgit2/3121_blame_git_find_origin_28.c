@@ -1,0 +1,66 @@
+static git_blame__origin *find_origin(
+		git_blame *blame,
+		git_commit *parent,
+		git_blame__origin *origin)
+{
+	git_blame__origin *porigin = NULL;
+	git_diff *difflist = NULL;
+	git_diff_options diffopts = GIT_DIFF_OPTIONS_INIT;
+	git_tree *otree=NULL, *ptree=NULL;
+
+	/* Get the trees from this commit and its parent */
+	if (0 != git_commit_tree(&otree, origin->commit) ||
+	    0 != git_commit_tree(&ptree, parent))
+		goto cleanup;
+
+	/* Configure the diff */
+	diffopts.context_lines = 0;
+	diffopts.flags = GIT_DIFF_SKIP_BINARY_CHECK;
+
+	/* Check to see if files we're interested have changed */
+	diffopts.pathspec.count = blame->paths.length;
+	diffopts.pathspec.strings = (char**)blame->paths.contents;
+	if (0 != git_diff_tree_to_tree(&difflist, blame->repository, ptree, otree, &diffopts))
+			goto cleanup;
+
+	if (!git_diff_num_deltas(difflist)) {
+		/* No changes; copy data */
+		git_blame__get_origin(&porigin, blame, parent, origin->path);
+	} else {
+		git_diff_find_options findopts = GIT_DIFF_FIND_OPTIONS_INIT;
+		int i;
+
+		/* Generate a full diff between the two trees */
+		git_diff_free(difflist);
+		diffopts.pathspec.count = 0;
+		if (0 != git_diff_tree_to_tree(&difflist, blame->repository, ptree, otree, &diffopts))
+			goto cleanup;
+
+		/* Let diff find renames */
+		findopts.flags = GIT_DIFF_FIND_RENAMES;
+		if (0 != git_diff_find_similar(difflist, &findopts))
+			goto cleanup;
+
+		/* Find one that matches */
+		for (i=0; i<(int)git_diff_num_deltas(difflist); i++) {
+			const git_diff_delta *delta = git_diff_get_delta(difflist, i);
+
+			if (!git_vector_bsearch(NULL, &blame->paths, delta->new_file.path))
+			{
+				git_vector_insert_sorted(&blame->paths, (void*)git__strdup(delta->old_file.path),
+						paths_on_dup);
+				make_origin(&porigin, parent, delta->old_file.path);
+			}
+		}
+	}
+
+cleanup:
+	git_diff_free(difflist);
+	git_tree_free(otree);
+	git_tree_free(ptree);
+	return porigin;
+}
+
+
+// Source: blame_git.c
+// Lines 432-493

@@ -1,0 +1,79 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'relpath' at line 5
+2. Pointer 'path' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool git_attr_fnmatch__match(
+	git_attr_fnmatch *match,
+	git_attr_path *path)
+{
+	const char *relpath = path->path;
+	const char *filename;
+	int flags = 0;
+
+	/*
+	 * If the rule was generated in a subdirectory, we must only
+	 * use it for paths inside that directory. We can thus return
+	 * a non-match if the prefixes don't match.
+	 */
+	if (match->containing_dir) {
+		if (match->flags & GIT_ATTR_FNMATCH_ICASE) {
+			if (git__strncasecmp(path->path, match->containing_dir, match->containing_dir_length))
+				return 0;
+		} else {
+			if (git__prefixcmp(path->path, match->containing_dir))
+				return 0;
+		}
+
+		relpath += match->containing_dir_length;
+	}
+
+	if (match->flags & GIT_ATTR_FNMATCH_ICASE)
+		flags |= WM_CASEFOLD;
+
+	if (match->flags & GIT_ATTR_FNMATCH_FULLPATH) {
+		filename = relpath;
+		flags |= WM_PATHNAME;
+	} else {
+		filename = path->basename;
+	}
+
+	if ((match->flags & GIT_ATTR_FNMATCH_DIRECTORY) && !path->is_dir) {
+		bool samename;
+
+		/*
+		 * for attribute checks or checks at the root of this match's
+		 * containing_dir (or root of the repository if no containing_dir),
+		 * do not match.
+		 */
+		if (!(match->flags & GIT_ATTR_FNMATCH_IGNORE) ||
+			path->basename == relpath)
+			return false;
+
+		/* fail match if this is a file with same name as ignored folder */
+		samename = (match->flags & GIT_ATTR_FNMATCH_ICASE) ?
+			!strcasecmp(match->pattern, relpath) :
+			!strcmp(match->pattern, relpath);
+
+		if (samename)
+			return false;
+
+		return (wildmatch(match->pattern, relpath, flags) == WM_MATCH);
+	}
+
+	return (wildmatch(match->pattern, filename, flags) == WM_MATCH);
+}
+
+
+// Source: attr_file.c
+// Lines 465-524
+
+
+[ANSWER]
+MUST

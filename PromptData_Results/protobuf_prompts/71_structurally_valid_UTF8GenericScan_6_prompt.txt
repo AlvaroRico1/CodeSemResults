@@ -1,0 +1,127 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'srclimit8' at line 12
+2. Pointer 'srclimit' at line 11
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int UTF8GenericScan(const UTF8ScanObj* st,
+                    const char * str,
+                    int str_length,
+                    int* bytes_consumed) {
+  *bytes_consumed = 0;
+  if (str_length == 0) return kExitOK;
+
+  int eshift = st->entry_shift;
+  const uint8* isrc = reinterpret_cast<const uint8*>(str);
+  const uint8* src = isrc;
+  const uint8* srclimit = isrc + str_length;
+  const uint8* srclimit8 = str_length < 7 ? isrc : srclimit - 7;
+  const uint8* Tbl_0 = &st->state_table[st->state0];
+
+ DoAgain:
+  // Do state-table scan
+  int e = 0;
+  uint8 c;
+  const uint8* Tbl2 = &st->fast_state[0];
+  const uint32 losub = st->losub;
+  const uint32 hiadd = st->hiadd;
+  // Check initial few bytes one at a time until 8-byte aligned
+  //----------------------------
+  while ((((uintptr_t)src & 0x07) != 0) &&
+         (src < srclimit) &&
+         Tbl2[src[0]] == 0) {
+    src++;
+  }
+  if (((uintptr_t)src & 0x07) == 0) {
+    // Do fast for groups of 8 identity bytes.
+    // This covers a lot of 7-bit ASCII ~8x faster then the 1-byte loop,
+    // including slowing slightly on cr/lf/ht
+    //----------------------------
+    while (src < srclimit8) {
+      uint32 s0123 = (reinterpret_cast<const uint32 *>(src))[0];
+      uint32 s4567 = (reinterpret_cast<const uint32 *>(src))[1];
+      src += 8;
+      // This is a fast range check for all bytes in [lowsub..0x80-hiadd)
+      uint32 temp = (s0123 - losub) | (s0123 + hiadd) |
+                    (s4567 - losub) | (s4567 + hiadd);
+      if ((temp & 0x80808080) != 0) {
+        // We typically end up here on cr/lf/ht; src was incremented
+        int e0123 = (Tbl2[src[-8]] | Tbl2[src[-7]]) |
+                    (Tbl2[src[-6]] | Tbl2[src[-5]]);
+        if (e0123 != 0) {
+          src -= 8;
+          break;
+        }    // Exit on Non-interchange
+        e0123 = (Tbl2[src[-4]] | Tbl2[src[-3]]) |
+                (Tbl2[src[-2]] | Tbl2[src[-1]]);
+        if (e0123 != 0) {
+          src -= 4;
+          break;
+        }    // Exit on Non-interchange
+        // Else OK, go around again
+      }
+    }
+  }
+  //----------------------------
+
+  // Byte-at-a-time scan
+  //----------------------------
+  const uint8* Tbl = Tbl_0;
+  while (src < srclimit) {
+    c = *src;
+    e = Tbl[c];
+    src++;
+    if (e >= kExitIllegalStructure) {break;}
+    Tbl = &Tbl_0[e << eshift];
+  }
+  //----------------------------
+
+  // Exit possibilities:
+  //  Some exit code, !state0, back up over last char
+  //  Some exit code, state0, back up one byte exactly
+  //  source consumed, !state0, back up over partial char
+  //  source consumed, state0, exit OK
+  // For illegal byte in state0, avoid backup up over PREVIOUS char
+  // For truncated last char, back up to beginning of it
+
+  if (e >= kExitIllegalStructure) {
+    // Back up over exactly one byte of rejected/illegal UTF-8 character
+    src--;
+    // Back up more if needed
+    if (!InStateZero(st, Tbl)) {
+      do {
+        src--;
+      } while ((src > isrc) && ((src[0] & 0xc0) == 0x80));
+    }
+  } else if (!InStateZero(st, Tbl)) {
+    // Back up over truncated UTF-8 character
+    e = kExitIllegalStructure;
+    do {
+      src--;
+    } while ((src > isrc) && ((src[0] & 0xc0) == 0x80));
+  } else {
+    // Normal termination, source fully consumed
+    e = kExitOK;
+  }
+
+  if (e == kExitDoAgain) {
+    // Loop back up to the fast scan
+    goto DoAgain;
+  }
+
+  *bytes_consumed = src - isrc;
+  return e;
+}
+
+
+// Source: structurally_valid.cc
+// Lines 387-494
+
+
+[ANSWER]
+MUST

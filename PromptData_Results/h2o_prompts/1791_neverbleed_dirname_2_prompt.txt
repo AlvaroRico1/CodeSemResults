@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'path' at line 1
+2. Pointer 'ret' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static char *dirname(const char *path)
+{
+    const char *last_slash = strrchr(path, '/');
+    char *ret;
+
+    if (last_slash == NULL) {
+        errno = 0;
+        dief("dirname: no slash in given path:%s", path);
+    }
+    if ((ret = malloc(last_slash + 1 - path)) == NULL)
+        dief("no memory");
+    memcpy(ret, path, last_slash - path);
+    ret[last_slash - path] = '\0';
+    return ret;
+}
+
+
+// Source: neverbleed.c
+// Lines 164-178
+
+
+[ANSWER]
+MAY

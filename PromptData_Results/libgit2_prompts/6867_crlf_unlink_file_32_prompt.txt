@@ -1,0 +1,33 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'payload' at line 1
+2. Pointer 'fn' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int unlink_file(void *payload, git_str *path)
+{
+	char *fn;
+
+	cl_assert(fn = git_fs_path_basename(path->ptr));
+
+	GIT_UNUSED(payload);
+
+	if (strcmp(fn, ".git"))
+		cl_must_pass(p_unlink(path->ptr));
+
+	git__free(fn);
+	return 0;
+}
+
+
+// Source: crlf.c
+// Lines 16-29
+
+
+[ANSWER]
+MUST-NOT

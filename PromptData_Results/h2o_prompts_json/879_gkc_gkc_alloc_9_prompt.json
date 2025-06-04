@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ret' at line 9\n2. Pointer 's' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic struct gkc_tuple *gkc_alloc(struct gkc_summary *s)\n{\n    s->alloced++;\n    if (s->alloced > s->max_alloced) {\n        s->max_alloced = s->alloced;\n    }\n\n    if (s->fl) {\n        void *ret;\n        ret = s->fl;\n        s->fl = s->fl->next;\n        return ret;\n    }\n\n\n// Source: gkc.c\n// Lines 178-190\n",
+  "ANSWER": "MUST"
+}

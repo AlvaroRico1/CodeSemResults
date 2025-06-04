@@ -1,0 +1,1 @@
+size_needed,linux/drivers/acpi/acpica/rscalc.c,2,resource_index,linux/drivers/acpi/acpica/rscalc.c,11,2

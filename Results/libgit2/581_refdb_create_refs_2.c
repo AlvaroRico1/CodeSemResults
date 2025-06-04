@@ -1,0 +1,46 @@
+static void *create_refs(void *arg)
+{
+	int i, error;
+	struct th_data *data = (struct th_data *) arg;
+	git_oid head;
+	char name[128];
+	git_reference *ref[NREFS];
+	git_repository *repo;
+
+	cl_git_thread_pass(data, git_repository_open(&repo, data->path));
+
+	do {
+		error = git_reference_name_to_id(&head, repo, "HEAD");
+	} while (error == GIT_ELOCKED);
+	cl_git_thread_pass(data, error);
+
+	for (i = 0; i < NREFS; ++i) {
+		p_snprintf(name, sizeof(name), "refs/heads/thread-%03d-%02d", data->id, i);
+		do {
+			error = git_reference_create(&ref[i], repo, name, &head, 0, NULL);
+		} while (error == GIT_ELOCKED);
+		cl_git_thread_pass(data, error);
+
+		if (concurrent_compress && i == NREFS/2) {
+			git_refdb *refdb;
+			cl_git_thread_pass(data, git_repository_refdb(&refdb, repo));
+			do {
+				error = git_refdb_compress(refdb);
+			} while (error == GIT_ELOCKED);
+			cl_git_thread_pass(data, error);
+			git_refdb_free(refdb);
+		}
+	}
+
+	for (i = 0; i < NREFS; ++i)
+		git_reference_free(ref[i]);
+
+	git_repository_free(repo);
+
+	git_error_clear();
+	return arg;
+}
+
+
+// Source: refdb.c
+// Lines 65-106

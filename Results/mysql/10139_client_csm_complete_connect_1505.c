@@ -1,0 +1,56 @@
+static mysql_state_machine_status csm_complete_connect(
+    mysql_async_connect *ctx) {
+  DBUG_TRACE;
+  MYSQL *mysql = ctx->mysql;
+  NET *net = &mysql->net;
+  DBUG_PRINT("info", ("net->vio: %p", net->vio));
+  if (!net->vio) {
+    DBUG_PRINT("error", ("Unknow protocol %d ", mysql->options.protocol));
+    set_mysql_error(mysql, CR_CONN_UNKNOW_PROTOCOL, unknown_sqlstate);
+    return STATE_MACHINE_FAILED;
+  }
+
+  if (my_net_init(net, net->vio)) {
+    vio_delete(net->vio);
+    net->vio = nullptr;
+    set_mysql_error(mysql, CR_OUT_OF_MEMORY, unknown_sqlstate);
+    return STATE_MACHINE_FAILED;
+  }
+  vio_keepalive(net->vio, true);
+
+  /* If user set read_timeout, let it override the default */
+  if (mysql->options.read_timeout)
+    my_net_set_read_timeout(net, mysql->options.read_timeout);
+
+  /* If user set write_timeout, let it override the default */
+  if (mysql->options.write_timeout)
+    my_net_set_write_timeout(net, mysql->options.write_timeout);
+
+  /* If user set retry_count, let it override the default */
+  if (mysql->options.extension && mysql->options.extension->retry_count)
+    my_net_set_retry_count(net, mysql->options.extension->retry_count);
+
+  if (mysql->options.max_allowed_packet)
+    net->max_packet_size = mysql->options.max_allowed_packet;
+
+  MYSQL_TRACE(CONNECTED, mysql, ());
+  MYSQL_TRACE_STAGE(mysql, WAIT_FOR_INIT_PACKET);
+
+  /* Get version info */
+  mysql->protocol_version = PROTOCOL_VERSION; /* Assume this */
+  if (mysql->options.connect_timeout && !ctx->non_blocking &&
+      (vio_io_wait(net->vio, VIO_IO_EVENT_READ,
+                   get_vio_connect_timeout(mysql)) < 1)) {
+    set_mysql_extended_error(mysql, CR_SERVER_LOST, unknown_sqlstate,
+                             ER_CLIENT(CR_SERVER_LOST_EXTENDED),
+                             "waiting for initial communication packet",
+                             socket_errno);
+    return STATE_MACHINE_FAILED;
+  }
+  ctx->state_function = csm_read_greeting;
+  return STATE_MACHINE_CONTINUE;
+}
+
+
+// Source: client.cc
+// Lines 6192-6243

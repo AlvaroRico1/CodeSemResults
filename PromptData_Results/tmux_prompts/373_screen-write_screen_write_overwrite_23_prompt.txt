@@ -1,0 +1,70 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 's' at line 4
+2. Pointer 'ctx' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+screen_write_overwrite(struct screen_write_ctx *ctx, struct grid_cell *gc,
+    u_int width)
+{
+	struct screen		*s = ctx->s;
+	struct grid		*gd = s->grid;
+	struct grid_cell	 tmp_gc;
+	u_int			 xx;
+	int			 done = 0;
+
+	if (gc->flags & GRID_FLAG_PADDING) {
+		/*
+		 * A padding cell, so clear any following and leading padding
+		 * cells back to the character. Don't overwrite the current
+		 * cell as that happens later anyway.
+		 */
+		xx = s->cx + 1;
+		while (--xx > 0) {
+			grid_view_get_cell(gd, xx, s->cy, &tmp_gc);
+			if (~tmp_gc.flags & GRID_FLAG_PADDING)
+				break;
+			log_debug("%s: padding at %u,%u", __func__, xx, s->cy);
+			grid_view_set_cell(gd, xx, s->cy, &grid_default_cell);
+		}
+
+		/* Overwrite the character at the start of this padding. */
+		log_debug("%s: character at %u,%u", __func__, xx, s->cy);
+		grid_view_set_cell(gd, xx, s->cy, &grid_default_cell);
+		done = 1;
+	}
+
+	/*
+	 * Overwrite any padding cells that belong to any UTF-8 characters
+	 * we'll be overwriting with the current character.
+	 */
+	if (width != 1 ||
+	    gc->data.width != 1 ||
+	    gc->flags & GRID_FLAG_PADDING) {
+		xx = s->cx + width - 1;
+		while (++xx < screen_size_x(s)) {
+			grid_view_get_cell(gd, xx, s->cy, &tmp_gc);
+			if (~tmp_gc.flags & GRID_FLAG_PADDING)
+				break;
+			log_debug("%s: overwrite at %u,%u", __func__, xx,
+			    s->cy);
+			grid_view_set_cell(gd, xx, s->cy, &grid_default_cell);
+			done = 1;
+		}
+	}
+
+	return (done);
+}
+
+
+// Source: screen-write.c
+// Lines 2024-2074
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,1 @@
+candidate,gcc/gcc/spellcheck.c,8,target,gcc/gcc/spellcheck.c,1,2

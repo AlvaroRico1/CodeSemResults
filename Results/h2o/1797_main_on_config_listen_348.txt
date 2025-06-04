@@ -1,0 +1,1 @@
+permission_node,h2o/src/main.c,4,amp_limit,h2o/src/main.c,181,2

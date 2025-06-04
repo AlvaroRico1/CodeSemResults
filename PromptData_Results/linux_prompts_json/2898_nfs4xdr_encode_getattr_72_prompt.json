@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'bitmap' at line 2\n2. Pointer 'masked_bitmap' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void encode_getattr(struct xdr_stream *xdr,\n\t\tconst __u32 *bitmap, const __u32 *mask, size_t len,\n\t\tstruct compound_hdr *hdr)\n{\n\t__u32 masked_bitmap[nfs4_fattr_bitmap_maxsz];\n\n\tencode_op_hdr(xdr, OP_GETATTR, decode_getattr_maxsz, hdr);\n\tif (mask) {\n\t\tif (WARN_ON_ONCE(len > ARRAY_SIZE(masked_bitmap)))\n\t\t\tlen = ARRAY_SIZE(masked_bitmap);\n\t\tlen = mask_bitmap4(bitmap, mask, masked_bitmap, len);\n\t\tbitmap = masked_bitmap;\n\t}\n\txdr_encode_bitmap4(xdr, bitmap, len);\n}\n\n\n// Source: nfs4xdr.c\n// Lines 1245-1259\n",
+  "ANSWER": "MUST"
+}

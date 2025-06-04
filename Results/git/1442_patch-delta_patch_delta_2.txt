@@ -1,0 +1,1 @@
+out,git/patch-delta.c,6,dst_buf,git/patch-delta.c,6,1

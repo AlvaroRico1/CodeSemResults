@@ -1,0 +1,26 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'self' at line 3
+2. Pointer '_self' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void specific_handler_on_dispose(h2o_handler_t *_self)
+{
+    struct st_h2o_specific_file_handler_t *self = (void *)_self;
+
+    free(self->real_path.base);
+    h2o_mem_release_shared(self->mime_type);
+}
+
+
+// Source: file.c
+// Lines 947-953
+
+
+[ANSWER]
+MUST

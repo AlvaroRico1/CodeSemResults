@@ -1,0 +1,144 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'cid' at line 26
+2. Pointer 'hid' at line 25
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+ACPI_EXPORT_SYMBOL(acpi_walk_namespace)
+
+/*******************************************************************************
+ *
+ * FUNCTION:    acpi_ns_get_device_callback
+ *
+ * PARAMETERS:  Callback from acpi_get_device
+ *
+ * RETURN:      Status
+ *
+ * DESCRIPTION: Takes callbacks from walk_namespace and filters out all non-
+ *              present devices, or if they specified a HID, it filters based
+ *              on that.
+ *
+ ******************************************************************************/
+static acpi_status
+acpi_ns_get_device_callback(acpi_handle obj_handle,
+			    u32 nesting_level,
+			    void *context, void **return_value)
+{
+	struct acpi_get_devices_info *info = context;
+	acpi_status status;
+	struct acpi_namespace_node *node;
+	u32 flags;
+	struct acpi_pnp_device_id *hid;
+	struct acpi_pnp_device_id_list *cid;
+	u32 i;
+	u8 found;
+	int no_match;
+
+	status = acpi_ut_acquire_mutex(ACPI_MTX_NAMESPACE);
+	if (ACPI_FAILURE(status)) {
+		return (status);
+	}
+
+	node = acpi_ns_validate_handle(obj_handle);
+	status = acpi_ut_release_mutex(ACPI_MTX_NAMESPACE);
+	if (ACPI_FAILURE(status)) {
+		return (status);
+	}
+
+	if (!node) {
+		return (AE_BAD_PARAMETER);
+	}
+
+	/*
+	 * First, filter based on the device HID and CID.
+	 *
+	 * 01/2010: For this case where a specific HID is requested, we don't
+	 * want to run _STA until we have an actual HID match. Thus, we will
+	 * not unnecessarily execute _STA on devices for which the caller
+	 * doesn't care about. Previously, _STA was executed unconditionally
+	 * on all devices found here.
+	 *
+	 * A side-effect of this change is that now we will continue to search
+	 * for a matching HID even under device trees where the parent device
+	 * would have returned a _STA that indicates it is not present or
+	 * not functioning (thus aborting the search on that branch).
+	 */
+	if (info->hid != NULL) {
+		status = acpi_ut_execute_HID(node, &hid);
+		if (status == AE_NOT_FOUND) {
+			return (AE_OK);
+		} else if (ACPI_FAILURE(status)) {
+			return (AE_CTRL_DEPTH);
+		}
+
+		no_match = strcmp(hid->string, info->hid);
+		ACPI_FREE(hid);
+
+		if (no_match) {
+			/*
+			 * HID does not match, attempt match within the
+			 * list of Compatible IDs (CIDs)
+			 */
+			status = acpi_ut_execute_CID(node, &cid);
+			if (status == AE_NOT_FOUND) {
+				return (AE_OK);
+			} else if (ACPI_FAILURE(status)) {
+				return (AE_CTRL_DEPTH);
+			}
+
+			/* Walk the CID list */
+
+			found = FALSE;
+			for (i = 0; i < cid->count; i++) {
+				if (strcmp(cid->ids[i].string, info->hid) == 0) {
+
+					/* Found a matching CID */
+
+					found = TRUE;
+					break;
+				}
+			}
+
+			ACPI_FREE(cid);
+			if (!found) {
+				return (AE_OK);
+			}
+		}
+	}
+
+	/* Run _STA to determine if device is present */
+
+	status = acpi_ut_execute_STA(node, &flags);
+	if (ACPI_FAILURE(status)) {
+		return (AE_CTRL_DEPTH);
+	}
+
+	if (!(flags & ACPI_STA_DEVICE_PRESENT) &&
+	    !(flags & ACPI_STA_DEVICE_FUNCTIONING)) {
+		/*
+		 * Don't examine the children of the device only when the
+		 * device is neither present nor functional. See ACPI spec,
+		 * description of _STA for more information.
+		 */
+		return (AE_CTRL_DEPTH);
+	}
+
+	/* We have a valid device, invoke the user function */
+
+	status = info->user_function(obj_handle, nesting_level,
+				     info->context, return_value);
+	return (status);
+}
+
+
+// Source: nsxfeval.c
+// Lines 619-743
+
+
+[ANSWER]
+MAY

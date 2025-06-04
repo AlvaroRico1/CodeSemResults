@@ -1,0 +1,36 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'src_end' at line 3
+2. Pointer 'src' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static char *append_unsafe_string_apache(char *pos, const char *src, size_t len)
+{
+    const char *src_end = src + len;
+
+    for (; src != src_end; ++src) {
+        if (' ' <= *src && *src < 0x7d && *src != '"') {
+            *pos++ = *src;
+        } else {
+            *pos++ = '\\';
+            *pos++ = 'x';
+            *pos++ = ("0123456789abcdef")[(*src >> 4) & 0xf];
+            *pos++ = ("0123456789abcdef")[*src & 0xf];
+        }
+    }
+
+    return pos;
+}
+
+
+// Source: logconf.c
+// Lines 405-421
+
+
+[ANSWER]
+MUST

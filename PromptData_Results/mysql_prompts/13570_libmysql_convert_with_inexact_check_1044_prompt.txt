@@ -1,0 +1,48 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'out_of_range' at line 19
+2. Pointer 'i' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static inline Float convert_with_inexact_check(Int i, bool *is_inexact) {
+  /*
+    We need to mark the local variable volatile to
+    workaround Intel FPU executive precision feature.
+    (See http://gcc.gnu.org/bugzilla/show_bug.cgi?id=323 for details)
+   */
+  volatile Float f = static_cast<Float>(i);
+
+  // If i is positive, it is possible for it to have been rounded outside
+  // Int's range. If so, converting back to check is undefined behavior,
+  // and UBSan will complain. Thus, we need to check before we convert.
+  // Rounding of 2^64 - 1 (and similarly for int64_t) to float/double is
+  // platform-dependent, so we need a bit of trickery to get the right
+  // value in a safe manner.
+  //
+  // For both int64_t and uint64_t, the minimum possible value is a
+  // (negative) power of two, which is exact, so the test is applicable
+  // for max() only.
+  constexpr Float out_of_range =
+      static_cast<Float>(1ULL << (std::numeric_limits<Int>::digits - 1)) *
+      (std::numeric_limits<Int>::is_signed ? 1.0 : 2.0);
+  if (f >= out_of_range) {
+    // Obviously inexact.
+    *is_inexact = true;
+  } else {
+    *is_inexact = static_cast<Int>(f) != i;
+  }
+  return f;
+}
+
+
+// Source: libmysql.cc
+// Lines 2816-2844
+
+
+[ANSWER]
+MUST-NOT

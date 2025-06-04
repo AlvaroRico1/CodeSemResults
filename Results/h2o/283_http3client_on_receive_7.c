@@ -1,0 +1,68 @@
+static void on_receive(quicly_stream_t *qs, size_t off, const void *input, size_t len)
+{
+    struct st_h2o_http3client_req_t *req = qs->data;
+    size_t bytes_consumed;
+    int err = 0;
+    const char *err_desc = NULL;
+
+    /* process the input, update stream-level receive buffer */
+    if (req->recvbuf.stream->size == 0 && off == 0) {
+
+        /* fast path; process the input directly, save the remaining bytes */
+        const uint8_t *src = input;
+        err = on_receive_process_bytes(req, &src, src + len, &err_desc);
+        bytes_consumed = src - (const uint8_t *)input;
+        if (bytes_consumed != len)
+            h2o_buffer_append(&req->recvbuf.stream, src, len - bytes_consumed);
+    } else {
+        /* slow path; copy data to partial_frame */
+        size_t size_required = off + len;
+        if (req->recvbuf.stream->size < size_required) {
+            h2o_buffer_reserve(&req->recvbuf.stream, size_required - req->recvbuf.stream->size);
+            req->recvbuf.stream->size = size_required;
+        }
+        memcpy(req->recvbuf.stream->bytes + off, input, len);
+
+        /* just return if no new data is available */
+        size_t bytes_available = quicly_recvstate_bytes_available(&req->quic->recvstate);
+        if (req->recvbuf.prev_bytes_available == bytes_available)
+            return;
+
+        /* process the bytes that have not been processed, update stream-level buffer */
+        const uint8_t *src = (const uint8_t *)req->recvbuf.stream->bytes;
+        err = on_receive_process_bytes(req, &src, (const uint8_t *)req->recvbuf.stream->bytes + bytes_available, &err_desc);
+        bytes_consumed = src - (const uint8_t *)req->recvbuf.stream->bytes;
+        h2o_buffer_consume(&req->recvbuf.stream, bytes_consumed);
+    }
+
+    /* update QUIC stream-level state */
+    if (bytes_consumed != 0)
+        quicly_stream_sync_recvbuf(req->quic, bytes_consumed);
+    req->recvbuf.prev_bytes_available = quicly_recvstate_bytes_available(&req->quic->recvstate);
+
+    /* cleanup */
+    if (quicly_recvstate_transfer_complete(&req->quic->recvstate)) {
+        /* destroy the request if send-side is already closed, otherwise wait until the send-side gets closed */
+        if (quicly_sendstate_transfer_complete(&req->quic->sendstate)) {
+            detach_stream(req);
+            destroy_request(req);
+        }
+    } else if (err != 0) {
+        notify_response_error(req, h2o_httpclient_error_io);
+        int send_is_open = quicly_sendstate_is_open(&req->quic->sendstate);
+        close_stream(req, err);
+        /* immediately dispose of the request if possible, or wait for the send-side to close */
+        if (!send_is_open) {
+            destroy_request(req);
+        } else if (req->proceed_req.bytes_inflight != SIZE_MAX) {
+            call_proceed_req(req, h2o_httpclient_error_io);
+            destroy_request(req);
+        } else {
+            /* wait for write_req to be called */
+        }
+    }
+}
+
+
+// Source: http3client.c
+// Lines 643-706

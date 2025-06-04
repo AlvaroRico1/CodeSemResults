@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'pointer' at line 2
+2. Pointer 'new_start' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+yaml_string_extend(yaml_char_t **start,
+        yaml_char_t **pointer, yaml_char_t **end)
+{
+    yaml_char_t *new_start = (yaml_char_t *)yaml_realloc((void*)*start, (*end - *start)*2);
+
+    if (!new_start) return 0;
+
+    memset(new_start + (*end - *start), 0, *end - *start);
+
+    *pointer = new_start + (*pointer - *start);
+    *end = new_start + (*end - *start)*2;
+    *start = new_start;
+
+    return 1;
+}
+
+
+// Source: api.c
+// Lines 74-88
+
+
+[ANSWER]
+MUST

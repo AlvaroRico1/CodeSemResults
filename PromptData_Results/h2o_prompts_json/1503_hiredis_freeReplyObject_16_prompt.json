@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'r' at line 2\n2. Pointer 'reply' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid freeReplyObject(void *reply) {\n    redisReply *r = reply;\n    size_t j;\n\n    if (r == NULL)\n        return;\n\n    switch(r->type) {\n    case REDIS_REPLY_INTEGER:\n        break; /* Nothing to free */\n    case REDIS_REPLY_ARRAY:\n        if (r->element != NULL) {\n            for (j = 0; j < r->elements; j++)\n                if (r->element[j] != NULL)\n                    freeReplyObject(r->element[j]);\n            free(r->element);\n        }\n        break;\n    case REDIS_REPLY_ERROR:\n    case REDIS_REPLY_STATUS:\n    case REDIS_REPLY_STRING:\n        if (r->str != NULL)\n            free(r->str);\n        break;\n    }\n    free(r);\n}\n\n\n// Source: hiredis.c\n// Lines 74-100\n",
+  "ANSWER": "MUST"
+}

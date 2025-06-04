@@ -1,0 +1,1 @@
+name_start,linux/fs/fat/namei_vfat.c,6,ext_start,linux/fs/fat/namei_vfat.c,6,2

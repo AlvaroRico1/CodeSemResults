@@ -1,0 +1,1 @@
+data,tmux/window-copy.c,4,wme,tmux/window-copy.c,3,1

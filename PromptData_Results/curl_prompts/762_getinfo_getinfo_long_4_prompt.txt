@@ -1,0 +1,28 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'lptr' at line 9
+2. Pointer 'param_longp' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static CURLcode getinfo_long(struct Curl_easy *data, CURLINFO info,
+                             long *param_longp)
+{
+  curl_socket_t sockfd;
+
+  union {
+    unsigned long *to_ulong;
+    long          *to_long;
+  } lptr;
+
+
+// Source: getinfo.c
+// Lines 175-183
+
+
+[ANSWER]
+MUST

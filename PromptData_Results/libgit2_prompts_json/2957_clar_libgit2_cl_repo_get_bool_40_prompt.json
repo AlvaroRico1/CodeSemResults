@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'cfg' at line 1\n2. Pointer 'val' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint cl_repo_get_bool(git_repository *repo, const char *cfg)\n{\n\tint val = 0;\n\tgit_config *config;\n\tcl_git_pass(git_repository_config(&config, repo));\n\tif (git_config_get_bool(&val, config, cfg) < 0)\n\t\tgit_error_clear();\n\tgit_config_free(config);\n\treturn val;\n}\n\n\n// Source: clar_libgit2.c\n// Lines 468-477\n",
+  "ANSWER": "MUST-NOT"
+}

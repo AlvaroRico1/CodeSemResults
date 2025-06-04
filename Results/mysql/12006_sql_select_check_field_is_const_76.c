@@ -1,0 +1,46 @@
+bool check_field_is_const(Item *cond, const Item *order_item,
+                          const Field *order_field, Item **const_item) {
+  assert((order_item == nullptr) ^ (order_field == nullptr));
+
+  Item *intermediate = nullptr;
+  if (const_item == nullptr) const_item = &intermediate;
+
+  if (cond->type() == Item::COND_ITEM) {
+    Item_cond *const c = down_cast<Item_cond *>(cond);
+    bool and_level = c->functype() == Item_func::COND_AND_FUNC;
+    List_iterator_fast<Item> li(*c->argument_list());
+    Item *item;
+    while ((item = li++)) {
+      if (check_field_is_const(item, order_item, order_field, const_item)) {
+        if (and_level) return true;
+      } else if (!and_level)
+        return false;
+    }
+    return !and_level;
+  } else {
+    if (cond->type() != Item::FUNC_ITEM) return false;
+    Item_func *const func = down_cast<Item_func *>(cond);
+    if (func->functype() != Item_func::EQUAL_FUNC &&
+        func->functype() != Item_func::EQ_FUNC)
+      return false;
+    Item_func_comparison *comp = down_cast<Item_func_comparison *>(func);
+    Item *left = comp->arguments()[0];
+    Item *right = comp->arguments()[1];
+    if (equal(left, order_item, order_field)) {
+      if (equality_determines_uniqueness(comp, left, right)) {
+        if (*const_item != nullptr) return right->eq(*const_item, true);
+        *const_item = right;
+        return true;
+      }
+    } else if (equal(right, order_item, order_field)) {
+      if (equality_determines_uniqueness(comp, right, left)) {
+        if (*const_item != nullptr) return left->eq(*const_item, true);
+        *const_item = left;
+        return true;
+      }
+    }
+  }
+
+
+// Source: sql_select.cc
+// Lines 3714-3755

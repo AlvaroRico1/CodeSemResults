@@ -1,0 +1,60 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'host' at line 4
+2. Pointer 'file' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+__nlm4svc_proc_lock(struct svc_rqst *rqstp, struct nlm_res *resp)
+{
+	struct nlm_args *argp = rqstp->rq_argp;
+	struct nlm_host	*host;
+	struct nlm_file	*file;
+	__be32 rc = rpc_success;
+
+	dprintk("lockd: LOCK          called\n");
+
+	resp->cookie = argp->cookie;
+
+	/* Obtain client and file */
+	if ((resp->status = nlm4svc_retrieve_args(rqstp, argp, &host, &file)))
+		return resp->status == nlm_drop_reply ? rpc_drop_reply :rpc_success;
+
+#if 0
+	/* If supplied state doesn't match current state, we assume it's
+	 * an old request that time-warped somehow. Any error return would
+	 * do in this case because it's irrelevant anyway.
+	 *
+	 * NB: We don't retrieve the remote host's state yet.
+	 */
+	if (host->h_nsmstate && host->h_nsmstate != argp->state) {
+		resp->status = nlm_lck_denied_nolocks;
+	} else
+#endif
+
+	/* Now try to lock the file */
+	resp->status = nlmsvc_lock(rqstp, file, host, &argp->lock,
+					argp->block, &argp->cookie,
+					argp->reclaim);
+	if (resp->status == nlm_drop_reply)
+		rc = rpc_drop_reply;
+	else
+		dprintk("lockd: LOCK         status %d\n", ntohl(resp->status));
+
+	nlmsvc_release_lockowner(&argp->lock);
+	nlmsvc_release_host(host);
+	nlm_release_file(file);
+	return rc;
+}
+
+
+// Source: svc4proc.c
+// Lines 116-156
+
+
+[ANSWER]
+MAY

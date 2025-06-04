@@ -1,0 +1,33 @@
+control_read_callback(__unused struct bufferevent *bufev, void *data)
+{
+	struct client		*c = data;
+	struct control_state	*cs = c->control_state;
+	struct evbuffer		*buffer = cs->read_event->input;
+	char			*line, *error;
+	struct cmdq_state	*state;
+	enum cmd_parse_status	 status;
+
+	for (;;) {
+		line = evbuffer_readln(buffer, NULL, EVBUFFER_EOL_LF);
+		if (line == NULL)
+			break;
+		log_debug("%s: %s: %s", __func__, c->name, line);
+		if (*line == '\0') { /* empty line detach */
+			free(line);
+			c->flags |= CLIENT_EXIT;
+			break;
+		}
+
+		state = cmdq_new_state(NULL, NULL, CMDQ_STATE_CONTROL);
+		status = cmd_parse_and_append(line, NULL, c, state, &error);
+		if (status == CMD_PARSE_ERROR)
+			cmdq_append(c, cmdq_get_callback(control_error, error));
+		cmdq_free_state(state);
+
+		free(line);
+	}
+}
+
+
+// Source: control.c
+// Lines 547-575

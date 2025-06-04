@@ -1,0 +1,44 @@
+static const char *get_refname(struct used_atom *atom, struct ref_array_item *ref)
+{
+	if (ref->kind & FILTER_REFS_DETACHED_HEAD)
+		return get_head_description();
+	return show_ref(&atom->u.refname, ref->refname);
+}
+
+static int get_object(struct ref_array_item *ref, int deref, struct object **obj,
+		      struct expand_data *oi, struct strbuf *err)
+{
+	/* parse_object_buffer() will set eaten to 0 if free() will be needed */
+	int eaten = 1;
+	if (oi->info.contentp) {
+		/* We need to know that to use parse_object_buffer properly */
+		oi->info.sizep = &oi->size;
+		oi->info.typep = &oi->type;
+	}
+	if (oid_object_info_extended(the_repository, &oi->oid, &oi->info,
+				     OBJECT_INFO_LOOKUP_REPLACE))
+		return strbuf_addf_ret(err, -1, _("missing object %s for %s"),
+				       oid_to_hex(&oi->oid), ref->refname);
+	if (oi->info.disk_sizep && oi->disk_size < 0)
+		BUG("Object size is less than zero.");
+
+	if (oi->info.contentp) {
+		*obj = parse_object_buffer(the_repository, &oi->oid, oi->type, oi->size, oi->content, &eaten);
+		if (!*obj) {
+			if (!eaten)
+				free(oi->content);
+			return strbuf_addf_ret(err, -1, _("parse_object_buffer failed on %s for %s"),
+					       oid_to_hex(&oi->oid), ref->refname);
+		}
+		grab_values(ref->value, deref, *obj, oi);
+	}
+
+	grab_common_values(ref->value, deref, oi);
+	if (!eaten)
+		free(oi->content);
+	return 0;
+}
+
+
+// Source: ref-filter.c
+// Lines 1735-1774

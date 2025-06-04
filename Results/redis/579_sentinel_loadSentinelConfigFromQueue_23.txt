@@ -1,0 +1,1 @@
+entry,redis/src/sentinel.c,8,ln,redis/src/sentinel.c,4,1

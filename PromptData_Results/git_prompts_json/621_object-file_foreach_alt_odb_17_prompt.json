@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ent' at line 3\n2. Pointer 'ent' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint foreach_alt_odb(alt_odb_fn fn, void *cb)\n{\n\tstruct object_directory *ent;\n\tint r = 0;\n\n\tprepare_alt_odb(the_repository);\n\tfor (ent = the_repository->objects->odb->next; ent; ent = ent->next) {\n\t\tr = fn(ent, cb);\n\t\tif (r)\n\t\t\tbreak;\n\t}\n\treturn r;\n}\n\n\n// Source: object-file.c\n// Lines 875-887\n",
+  "ANSWER": "MUST"
+}

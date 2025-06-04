@@ -1,0 +1,52 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'out' at line 3
+2. Pointer 'src' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int string_unescape(char *src, char *dst, size_t size, unsigned int flags)
+{
+	char *out = dst;
+
+	while (*src && --size) {
+		if (src[0] == '\\' && src[1] != '\0' && size > 1) {
+			src++;
+			size--;
+
+			if (flags & UNESCAPE_SPACE &&
+					unescape_space(&src, &out))
+				continue;
+
+			if (flags & UNESCAPE_OCTAL &&
+					unescape_octal(&src, &out))
+				continue;
+
+			if (flags & UNESCAPE_HEX &&
+					unescape_hex(&src, &out))
+				continue;
+
+			if (flags & UNESCAPE_SPECIAL &&
+					unescape_special(&src, &out))
+				continue;
+
+			*out++ = '\\';
+		}
+		*out++ = *src++;
+	}
+	*out = '\0';
+
+	return out - dst;
+}
+
+
+// Source: string_helpers.c
+// Lines 268-300
+
+
+[ANSWER]
+MAY

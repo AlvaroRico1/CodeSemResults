@@ -1,0 +1,71 @@
+sds getMemoryDoctorReport(void) {
+    int empty = 0;          /* Instance is empty or almost empty. */
+    int big_peak = 0;       /* Memory peak is much larger than used mem. */
+    int high_frag = 0;      /* High fragmentation. */
+    int high_alloc_frag = 0;/* High allocator fragmentation. */
+    int high_proc_rss = 0;  /* High process rss overhead. */
+    int high_alloc_rss = 0; /* High rss overhead. */
+    int big_slave_buf = 0;  /* Slave buffers are too big. */
+    int big_client_buf = 0; /* Client buffers are too big. */
+    int many_scripts = 0;   /* Script cache has too many scripts. */
+    int num_reports = 0;
+    struct redisMemOverhead *mh = getMemoryOverheadData();
+
+    if (mh->total_allocated < (1024*1024*5)) {
+        empty = 1;
+        num_reports++;
+    } else {
+        /* Peak is > 150% of current used memory? */
+        if (((float)mh->peak_allocated / mh->total_allocated) > 1.5) {
+            big_peak = 1;
+            num_reports++;
+        }
+
+        /* Fragmentation is higher than 1.4 and 10MB ?*/
+        if (mh->total_frag > 1.4 && mh->total_frag_bytes > 10<<20) {
+            high_frag = 1;
+            num_reports++;
+        }
+
+        /* External fragmentation is higher than 1.1 and 10MB? */
+        if (mh->allocator_frag > 1.1 && mh->allocator_frag_bytes > 10<<20) {
+            high_alloc_frag = 1;
+            num_reports++;
+        }
+
+        /* Allocator rss is higher than 1.1 and 10MB ? */
+        if (mh->allocator_rss > 1.1 && mh->allocator_rss_bytes > 10<<20) {
+            high_alloc_rss = 1;
+            num_reports++;
+        }
+
+        /* Non-Allocator rss is higher than 1.1 and 10MB ? */
+        if (mh->rss_extra > 1.1 && mh->rss_extra_bytes > 10<<20) {
+            high_proc_rss = 1;
+            num_reports++;
+        }
+
+        /* Clients using more than 200k each average? */
+        long numslaves = listLength(server.slaves);
+        long numclients = listLength(server.clients)-numslaves;
+        if (mh->clients_normal / numclients > (1024*200)) {
+            big_client_buf = 1;
+            num_reports++;
+        }
+
+        /* Slaves using more than 10 MB each? */
+        if (numslaves > 0 && mh->clients_slaves / numslaves > (1024*1024*10)) {
+            big_slave_buf = 1;
+            num_reports++;
+        }
+
+        /* Too many scripts are cached? */
+        if (dictSize(server.lua_scripts) > 1000) {
+            many_scripts = 1;
+            num_reports++;
+        }
+    }
+
+
+// Source: object.c
+// Lines 1094-1160

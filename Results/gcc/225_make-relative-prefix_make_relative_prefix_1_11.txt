@@ -1,0 +1,1 @@
+bin_dirs,gcc/libiberty/make-relative-prefix.c,4,progname,gcc/libiberty/make-relative-prefix.c,1,2

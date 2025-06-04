@@ -1,0 +1,1 @@
+table,h2o/lib/http3/qpack.c,1,newbuf,h2o/lib/http3/qpack.c,8,1

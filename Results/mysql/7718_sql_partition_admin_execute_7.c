@@ -1,0 +1,47 @@
+bool Sql_cmd_alter_table_exchange_partition::execute(THD *thd) {
+  /* Moved from mysql_execute_command */
+  LEX *lex = thd->lex;
+  /* first Query_block (have special meaning for many of non-SELECTcommands) */
+  Query_block *query_block = lex->query_block;
+  /* first table of first Query_block */
+  TABLE_LIST *first_table = query_block->table_list.first;
+  /*
+    Code in mysql_alter_table() may modify its HA_CREATE_INFO argument,
+    so we have to use a copy of this structure to make execution
+    prepared statement- safe. A shallow copy is enough as no memory
+    referenced from this structure will be modified.
+    @todo move these into constructor...
+  */
+  HA_CREATE_INFO create_info(*lex->create_info);
+  Alter_info alter_info(*m_alter_info, thd->mem_root);
+  ulong priv_needed = ALTER_ACL | DROP_ACL | INSERT_ACL | CREATE_ACL;
+
+  DBUG_TRACE;
+
+  if (thd->is_fatal_error()) /* out of memory creating a copy of alter_info */
+    return true;
+
+  /* also check the table to be exchanged with the partition */
+  assert(alter_info.flags & Alter_info::ALTER_EXCHANGE_PARTITION);
+
+  if (check_access(thd, priv_needed, first_table->db,
+                   &first_table->grant.privilege,
+                   &first_table->grant.m_internal, false, false) ||
+      check_access(thd, priv_needed, first_table->next_local->db,
+                   &first_table->next_local->grant.privilege,
+                   &first_table->next_local->grant.m_internal, false, false))
+    return true;
+
+  if (check_grant(thd, priv_needed, first_table, false, UINT_MAX, false))
+    return true;
+
+  /* Not allowed with EXCHANGE PARTITION */
+  assert(!create_info.data_file_name && !create_info.index_file_name);
+
+  thd->enable_slow_log = opt_log_slow_admin_statements;
+  return exchange_partition(thd, first_table, &alter_info);
+}
+
+
+// Source: sql_partition_admin.cc
+// Lines 74-116

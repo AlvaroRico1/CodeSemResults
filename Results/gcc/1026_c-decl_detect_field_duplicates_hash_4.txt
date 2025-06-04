@@ -1,0 +1,1 @@
+y,gcc/gcc/c/c-decl.c,4,slot,gcc/gcc/c/c-decl.c,5,0

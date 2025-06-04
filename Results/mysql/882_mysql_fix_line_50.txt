@@ -1,0 +1,1 @@
+str_char,mysql/client/mysql.cc,7,final_command,mysql/client/mysql.cc,1,0

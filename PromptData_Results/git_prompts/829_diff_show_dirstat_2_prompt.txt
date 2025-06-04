@@ -1,0 +1,107 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'copied' at line 18
+2. Pointer 'added' at line 18
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void show_dirstat(struct diff_options *options)
+{
+	int i;
+	unsigned long changed;
+	struct dirstat_dir dir;
+	struct diff_queue_struct *q = &diff_queued_diff;
+
+	dir.files = NULL;
+	dir.alloc = 0;
+	dir.nr = 0;
+	dir.permille = options->dirstat_permille;
+	dir.cumulative = options->flags.dirstat_cumulative;
+
+	changed = 0;
+	for (i = 0; i < q->nr; i++) {
+		struct diff_filepair *p = q->queue[i];
+		const char *name;
+		unsigned long copied, added, damage;
+		struct diff_populate_filespec_options dpf_options = {
+			.check_size_only = 1,
+		};
+
+		name = p->two->path ? p->two->path : p->one->path;
+
+		if (p->one->oid_valid && p->two->oid_valid &&
+		    oideq(&p->one->oid, &p->two->oid)) {
+			/*
+			 * The SHA1 has not changed, so pre-/post-content is
+			 * identical. We can therefore skip looking at the
+			 * file contents altogether.
+			 */
+			damage = 0;
+			goto found_damage;
+		}
+
+		if (options->flags.dirstat_by_file) {
+			/*
+			 * In --dirstat-by-file mode, we don't really need to
+			 * look at the actual file contents at all.
+			 * The fact that the SHA1 changed is enough for us to
+			 * add this file to the list of results
+			 * (with each file contributing equal damage).
+			 */
+			damage = 1;
+			goto found_damage;
+		}
+
+		if (DIFF_FILE_VALID(p->one) && DIFF_FILE_VALID(p->two)) {
+			diff_populate_filespec(options->repo, p->one, NULL);
+			diff_populate_filespec(options->repo, p->two, NULL);
+			diffcore_count_changes(options->repo,
+					       p->one, p->two, NULL, NULL,
+					       &copied, &added);
+			diff_free_filespec_data(p->one);
+			diff_free_filespec_data(p->two);
+		} else if (DIFF_FILE_VALID(p->one)) {
+			diff_populate_filespec(options->repo, p->one, &dpf_options);
+			copied = added = 0;
+			diff_free_filespec_data(p->one);
+		} else if (DIFF_FILE_VALID(p->two)) {
+			diff_populate_filespec(options->repo, p->two, &dpf_options);
+			copied = 0;
+			added = p->two->size;
+			diff_free_filespec_data(p->two);
+		} else
+			continue;
+
+		/*
+		 * Original minus copied is the removed material,
+		 * added is the new material.  They are both damages
+		 * made to the preimage.
+		 * If the resulting damage is zero, we know that
+		 * diffcore_count_changes() considers the two entries to
+		 * be identical, but since the oid changed, we
+		 * know that there must have been _some_ kind of change,
+		 * so we force all entries to have damage > 0.
+		 */
+		damage = (p->one->size - copied) + added;
+		if (!damage)
+			damage = 1;
+
+found_damage:
+		ALLOC_GROW(dir.files, dir.nr + 1, dir.alloc);
+		dir.files[dir.nr].name = name;
+		dir.files[dir.nr].changed = damage;
+		changed += damage;
+		dir.nr++;
+	}
+
+
+// Source: diff.c
+// Lines 3019-3106
+
+
+[ANSWER]
+MAY

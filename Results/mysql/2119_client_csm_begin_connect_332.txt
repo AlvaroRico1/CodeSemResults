@@ -1,0 +1,1 @@
+flags,mysql/sql-common/client.cc,188,bind_result,mysql/sql-common/client.cc,187,0

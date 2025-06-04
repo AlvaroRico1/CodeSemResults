@@ -1,0 +1,36 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'p' at line 3
+2. Pointer 'llbuf' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+unsigned char *getObjectReadOnlyString(robj *o, long *len, char *llbuf) {
+    serverAssert(o->type == OBJ_STRING);
+    unsigned char *p = NULL;
+
+    /* Set the 'p' pointer to the string, that can be just a stack allocated
+     * array if our string was integer encoded. */
+    if (o && o->encoding == OBJ_ENCODING_INT) {
+        p = (unsigned char*) llbuf;
+        if (len) *len = ll2string(llbuf,LONG_STR_SIZE,(long)o->ptr);
+    } else if (o) {
+        p = (unsigned char*) o->ptr;
+        if (len) *len = sdslen(o->ptr);
+    } else {
+        if (len) *len = 0;
+    }
+    return p;
+}
+
+
+// Source: bitops.c
+// Lines 508-524
+
+
+[ANSWER]
+MUST

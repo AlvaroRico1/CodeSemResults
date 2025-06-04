@@ -1,0 +1,33 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'set' at line 3
+2. Pointer 'p' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int sysctl_is_seen(struct ctl_table_header *p)
+{
+	struct ctl_table_set *set = p->set;
+	int res;
+	spin_lock(&sysctl_lock);
+	if (p->unregistering)
+		res = 0;
+	else if (!set->is_seen)
+		res = 1;
+	else
+		res = set->is_seen(set);
+	spin_unlock(&sysctl_lock);
+	return res;
+}
+
+
+// Source: proc_sysctl.c
+// Lines 909-922
+
+
+[ANSWER]
+MUST

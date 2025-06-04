@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'mm' at line 3\n2. Pointer 'priv' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void vma_stop(struct proc_maps_private *priv)\n{\n\tstruct mm_struct *mm = priv->mm;\n\n\trelease_task_mempolicy(priv);\n\tup_read(&mm->mmap_sem);\n\tmmput(mm);\n}\n\n\n// Source: task_mmu.c\n// Lines 126-133\n",
+  "ANSWER": "MUST"
+}

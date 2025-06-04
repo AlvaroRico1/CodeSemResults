@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ft' at line 3\n2. Pointer 'item' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nformat_create(struct client *c, struct cmdq_item *item, int tag, int flags)\n{\n\tstruct format_tree\t*ft;\n\n\tft = xcalloc(1, sizeof *ft);\n\tRB_INIT(&ft->tree);\n\n\tif (c != NULL) {\n\t\tft->client = c;\n\t\tft->client->references++;\n\t}\n\tft->item = item;\n\n\tft->tag = tag;\n\tft->flags = flags;\n\n\tif (item != NULL)\n\t\tformat_create_add_item(ft, item);\n\n\treturn (ft);\n}\n\n\n// Source: format.c\n// Lines 3058-3078\n",
+  "ANSWER": "MUST"
+}

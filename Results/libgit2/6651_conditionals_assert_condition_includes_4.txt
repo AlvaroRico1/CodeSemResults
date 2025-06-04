@@ -1,0 +1,1 @@
+path,libgit2/tests/libgit2/config/conditionals.c,1,cfg,libgit2/tests/libgit2/config/conditionals.c,5,0

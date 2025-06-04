@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 's' at line 3\n2. Pointer 'ctx' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nscreen_write_scrollup(struct screen_write_ctx *ctx, u_int lines, u_int bg)\n{\n\tstruct screen\t*s = ctx->s;\n\tstruct grid\t*gd = s->grid;\n\tu_int\t\t i;\n\n\tif (lines == 0)\n\t\tlines = 1;\n\telse if (lines > s->rlower - s->rupper + 1)\n\t\tlines = s->rlower - s->rupper + 1;\n\n\tif (bg != ctx->bg) {\n\t\tscreen_write_collect_flush(ctx, 1, __func__);\n\t\tctx->bg = bg;\n\t}\n\n\tfor (i = 0; i < lines; i++) {\n\t\tgrid_view_scroll_region_up(gd, s->rupper, s->rlower, bg);\n\t\tscreen_write_collect_scroll(ctx, bg);\n\t}\n\tctx->scrolled += lines;\n}\n\n\n// Source: screen-write.c\n// Lines 1358-1379\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,47 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'p' at line 3
+2. Pointer 'p' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void mem_pool_combine(struct mem_pool *dst, struct mem_pool *src)
+{
+	struct mp_block *p;
+
+	/* Append the blocks from src to dst */
+	if (dst->mp_block && src->mp_block) {
+		/*
+		 * src and dst have blocks, append
+		 * blocks from src to dst.
+		 */
+		p = dst->mp_block;
+		while (p->next_block)
+			p = p->next_block;
+
+		p->next_block = src->mp_block;
+	} else if (src->mp_block) {
+		/*
+		 * src has blocks, dst is empty.
+		 */
+		dst->mp_block = src->mp_block;
+	} else {
+		/* src is empty, nothing to do. */
+	}
+
+	dst->pool_alloc += src->pool_alloc;
+	src->pool_alloc = 0;
+	src->mp_block = NULL;
+}
+
+
+// Source: mem-pool.c
+// Lines 131-158
+
+
+[ANSWER]
+MUST

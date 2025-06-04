@@ -1,0 +1,99 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'repo' at line 7
+2. Pointer 'result' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int git_describe__format(
+	git_str *out,
+	const git_describe_result *result,
+	const git_describe_format_options *given)
+{
+	int error;
+	git_repository *repo;
+	struct commit_name *name;
+	git_describe_format_options opts;
+
+	GIT_ASSERT_ARG(out);
+	GIT_ASSERT_ARG(result);
+
+	GIT_ERROR_CHECK_VERSION(given, GIT_DESCRIBE_FORMAT_OPTIONS_VERSION, "git_describe_format_options");
+	normalize_format_options(&opts, given);
+
+	if (opts.always_use_long_format && opts.abbreviated_size == 0) {
+		git_error_set(GIT_ERROR_DESCRIBE, "cannot describe - "
+			"'always_use_long_format' is incompatible with a zero"
+			"'abbreviated_size'");
+		return -1;
+	}
+
+
+	repo = result->repo;
+
+	/* If we did find an exact match, then it's the easier method */
+	if (result->exact_match) {
+		name = result->name;
+		if ((error = display_name(out, repo, name)) < 0)
+			return error;
+
+		if (opts.always_use_long_format) {
+			const git_oid *id = name->tag ? git_tag_target_id(name->tag) : &result->commit_id;
+			if ((error = show_suffix(out, 0, repo, id, opts.abbreviated_size)) < 0)
+				return error;
+		}
+
+		if (result->dirty && opts.dirty_suffix)
+			git_str_puts(out, opts.dirty_suffix);
+
+		return git_str_oom(out) ? -1 : 0;
+	}
+
+	/* If we didn't find *any* tags, we fall back to the commit's id */
+	if (result->fallback_to_id) {
+		char hex_oid[GIT_OID_HEXSZ + 1] = {0};
+		int size = 0;
+
+		if ((error = find_unique_abbrev_size(
+			     &size, repo, &result->commit_id, opts.abbreviated_size)) < 0)
+			return -1;
+
+		git_oid_fmt(hex_oid, &result->commit_id);
+		git_str_put(out, hex_oid, size);
+
+		if (result->dirty && opts.dirty_suffix)
+			git_str_puts(out, opts.dirty_suffix);
+
+		return git_str_oom(out) ? -1 : 0;
+	}
+
+	/* Lastly, if we found a matching tag, we show that */
+	name = result->tag->name;
+
+	if ((error = display_name(out, repo, name)) < 0)
+		return error;
+
+	if (opts.abbreviated_size) {
+		if ((error = show_suffix(out, result->tag->depth, repo,
+			&result->commit_id, opts.abbreviated_size)) < 0)
+			return error;
+	}
+
+	if (result->dirty && opts.dirty_suffix) {
+		git_str_puts(out, opts.dirty_suffix);
+	}
+
+	return git_str_oom(out) ? -1 : 0;
+}
+
+
+// Source: describe.c
+// Lines 773-852
+
+
+[ANSWER]
+MUST

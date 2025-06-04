@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'self' at line 3\n2. Pointer 'cmd' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int on_config_file(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)\n{\n    struct st_h2o_file_configurator_t *self = (void *)cmd->configurator;\n    h2o_mimemap_type_t *mime_type =\n        h2o_mimemap_get_type_by_extension(*ctx->mimemap, h2o_get_filext(node->data.scalar, strlen(node->data.scalar)));\n    h2o_file_register_file(ctx->pathconf, node->data.scalar, mime_type, self->vars->flags);\n    return 0;\n}\n\n\n// Source: file.c\n// Lines 44-51\n",
+  "ANSWER": "MUST"
+}

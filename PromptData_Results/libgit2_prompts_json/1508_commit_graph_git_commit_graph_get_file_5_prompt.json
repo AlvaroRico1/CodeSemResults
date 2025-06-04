@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'file_out' at line 1\n2. Pointer 'result' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint git_commit_graph_get_file(git_commit_graph_file **file_out, git_commit_graph *cgraph)\n{\n\tif (!cgraph->checked) {\n\t\tint error = 0;\n\t\tgit_commit_graph_file *result = NULL;\n\n\t\t/* We only check once, no matter the result. */\n\t\tcgraph->checked = 1;\n\n\t\t/* Best effort */\n\t\terror = git_commit_graph_file_open(&result, git_str_cstr(&cgraph->filename));\n\n\t\tif (error < 0)\n\t\t\treturn error;\n\n\t\tcgraph->file = result;\n\t}\n\n\n// Source: commit_graph.c\n// Lines 384-400\n",
+  "ANSWER": "MUST"
+}

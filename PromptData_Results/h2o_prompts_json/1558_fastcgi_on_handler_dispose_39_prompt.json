@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'handler' at line 3\n2. Pointer '_handler' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void on_handler_dispose(h2o_handler_t *_handler)\n{\n    h2o_fastcgi_handler_t *handler = (void *)_handler;\n\n    if (handler->config.callbacks.dispose != NULL)\n        handler->config.callbacks.dispose(handler, handler->config.callbacks.data);\n\n    h2o_socketpool_dispose(&handler->sockpool);\n    free(handler->config.document_root.base);\n}\n\n\n// Source: fastcgi.c\n// Lines 820-829\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'remaining_bytes' at line 3
+2. Pointer 'packet_length' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+inline bool buffer_check_remaining(MYSQL *mysql, uchar *packet,
+                                   ulong packet_length, size_t bytes) {
+  size_t remaining_bytes;
+  /* Check to avoid underflow */
+  if (packet_length < (ulong)(packet - mysql->net.read_pos)) {
+    set_mysql_error(mysql, CR_MALFORMED_PACKET, unknown_sqlstate);
+    return false;
+  }
+  remaining_bytes = packet_length - (packet - mysql->net.read_pos);
+  if (remaining_bytes < bytes) {
+    set_mysql_error(mysql, CR_MALFORMED_PACKET, unknown_sqlstate);
+    return false;
+  }
+  return true;
+}
+
+
+// Source: client.cc
+// Lines 709-723
+
+
+[ANSWER]
+MUST-NOT

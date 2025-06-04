@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 's' at line 4\n2. Pointer '_s' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int range_cmp(const void *_r, const void *_s)\n{\n\tconst struct range *r = _r;\n\tconst struct range *s = _s;\n\n\t/* this could be simply 'return r.start-s.start', but for the types */\n\tif (r->start == s->start)\n\t\treturn 0;\n\tif (r->start < s->start)\n\t\treturn -1;\n\treturn 1;\n}\n\n\n// Source: line-log.c\n// Lines 76-87\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,1 @@
+linesize,tmux/client.c,11,ttynam,tmux/client.c,7,0

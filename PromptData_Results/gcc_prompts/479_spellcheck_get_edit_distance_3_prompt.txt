@@ -1,0 +1,109 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'v_next' at line 21
+2. Pointer 'v_one_ago' at line 20
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+get_edit_distance (const char *s, int len_s,
+		   const char *t, int len_t)
+{
+  const bool debug = false;
+
+  if (debug)
+    {
+      printf ("s: \"%s\" (len_s=%i)\n", s, len_s);
+      printf ("t: \"%s\" (len_t=%i)\n", t, len_t);
+    }
+
+  if (len_s == 0)
+    return len_t;
+  if (len_t == 0)
+    return len_s;
+
+  /* We effectively build a matrix where each (i, j) contains the
+     distance between the prefix strings s[0:j] and t[0:i].
+     Rather than actually build an (len_t + 1) * (len_s + 1) matrix,
+     we simply keep track of the last two rows, v_one_ago and v_two_ago,
+     and a new row, v_next, which avoids an (len_t + 1) * (len_s + 1)
+     allocation and memory accesses in favor of three (len_s + 1)
+     allocations.  These could potentially be
+     statically-allocated if we impose a maximum length on the
+     strings of interest.  */
+  edit_distance_t *v_two_ago = new edit_distance_t[len_s + 1];
+  edit_distance_t *v_one_ago = new edit_distance_t[len_s + 1];
+  edit_distance_t *v_next = new edit_distance_t[len_s + 1];
+
+  /* The first row is for the case of an empty target string, which
+     we can reach by deleting every character in the source string.  */
+  for (int i = 0; i < len_s + 1; i++)
+    v_one_ago[i] = i;
+
+  /* Build successive rows.  */
+  for (int i = 0; i < len_t; i++)
+    {
+      if (debug)
+	{
+	  printf ("i:%i v_one_ago = ", i);
+	  for (int j = 0; j < len_s + 1; j++)
+	    printf ("%i ", v_one_ago[j]);
+	  printf ("\n");
+	}
+
+      /* The initial column is for the case of an empty source string; we
+	 can reach prefixes of the target string of length i
+	 by inserting i characters.  */
+      v_next[0] = i + 1;
+
+      /* Build the rest of the row by considering neighbors to
+	 the north, west and northwest.  */
+      for (int j = 0; j < len_s; j++)
+	{
+	  edit_distance_t cost = (s[j] == t[i] ? 0 : 1);
+	  edit_distance_t deletion     = v_next[j] + 1;
+	  edit_distance_t insertion    = v_one_ago[j + 1] + 1;
+	  edit_distance_t substitution = v_one_ago[j] + cost;
+	  edit_distance_t cheapest = MIN (deletion, insertion);
+	  cheapest = MIN (cheapest, substitution);
+	  if (i > 0 && j > 0 && s[j] == t[i - 1] && s[j - 1] == t[i])
+	    {
+	      edit_distance_t transposition = v_two_ago[j - 1] + 1;
+	      cheapest = MIN (cheapest, transposition);
+	    }
+	  v_next[j + 1] = cheapest;
+	}
+
+      /* Prepare to move on to next row.  */
+      for (int j = 0; j < len_s + 1; j++)
+	{
+	  v_two_ago[j] = v_one_ago[j];
+	  v_one_ago[j] = v_next[j];
+	}
+    }
+
+  if (debug)
+    {
+      printf ("final v_next = ");
+      for (int j = 0; j < len_s + 1; j++)
+	printf ("%i ", v_next[j]);
+      printf ("\n");
+    }
+
+  edit_distance_t result = v_next[len_s];
+  delete[] v_two_ago;
+  delete[] v_one_ago;
+  delete[] v_next;
+  return result;
+}
+
+
+// Source: spellcheck.c
+// Lines 38-127
+
+
+[ANSWER]
+MUST-NOT

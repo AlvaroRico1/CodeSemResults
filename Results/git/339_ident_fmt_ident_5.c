@@ -1,0 +1,67 @@
+const char *fmt_ident(const char *name, const char *email,
+		      enum want_ident whose_ident, const char *date_str, int flag)
+{
+	static int index;
+	static struct strbuf ident_pool[2] = { STRBUF_INIT, STRBUF_INIT };
+	int strict = (flag & IDENT_STRICT);
+	int want_date = !(flag & IDENT_NO_DATE);
+	int want_name = !(flag & IDENT_NO_NAME);
+
+	struct strbuf *ident = &ident_pool[index];
+	index = (index + 1) % ARRAY_SIZE(ident_pool);
+
+	if (!email) {
+		if (whose_ident == WANT_AUTHOR_IDENT && git_author_email.len)
+			email = git_author_email.buf;
+		else if (whose_ident == WANT_COMMITTER_IDENT && git_committer_email.len)
+			email = git_committer_email.buf;
+	}
+	if (!email) {
+		if (strict && ident_use_config_only
+		    && !(ident_config_given & IDENT_MAIL_GIVEN)) {
+			ident_env_hint(whose_ident);
+			die(_("no email was given and auto-detection is disabled"));
+		}
+		email = ident_default_email();
+		if (strict && default_email_is_bogus) {
+			ident_env_hint(whose_ident);
+			die(_("unable to auto-detect email address (got '%s')"), email);
+		}
+	}
+
+	if (want_name) {
+		int using_default = 0;
+		if (!name) {
+			if (whose_ident == WANT_AUTHOR_IDENT && git_author_name.len)
+				name = git_author_name.buf;
+			else if (whose_ident == WANT_COMMITTER_IDENT &&
+					git_committer_name.len)
+				name = git_committer_name.buf;
+		}
+		if (!name) {
+			if (strict && ident_use_config_only
+			    && !(ident_config_given & IDENT_NAME_GIVEN)) {
+				ident_env_hint(whose_ident);
+				die(_("no name was given and auto-detection is disabled"));
+			}
+			name = ident_default_name();
+			using_default = 1;
+			if (strict && default_name_is_bogus) {
+				ident_env_hint(whose_ident);
+				die(_("unable to auto-detect name (got '%s')"), name);
+			}
+		}
+		if (!*name) {
+			struct passwd *pw;
+			if (strict) {
+				if (using_default)
+					ident_env_hint(whose_ident);
+				die(_("empty ident name (for <%s>) not allowed"), email);
+			}
+			pw = xgetpwuid_self(NULL);
+			name = pw->pw_name;
+		}
+
+
+// Source: ident.c
+// Lines 375-437

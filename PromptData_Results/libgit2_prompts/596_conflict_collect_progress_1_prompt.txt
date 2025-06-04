@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'total_steps' at line 4
+2. Pointer 'paths' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void collect_progress(
+	const char *path,
+	size_t completed_steps,
+	size_t total_steps,
+	void *payload)
+{
+	git_vector *paths = payload;
+
+	GIT_UNUSED(completed_steps);
+	GIT_UNUSED(total_steps);
+
+	if (path == NULL)
+		return;
+
+	git_vector_insert(paths, strdup(path));
+}
+
+
+// Source: conflict.c
+// Lines 1084-1099
+
+
+[ANSWER]
+MUST-NOT

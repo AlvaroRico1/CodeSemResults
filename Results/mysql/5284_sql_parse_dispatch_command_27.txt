@@ -1,0 +1,1 @@
+query_start_status_ptr,mysql/sql/sql_parse.cc,12,query_start_status,mysql/sql/sql_parse.cc,11,1

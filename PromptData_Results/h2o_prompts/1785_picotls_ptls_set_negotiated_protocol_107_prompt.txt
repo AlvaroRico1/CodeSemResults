@@ -1,0 +1,37 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tls' at line 1
+2. Pointer 'duped' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int ptls_set_negotiated_protocol(ptls_t *tls, const char *protocol, size_t protocol_len)
+{
+    char *duped = NULL;
+
+    if (protocol != NULL) {
+        if (protocol_len == 0)
+            protocol_len = strlen(protocol);
+        if ((duped = malloc(protocol_len + 1)) == NULL)
+            return PTLS_ERROR_NO_MEMORY;
+        memcpy(duped, protocol, protocol_len);
+        duped[protocol_len] = '\0';
+    }
+
+    free(tls->negotiated_protocol);
+    tls->negotiated_protocol = duped;
+
+    return 0;
+}
+
+
+// Source: picotls.c
+// Lines 4457-4474
+
+
+[ANSWER]
+MUST

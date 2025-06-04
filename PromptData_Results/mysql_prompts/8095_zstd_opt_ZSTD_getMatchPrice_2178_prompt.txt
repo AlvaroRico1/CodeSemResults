@@ -1,0 +1,47 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'matchLength' at line 2
+2. Pointer 'price' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+ZSTD_getMatchPrice(U32 const offset,
+                   U32 const matchLength,
+             const optState_t* const optPtr,
+                   int const optLevel)
+{
+    U32 price;
+    U32 const offCode = ZSTD_highbit32(offset+1);
+    U32 const mlBase = matchLength - MINMATCH;
+    assert(matchLength >= MINMATCH);
+
+    if (optPtr->priceType == zop_predef)  /* fixed scheme, do not use statistics */
+        return WEIGHT(mlBase, optLevel) + ((16 + offCode) * BITCOST_MULTIPLIER);
+
+    /* dynamic statistics */
+    price = (offCode * BITCOST_MULTIPLIER) + (optPtr->offCodeSumBasePrice - WEIGHT(optPtr->offCodeFreq[offCode], optLevel));
+    if ((optLevel<2) /*static*/ && offCode >= 20)
+        price += (offCode-19)*2 * BITCOST_MULTIPLIER; /* handicap for long distance offsets, favor decompression speed */
+
+    /* match Length */
+    {   U32 const mlCode = ZSTD_MLcode(mlBase);
+        price += (ML_bits[mlCode] * BITCOST_MULTIPLIER) + (optPtr->matchLengthSumBasePrice - WEIGHT(optPtr->matchLengthFreq[mlCode], optLevel));
+    }
+
+    price += BITCOST_MULTIPLIER / 5;   /* heuristic : make matches a bit more costly to favor less sequences -> faster decompression speed */
+
+    DEBUGLOG(8, "ZSTD_getMatchPrice(ml:%u) = %u", matchLength, price);
+    return price;
+}
+
+
+// Source: zstd_opt.c
+// Lines 292-319
+
+
+[ANSWER]
+MAY

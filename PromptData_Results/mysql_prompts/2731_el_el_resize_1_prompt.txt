@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'lins' at line 3
+2. Pointer 'cols' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+el_resize(EditLine *el)
+{
+	int lins, cols;
+	sigset_t oset, nset;
+
+	(void) sigemptyset(&nset);
+	(void) sigaddset(&nset, SIGWINCH);
+	(void) sigprocmask(SIG_BLOCK, &nset, &oset);
+
+	/* get the correct window size */
+	if (terminal_get_size(el, &lins, &cols))
+		terminal_change_size(el, lins, cols);
+
+	(void) sigprocmask(SIG_SETMASK, &oset, NULL);
+}
+
+
+// Source: el.c
+// Lines 630-644
+
+
+[ANSWER]
+MAY

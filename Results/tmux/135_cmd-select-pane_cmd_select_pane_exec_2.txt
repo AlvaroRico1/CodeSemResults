@@ -1,0 +1,1 @@
+activewp,tmux/cmd-select-pane.c,11,w,tmux/cmd-select-pane.c,9,1

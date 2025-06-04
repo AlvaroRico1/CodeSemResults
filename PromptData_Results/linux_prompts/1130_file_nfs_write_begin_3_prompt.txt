@@ -1,0 +1,51 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'pagep' at line 3
+2. Pointer 'page' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int nfs_write_begin(struct file *file, struct address_space *mapping,
+			loff_t pos, unsigned len, unsigned flags,
+			struct page **pagep, void **fsdata)
+{
+	int ret;
+	pgoff_t index = pos >> PAGE_SHIFT;
+	struct page *page;
+	int once_thru = 0;
+
+	dfprintk(PAGECACHE, "NFS: write_begin(%pD2(%lu), %u@%lld)\n",
+		file, mapping->host->i_ino, len, (long long) pos);
+
+start:
+	page = grab_cache_page_write_begin(mapping, index, flags);
+	if (!page)
+		return -ENOMEM;
+	*pagep = page;
+
+	ret = nfs_flush_incompatible(file, page);
+	if (ret) {
+		unlock_page(page);
+		put_page(page);
+	} else if (!once_thru &&
+		   nfs_want_read_modify_write(file, page, pos, len)) {
+		once_thru = 1;
+		ret = nfs_readpage(file, page);
+		put_page(page);
+		if (!ret)
+			goto start;
+	}
+	return ret;
+}
+
+
+// Source: file.c
+// Lines 321-352
+
+
+[ANSWER]
+MUST

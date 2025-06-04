@@ -1,0 +1,1 @@
+curargv,h2o/deps/hiredis/hiredis.c,7,curarg,h2o/deps/hiredis/hiredis.c,5,1

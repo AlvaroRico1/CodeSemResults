@@ -1,0 +1,101 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'area' at line 5
+2. Pointer 'lins' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+terminal_set(EditLine *el, const char *term)
+{
+	int i;
+	char buf[TC_BUFSIZE];
+	char *area;
+	const struct termcapstr *t;
+	sigset_t oset, nset;
+	int lins, cols;
+
+	(void) sigemptyset(&nset);
+	(void) sigaddset(&nset, SIGWINCH);
+	(void) sigprocmask(SIG_BLOCK, &nset, &oset);
+
+	area = buf;
+
+
+	if (term == NULL)
+		term = getenv("TERM");
+
+	if (!term || !term[0])
+		term = "dumb";
+
+	if (strcmp(term, "emacs") == 0)
+		el->el_flags |= EDIT_DISABLED;
+
+	(void) memset(el->el_terminal.t_cap, 0, TC_BUFSIZE);
+
+	i = tgetent(el->el_terminal.t_cap, term);
+
+	if (i <= 0) {
+		if (i == -1)
+			(void) fprintf(el->el_errfile,
+			    "Cannot read termcap database;\n");
+		else if (i == 0)
+			(void) fprintf(el->el_errfile,
+			    "No entry for terminal type \"%s\";\n", term);
+		(void) fprintf(el->el_errfile,
+		    "using dumb terminal settings.\n");
+		Val(T_co) = 80;	/* do a dumb terminal */
+		Val(T_pt) = Val(T_km) = Val(T_li) = 0;
+		Val(T_xt) = Val(T_MT);
+		for (t = tstr; t->name != NULL; t++)
+			terminal_alloc(el, t, NULL);
+	} else {
+		/* auto/magic margins */
+		Val(T_am) = tgetflag("am");
+		Val(T_xn) = tgetflag("xn");
+		/* Can we tab */
+		Val(T_pt) = tgetflag("pt");
+		Val(T_xt) = tgetflag("xt");
+		/* do we have a meta? */
+		Val(T_km) = tgetflag("km");
+		Val(T_MT) = tgetflag("MT");
+		/* Get the size */
+		Val(T_co) = tgetnum("co");
+		Val(T_li) = tgetnum("li");
+		for (t = tstr; t->name != NULL; t++) {
+			/* XXX: some systems' tgetstr needs non const */
+			terminal_alloc(el, t, tgetstr(strchr(t->name, *t->name),
+			    &area));
+		}
+	}
+
+	if (Val(T_co) < 2)
+		Val(T_co) = 80;	/* just in case */
+	if (Val(T_li) < 1)
+		Val(T_li) = 24;
+
+	el->el_terminal.t_size.v = Val(T_co);
+	el->el_terminal.t_size.h = Val(T_li);
+
+	terminal_setflags(el);
+
+				/* get the correct window size */
+	(void) terminal_get_size(el, &lins, &cols);
+	if (terminal_change_size(el, lins, cols) == -1)
+		return -1;
+	(void) sigprocmask(SIG_SETMASK, &oset, NULL);
+	terminal_bind_arrow(el);
+	el->el_terminal.t_name = term;
+	return i <= 0 ? -1 : 0;
+}
+
+
+// Source: terminal.c
+// Lines 838-919
+
+
+[ANSWER]
+MAY

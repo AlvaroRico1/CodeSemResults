@@ -1,0 +1,144 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'edge' at line 4
+2. Pointer 'node' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+early_inliner (function *fun)
+{
+  struct cgraph_node *node = cgraph_node::get (current_function_decl);
+  struct cgraph_edge *edge;
+  unsigned int todo = 0;
+  int iterations = 0;
+  bool inlined = false;
+
+  if (seen_error ())
+    return 0;
+
+  /* Do nothing if datastructures for ipa-inliner are already computed.  This
+     happens when some pass decides to construct new function and
+     cgraph_add_new_function calls lowering passes and early optimization on
+     it.  This may confuse ourself when early inliner decide to inline call to
+     function clone, because function clones don't have parameter list in
+     ipa-prop matching their signature.  */
+  if (ipa_node_params_sum)
+    return 0;
+
+  if (flag_checking)
+    node->verify ();
+  node->remove_all_references ();
+
+  /* Even when not optimizing or not inlining inline always-inline
+     functions.  */
+  inlined = inline_always_inline_functions (node);
+
+  if (!optimize
+      || flag_no_inline
+      || !flag_early_inlining
+      /* Never inline regular functions into always-inline functions
+	 during incremental inlining.  This sucks as functions calling
+	 always inline functions will get less optimized, but at the
+	 same time inlining of functions calling always inline
+	 function into an always inline function might introduce
+	 cycles of edges to be always inlined in the callgraph.
+
+	 We might want to be smarter and just avoid this type of inlining.  */
+      || (DECL_DISREGARD_INLINE_LIMITS (node->decl)
+	  && lookup_attribute ("always_inline",
+			       DECL_ATTRIBUTES (node->decl))))
+    ;
+  else if (lookup_attribute ("flatten",
+			     DECL_ATTRIBUTES (node->decl)) != NULL)
+    {
+      /* When the function is marked to be flattened, recursively inline
+	 all calls in it.  */
+      if (dump_enabled_p ())
+	dump_printf (MSG_OPTIMIZED_LOCATIONS,
+		     "Flattening %C\n", node);
+      flatten_function (node, true, true);
+      inlined = true;
+    }
+  else
+    {
+      /* If some always_inline functions was inlined, apply the changes.
+	 This way we will not account always inline into growth limits and
+	 moreover we will inline calls from always inlines that we skipped
+	 previously because of conditional above.  */
+      if (inlined)
+	{
+	  timevar_push (TV_INTEGRATION);
+	  todo |= optimize_inline_calls (current_function_decl);
+	  /* optimize_inline_calls call above might have introduced new
+	     statements that don't have inline parameters computed.  */
+	  for (edge = node->callees; edge; edge = edge->next_callee)
+	    {
+	      /* We can enounter not-yet-analyzed function during
+		 early inlining on callgraphs with strongly
+		 connected components.  */
+	      ipa_call_summary *es = ipa_call_summaries->get_create (edge);
+	      es->call_stmt_size
+		= estimate_num_insns (edge->call_stmt, &eni_size_weights);
+	      es->call_stmt_time
+		= estimate_num_insns (edge->call_stmt, &eni_time_weights);
+	    }
+	  ipa_update_overall_fn_summary (node);
+	  inlined = false;
+	  timevar_pop (TV_INTEGRATION);
+	}
+      /* We iterate incremental inlining to get trivial cases of indirect
+	 inlining.  */
+      while (iterations < opt_for_fn (node->decl,
+				      param_early_inliner_max_iterations)
+	     && early_inline_small_functions (node))
+	{
+	  timevar_push (TV_INTEGRATION);
+	  todo |= optimize_inline_calls (current_function_decl);
+
+	  /* Technically we ought to recompute inline parameters so the new
+ 	     iteration of early inliner works as expected.  We however have
+	     values approximately right and thus we only need to update edge
+	     info that might be cleared out for newly discovered edges.  */
+	  for (edge = node->callees; edge; edge = edge->next_callee)
+	    {
+	      /* We have no summary for new bound store calls yet.  */
+	      ipa_call_summary *es = ipa_call_summaries->get_create (edge);
+	      es->call_stmt_size
+		= estimate_num_insns (edge->call_stmt, &eni_size_weights);
+	      es->call_stmt_time
+		= estimate_num_insns (edge->call_stmt, &eni_time_weights);
+	    }
+	  if (iterations < opt_for_fn (node->decl,
+				       param_early_inliner_max_iterations) - 1)
+	    ipa_update_overall_fn_summary (node);
+	  timevar_pop (TV_INTEGRATION);
+	  iterations++;
+	  inlined = false;
+	}
+      if (dump_file)
+	fprintf (dump_file, "Iterations: %i\n", iterations);
+    }
+
+  if (inlined)
+    {
+      timevar_push (TV_INTEGRATION);
+      todo |= optimize_inline_calls (current_function_decl);
+      timevar_pop (TV_INTEGRATION);
+    }
+
+  fun->always_inline_functions_inlined = true;
+
+  return todo;
+}
+
+
+// Source: ipa-inline.c
+// Lines 2888-3012
+
+
+[ANSWER]
+MUST

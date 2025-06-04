@@ -1,0 +1,1 @@
+off,tmux/status.c,4,first,tmux/status.c,5,1

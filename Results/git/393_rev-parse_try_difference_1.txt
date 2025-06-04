@@ -1,0 +1,1 @@
+exclude,git/builtin/rev-parse.c,39,end,git/builtin/rev-parse.c,6,2

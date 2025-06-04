@@ -1,0 +1,1 @@
+result,protobuf/src/google/protobuf/descriptor.cc,51,parent,protobuf/src/google/protobuf/descriptor.cc,2,1

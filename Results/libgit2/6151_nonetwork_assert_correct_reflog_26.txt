@@ -1,0 +1,1 @@
+name,libgit2/tests/libgit2/clone/nonetwork.c,1,entry,libgit2/tests/libgit2/clone/nonetwork.c,4,0

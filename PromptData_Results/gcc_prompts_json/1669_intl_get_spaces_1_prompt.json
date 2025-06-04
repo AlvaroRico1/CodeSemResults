@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'spaces' at line 4\n2. Pointer 'str' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nget_spaces (const char *str)\n{\n   size_t len = gcc_gettext_width (str);\n   char *spaces = XNEWVEC (char, len + 1);\n   memset (spaces, ' ', len);\n   spaces[len] = '\\0';\n   return spaces;\n}\n\n\n// Source: intl.c\n// Lines 140-147\n",
+  "ANSWER": "MAY"
+}

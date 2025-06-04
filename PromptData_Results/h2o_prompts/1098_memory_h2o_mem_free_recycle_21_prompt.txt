@@ -1,0 +1,30 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'allocator' at line 1
+2. Pointer 'chunk' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void h2o_mem_free_recycle(h2o_mem_recycle_t *allocator, void *p)
+{
+#if !ASAN_IN_USE
+    /* register the pointer to the pool and return unless the pool is full */
+    if (allocator->cnt < allocator->max) {
+        struct st_h2o_mem_recycle_chunk_t *chunk = p;
+        chunk->next = allocator->_link;
+        allocator->_link = chunk;
+        ++allocator->cnt;
+        return;
+    }
+
+
+// Source: memory.c
+// Lines 112-122
+
+
+[ANSWER]
+MUST

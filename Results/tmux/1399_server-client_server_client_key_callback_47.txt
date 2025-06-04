@@ -1,0 +1,1 @@
+table,tmux/server-client.c,12,c,tmux/server-client.c,3,1

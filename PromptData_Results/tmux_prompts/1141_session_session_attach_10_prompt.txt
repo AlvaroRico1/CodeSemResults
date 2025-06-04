@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'wl' at line 3
+2. Pointer 's' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+session_attach(struct session *s, struct window *w, int idx, char **cause)
+{
+	struct winlink	*wl;
+
+	if ((wl = winlink_add(&s->windows, idx)) == NULL) {
+		xasprintf(cause, "index in use: %d", idx);
+		return (NULL);
+	}
+	wl->session = s;
+	winlink_set_window(wl, w);
+	notify_session_window("window-linked", s, w);
+
+	session_group_synchronize_from(s);
+	return (wl);
+}
+
+
+// Source: session.c
+// Lines 336-350
+
+
+[ANSWER]
+MUST

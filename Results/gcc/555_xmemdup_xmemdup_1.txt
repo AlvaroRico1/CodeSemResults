@@ -1,0 +1,1 @@
+input,gcc/libiberty/xmemdup.c,1,output,gcc/libiberty/xmemdup.c,3,2

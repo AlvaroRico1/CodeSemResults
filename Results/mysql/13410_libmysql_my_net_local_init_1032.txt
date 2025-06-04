@@ -1,0 +1,1 @@
+local_net_buffer_length,mysql/libmysql/libmysql.cc,2,local_max_allowed_packet,mysql/libmysql/libmysql.cc,3,2

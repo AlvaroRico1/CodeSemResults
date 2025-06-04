@@ -1,0 +1,237 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'found' at line 4
+2. Pointer 'lineno' at line 14
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+dwarf_lookup_pc (struct backtrace_state *state, struct dwarf_data *ddata,
+		 uintptr_t pc, backtrace_full_callback callback,
+		 backtrace_error_callback error_callback, void *data,
+		 int *found)
+{
+  struct unit_addrs *entry;
+  struct unit *u;
+  int new_data;
+  struct line *lines;
+  struct line *ln;
+  struct function_addrs *function_addrs;
+  struct function *function;
+  const char *filename;
+  int lineno;
+  int ret;
+
+  *found = 1;
+
+  /* Find an address range that includes PC.  */
+  entry = (ddata->addrs_count == 0
+	   ? NULL
+	   : bsearch (&pc, ddata->addrs, ddata->addrs_count,
+		      sizeof (struct unit_addrs), unit_addrs_search));
+
+  if (entry == NULL)
+    {
+      *found = 0;
+      return 0;
+    }
+
+  /* If there are multiple ranges that contain PC, use the last one,
+     in order to produce predictable results.  If we assume that all
+     ranges are properly nested, then the last range will be the
+     smallest one.  */
+  while ((size_t) (entry - ddata->addrs) + 1 < ddata->addrs_count
+	 && pc >= (entry + 1)->low
+	 && pc < (entry + 1)->high)
+    ++entry;
+
+  /* We need the lines, lines_count, function_addrs,
+     function_addrs_count fields of u.  If they are not set, we need
+     to set them.  When running in threaded mode, we need to allow for
+     the possibility that some other thread is setting them
+     simultaneously.  */
+
+  u = entry->u;
+  lines = u->lines;
+
+  /* Skip units with no useful line number information by walking
+     backward.  Useless line number information is marked by setting
+     lines == -1.  */
+  while (entry > ddata->addrs
+	 && pc >= (entry - 1)->low
+	 && pc < (entry - 1)->high)
+    {
+      if (state->threaded)
+	lines = (struct line *) backtrace_atomic_load_pointer (&u->lines);
+
+      if (lines != (struct line *) (uintptr_t) -1)
+	break;
+
+      --entry;
+
+      u = entry->u;
+      lines = u->lines;
+    }
+
+  if (state->threaded)
+    lines = backtrace_atomic_load_pointer (&u->lines);
+
+  new_data = 0;
+  if (lines == NULL)
+    {
+      size_t function_addrs_count;
+      struct line_header lhdr;
+      size_t count;
+
+      /* We have never read the line information for this unit.  Read
+	 it now.  */
+
+      function_addrs = NULL;
+      function_addrs_count = 0;
+      if (read_line_info (state, ddata, error_callback, data, entry->u, &lhdr,
+			  &lines, &count))
+	{
+	  struct function_vector *pfvec;
+
+	  /* If not threaded, reuse DDATA->FVEC for better memory
+	     consumption.  */
+	  if (state->threaded)
+	    pfvec = NULL;
+	  else
+	    pfvec = &ddata->fvec;
+	  read_function_info (state, ddata, &lhdr, error_callback, data,
+			      entry->u, pfvec, &function_addrs,
+			      &function_addrs_count);
+	  free_line_header (state, &lhdr, error_callback, data);
+	  new_data = 1;
+	}
+
+      /* Atomically store the information we just read into the unit.
+	 If another thread is simultaneously writing, it presumably
+	 read the same information, and we don't care which one we
+	 wind up with; we just leak the other one.  We do have to
+	 write the lines field last, so that the acquire-loads above
+	 ensure that the other fields are set.  */
+
+      if (!state->threaded)
+	{
+	  u->lines_count = count;
+	  u->function_addrs = function_addrs;
+	  u->function_addrs_count = function_addrs_count;
+	  u->lines = lines;
+	}
+      else
+	{
+	  backtrace_atomic_store_size_t (&u->lines_count, count);
+	  backtrace_atomic_store_pointer (&u->function_addrs, function_addrs);
+	  backtrace_atomic_store_size_t (&u->function_addrs_count,
+					 function_addrs_count);
+	  backtrace_atomic_store_pointer (&u->lines, lines);
+	}
+    }
+
+  /* Now all fields of U have been initialized.  */
+
+  if (lines == (struct line *) (uintptr_t) -1)
+    {
+      /* If reading the line number information failed in some way,
+	 try again to see if there is a better compilation unit for
+	 this PC.  */
+      if (new_data)
+	return dwarf_lookup_pc (state, ddata, pc, callback, error_callback,
+				data, found);
+      return callback (data, pc, NULL, 0, NULL);
+    }
+
+  /* Search for PC within this unit.  */
+
+  ln = (struct line *) bsearch (&pc, lines, entry->u->lines_count,
+				sizeof (struct line), line_search);
+  if (ln == NULL)
+    {
+      /* The PC is between the low_pc and high_pc attributes of the
+	 compilation unit, but no entry in the line table covers it.
+	 This implies that the start of the compilation unit has no
+	 line number information.  */
+
+      if (entry->u->abs_filename == NULL)
+	{
+	  const char *filename;
+
+	  filename = entry->u->filename;
+	  if (filename != NULL
+	      && !IS_ABSOLUTE_PATH (filename)
+	      && entry->u->comp_dir != NULL)
+	    {
+	      size_t filename_len;
+	      const char *dir;
+	      size_t dir_len;
+	      char *s;
+
+	      filename_len = strlen (filename);
+	      dir = entry->u->comp_dir;
+	      dir_len = strlen (dir);
+	      s = (char *) backtrace_alloc (state, dir_len + filename_len + 2,
+					    error_callback, data);
+	      if (s == NULL)
+		{
+		  *found = 0;
+		  return 0;
+		}
+	      memcpy (s, dir, dir_len);
+	      /* FIXME: Should use backslash if DOS file system.  */
+	      s[dir_len] = '/';
+	      memcpy (s + dir_len + 1, filename, filename_len + 1);
+	      filename = s;
+	    }
+	  entry->u->abs_filename = filename;
+	}
+
+      return callback (data, pc, entry->u->abs_filename, 0, NULL);
+    }
+
+  /* Search for function name within this unit.  */
+
+  if (entry->u->function_addrs_count == 0)
+    return callback (data, pc, ln->filename, ln->lineno, NULL);
+
+  function_addrs = ((struct function_addrs *)
+		    bsearch (&pc, entry->u->function_addrs,
+			     entry->u->function_addrs_count,
+			     sizeof (struct function_addrs),
+			     function_addrs_search));
+  if (function_addrs == NULL)
+    return callback (data, pc, ln->filename, ln->lineno, NULL);
+
+  /* If there are multiple function ranges that contain PC, use the
+     last one, in order to produce predictable results.  */
+
+  while (((size_t) (function_addrs - entry->u->function_addrs + 1)
+	  < entry->u->function_addrs_count)
+	 && pc >= (function_addrs + 1)->low
+	 && pc < (function_addrs + 1)->high)
+    ++function_addrs;
+
+  function = function_addrs->function;
+
+  filename = ln->filename;
+  lineno = ln->lineno;
+
+  ret = report_inlined_functions (pc, function, callback, data,
+				  &filename, &lineno);
+  if (ret != 0)
+    return ret;
+
+  return callback (data, pc, filename, lineno, function->name);
+}
+
+
+// Source: dwarf.c
+// Lines 3559-3776
+
+
+[ANSWER]
+MUST-NOT

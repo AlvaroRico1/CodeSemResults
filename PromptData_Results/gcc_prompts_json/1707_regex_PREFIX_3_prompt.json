@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'loc' at line 1\n2. Pointer 'op' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nPREFIX(store_op1) (re_opcode_t op, UCHAR_T *loc, int arg)\n{\n  *loc = (UCHAR_T) op;\n  STORE_NUMBER (loc + 1, arg);\n}\n\n\n// Source: regex.c\n// Lines 4231-4235\n",
+  "ANSWER": "MUST-NOT"
+}

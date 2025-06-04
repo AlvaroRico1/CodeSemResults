@@ -1,0 +1,338 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'oconstraints' at line 5
+2. Pointer 'constraint' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+gimplify_asm_expr (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p)
+{
+  tree expr;
+  int noutputs;
+  const char **oconstraints;
+  int i;
+  tree link;
+  const char *constraint;
+  bool allows_mem, allows_reg, is_inout;
+  enum gimplify_status ret, tret;
+  gasm *stmt;
+  vec<tree, va_gc> *inputs;
+  vec<tree, va_gc> *outputs;
+  vec<tree, va_gc> *clobbers;
+  vec<tree, va_gc> *labels;
+  tree link_next;
+
+  expr = *expr_p;
+  noutputs = list_length (ASM_OUTPUTS (expr));
+  oconstraints = (const char **) alloca ((noutputs) * sizeof (const char *));
+
+  inputs = NULL;
+  outputs = NULL;
+  clobbers = NULL;
+  labels = NULL;
+
+  ret = GS_ALL_DONE;
+  link_next = NULL_TREE;
+  for (i = 0, link = ASM_OUTPUTS (expr); link; ++i, link = link_next)
+    {
+      bool ok;
+      size_t constraint_len;
+
+      link_next = TREE_CHAIN (link);
+
+      oconstraints[i]
+	= constraint
+	= TREE_STRING_POINTER (TREE_VALUE (TREE_PURPOSE (link)));
+      constraint_len = strlen (constraint);
+      if (constraint_len == 0)
+        continue;
+
+      ok = parse_output_constraint (&constraint, i, 0, 0,
+				    &allows_mem, &allows_reg, &is_inout);
+      if (!ok)
+	{
+	  ret = GS_ERROR;
+	  is_inout = false;
+	}
+
+      /* If we can't make copies, we can only accept memory.
+	 Similarly for VLAs.  */
+      tree outtype = TREE_TYPE (TREE_VALUE (link));
+      if (outtype != error_mark_node
+	  && (TREE_ADDRESSABLE (outtype)
+	      || !COMPLETE_TYPE_P (outtype)
+	      || !tree_fits_poly_uint64_p (TYPE_SIZE_UNIT (outtype))))
+	{
+	  if (allows_mem)
+	    allows_reg = 0;
+	  else
+	    {
+	      error ("impossible constraint in %<asm%>");
+	      error ("non-memory output %d must stay in memory", i);
+	      return GS_ERROR;
+	    }
+	}
+
+      if (!allows_reg && allows_mem)
+	mark_addressable (TREE_VALUE (link));
+
+      tret = gimplify_expr (&TREE_VALUE (link), pre_p, post_p,
+			    is_inout ? is_gimple_min_lval : is_gimple_lvalue,
+			    fb_lvalue | fb_mayfail);
+      if (tret == GS_ERROR)
+	{
+	  error ("invalid lvalue in %<asm%> output %d", i);
+	  ret = tret;
+	}
+
+      /* If the constraint does not allow memory make sure we gimplify
+         it to a register if it is not already but its base is.  This
+	 happens for complex and vector components.  */
+      if (!allows_mem)
+	{
+	  tree op = TREE_VALUE (link);
+	  if (! is_gimple_val (op)
+	      && is_gimple_reg_type (TREE_TYPE (op))
+	      && is_gimple_reg (get_base_address (op)))
+	    {
+	      tree tem = create_tmp_reg (TREE_TYPE (op));
+	      tree ass;
+	      if (is_inout)
+		{
+		  ass = build2 (MODIFY_EXPR, TREE_TYPE (tem),
+				tem, unshare_expr (op));
+		  gimplify_and_add (ass, pre_p);
+		}
+	      ass = build2 (MODIFY_EXPR, TREE_TYPE (tem), op, tem);
+	      gimplify_and_add (ass, post_p);
+
+	      TREE_VALUE (link) = tem;
+	      tret = GS_OK;
+	    }
+	}
+
+      vec_safe_push (outputs, link);
+      TREE_CHAIN (link) = NULL_TREE;
+
+      if (is_inout)
+	{
+	  /* An input/output operand.  To give the optimizers more
+	     flexibility, split it into separate input and output
+ 	     operands.  */
+	  tree input;
+	  /* Buffer big enough to format a 32-bit UINT_MAX into.  */
+	  char buf[11];
+
+	  /* Turn the in/out constraint into an output constraint.  */
+	  char *p = xstrdup (constraint);
+	  p[0] = '=';
+	  TREE_VALUE (TREE_PURPOSE (link)) = build_string (constraint_len, p);
+
+	  /* And add a matching input constraint.  */
+	  if (allows_reg)
+	    {
+	      sprintf (buf, "%u", i);
+
+	      /* If there are multiple alternatives in the constraint,
+		 handle each of them individually.  Those that allow register
+		 will be replaced with operand number, the others will stay
+		 unchanged.  */
+	      if (strchr (p, ',') != NULL)
+		{
+		  size_t len = 0, buflen = strlen (buf);
+		  char *beg, *end, *str, *dst;
+
+		  for (beg = p + 1;;)
+		    {
+		      end = strchr (beg, ',');
+		      if (end == NULL)
+			end = strchr (beg, '\0');
+		      if ((size_t) (end - beg) < buflen)
+			len += buflen + 1;
+		      else
+			len += end - beg + 1;
+		      if (*end)
+			beg = end + 1;
+		      else
+			break;
+		    }
+
+		  str = (char *) alloca (len);
+		  for (beg = p + 1, dst = str;;)
+		    {
+		      const char *tem;
+		      bool mem_p, reg_p, inout_p;
+
+		      end = strchr (beg, ',');
+		      if (end)
+			*end = '\0';
+		      beg[-1] = '=';
+		      tem = beg - 1;
+		      parse_output_constraint (&tem, i, 0, 0,
+					       &mem_p, &reg_p, &inout_p);
+		      if (dst != str)
+			*dst++ = ',';
+		      if (reg_p)
+			{
+			  memcpy (dst, buf, buflen);
+			  dst += buflen;
+			}
+		      else
+			{
+			  if (end)
+			    len = end - beg;
+			  else
+			    len = strlen (beg);
+			  memcpy (dst, beg, len);
+			  dst += len;
+			}
+		      if (end)
+			beg = end + 1;
+		      else
+			break;
+		    }
+		  *dst = '\0';
+		  input = build_string (dst - str, str);
+		}
+	      else
+		input = build_string (strlen (buf), buf);
+	    }
+	  else
+	    input = build_string (constraint_len - 1, constraint + 1);
+
+	  free (p);
+
+	  input = build_tree_list (build_tree_list (NULL_TREE, input),
+				   unshare_expr (TREE_VALUE (link)));
+	  ASM_INPUTS (expr) = chainon (ASM_INPUTS (expr), input);
+	}
+    }
+
+  link_next = NULL_TREE;
+  for (link = ASM_INPUTS (expr); link; ++i, link = link_next)
+    {
+      link_next = TREE_CHAIN (link);
+      constraint = TREE_STRING_POINTER (TREE_VALUE (TREE_PURPOSE (link)));
+      parse_input_constraint (&constraint, 0, 0, noutputs, 0,
+			      oconstraints, &allows_mem, &allows_reg);
+
+      /* If we can't make copies, we can only accept memory.  */
+      tree intype = TREE_TYPE (TREE_VALUE (link));
+      if (intype != error_mark_node
+	  && (TREE_ADDRESSABLE (intype)
+	      || !COMPLETE_TYPE_P (intype)
+	      || !tree_fits_poly_uint64_p (TYPE_SIZE_UNIT (intype))))
+	{
+	  if (allows_mem)
+	    allows_reg = 0;
+	  else
+	    {
+	      error ("impossible constraint in %<asm%>");
+	      error ("non-memory input %d must stay in memory", i);
+	      return GS_ERROR;
+	    }
+	}
+
+      /* If the operand is a memory input, it should be an lvalue.  */
+      if (!allows_reg && allows_mem)
+	{
+	  tree inputv = TREE_VALUE (link);
+	  STRIP_NOPS (inputv);
+	  if (TREE_CODE (inputv) == PREDECREMENT_EXPR
+	      || TREE_CODE (inputv) == PREINCREMENT_EXPR
+	      || TREE_CODE (inputv) == POSTDECREMENT_EXPR
+	      || TREE_CODE (inputv) == POSTINCREMENT_EXPR
+	      || TREE_CODE (inputv) == MODIFY_EXPR)
+	    TREE_VALUE (link) = error_mark_node;
+	  tret = gimplify_expr (&TREE_VALUE (link), pre_p, post_p,
+				is_gimple_lvalue, fb_lvalue | fb_mayfail);
+	  if (tret != GS_ERROR)
+	    {
+	      /* Unlike output operands, memory inputs are not guaranteed
+		 to be lvalues by the FE, and while the expressions are
+		 marked addressable there, if it is e.g. a statement
+		 expression, temporaries in it might not end up being
+		 addressable.  They might be already used in the IL and thus
+		 it is too late to make them addressable now though.  */
+	      tree x = TREE_VALUE (link);
+	      while (handled_component_p (x))
+		x = TREE_OPERAND (x, 0);
+	      if (TREE_CODE (x) == MEM_REF
+		  && TREE_CODE (TREE_OPERAND (x, 0)) == ADDR_EXPR)
+		x = TREE_OPERAND (TREE_OPERAND (x, 0), 0);
+	      if ((VAR_P (x)
+		   || TREE_CODE (x) == PARM_DECL
+		   || TREE_CODE (x) == RESULT_DECL)
+		  && !TREE_ADDRESSABLE (x)
+		  && is_gimple_reg (x))
+		{
+		  warning_at (EXPR_LOC_OR_LOC (TREE_VALUE (link),
+					       input_location), 0,
+			      "memory input %d is not directly addressable",
+			      i);
+		  prepare_gimple_addressable (&TREE_VALUE (link), pre_p);
+		}
+	    }
+	  mark_addressable (TREE_VALUE (link));
+	  if (tret == GS_ERROR)
+	    {
+	      error_at (EXPR_LOC_OR_LOC (TREE_VALUE (link), input_location),
+			"memory input %d is not directly addressable", i);
+	      ret = tret;
+	    }
+	}
+      else
+	{
+	  tret = gimplify_expr (&TREE_VALUE (link), pre_p, post_p,
+				is_gimple_asm_val, fb_rvalue);
+	  if (tret == GS_ERROR)
+	    ret = tret;
+	}
+
+      TREE_CHAIN (link) = NULL_TREE;
+      vec_safe_push (inputs, link);
+    }
+
+  link_next = NULL_TREE;
+  for (link = ASM_CLOBBERS (expr); link; ++i, link = link_next)
+    {
+      link_next = TREE_CHAIN (link);
+      TREE_CHAIN (link) = NULL_TREE;
+      vec_safe_push (clobbers, link);
+    }
+
+  link_next = NULL_TREE;
+  for (link = ASM_LABELS (expr); link; ++i, link = link_next)
+    {
+      link_next = TREE_CHAIN (link);
+      TREE_CHAIN (link) = NULL_TREE;
+      vec_safe_push (labels, link);
+    }
+
+  /* Do not add ASMs with errors to the gimple IL stream.  */
+  if (ret != GS_ERROR)
+    {
+      stmt = gimple_build_asm_vec (TREE_STRING_POINTER (ASM_STRING (expr)),
+				   inputs, outputs, clobbers, labels);
+
+      gimple_asm_set_volatile (stmt, ASM_VOLATILE_P (expr) || noutputs == 0);
+      gimple_asm_set_input (stmt, ASM_INPUT_P (expr));
+      gimple_asm_set_inline (stmt, ASM_INLINE_P (expr));
+
+      gimplify_seq_add_stmt (pre_p, stmt);
+    }
+
+  return ret;
+}
+
+
+// Source: gimplify.c
+// Lines 6223-6541
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,67 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'conn' at line 3
+2. Pointer 'ctx' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int aead_decrypt_1rtt(void *ctx, uint64_t pn, quicly_decoded_packet_t *packet, size_t aead_off, size_t *ptlen)
+{
+    quicly_conn_t *conn = ctx;
+    struct st_quicly_application_space_t *space = conn->application;
+    size_t aead_index = (packet->octets.base[0] & QUICLY_KEY_PHASE_BIT) != 0;
+    int ret;
+
+    /* prepare key, when not available (yet) */
+    if (space->cipher.ingress.aead[aead_index] == NULL) {
+    Retry_1RTT : {
+        /* Replace the AEAD key at the alternative slot (note: decryption key slots are shared by 0-RTT and 1-RTT), at the same time
+         * dropping 0-RTT header protection key. */
+        if (conn->application->cipher.ingress.header_protection.zero_rtt != NULL) {
+            ptls_cipher_free(conn->application->cipher.ingress.header_protection.zero_rtt);
+            conn->application->cipher.ingress.header_protection.zero_rtt = NULL;
+        }
+        ptls_cipher_suite_t *cipher = ptls_get_cipher(conn->crypto.tls);
+        if ((ret = update_1rtt_key(conn, cipher, 0, &space->cipher.ingress.aead[aead_index], space->cipher.ingress.secret)) != 0)
+            return ret;
+        ++space->cipher.ingress.key_phase.prepared;
+        QUICLY_PROBE(CRYPTO_RECEIVE_KEY_UPDATE_PREPARE, conn, conn->stash.now, space->cipher.ingress.key_phase.prepared,
+                     QUICLY_PROBE_HEXDUMP(space->cipher.ingress.secret, cipher->hash->digest_size));
+    }
+    }
+
+    /* decrypt */
+    ptls_aead_context_t *aead = space->cipher.ingress.aead[aead_index];
+    if ((*ptlen = aead_decrypt_core(aead, pn, packet, aead_off)) == SIZE_MAX) {
+        /* retry with a new key, if possible */
+        if (space->cipher.ingress.key_phase.decrypted == space->cipher.ingress.key_phase.prepared &&
+            space->cipher.ingress.key_phase.decrypted % 2 != aead_index) {
+            /* reapply AEAD to revert payload to the encrypted form. This assumes that the cipher used in AEAD is CTR. */
+            aead_decrypt_core(aead, pn, packet, aead_off);
+            goto Retry_1RTT;
+        }
+        /* otherwise return failure */
+        return QUICLY_ERROR_PACKET_IGNORED;
+    }
+
+    /* update the confirmed key phase and also the egress key phase, if necessary */
+    if (space->cipher.ingress.key_phase.prepared != space->cipher.ingress.key_phase.decrypted &&
+        space->cipher.ingress.key_phase.prepared % 2 == aead_index) {
+        if ((ret = received_key_update(conn, space->cipher.ingress.key_phase.prepared)) != 0)
+            return ret;
+    }
+
+    return 0;
+}
+
+
+// Source: quicly.c
+// Lines 2415-2462
+
+
+[ANSWER]
+MUST

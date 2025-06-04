@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'loop' at line 3\n2. Pointer 'copy' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nutf8_cstrhas(const char *s, const struct utf8_data *ud)\n{\n\tstruct utf8_data\t*copy, *loop;\n\tint\t\t\t found = 0;\n\n\tcopy = utf8_fromcstr(s);\n\tfor (loop = copy; loop->size != 0; loop++) {\n\t\tif (loop->size != ud->size)\n\t\t\tcontinue;\n\t\tif (memcmp(loop->data, ud->data, loop->size) == 0) {\n\t\t\tfound = 1;\n\t\t\tbreak;\n\t\t}\n\t}\n\tfree(copy);\n\n\treturn (found);\n}\n\n\n// Source: utf8.c\n// Lines 584-601\n",
+  "ANSWER": "MUST"
+}

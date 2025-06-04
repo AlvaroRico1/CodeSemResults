@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'one' at line 1\n2. Pointer 'i' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void options_cmp(void *one, void *two, size_t size, const char *name)\n{\n\tsize_t i;\n\n\tfor (i = 0; i < size; i++) {\n\t\tif (((char *)one)[i] != ((char *)two)[i]) {\n\t\t\tchar desc[1024];\n\n\t\t\tp_snprintf(desc, 1024, \"Difference in %s at byte %\" PRIuZ \": macro=%u / func=%u\",\n\t\t\t\tname, i, ((char *)one)[i], ((char *)two)[i]);\n\t\t\tclar__fail(__FILE__, __func__, __LINE__,\n\t\t\t\t\"Difference between macro and function options initializer\",\n\t\t\t\tdesc, 0);\n\t\t\treturn;\n\t\t}\n\t}\n}\n\n\n// Source: structinit.c\n// Lines 42-58\n",
+  "ANSWER": "MUST-NOT"
+}

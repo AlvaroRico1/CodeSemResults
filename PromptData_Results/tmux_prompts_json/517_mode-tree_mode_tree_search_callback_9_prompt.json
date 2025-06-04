@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'mtd' at line 4\n2. Pointer 'data' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nmode_tree_search_callback(__unused struct client *c, void *data, const char *s,\n    __unused int done)\n{\n\tstruct mode_tree_data\t*mtd = data;\n\n\tif (mtd->dead)\n\t\treturn (0);\n\n\tfree(mtd->search);\n\tif (s == NULL || *s == '\\0') {\n\t\tmtd->search = NULL;\n\t\treturn (0);\n\t}\n\tmtd->search = xstrdup(s);\n\tmode_tree_search_set(mtd);\n\n\treturn (0);\n}\n\n\n// Source: mode-tree.c\n// Lines 854-871\n",
+  "ANSWER": "MUST"
+}

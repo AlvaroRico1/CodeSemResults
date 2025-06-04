@@ -1,0 +1,1 @@
+simple_name,linux/drivers/acpi/acpica/nsaccess.c,17,path,linux/drivers/acpi/acpica/nsaccess.c,10,2

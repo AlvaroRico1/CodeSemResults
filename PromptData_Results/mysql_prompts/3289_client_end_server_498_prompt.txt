@@ -1,0 +1,41 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'save_errno' at line 2
+2. Pointer 'mysql' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void end_server(MYSQL *mysql) {
+  int save_errno = errno;
+  DBUG_TRACE;
+  if (mysql->net.vio != nullptr) {
+#ifndef NDEBUG
+    char desc[VIO_DESCRIPTION_SIZE];
+    vio_description(mysql->net.vio, desc);
+    DBUG_PRINT("info", ("Net: %s", desc));
+#endif  // NDEBUG
+#ifdef MYSQL_SERVER
+    slave_io_thread_detach_vio();
+#endif
+    vio_delete(mysql->net.vio);
+    mysql->net.vio = nullptr; /* Marker */
+    mysql_prune_stmt_list(mysql);
+  }
+  net_end(&mysql->net);
+  //  net_extension_free(&mysql->net);
+  free_old_query(mysql);
+  errno = save_errno;
+  MYSQL_TRACE(DISCONNECTED, mysql, ());
+}
+
+
+// Source: client.cc
+// Lines 1828-1849
+
+
+[ANSWER]
+MUST-NOT

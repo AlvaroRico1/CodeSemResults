@@ -1,0 +1,40 @@
+int git_config_backend_from_string(git_config_backend **out, const char *cfg, size_t len)
+{
+	config_memory_backend *backend;
+
+	backend = git__calloc(1, sizeof(config_memory_backend));
+	GIT_ERROR_CHECK_ALLOC(backend);
+
+	if (git_config_entries_new(&backend->entries) < 0) {
+		git__free(backend);
+		return -1;
+	}
+
+	if (git_str_set(&backend->cfg, cfg, len) < 0) {
+		git_config_entries_free(backend->entries);
+		git__free(backend);
+		return -1;
+	}
+
+	backend->parent.version = GIT_CONFIG_BACKEND_VERSION;
+	backend->parent.readonly = 1;
+	backend->parent.open = config_memory_open;
+	backend->parent.get = config_memory_get;
+	backend->parent.set = config_memory_set;
+	backend->parent.set_multivar = config_memory_set_multivar;
+	backend->parent.del = config_memory_delete;
+	backend->parent.del_multivar = config_memory_delete_multivar;
+	backend->parent.iterator = config_memory_iterator;
+	backend->parent.lock = config_memory_lock;
+	backend->parent.unlock = config_memory_unlock;
+	backend->parent.snapshot = git_config_backend_snapshot;
+	backend->parent.free = config_memory_free;
+
+	*out = (git_config_backend *)backend;
+
+	return 0;
+}
+
+
+// Source: config_mem.c
+// Lines 185-220

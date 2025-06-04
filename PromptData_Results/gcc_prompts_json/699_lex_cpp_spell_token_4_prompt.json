@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'buffer' at line 2\n2. Pointer 'spelling' at line 8\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ncpp_spell_token (cpp_reader *pfile, const cpp_token *token,\n\t\t unsigned char *buffer, bool forstring)\n{\n  switch (TOKEN_SPELL (token))\n    {\n    case SPELL_OPERATOR:\n      {\n\tconst unsigned char *spelling;\n\tunsigned char c;\n\n\tif (token->flags & DIGRAPH)\n\t  spelling = cpp_digraph2name (token->type);\n\telse if (token->flags & NAMED_OP)\n\t  goto spell_ident;\n\telse\n\t  spelling = TOKEN_NAME (token);\n\n\twhile ((c = *spelling++) != '\\0')\n\t  *buffer++ = c;\n      }\n\n\n// Source: lex.c\n// Lines 3289-3308\n",
+  "ANSWER": "MAY"
+}

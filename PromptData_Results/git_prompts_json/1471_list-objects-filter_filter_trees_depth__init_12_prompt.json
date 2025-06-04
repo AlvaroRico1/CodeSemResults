@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'filter' at line 3\n2. Pointer 'd' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void filter_trees_depth__init(\n\tstruct list_objects_filter_options *filter_options,\n\tstruct filter *filter)\n{\n\tstruct filter_trees_depth_data *d = xcalloc(1, sizeof(*d));\n\toidmap_init(&d->seen_at_depth, 0);\n\td->exclude_depth = filter_options->tree_exclude_depth;\n\td->current_depth = 0;\n\n\tfilter->filter_data = d;\n\tfilter->filter_object_fn = filter_trees_depth;\n\tfilter->free_fn = filter_trees_free;\n}\n\n\n// Source: list-objects-filter.c\n// Lines 251-263\n",
+  "ANSWER": "MUST"
+}

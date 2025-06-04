@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'res' at line 3\n2. Pointer 'stmt' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nsingle_use_in_loop (tree var, class loop *loop)\n{\n  gimple *stmt, *res = NULL;\n  use_operand_p use_p;\n  imm_use_iterator iterator;\n\n  FOR_EACH_IMM_USE_FAST (use_p, iterator, var)\n    {\n      stmt = USE_STMT (use_p);\n      if (is_gimple_debug (stmt))\n\tcontinue;\n\n      if (!flow_bb_inside_loop_p (loop, gimple_bb (stmt)))\n\tcontinue;\n\n      if (res)\n\treturn NULL;\n\n      res = stmt;\n    }\n  return res;\n}\n\n\n// Source: gimple-loop-interchange.cc\n// Lines 243-264\n",
+  "ANSWER": "MUST"
+}

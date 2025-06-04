@@ -1,0 +1,54 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'size' at line 8
+2. Pointer 'type' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int repo_parse_commit_internal(struct repository *r,
+			       struct commit *item,
+			       int quiet_on_missing,
+			       int use_commit_graph)
+{
+	enum object_type type;
+	void *buffer;
+	unsigned long size;
+	int ret;
+
+	if (!item)
+		return -1;
+	if (item->object.parsed)
+		return 0;
+	if (use_commit_graph && parse_commit_in_graph(r, item))
+		return 0;
+	buffer = repo_read_object_file(r, &item->object.oid, &type, &size);
+	if (!buffer)
+		return quiet_on_missing ? -1 :
+			error("Could not read %s",
+			     oid_to_hex(&item->object.oid));
+	if (type != OBJ_COMMIT) {
+		free(buffer);
+		return error("Object %s not a commit",
+			     oid_to_hex(&item->object.oid));
+	}
+
+	ret = parse_commit_buffer(r, item, buffer, size, 0);
+	if (save_commit_buffer && !ret) {
+		set_commit_buffer(r, item, buffer, size);
+		return 0;
+	}
+	free(buffer);
+	return ret;
+}
+
+
+// Source: commit.c
+// Lines 473-507
+
+
+[ANSWER]
+MAY

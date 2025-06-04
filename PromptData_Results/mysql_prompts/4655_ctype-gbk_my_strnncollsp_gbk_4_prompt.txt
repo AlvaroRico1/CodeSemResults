@@ -1,0 +1,81 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'a_length' at line 2
+2. Pointer 'b' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int my_strnncollsp_gbk(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
+                              const uchar *a, size_t a_length, const uchar *b,
+                              size_t b_length) {
+  size_t length = std::min(a_length, b_length);
+  int res = my_strnncoll_gbk_internal(&a, &b, length);
+
+  if (!res && a_length != b_length) {
+    const uchar *end;
+    int swap = 1;
+    /*
+      Check the next not space character of the longer key. If it's < ' ',
+      then it's smaller than the other key.
+    */
+    if (a_length < b_length) {
+      /* put shorter key in a */
+      a_length = b_length;
+      a = b;
+      swap = -1; /* swap sign of result */
+      res = -res;
+    }
+    for (end = a + a_length - length; a < end; a++) {
+      if (*a != ' ') return (*a < ' ') ? -swap : swap;
+    }
+  }
+  return res;
+}
+
+static size_t my_strnxfrm_gbk(const CHARSET_INFO *cs, uchar *dst, size_t dstlen,
+                              uint nweights, const uchar *src, size_t srclen,
+                              uint flags) {
+  uchar *d0 = dst;
+  uchar *de = dst + dstlen;
+  const uchar *se = src + srclen;
+  const uchar *sort_order = cs->sort_order;
+
+  for (; dst < de && src < se && nweights; nweights--) {
+    if (cs->cset->ismbchar(cs, (const char *)src, (const char *)se)) {
+      /*
+        Note, it is safe not to check (src < se)
+        in the code below, because ismbchar() would
+        not return true if src was too short
+      */
+      uint16 e = gbksortorder((uint16)gbkcode(*src, *(src + 1)));
+      *dst++ = gbkhead(e);
+      if (dst < de) *dst++ = gbktail(e);
+      src += 2;
+    } else
+      *dst++ = sort_order ? sort_order[*src++] : *src++;
+  }
+  return my_strxfrm_pad(cs, d0, dst, de, nweights, flags);
+}
+
+static uint ismbchar_gbk(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
+                         const char *p, const char *e) {
+  return (isgbkhead(*(p)) && (e) - (p) > 1 && isgbktail(*((p) + 1)) ? 2 : 0);
+}
+
+static uint mbcharlen_gbk(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
+                          uint c) {
+  return (isgbkhead(c) ? 2 : 1);
+}
+}  // extern "C"
+
+
+// Source: ctype-gbk.cc
+// Lines 3553-3614
+
+
+[ANSWER]
+MAY

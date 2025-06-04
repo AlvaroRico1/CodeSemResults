@@ -1,0 +1,28 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'end' at line 4
+2. Pointer 'dst' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+size_t my_caseup_8bit(const CHARSET_INFO *cs, char *src, size_t srclen,
+                      char *dst MY_ATTRIBUTE((unused)),
+                      size_t dstlen MY_ATTRIBUTE((unused))) {
+  char *end = src + srclen;
+  const uchar *map = cs->to_upper;
+  assert(src == dst && srclen == dstlen);
+  for (; src != end; src++) *src = (char)map[(uchar)*src];
+  return srclen;
+}
+
+
+// Source: ctype-simple.cc
+// Lines 215-223
+
+
+[ANSWER]
+MUST-NOT

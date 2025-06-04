@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'lcparent' at line 4\n2. Pointer 'lc' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nlayout_resize_pane(struct window_pane *wp, enum layout_type type, int change,\n    int opposite)\n{\n\tstruct layout_cell\t*lc, *lcparent;\n\n\tlc = wp->layout_cell;\n\n\t/* Find next parent of the same type. */\n\tlcparent = lc->parent;\n\twhile (lcparent != NULL && lcparent->type != type) {\n\t\tlc = lcparent;\n\t\tlcparent = lc->parent;\n\t}\n\tif (lcparent == NULL)\n\t\treturn;\n\n\t/* If this is the last cell, move back one. */\n\tif (lc == TAILQ_LAST(&lcparent->cells, layout_cells))\n\t\tlc = TAILQ_PREV(lc, layout_cells, entry);\n\n\tlayout_resize_layout(wp->window, lc, type, change, opposite);\n}\n\n\n// Source: layout.c\n// Lines 609-630\n",
+  "ANSWER": "MUST"
+}

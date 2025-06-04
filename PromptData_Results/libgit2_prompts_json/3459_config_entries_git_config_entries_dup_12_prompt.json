@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'head' at line 4\n2. Pointer 'entries' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint git_config_entries_dup(git_config_entries **out, git_config_entries *entries)\n{\n\tgit_config_entries *result = NULL;\n\tconfig_entry_list *head;\n\tint error;\n\n\tif ((error = git_config_entries_new(&result)) < 0)\n\t\tgoto out;\n\n\tfor (head = entries->list; head; head = head->next)\n\t\tif ((git_config_entries_dup_entry(result, head->entry)) < 0)\n\t\t\tgoto out;\n\n\t*out = result;\n\tresult = NULL;\n\nout:\n\tgit_config_entries_free(result);\n\treturn error;\n}\n\n\n// Source: config_entries.c\n// Lines 80-99\n",
+  "ANSWER": "MUST"
+}

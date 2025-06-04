@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'entry' at line 4\n2. Pointer 'pdata' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void rehash_objects(struct packing_data *pdata)\n{\n\tuint32_t i;\n\tstruct object_entry *entry;\n\n\tpdata->index_size = closest_pow2(pdata->nr_objects * 3);\n\tif (pdata->index_size < 1024)\n\t\tpdata->index_size = 1024;\n\n\tfree(pdata->index);\n\tCALLOC_ARRAY(pdata->index, pdata->index_size);\n\n\tentry = pdata->objects;\n\n\tfor (i = 0; i < pdata->nr_objects; i++) {\n\t\tint found;\n\t\tuint32_t ix = locate_object_entry_hash(pdata,\n\t\t\t\t\t\t       &entry->idx.oid,\n\t\t\t\t\t\t       &found);\n\n\t\tif (found)\n\t\t\tBUG(\"Duplicate object in hash\");\n\n\t\tpdata->index[ix] = i + 1;\n\t\tentry++;\n\t}\n}\n\n\n// Source: pack-objects.c\n// Lines 42-68\n",
+  "ANSWER": "MUST"
+}

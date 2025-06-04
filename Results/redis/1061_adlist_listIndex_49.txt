@@ -1,0 +1,1 @@
+n,redis/src/adlist.c,2,list,redis/src/adlist.c,1,1

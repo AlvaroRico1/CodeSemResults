@@ -1,0 +1,33 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'oldns' at line 4
+2. Pointer 'old' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int nfs_compare_userns(const struct nfs_server *old,
+		const struct nfs_server *new)
+{
+	const struct user_namespace *oldns = &init_user_ns;
+	const struct user_namespace *newns = &init_user_ns;
+
+	if (old->client && old->client->cl_cred)
+		oldns = old->client->cl_cred->user_ns;
+	if (new->client && new->client->cl_cred)
+		newns = new->client->cl_cred->user_ns;
+	if (oldns != newns)
+		return 0;
+	return 1;
+}
+
+
+// Source: super.c
+// Lines 2511-2524
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ret_data_length' at line 12\n2. Pointer 'mysql' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint STDCALL mysql_send_query(MYSQL *mysql, const char *query, ulong length) {\n  DBUG_TRACE;\n\n  STATE_INFO *info;\n  assert(mysql);\n\n  MYSQL_EXTENSION *ext = MYSQL_EXTENSION_PTR(mysql);\n  assert(ext);\n\n  if ((info = STATE_DATA(mysql))) free_state_change_info(ext);\n  uchar *ret_data;\n  unsigned long ret_data_length;\n  if (mysql_prepare_com_query_parameters(mysql, &ret_data, &ret_data_length))\n    return 1;\n  int ret = (*mysql->methods->advanced_command)(\n      mysql, COM_QUERY, ret_data, ret_data_length,\n      pointer_cast<const uchar *>(query), length, 1, NULL);\n  if (ret_data) my_free(ret_data);\n  return ret;\n}\n\n\n// Source: client.cc\n// Lines 7285-7304\n",
+  "ANSWER": "MUST-NOT"
+}

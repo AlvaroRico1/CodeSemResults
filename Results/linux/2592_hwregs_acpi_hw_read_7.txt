@@ -1,0 +1,1 @@
+value32,linux/drivers/acpi/acpica/hwregs.c,8,value64,linux/drivers/acpi/acpica/hwregs.c,7,2

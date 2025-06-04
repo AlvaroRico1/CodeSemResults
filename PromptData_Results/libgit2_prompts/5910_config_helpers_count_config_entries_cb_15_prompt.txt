@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'entry' at line 2
+2. Pointer 'how_many' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int count_config_entries_cb(
+	const git_config_entry *entry,
+	void *payload)
+{
+	int *how_many = (int *)payload;
+
+	GIT_UNUSED(entry);
+
+	(*how_many)++;
+
+	return 0;
+}
+
+
+// Source: config_helpers.c
+// Lines 41-52
+
+
+[ANSWER]
+MUST-NOT

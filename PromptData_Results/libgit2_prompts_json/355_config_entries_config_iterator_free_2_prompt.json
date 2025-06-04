@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'it' at line 3\n2. Pointer 'iter' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void config_iterator_free(git_config_iterator *iter)\n{\n\tconfig_entries_iterator *it = (config_entries_iterator *) iter;\n\tgit_config_entries_free(it->entries);\n\tgit__free(it);\n}\n\n\n// Source: config_entries.c\n// Lines 200-205\n",
+  "ANSWER": "MUST"
+}

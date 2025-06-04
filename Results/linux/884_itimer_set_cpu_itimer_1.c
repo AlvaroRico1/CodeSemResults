@@ -1,0 +1,39 @@
+static void set_cpu_itimer(struct task_struct *tsk, unsigned int clock_id,
+			   const struct itimerval *const value,
+			   struct itimerval *const ovalue)
+{
+	u64 oval, nval, ointerval, ninterval;
+	struct cpu_itimer *it = &tsk->signal->it[clock_id];
+
+	/*
+	 * Use the to_ktime conversion because that clamps the maximum
+	 * value to KTIME_MAX and avoid multiplication overflows.
+	 */
+	nval = ktime_to_ns(timeval_to_ktime(value->it_value));
+	ninterval = ktime_to_ns(timeval_to_ktime(value->it_interval));
+
+	spin_lock_irq(&tsk->sighand->siglock);
+
+	oval = it->expires;
+	ointerval = it->incr;
+	if (oval || nval) {
+		if (nval > 0)
+			nval += TICK_NSEC;
+		set_process_cpu_timer(tsk, clock_id, &nval, &oval);
+	}
+	it->expires = nval;
+	it->incr = ninterval;
+	trace_itimer_state(clock_id == CPUCLOCK_VIRT ?
+			   ITIMER_VIRTUAL : ITIMER_PROF, value, nval);
+
+	spin_unlock_irq(&tsk->sighand->siglock);
+
+	if (ovalue) {
+		ovalue->it_value = ns_to_timeval(oval);
+		ovalue->it_interval = ns_to_timeval(ointerval);
+	}
+}
+
+
+// Source: itimer.c
+// Lines 148-182

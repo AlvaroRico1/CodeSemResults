@@ -1,0 +1,27 @@
+static net_async_status read_one_row_nonblocking(MYSQL *mysql, uint fields,
+                                                 MYSQL_ROW row, ulong *lengths,
+                                                 int *res) {
+  DBUG_TRACE;
+  ulong pkt_len;
+  bool is_data_packet;
+  net_async_status status;
+
+  status = cli_safe_read_nonblocking(mysql, &is_data_packet, &pkt_len);
+  if (status == NET_ASYNC_NOT_READY) {
+    return status;
+  }
+
+  mysql->packet_length = pkt_len;
+  if (pkt_len == packet_error) {
+    *res = -1;
+    return NET_ASYNC_COMPLETE;
+  }
+
+  *res = read_one_row_complete(mysql, pkt_len, is_data_packet, fields, row,
+                               lengths);
+  return NET_ASYNC_COMPLETE;
+}
+
+
+// Source: client.cc
+// Lines 3111-3133

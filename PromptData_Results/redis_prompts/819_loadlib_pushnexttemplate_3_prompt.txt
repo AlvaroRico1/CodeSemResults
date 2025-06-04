@@ -1,0 +1,28 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'l' at line 2
+2. Pointer 'path' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static const char *pushnexttemplate (lua_State *L, const char *path) {
+  const char *l;
+  while (*path == *LUA_PATHSEP) path++;  /* skip separators */
+  if (*path == '\0') return NULL;  /* no more templates */
+  l = strchr(path, *LUA_PATHSEP);  /* find next separator */
+  if (l == NULL) l = path + strlen(path);
+  lua_pushlstring(L, path, l - path);  /* template */
+  return l;
+}
+
+
+// Source: loadlib.c
+// Lines 340-348
+
+
+[ANSWER]
+MUST

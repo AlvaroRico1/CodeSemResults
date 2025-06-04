@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'rpc' at line 4\n2. Pointer 'server' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid nfs_umount_begin(struct super_block *sb)\n{\n\tstruct nfs_server *server;\n\tstruct rpc_clnt *rpc;\n\n\tserver = NFS_SB(sb);\n\t/* -EIO all pending I/O */\n\trpc = server->client_acl;\n\tif (!IS_ERR(rpc))\n\t\trpc_killall_tasks(rpc);\n\trpc = server->client;\n\tif (!IS_ERR(rpc))\n\t\trpc_killall_tasks(rpc);\n}\n\n\n// Source: super.c\n// Lines 918-931\n",
+  "ANSWER": "MUST"
+}

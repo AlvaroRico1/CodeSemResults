@@ -1,0 +1,123 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'parent_join' at line 8
+2. Pointer 'parent_query_block' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+double calculate_subquery_executions(const Item_subselect *subquery,
+                                     Opt_trace_context *trace) {
+  Opt_trace_array trace_parents(trace, "parent_fanouts");
+  double subquery_executions = 1.0;
+  for (;;) {
+    const Query_block *const parent_query_block =
+        subquery->unit->outer_query_block();
+    const JOIN *const parent_join = parent_query_block->join;
+    if (parent_join == nullptr) {
+      /*
+        May be single-table UPDATE/DELETE, has no join.
+        @todo  we should find how many rows it plans to UPDATE/DELETE, taking
+        inspiration in Explain_table::explain_rows_and_filtered().
+        This is not a priority as it applies only to
+        UPDATE - child(non-mat-subq) - grandchild(may-be-mat-subq).
+        And it will autosolve the day UPDATE gets a JOIN.
+      */
+      break;
+    }
+
+    Opt_trace_object trace_parent(trace);
+    trace_parent.add_select_number(parent_query_block->select_number);
+    double parent_fanout;
+    if (  // safety, not sure needed
+        parent_join->plan_is_const() ||
+        // if subq is in condition on constant table:
+        !parent_join->child_subquery_can_materialize) {
+      parent_fanout = 1.0;
+      trace_parent.add("subq_attached_to_const_table", true);
+    } else {
+      if (subquery->in_cond_of_tab != NO_PLAN_IDX) {
+        /*
+          Subquery is attached to a certain 'pos', pos[-1].prefix_rowcount
+          is the number of times we'll start a loop accessing 'pos'; each such
+          loop will read pos->rows_fetched rows of 'pos', so subquery will
+          be evaluated pos[-1].prefix_rowcount * pos->rows_fetched times.
+          Exceptions:
+          - if 'pos' is first, use 1.0 instead of pos[-1].prefix_rowcount
+          - if 'pos' is first of a sj-materialization nest, same.
+
+          If in a sj-materialization nest, pos->rows_fetched and
+          pos[-1].prefix_rowcount are of the "nest materialization" plan
+          (copied back in fix_semijoin_strategies()), which is
+          appropriate as it corresponds to evaluations of our subquery.
+
+          pos->prefix_rowcount is not suitable because if we have:
+          select ... from ot1 where ot1.col in
+            (select it1.col1 from it1 where it1.col2 not in (subq));
+          and subq does subq-mat, and plan is ot1 - it1+firstmatch(ot1),
+          then:
+          - t1.prefix_rowcount==1 (due to firstmatch)
+          - subq is attached to it1, and is evaluated for each row read from
+            t1, potentially way more than 1.
+         */
+        const uint idx = subquery->in_cond_of_tab;
+        assert((int)idx >= 0 && idx < parent_join->tables);
+        trace_parent.add("subq_attached_to_table", true);
+        QEP_TAB *const parent_tab = &parent_join->qep_tab[idx];
+        trace_parent.add_utf8_table(parent_tab->table_ref);
+        parent_fanout = parent_tab->position()->rows_fetched;
+        if ((idx > parent_join->const_tables) &&
+            !sj_is_materialize_strategy(parent_tab->position()->sj_strategy))
+          parent_fanout *= parent_tab[-1].position()->prefix_rowcount;
+      } else {
+        /*
+          Subquery is SELECT list, GROUP BY, ORDER BY, HAVING: it is evaluated
+          at the end of the parent join's execution.
+          It can be evaluated once per row-before-grouping:
+          SELECT SUM(t1.col IN (subq)) FROM t1 GROUP BY expr;
+          or once per row-after-grouping:
+          SELECT SUM(t1.col) AS s FROM t1 GROUP BY expr HAVING s IN (subq),
+          SELECT SUM(t1.col) IN (subq) FROM t1 GROUP BY expr
+          It's hard to tell. We simply assume 'once per
+          row-before-grouping'.
+
+          Another approximation:
+          SELECT ... HAVING x IN (subq) LIMIT 1
+          best_rowcount=1 due to LIMIT, though HAVING (and thus the subquery)
+          may be evaluated many times before HAVING becomes true and the limit
+          is reached.
+        */
+        trace_parent.add("subq_attached_to_join_result", true);
+        parent_fanout = static_cast<double>(parent_join->best_rowcount);
+      }
+    }
+    subquery_executions *= parent_fanout;
+    trace_parent.add("fanout", parent_fanout);
+    const bool cacheable = parent_query_block->is_cacheable();
+    trace_parent.add("cacheable", cacheable);
+    if (cacheable) {
+      // Parent executed only once
+      break;
+    }
+    /*
+      Parent query is executed once per outer row => go up to find number of
+      outer rows. Example:
+      SELECT ... IN(subq-with-in2exists WHERE ... IN (subq-with-mat))
+    */
+    subquery = parent_join->query_expression()->item;
+    if (subquery == nullptr) {
+      // derived table, materialized only once
+      break;
+    }
+  }  // for(;;)
+
+
+// Source: sql_optimizer.cc
+// Lines 10765-10868
+
+
+[ANSWER]
+MUST

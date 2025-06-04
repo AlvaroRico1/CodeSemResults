@@ -1,0 +1,75 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'fdata' at line 52
+2. Pointer 'endptr' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void fetch_string_with_conversion(MYSQL_BIND *param, char *value,
+                                         size_t length) {
+  uchar *buffer = pointer_cast<uchar *>(param->buffer);
+  const char *endptr = value + length;
+
+  /*
+    This function should support all target buffer types: the rest
+    of conversion functions can delegate conversion to it.
+  */
+  switch (param->buffer_type) {
+    case MYSQL_TYPE_NULL: /* do nothing */
+      break;
+    case MYSQL_TYPE_TINY: {
+      int err;
+      longlong data = my_strtoll10(value, &endptr, &err);
+      *param->error = (IS_TRUNCATED(data, param->is_unsigned, INT_MIN8,
+                                    INT_MAX8, UINT_MAX8) ||
+                       err > 0);
+      *buffer = (uchar)data;
+      break;
+    }
+    case MYSQL_TYPE_SHORT: {
+      int err;
+      longlong data = my_strtoll10(value, &endptr, &err);
+      *param->error = (IS_TRUNCATED(data, param->is_unsigned, INT_MIN16,
+                                    INT_MAX16, UINT_MAX16) ||
+                       err > 0);
+      shortstore(buffer, (short)data);
+      break;
+    }
+    case MYSQL_TYPE_LONG: {
+      int err;
+      longlong data = my_strtoll10(value, &endptr, &err);
+      *param->error = (IS_TRUNCATED(data, param->is_unsigned, INT_MIN32,
+                                    INT_MAX32, UINT_MAX32) ||
+                       err > 0);
+      longstore(buffer, (int32)data);
+      break;
+    }
+    case MYSQL_TYPE_LONGLONG: {
+      int err;
+      longlong data = my_strtoll10(value, &endptr, &err);
+      *param->error =
+          param->is_unsigned ? err != 0 : (err > 0 || (err == 0 && data < 0));
+      longlongstore(buffer, data);
+      break;
+    }
+    case MYSQL_TYPE_FLOAT: {
+      int err;
+      double data =
+          my_strntod(&my_charset_latin1, value, length, &endptr, &err);
+      float fdata = (float)data;
+      *param->error = (fdata != data) | (err != 0);
+      floatstore(buffer, fdata);
+      break;
+    }
+
+
+// Source: libmysql.cc
+// Lines 2695-2750
+
+
+[ANSWER]
+MUST-NOT

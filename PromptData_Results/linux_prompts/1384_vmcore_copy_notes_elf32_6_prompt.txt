@@ -1,0 +1,40 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'phdr_ptr' at line 4
+2. Pointer 'ehdr_ptr' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int __init copy_notes_elf32(const Elf32_Ehdr *ehdr_ptr, char *notes_buf)
+{
+	int i, rc=0;
+	Elf32_Phdr *phdr_ptr;
+
+	phdr_ptr = (Elf32_Phdr*)(ehdr_ptr + 1);
+
+	for (i = 0; i < ehdr_ptr->e_phnum; i++, phdr_ptr++) {
+		u64 offset;
+		if (phdr_ptr->p_type != PT_NOTE)
+			continue;
+		offset = phdr_ptr->p_offset;
+		rc = elfcorehdr_read_notes(notes_buf, phdr_ptr->p_memsz,
+					   &offset);
+		if (rc < 0)
+			return rc;
+		notes_buf += phdr_ptr->p_memsz;
+	}
+
+	return 0;
+}
+
+
+// Source: vmcore.c
+// Lines 992-1012
+
+
+[ANSWER]
+MUST

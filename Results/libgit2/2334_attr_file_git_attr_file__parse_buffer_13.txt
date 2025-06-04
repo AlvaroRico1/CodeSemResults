@@ -1,0 +1,1 @@
+scan,libgit2/src/libgit2/attr_file.c,4,data,libgit2/src/libgit2/attr_file.c,2,1

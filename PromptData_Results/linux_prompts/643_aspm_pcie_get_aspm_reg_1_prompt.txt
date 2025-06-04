@@ -1,0 +1,57 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'reg16' at line 4
+2. Pointer 'reg32' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void pcie_get_aspm_reg(struct pci_dev *pdev,
+			      struct aspm_register_info *info)
+{
+	u16 reg16;
+	u32 reg32;
+
+	pcie_capability_read_dword(pdev, PCI_EXP_LNKCAP, &reg32);
+	info->support = (reg32 & PCI_EXP_LNKCAP_ASPMS) >> 10;
+	info->latency_encoding_l0s = (reg32 & PCI_EXP_LNKCAP_L0SEL) >> 12;
+	info->latency_encoding_l1  = (reg32 & PCI_EXP_LNKCAP_L1EL) >> 15;
+	pcie_capability_read_word(pdev, PCI_EXP_LNKCTL, &reg16);
+	info->enabled = reg16 & PCI_EXP_LNKCTL_ASPMC;
+
+	/* Read L1 PM substate capabilities */
+	info->l1ss_cap = info->l1ss_ctl1 = info->l1ss_ctl2 = 0;
+	info->l1ss_cap_ptr = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_L1SS);
+	if (!info->l1ss_cap_ptr)
+		return;
+	pci_read_config_dword(pdev, info->l1ss_cap_ptr + PCI_L1SS_CAP,
+			      &info->l1ss_cap);
+	if (!(info->l1ss_cap & PCI_L1SS_CAP_L1_PM_SS)) {
+		info->l1ss_cap = 0;
+		return;
+	}
+
+	/*
+	 * If we don't have LTR for the entire path from the Root Complex
+	 * to this device, we can't use ASPM L1.2 because it relies on the
+	 * LTR_L1.2_THRESHOLD.  See PCIe r4.0, secs 5.5.4, 6.18.
+	 */
+	if (!pdev->ltr_path)
+		info->l1ss_cap &= ~PCI_L1SS_CAP_ASPM_L1_2;
+
+	pci_read_config_dword(pdev, info->l1ss_cap_ptr + PCI_L1SS_CTL1,
+			      &info->l1ss_ctl1);
+	pci_read_config_dword(pdev, info->l1ss_cap_ptr + PCI_L1SS_CTL2,
+			      &info->l1ss_ctl2);
+}
+
+
+// Source: aspm.c
+// Lines 392-429
+
+
+[ANSWER]
+MAY

@@ -1,0 +1,1 @@
+capid5,linux/arch/x86/kernel/quirks.c,3,capid0,linux/arch/x86/kernel/quirks.c,3,2

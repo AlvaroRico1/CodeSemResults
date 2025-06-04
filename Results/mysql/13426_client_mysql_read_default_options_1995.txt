@@ -1,0 +1,1 @@
+option,mysql/sql-common/client.cc,22,argc,mysql/sql-common/client.cc,3,0

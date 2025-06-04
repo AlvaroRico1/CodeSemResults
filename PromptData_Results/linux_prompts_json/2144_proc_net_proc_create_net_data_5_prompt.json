@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'p' at line 5\n2. Pointer 'ops' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstruct proc_dir_entry *proc_create_net_data(const char *name, umode_t mode,\n\t\tstruct proc_dir_entry *parent, const struct seq_operations *ops,\n\t\tunsigned int state_size, void *data)\n{\n\tstruct proc_dir_entry *p;\n\n\tp = proc_create_reg(name, mode, &parent, data);\n\tif (!p)\n\t\treturn NULL;\n\tpde_force_lookup(p);\n\tp->proc_fops = &proc_net_seq_fops;\n\tp->seq_ops = ops;\n\tp->state_size = state_size;\n\treturn proc_register(parent, p);\n}\n\n\n// Source: proc_net.c\n// Lines 101-115\n",
+  "ANSWER": "MUST"
+}

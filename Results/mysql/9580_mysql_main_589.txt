@@ -1,0 +1,1 @@
+stdout_fileno_copy,mysql/client/mysql.cc,40,ssl_mode,mysql/client/mysql.cc,190,0

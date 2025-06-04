@@ -1,0 +1,1 @@
+out_writepos,mysql/components/logging/log_sink_test.cc,2,out_buff,mysql/components/logging/log_sink_test.cc,1,1

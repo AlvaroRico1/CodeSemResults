@@ -1,0 +1,55 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 's' at line 4
+2. Pointer 'ctx' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+tty_cmd_cell(struct tty *tty, const struct tty_ctx *ctx)
+{
+	const struct grid_cell	*gcp = ctx->cell;
+	struct screen		*s = ctx->s;
+	struct overlay_ranges	 r;
+	u_int			 px, py, i, vis = 0;
+
+	px = ctx->xoff + ctx->ocx - ctx->wox;
+	py = ctx->yoff + ctx->ocy - ctx->woy;
+	if (!tty_is_visible(tty, ctx, ctx->ocx, ctx->ocy, 1, 1) ||
+	    (gcp->data.width == 1 && !tty_check_overlay(tty, px, py)))
+		return;
+
+	/* Handle partially obstructed wide characters. */
+	if (gcp->data.width > 1) {
+		tty_check_overlay_range(tty, px, py, gcp->data.width, &r);
+		for (i = 0; i < OVERLAY_MAX_RANGES; i++)
+			vis += r.nx[i];
+		if (vis < gcp->data.width) {
+			tty_draw_line(tty, s, s->cx, s->cy,
+				    gcp->data.width, px, py, &ctx->defaults,
+				    ctx->palette);
+				return;
+		}
+	}
+
+	if (ctx->xoff + ctx->ocx - ctx->wox > tty->sx - 1 &&
+	    ctx->ocy == ctx->orlower &&
+	    tty_full_width(tty, ctx))
+		tty_region_pane(tty, ctx, ctx->orupper, ctx->orlower);
+
+	tty_margin_off(tty);
+	tty_cursor_pane_unless_wrap(tty, ctx, ctx->ocx, ctx->ocy);
+
+	tty_cell(tty, ctx->cell, &ctx->defaults, ctx->palette);
+}
+
+
+// Source: tty.c
+// Lines 1956-1991
+
+
+[ANSWER]
+MUST

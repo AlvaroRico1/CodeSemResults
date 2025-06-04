@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'entry' at line 4\n2. Pointer 'array_member' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint git_index_entry_srch(const void *key, const void *array_member)\n{\n\tconst struct entry_srch_key *srch_key = key;\n\tconst struct entry_internal *entry = array_member;\n\tint cmp;\n\tsize_t len1, len2, len;\n\n\tlen1 = srch_key->pathlen;\n\tlen2 = entry->pathlen;\n\tlen = len1 < len2 ? len1 : len2;\n\n\tcmp = memcmp(srch_key->path, entry->path, len);\n\tif (cmp)\n\t\treturn cmp;\n\tif (len1 < len2)\n\t\treturn -1;\n\tif (len1 > len2)\n\t\treturn 1;\n\n\tif (srch_key->stage != GIT_INDEX_STAGE_ANY)\n\t\treturn srch_key->stage - GIT_INDEX_ENTRY_STAGE(&entry->entry);\n\n\treturn 0;\n}\n\n\n// Source: index.c\n// Lines 152-175\n",
+  "ANSWER": "MUST"
+}

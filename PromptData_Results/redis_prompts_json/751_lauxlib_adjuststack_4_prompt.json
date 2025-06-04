@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'L' at line 3\n2. Pointer 'B' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void adjuststack (luaL_Buffer *B) {\n  if (B->lvl > 1) {\n    lua_State *L = B->L;\n    int toget = 1;  /* number of levels to concat */\n    size_t toplen = lua_strlen(L, -1);\n    do {\n      size_t l = lua_strlen(L, -(toget+1));\n      if (B->lvl - toget + 1 >= LIMIT || toplen > l) {\n        toplen += l;\n        toget++;\n      }\n      else break;\n    } while (toget < B->lvl);\n    lua_concat(L, toget);\n    B->lvl = B->lvl - toget + 1;\n  }\n\n\n// Source: lauxlib.c\n// Lines 410-425\n",
+  "ANSWER": "MUST"
+}

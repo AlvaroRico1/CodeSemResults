@@ -1,0 +1,70 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'lastreq' at line 6
+2. Pointer 'lastreq' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int nfs_pageio_add_request(struct nfs_pageio_descriptor *desc,
+			   struct nfs_page *req)
+{
+	u32 midx;
+	unsigned int pgbase, offset, bytes;
+	struct nfs_page *dupreq, *lastreq;
+
+	pgbase = req->wb_pgbase;
+	offset = req->wb_offset;
+	bytes = req->wb_bytes;
+
+	nfs_pageio_setup_mirroring(desc, req);
+	if (desc->pg_error < 0)
+		goto out_failed;
+
+	for (midx = 0; midx < desc->pg_mirror_count; midx++) {
+		if (midx) {
+			nfs_page_group_lock(req);
+
+			/* find the last request */
+			for (lastreq = req->wb_head;
+			     lastreq->wb_this_page != req->wb_head;
+			     lastreq = lastreq->wb_this_page)
+				;
+
+			dupreq = nfs_create_subreq(req, lastreq,
+					pgbase, offset, bytes);
+
+			nfs_page_group_unlock(req);
+			if (IS_ERR(dupreq)) {
+				desc->pg_error = PTR_ERR(dupreq);
+				goto out_failed;
+			}
+		} else
+			dupreq = req;
+
+		if (nfs_pgio_has_mirroring(desc))
+			desc->pg_mirror_idx = midx;
+		if (!nfs_pageio_add_request_mirror(desc, dupreq))
+			goto out_cleanup_subreq;
+	}
+
+	return 1;
+
+out_cleanup_subreq:
+	if (req != dupreq)
+		nfs_pageio_cleanup_request(desc, dupreq);
+out_failed:
+	nfs_pageio_error_cleanup(desc);
+	return 0;
+}
+
+
+// Source: pagelist.c
+// Lines 1165-1215
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,65 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'branch2_ref' at line 4
+2. Pointer 'rebase' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_rebase_setup__merge_onto_and_upstream(void)
+{
+	git_rebase *rebase;
+	git_reference *branch1_ref, *branch2_ref, *onto_ref;
+	git_annotated_commit *branch1_head, *branch2_head, *onto_head;
+	git_reference *head;
+	git_commit *head_commit;
+	git_oid head_id;
+
+	cl_assert_equal_i(GIT_REPOSITORY_STATE_NONE, git_repository_state(repo));
+
+	cl_git_pass(git_reference_lookup(&branch1_ref, repo, "refs/heads/gravy"));
+	cl_git_pass(git_reference_lookup(&branch2_ref, repo, "refs/heads/veal"));
+	cl_git_pass(git_reference_lookup(&onto_ref, repo, "refs/heads/master"));
+
+	cl_git_pass(git_annotated_commit_from_ref(&branch1_head, repo, branch1_ref));
+	cl_git_pass(git_annotated_commit_from_ref(&branch2_head, repo, branch2_ref));
+	cl_git_pass(git_annotated_commit_from_ref(&onto_head, repo, onto_ref));
+
+	cl_git_pass(git_rebase_init(&rebase, repo, branch1_head, branch2_head, onto_head, NULL));
+
+	git_oid_fromstr(&head_id, "efad0b11c47cb2f0220cbd6f5b0f93bb99064b00");
+	cl_git_pass(git_repository_head(&head, repo));
+	cl_git_pass(git_reference_peel((git_object **)&head_commit, head, GIT_OBJECT_COMMIT));
+	cl_assert_equal_oid(&head_id, git_commit_id(head_commit));
+
+	cl_assert_equal_file("d616d97082eb7bb2dc6f180a7cca940993b7a56f\n", 41, "rebase/.git/ORIG_HEAD");
+
+	cl_assert_equal_i(GIT_REPOSITORY_STATE_REBASE_MERGE, git_repository_state(repo));
+
+	cl_assert_equal_file("d616d97082eb7bb2dc6f180a7cca940993b7a56f\n", 41, "rebase/.git/rebase-merge/cmt.1");
+	cl_assert_equal_file("1\n", 2, "rebase/.git/rebase-merge/end");
+	cl_assert_equal_file("efad0b11c47cb2f0220cbd6f5b0f93bb99064b00\n", 41, "rebase/.git/rebase-merge/onto");
+	cl_assert_equal_file("master\n", 7, "rebase/.git/rebase-merge/onto_name");
+	cl_assert_equal_file("d616d97082eb7bb2dc6f180a7cca940993b7a56f\n", 41, "rebase/.git/rebase-merge/orig-head");
+
+	git_commit_free(head_commit);
+	git_reference_free(head);
+	git_annotated_commit_free(branch1_head);
+	git_annotated_commit_free(branch2_head);
+	git_annotated_commit_free(onto_head);
+	git_reference_free(branch1_ref);
+	git_reference_free(branch2_ref);
+	git_reference_free(onto_ref);
+	git_rebase_free(rebase);
+}
+
+
+// Source: setup.c
+// Lines 152-197
+
+
+[ANSWER]
+MAY

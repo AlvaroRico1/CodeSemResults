@@ -1,0 +1,61 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'gd' at line 5
+2. Pointer 's' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+screen_write_combine(struct screen_write_ctx *ctx, const struct utf8_data *ud,
+    u_int *xx)
+{
+	struct screen		*s = ctx->s;
+	struct grid		*gd = s->grid;
+	static struct grid_cell	 gc;
+	u_int			 n;
+
+	/* Can't combine if at 0. */
+	if (s->cx == 0)
+		return (NULL);
+
+	/* Empty data is out. */
+	if (ud->size == 0)
+		fatalx("UTF-8 data empty");
+
+	/* Retrieve the previous cell. */
+	for (n = 1; n <= s->cx; n++) {
+		grid_view_get_cell(gd, s->cx - n, s->cy, &gc);
+		if (~gc.flags & GRID_FLAG_PADDING)
+			break;
+	}
+	if (n > s->cx)
+		return (NULL);
+	*xx = s->cx - n;
+
+	/* Check there is enough space. */
+	if (gc.data.size + ud->size > sizeof gc.data.data)
+		return (NULL);
+
+	log_debug("%s: %.*s onto %.*s at %u,%u", __func__, (int)ud->size,
+	    ud->data, (int)gc.data.size, gc.data.data, *xx, s->cy);
+
+	/* Append the data. */
+	memcpy(gc.data.data + gc.data.size, ud->data, ud->size);
+	gc.data.size += ud->size;
+
+	/* Set the new cell. */
+	grid_view_set_cell(gd, *xx, s->cy, &gc);
+
+	return (&gc);
+}
+
+
+// Source: screen-write.c
+// Lines 1971-2012
+
+
+[ANSWER]
+MUST

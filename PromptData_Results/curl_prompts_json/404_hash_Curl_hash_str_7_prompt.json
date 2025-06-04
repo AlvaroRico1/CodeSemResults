@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'key_str' at line 3\n2. Pointer 'key' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nsize_t Curl_hash_str(void *key, size_t key_length, size_t slots_num)\n{\n  const char *key_str = (const char *) key;\n  const char *end = key_str + key_length;\n  size_t h = 5381;\n\n  while(key_str < end) {\n    h += h << 5;\n    h ^= *key_str++;\n  }\n\n  return (h % slots_num);\n}\n\n\n// Source: hash.c\n// Lines 257-269\n",
+  "ANSWER": "MUST"
+}

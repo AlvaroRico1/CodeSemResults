@@ -1,0 +1,94 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'master_replid' at line 68
+2. Pointer 'c' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void syncCommand(client *c) {
+    /* ignore SYNC if already slave or in monitor mode */
+    if (c->flags & CLIENT_SLAVE) return;
+
+    /* Check if this is a failover request to a replica with the same replid and
+     * become a master if so. */
+    if (c->argc > 3 && !strcasecmp(c->argv[0]->ptr,"psync") && 
+        !strcasecmp(c->argv[3]->ptr,"failover"))
+    {
+        serverLog(LL_WARNING, "Failover request received for replid %s.",
+            (unsigned char *)c->argv[1]->ptr);
+        if (!server.masterhost) {
+            addReplyError(c, "PSYNC FAILOVER can't be sent to a master.");
+            return;
+        }
+
+        if (!strcasecmp(c->argv[1]->ptr,server.replid)) {
+            replicationUnsetMaster();
+            sds client = catClientInfoString(sdsempty(),c);
+            serverLog(LL_NOTICE,
+                "MASTER MODE enabled (failover request from '%s')",client);
+            sdsfree(client);
+        } else {
+            addReplyError(c, "PSYNC FAILOVER replid must match my replid.");
+            return;            
+        }
+    }
+
+    /* Don't let replicas sync with us while we're failing over */
+    if (server.failover_state != NO_FAILOVER) {
+        addReplyError(c,"-NOMASTERLINK Can't SYNC while failing over");
+        return;
+    }
+
+    /* Refuse SYNC requests if we are a slave but the link with our master
+     * is not ok... */
+    if (server.masterhost && server.repl_state != REPL_STATE_CONNECTED) {
+        addReplyError(c,"-NOMASTERLINK Can't SYNC while not connected with my master");
+        return;
+    }
+
+    /* SYNC can't be issued when the server has pending data to send to
+     * the client about already issued commands. We need a fresh reply
+     * buffer registering the differences between the BGSAVE and the current
+     * dataset, so that we can copy to other slaves if needed. */
+    if (clientHasPendingReplies(c)) {
+        addReplyError(c,"SYNC and PSYNC are invalid with pending output");
+        return;
+    }
+
+    serverLog(LL_NOTICE,"Replica %s asks for synchronization",
+        replicationGetSlaveName(c));
+
+    /* Try a partial resynchronization if this is a PSYNC command.
+     * If it fails, we continue with usual full resynchronization, however
+     * when this happens masterTryPartialResynchronization() already
+     * replied with:
+     *
+     * +FULLRESYNC <replid> <offset>
+     *
+     * So the slave knows the new replid and offset to try a PSYNC later
+     * if the connection with the master is lost. */
+    if (!strcasecmp(c->argv[0]->ptr,"psync")) {
+        if (masterTryPartialResynchronization(c) == C_OK) {
+            server.stat_sync_partial_ok++;
+            return; /* No full resync needed, return. */
+        } else {
+            char *master_replid = c->argv[1]->ptr;
+
+            /* Increment stats for failed PSYNCs, but only if the
+             * replid is not "?", as this is used by slaves to force a full
+             * resync on purpose when they are not albe to partially
+             * resync. */
+            if (master_replid[0] != '?') server.stat_sync_partial_err++;
+        }
+
+
+// Source: replication.c
+// Lines 719-793
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,1 @@
+copy,tmux/options.c,4,string,tmux/options.c,4,1

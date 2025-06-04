@@ -1,0 +1,158 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'len' at line 7
+2. Pointer 'net_async' at line 15
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+net_async_status cli_read_rows_nonblocking(MYSQL *mysql,
+                                           MYSQL_FIELD *mysql_fields,
+                                           unsigned int fields,
+                                           MYSQL_DATA **result_out) {
+  uint field;
+  ulong pkt_len;
+  ulong len;
+  uchar *cp;
+  char *to, *end_to;
+  MYSQL_ROWS *cur;
+  NET *net = &mysql->net;
+  bool is_data_packet;
+  DBUG_TRACE;
+  MYSQL_ASYNC *async_context = ASYNC_DATA(mysql);
+  NET_ASYNC *net_async = NET_ASYNC_DATA(net);
+  *result_out = nullptr;
+
+  if (cli_safe_read_nonblocking(mysql, &is_data_packet, &pkt_len) ==
+      NET_ASYNC_NOT_READY) {
+    return NET_ASYNC_NOT_READY;
+  }
+
+  mysql->packet_length = pkt_len;
+  if (pkt_len == packet_error) {
+    if (net_async->read_rows_is_first_read) {
+      free_rows(async_context->rows_result_buffer);
+      async_context->rows_result_buffer = nullptr;
+    }
+    net_async->read_rows_is_first_read = true;
+    return NET_ASYNC_COMPLETE;
+  }
+
+  if (net_async->read_rows_is_first_read) {
+    MYSQL_DATA *result;
+    if (!(result =
+              (MYSQL_DATA *)my_malloc(key_memory_MYSQL_DATA, sizeof(MYSQL_DATA),
+                                      MYF(MY_WME | MY_ZEROFILL))) ||
+        !(result->alloc =
+              (MEM_ROOT *)my_malloc(key_memory_MYSQL_DATA, sizeof(MEM_ROOT),
+                                    MYF(MY_WME | MY_ZEROFILL)))) {
+      set_mysql_error(mysql, CR_OUT_OF_MEMORY, unknown_sqlstate);
+      net_async->read_rows_is_first_read = true;
+      free_rows(result);
+      return NET_ASYNC_COMPLETE;
+    }
+    async_context->rows_result_buffer = result;
+    init_alloc_root(PSI_NOT_INSTRUMENTED, result->alloc, 8192,
+                    0); /* Assume rowlength < 8192 */
+    async_context->prev_row_ptr = &result->data;
+    result->rows = 0;
+    result->fields = fields;
+
+    net_async->read_rows_is_first_read = false;
+  }
+
+  /*
+    The last EOF packet is either a single 254 character or (in MySQL 4.1)
+    254 followed by 1-7 status bytes or an OK packet starting with 0xFE
+  */
+  while (*(cp = net->read_pos) == 0 || is_data_packet) {
+    MYSQL_DATA *result = async_context->rows_result_buffer;
+    result->rows++;
+    if (!(cur = (MYSQL_ROWS *)result->alloc->Alloc(sizeof(MYSQL_ROWS))) ||
+        !(cur->data = ((MYSQL_ROW)result->alloc->Alloc(
+              (fields + 1) * sizeof(char *) + pkt_len)))) {
+      free_rows(result);
+      async_context->rows_result_buffer = nullptr;
+      set_mysql_error(mysql, CR_OUT_OF_MEMORY, unknown_sqlstate);
+      net_async->read_rows_is_first_read = true;
+      return NET_ASYNC_COMPLETE;
+    }
+    *async_context->prev_row_ptr = cur;
+    async_context->prev_row_ptr = &cur->next;
+    to = (char *)(cur->data + fields + 1);
+    end_to = to + pkt_len - 1;
+    for (field = 0; field < fields; field++) {
+      if ((len = (ulong)net_field_length(&cp)) ==
+          NULL_LENGTH) { /* null field */
+        cur->data[field] = nullptr;
+      } else {
+        cur->data[field] = to;
+        if (to > end_to || len > (ulong)(end_to - to)) {
+          free_rows(result);
+          async_context->rows_result_buffer = nullptr;
+          set_mysql_error(mysql, CR_MALFORMED_PACKET, unknown_sqlstate);
+          net_async->read_rows_is_first_read = true;
+          return NET_ASYNC_COMPLETE;
+        }
+        memcpy(to, (char *)cp, len);
+        to[len] = 0;
+        to += len + 1;
+        cp += len;
+        if (mysql_fields) {
+          if (mysql_fields[field].max_length < len)
+            mysql_fields[field].max_length = len;
+        }
+      }
+    }
+    cur->data[field] = to; /* End of last field */
+    if (cli_safe_read_nonblocking(mysql, &is_data_packet, &pkt_len) ==
+        NET_ASYNC_NOT_READY) {
+      return NET_ASYNC_NOT_READY;
+    }
+    mysql->packet_length = pkt_len;
+    if (pkt_len == packet_error) {
+      free_rows(async_context->rows_result_buffer);
+      async_context->rows_result_buffer = nullptr;
+      net_async->read_rows_is_first_read = true;
+      return NET_ASYNC_COMPLETE;
+    }
+  }
+
+  *async_context->prev_row_ptr = nullptr; /* last pointer is null */
+  /* read EOF packet or OK packet if it is new client */
+  if (pkt_len > 1) {
+    if (mysql->server_capabilities & CLIENT_DEPRECATE_EOF && !is_data_packet)
+      read_ok_ex(mysql, pkt_len);
+    else {
+      mysql->warning_count = uint2korr(cp + 1);
+      mysql->server_status = uint2korr(cp + 3);
+    }
+
+    DBUG_PRINT("info", ("status: %u  warning_count:  %u", mysql->server_status,
+                        mysql->warning_count));
+  }
+
+#if defined(CLIENT_PROTOCOL_TRACING)
+  if (mysql->server_status & SERVER_MORE_RESULTS_EXISTS)
+    MYSQL_TRACE_STAGE(mysql, WAIT_FOR_RESULT);
+  else
+    MYSQL_TRACE_STAGE(mysql, READY_FOR_COMMAND);
+#endif
+  DBUG_PRINT("exit",
+             ("Got %lu rows", (ulong)async_context->rows_result_buffer->rows));
+  *result_out = async_context->rows_result_buffer;
+  async_context->rows_result_buffer = nullptr;
+  net_async->read_rows_is_first_read = true;
+  return NET_ASYNC_COMPLETE;
+}
+
+
+// Source: client.cc
+// Lines 2782-2920
+
+
+[ANSWER]
+MUST-NOT

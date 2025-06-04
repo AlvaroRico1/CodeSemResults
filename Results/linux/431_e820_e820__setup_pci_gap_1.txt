@@ -1,0 +1,1 @@
+gapsize,linux/arch/x86/kernel/e820.c,3,gapstart,linux/arch/x86/kernel/e820.c,3,0

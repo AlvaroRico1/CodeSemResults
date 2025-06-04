@@ -1,0 +1,70 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'is_visited' at line 9
+2. Pointer 'augmenting_path' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+find_augmenting_path (fixup_graph_type *fixup_graph,
+		      augmenting_path_type *augmenting_path, int source,
+		      int sink)
+{
+  int u = 0;
+  int i;
+  fixup_vertex_p fvertex_list, pfvertex;
+  fixup_edge_p pfedge;
+  int *bb_pred, *is_visited;
+  queue_type *queue_list;
+
+  gcc_assert (augmenting_path);
+  bb_pred = augmenting_path->bb_pred;
+  gcc_assert (bb_pred);
+  is_visited = augmenting_path->is_visited;
+  gcc_assert (is_visited);
+  queue_list = &(augmenting_path->queue_list);
+
+  gcc_assert (fixup_graph);
+
+  fvertex_list = fixup_graph->vertex_list;
+
+  for (u = 0; u < fixup_graph->num_vertices; u++)
+    is_visited[u] = 0;
+
+  init_queue (queue_list);
+  enqueue (queue_list, source);
+  bb_pred[source] = -1;
+
+  while (!is_empty (queue_list))
+    {
+      u = dequeue (queue_list);
+      is_visited[u] = 1;
+      pfvertex = fvertex_list + u;
+      for (i = 0; pfvertex->succ_edges.iterate (i, &pfedge);
+	   i++)
+	{
+	  int dest = pfedge->dest;
+	  if ((pfedge->rflow > 0) && (is_visited[dest] == 0))
+	    {
+	      enqueue (queue_list, dest);
+	      bb_pred[dest] = u;
+	      is_visited[dest] = 1;
+	      if (dest == sink)
+		return 1;
+	    }
+	}
+    }
+
+  return 0;
+}
+
+
+// Source: mcf.c
+// Lines 959-1009
+
+
+[ANSWER]
+MUST

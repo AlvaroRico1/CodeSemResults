@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'mp' at line 17\n2. Pointer 'm' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint prepare_multi_pack_index_one(struct repository *r, const char *object_dir, int local)\n{\n\tstruct multi_pack_index *m;\n\tstruct multi_pack_index *m_search;\n\n\tprepare_repo_settings(r);\n\tif (!r->settings.core_multi_pack_index)\n\t\treturn 0;\n\n\tfor (m_search = r->objects->multi_pack_index; m_search; m_search = m_search->next)\n\t\tif (!strcmp(object_dir, m_search->object_dir))\n\t\t\treturn 1;\n\n\tm = load_multi_pack_index(object_dir, local);\n\n\tif (m) {\n\t\tstruct multi_pack_index *mp = r->objects->multi_pack_index;\n\t\tif (mp) {\n\t\t\tm->next = mp->next;\n\t\t\tmp->next = m;\n\t\t} else\n\t\t\tr->objects->multi_pack_index = m;\n\t\treturn 1;\n\t}\n\n\n// Source: midx.c\n// Lines 382-405\n",
+  "ANSWER": "MUST"
+}

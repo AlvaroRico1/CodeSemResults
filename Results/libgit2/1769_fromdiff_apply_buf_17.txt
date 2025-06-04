@@ -1,0 +1,1 @@
+patch_expected,libgit2/tests/libgit2/apply/fromdiff.c,6,nptr,libgit2/tests/libgit2/apply/fromdiff.c,10,0

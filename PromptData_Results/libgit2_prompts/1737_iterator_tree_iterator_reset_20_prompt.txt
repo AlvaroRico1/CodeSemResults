@@ -1,0 +1,26 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'iter' at line 3
+2. Pointer 'i' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int tree_iterator_reset(git_iterator *i)
+{
+	tree_iterator *iter = (tree_iterator *)i;
+
+	tree_iterator_clear(iter);
+	return tree_iterator_init(iter);
+}
+
+
+// Source: iterator.c
+// Lines 914-920
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,124 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'argv' at line 7
+2. Pointer 'setuidgid_cmd_path' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct fastcgi_configurator_t *self = (void *)cmd->configurator;
+    char *spawn_user = ctx->globalconf->user, *spawn_cmd;
+    char *kill_on_close_cmd_path = NULL, *setuidgid_cmd_path = NULL;
+    char dirname[] = "/tmp/h2o.fcgisock.XXXXXX";
+    char *argv[10];
+    int spawner_fd;
+    struct sockaddr_un sa;
+    h2o_fastcgi_config_vars_t config_vars;
+    int ret = -1;
+    struct passwd h2o_user_pwbuf, *h2o_user_pw;
+    char h2o_user_buf[65536];
+
+    memset(&sa, 0, sizeof(sa));
+
+    switch (node->type) {
+    case YOML_TYPE_SCALAR:
+        spawn_cmd = node->data.scalar;
+        break;
+    case YOML_TYPE_MAPPING: {
+        yoml_t **command_node, **user_node;
+        if (h2o_configurator_parse_mapping(cmd, node, "command:s", "user:s", &command_node, &user_node) != 0)
+            return -1;
+        spawn_cmd = (*command_node)->data.scalar;
+        if (user_node != NULL)
+            spawn_user = (*user_node)->data.scalar;
+    } break;
+    default:
+        h2o_configurator_errprintf(cmd, node, "argument must be scalar or mapping");
+        return -1;
+    }
+
+    /* obtain uid & gid of the client that connects to the FastCGI daemon (i.e. H2O after dropping privileges) */
+    if (ctx->globalconf->user != NULL) {
+        /* change ownership of temporary directory */
+        if (getpwnam_r(ctx->globalconf->user, &h2o_user_pwbuf, h2o_user_buf, sizeof(h2o_user_buf), &h2o_user_pw) != 0 ||
+            h2o_user_pw == NULL) {
+            h2o_configurator_errprintf(cmd, node, "getpwnam_r(3) failed to obtain uid of user:%s", ctx->globalconf->user);
+            goto Exit;
+        }
+    } else {
+        h2o_user_pw = NULL;
+    }
+
+    { /* build args */
+        size_t i = 0;
+        argv[i++] = kill_on_close_cmd_path = h2o_configurator_get_cmd_path("share/h2o/kill-on-close");
+        argv[i++] = "--rm";
+        argv[i++] = dirname;
+        argv[i++] = "--";
+        if (spawn_user != NULL) {
+            argv[i++] = setuidgid_cmd_path = h2o_configurator_get_cmd_path("share/h2o/setuidgid");
+            argv[i++] = spawn_user;
+        }
+        argv[i++] = "/bin/sh";
+        argv[i++] = "-c";
+        argv[i++] = spawn_cmd;
+        argv[i++] = NULL;
+        assert(i <= sizeof(argv) / sizeof(argv[0]));
+    }
+
+    if (ctx->dry_run) {
+        dirname[0] = '\0';
+        spawner_fd = -1;
+        sa.sun_family = AF_UNIX;
+        strcpy(sa.sun_path, "/dry-run.nonexistent");
+    } else {
+        /* create temporary directory */
+        if (mkdtemp(dirname) == NULL) {
+            h2o_configurator_errprintf(cmd, node, "mkdtemp(3) failed to create temporary directory:%s:%s", dirname,
+                                       strerror(errno));
+            dirname[0] = '\0';
+            goto Exit;
+        }
+        /* change ownership of temporary directory */
+        if (h2o_user_pw != NULL && chown(dirname, h2o_user_pw->pw_uid, h2o_user_pw->pw_gid) != 0) {
+            h2o_configurator_errprintf(cmd, node, "chown(2) failed to change ownership of temporary directory:%s:%s", dirname,
+                                       strerror(errno));
+            goto Exit;
+        }
+        /* launch spawnfcgi command */
+        if ((spawner_fd = create_spawnproc(cmd, node, dirname, argv, &sa, h2o_user_pw)) == -1) {
+            goto Exit;
+        }
+    }
+
+    config_vars = *self->vars;
+    config_vars.callbacks.dispose = spawnproc_on_dispose;
+    config_vars.callbacks.data = (char *)NULL + spawner_fd;
+
+    h2o_url_t upstream;
+    h2o_url_init_with_sun_path(&upstream, NULL, &H2O_URL_SCHEME_FASTCGI, h2o_iovec_init(sa.sun_path, strlen(sa.sun_path)),
+                               h2o_iovec_init(H2O_STRLIT("/")));
+    h2o_fastcgi_register(ctx->pathconf, &upstream, &config_vars);
+    free(upstream.authority.base);
+
+    ret = 0;
+Exit:
+    if (dirname[0] != '\0')
+        unlink(dirname);
+    free(kill_on_close_cmd_path);
+    free(setuidgid_cmd_path);
+    return ret;
+}
+
+
+// Source: fastcgi.c
+// Lines 215-319
+
+
+[ANSWER]
+MUST

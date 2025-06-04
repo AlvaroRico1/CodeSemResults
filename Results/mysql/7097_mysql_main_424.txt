@@ -1,0 +1,1 @@
+stdout_fileno_copy,mysql/client/mysql.cc,40,argv,mysql/client/mysql.cc,1,0

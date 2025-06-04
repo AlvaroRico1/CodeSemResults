@@ -1,0 +1,57 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'a' at line 3
+2. Pointer 'a0' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+window_client_cmp(const void *a0, const void *b0)
+{
+	const struct window_client_itemdata *const	*a = a0;
+	const struct window_client_itemdata *const	*b = b0;
+	const struct window_client_itemdata		*itema = *a;
+	const struct window_client_itemdata		*itemb = *b;
+	struct client					*ca = itema->c;
+	struct client					*cb = itemb->c;
+	int						 result = 0;
+
+	switch (window_client_sort->field) {
+	case WINDOW_CLIENT_BY_SIZE:
+		result = ca->tty.sx - cb->tty.sx;
+		if (result == 0)
+			result = ca->tty.sy - cb->tty.sy;
+		break;
+	case WINDOW_CLIENT_BY_CREATION_TIME:
+		if (timercmp(&ca->creation_time, &cb->creation_time, >))
+			result = -1;
+		else if (timercmp(&ca->creation_time, &cb->creation_time, <))
+			result = 1;
+		break;
+	case WINDOW_CLIENT_BY_ACTIVITY_TIME:
+		if (timercmp(&ca->activity_time, &cb->activity_time, >))
+			result = -1;
+		else if (timercmp(&ca->activity_time, &cb->activity_time, <))
+			result = 1;
+		break;
+	}
+
+	/* Use WINDOW_CLIENT_BY_NAME as default order and tie breaker. */
+	if (result == 0)
+		result = strcmp(ca->name, cb->name);
+
+	if (window_client_sort->reversed)
+		result = -result;
+	return (result);
+}
+
+
+// Source: window-client.c
+// Lines 127-164
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,30 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'path_ctx' at line 3
+2. Pointer 'pathconf' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int config_path(h2o_configurator_context_t *parent_ctx, h2o_pathconf_t *pathconf, yoml_t *node)
+{
+    h2o_configurator_context_t *path_ctx = create_context(parent_ctx, 0);
+    path_ctx->pathconf = pathconf;
+    path_ctx->mimemap = &pathconf->mimemap;
+
+    int ret = h2o_configurator_apply_commands(path_ctx, node, H2O_CONFIGURATOR_FLAG_PATH, NULL);
+
+    destroy_context(path_ctx);
+    return ret;
+}
+
+
+// Source: configurator.c
+// Lines 304-314
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,99 @@
+static int tree_iterator_advance(const git_index_entry **out, git_iterator *i)
+{
+	tree_iterator *iter = (tree_iterator *)i;
+	int error = 0;
+
+	iter->base.flags |= GIT_ITERATOR_FIRST_ACCESS;
+
+	/* examine tree entries until we find the next one to return */
+	while (true) {
+		tree_iterator_entry *prev_entry, *entry;
+		tree_iterator_frame *frame;
+		bool is_tree;
+
+		if ((frame = tree_iterator_current_frame(iter)) == NULL) {
+			error = GIT_ITEROVER;
+			break;
+		}
+
+		/* no more entries in this frame.  pop the frame out */
+		if (frame->next_idx == frame->entries.length) {
+			if ((error = tree_iterator_frame_pop(iter)) < 0)
+				break;
+
+			continue;
+		}
+
+		/* we may have coalesced the contents of case-insensitively same-named
+		 * directories, so do the sort now.
+		 */
+		if (frame->next_idx == 0 && !git_vector_is_sorted(&frame->entries))
+			git_vector_sort(&frame->entries);
+
+		/* we have more entries in the current frame, that's our next entry */
+		prev_entry = tree_iterator_current_entry(frame);
+		entry = frame->entries.contents[frame->next_idx];
+		frame->next_idx++;
+
+		/* we can have collisions when iterating case insensitively.  (eg,
+		 * 'A/a' and 'a/A').  squash this one if it's already been seen.
+		 */
+		if (iterator__ignore_case(&iter->base) &&
+			prev_entry &&
+			tree_iterator_entry_cmp_icase(prev_entry, entry) == 0)
+			continue;
+
+		if ((error = tree_iterator_compute_path(&iter->entry_path, entry)) < 0)
+			break;
+
+		/* if this path is before our start, advance over this entry */
+		if (!iterator_has_started(&iter->base, iter->entry_path.ptr, false))
+			continue;
+
+		/* if this path is after our end, stop */
+		if (iterator_has_ended(&iter->base, iter->entry_path.ptr)) {
+			error = GIT_ITEROVER;
+			break;
+		}
+
+		/* if we have a list of paths we're interested in, examine it */
+		if (!iterator_pathlist_next_is(&iter->base, iter->entry_path.ptr))
+			continue;
+
+		is_tree = git_tree_entry__is_tree(entry->tree_entry);
+
+		/* if we are *not* including trees then advance over this entry */
+		if (is_tree && !iterator__include_trees(iter)) {
+
+			/* if we've found a tree (and are not returning it to the caller)
+			 * and we are autoexpanding, then we want to return the first
+			 * child.  push the new directory and advance.
+			 */
+			if (iterator__do_autoexpand(iter)) {
+				if ((error = tree_iterator_frame_push(iter, entry)) < 0)
+					break;
+			}
+
+			continue;
+		}
+
+		tree_iterator_set_current(iter, frame, entry);
+
+		/* if we are autoexpanding, then push this as a new frame, so that
+		 * the next call to `advance` will dive into this directory.
+		 */
+		if (is_tree && iterator__do_autoexpand(iter))
+			error = tree_iterator_frame_push(iter, entry);
+
+		break;
+	}
+
+	if (out)
+		*out = (error == 0) ? &iter->entry : NULL;
+
+	return error;
+}
+
+
+// Source: iterator.c
+// Lines 746-840

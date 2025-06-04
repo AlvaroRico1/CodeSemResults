@@ -1,0 +1,52 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'type_url_field' at line 4
+2. Pointer 'value_field' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool MessageDifferencer::UnpackAnyField::UnpackAny(
+    const Message& any, std::unique_ptr<Message>* data) {
+  const Reflection* reflection = any.GetReflection();
+  const FieldDescriptor* type_url_field;
+  const FieldDescriptor* value_field;
+  if (!internal::GetAnyFieldDescriptors(any, &type_url_field, &value_field)) {
+    return false;
+  }
+  const std::string& type_url = reflection->GetString(any, type_url_field);
+  std::string full_type_name;
+  if (!internal::ParseAnyTypeUrl(type_url, &full_type_name)) {
+    return false;
+  }
+
+  const Descriptor* desc =
+      any.GetDescriptor()->file()->pool()->FindMessageTypeByName(
+          full_type_name);
+  if (desc == NULL) {
+    GOOGLE_LOG(INFO) << "Proto type '" << full_type_name << "' not found";
+    return false;
+  }
+
+  if (dynamic_message_factory_ == NULL) {
+    dynamic_message_factory_.reset(new DynamicMessageFactory());
+  }
+  data->reset(dynamic_message_factory_->GetPrototype(desc)->New());
+  std::string serialized_value = reflection->GetString(any, value_field);
+  if (!(*data)->ParsePartialFromString(serialized_value)) {
+    GOOGLE_DLOG(ERROR) << "Failed to parse value for " << full_type_name;
+    return false;
+  }
+  return true;
+}
+
+
+// Source: message_differencer.cc
+// Lines 1426-1458
+
+
+[ANSWER]
+MAY

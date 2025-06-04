@@ -1,0 +1,1 @@
+tinfo,gcc/gcc/resource.c,3,tinfo,gcc/gcc/resource.c,3,1

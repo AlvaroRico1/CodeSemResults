@@ -1,0 +1,44 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'pool' at line 1
+2. Pointer 'newp' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void *h2o_mem__do_alloc_pool_aligned(h2o_mem_pool_t *pool, size_t alignment, size_t sz)
+{
+#define ALIGN_TO(x, a) (((x) + (a)-1) & ~((a)-1))
+    void *ret;
+
+    if (sz >= (sizeof(pool->chunks->bytes) - sizeof(pool->chunks->next)) / 4) {
+        /* allocate large requests directly */
+        struct st_h2o_mem_pool_direct_t *newp = h2o_mem_alloc(offsetof(struct st_h2o_mem_pool_direct_t, bytes) + sz);
+        newp->next = pool->directs;
+        pool->directs = newp;
+        return newp->bytes;
+    }
+
+    /* return a valid pointer even for 0 sized allocs */
+    if (H2O_UNLIKELY(sz == 0))
+        sz = 1;
+
+    pool->chunk_offset = ALIGN_TO(pool->chunk_offset, alignment);
+    if (sizeof(pool->chunks->bytes) - pool->chunk_offset < sz) {
+        /* allocate new chunk */
+        union un_h2o_mem_pool_chunk_t *newp = h2o_mem_alloc_recycle(&h2o_mem_pool_allocator, sizeof(*newp));
+        newp->next = pool->chunks;
+        pool->chunks = newp;
+        pool->chunk_offset = ALIGN_TO(sizeof(newp->next), alignment);
+    }
+
+
+// Source: memory.c
+// Lines 179-203
+
+
+[ANSWER]
+MUST

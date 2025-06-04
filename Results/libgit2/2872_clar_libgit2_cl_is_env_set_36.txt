@@ -1,0 +1,1 @@
+name,libgit2/tests/clar/clar_libgit2.c,1,result,libgit2/tests/clar/clar_libgit2.c,4,0

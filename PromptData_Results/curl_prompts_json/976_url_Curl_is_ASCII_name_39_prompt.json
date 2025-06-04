@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ch' at line 4\n2. Pointer 'hostname' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nbool Curl_is_ASCII_name(const char *hostname)\n{\n  /* get an UNSIGNED local version of the pointer */\n  const unsigned char *ch = (const unsigned char *)hostname;\n\n  if(!hostname) /* bad input, consider it ASCII! */\n    return TRUE;\n\n  while(*ch) {\n    if(*ch++ & 0x80)\n      return FALSE;\n  }\n  return TRUE;\n}\n\n\n// Source: url.c\n// Lines 1538-1551\n",
+  "ANSWER": "MUST"
+}

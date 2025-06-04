@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'bstr' at line None\n2. Pointer 'bufb' at line None\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint getLongFromObjectOrReply(client *c, robj *o, long *target, const char *msg) {\n    long long value;\n\n    if (getLongLongFromObjectOrReply(c, o, &value, msg) != C_OK) return C_ERR;\n    if (value < LONG_MIN || value > LONG_MAX) {\n        if (msg != NULL) {\n            addReplyError(c,(char*)msg);\n        } else {\n            addReplyError(c,\"value is out of range\");\n        }\n\n\n// Source: object.c\n// Lines 715-724\n",
+  "ANSWER": "MUST"
+}

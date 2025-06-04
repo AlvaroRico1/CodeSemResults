@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'entry_ptr' at line 3\n2. Pointer 'cand' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ninsert_cand (cand_t cand)\n{\n  void **entry_ptr;\n\n  entry_ptr = htab_find_slot (cand_table, cand, INSERT);\n  if (*entry_ptr == NULL)\n    *entry_ptr = (void *) cand;\n  return (cand_t) *entry_ptr;\n}\n\n\n// Source: lra-remat.c\n// Lines 218-226\n",
+  "ANSWER": "MUST"
+}

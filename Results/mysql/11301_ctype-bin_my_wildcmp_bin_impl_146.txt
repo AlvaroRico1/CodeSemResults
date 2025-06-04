@@ -1,0 +1,1 @@
+result,mysql/strings/ctype-bin.cc,5,cs,mysql/strings/ctype-bin.cc,1,0

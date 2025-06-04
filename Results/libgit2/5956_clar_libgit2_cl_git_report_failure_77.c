@@ -1,0 +1,21 @@
+void cl_git_report_failure(
+	int error, int expected, const char *file, const char *func, int line, const char *fncall)
+{
+	char msg[4096];
+	const git_error *last = git_error_last();
+
+	if (expected)
+		p_snprintf(msg, 4096, "error %d (expected %d) - %s",
+			error, expected, last ? last->message : "<no message>");
+	else if (error || last)
+		p_snprintf(msg, 4096, "error %d - %s",
+			error, last ? last->message : "<no message>");
+	else
+		p_snprintf(msg, 4096, "no error, expected non-zero return");
+
+	clar__assert(0, file, func, line, fncall, msg, 1);
+}
+
+
+// Source: clar_libgit2.c
+// Lines 6-22

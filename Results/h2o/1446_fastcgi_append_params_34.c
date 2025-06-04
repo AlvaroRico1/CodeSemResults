@@ -1,0 +1,106 @@
+static void append_params(h2o_req_t *req, iovec_vector_t *vecs, h2o_fastcgi_config_vars_t *config)
+{
+    h2o_iovec_t path_info = {NULL};
+
+    /* CONTENT_LENGTH */
+    if (req->entity.base != NULL) {
+        char buf[32];
+        int l = sprintf(buf, "%zu", req->entity.len);
+        append_pair(&req->pool, vecs, H2O_STRLIT("CONTENT_LENGTH"), buf, (size_t)l);
+    }
+    /* SCRIPT_FILENAME, SCRIPT_NAME, PATH_INFO */
+    if (req->filereq != NULL) {
+        h2o_filereq_t *filereq = req->filereq;
+        append_pair(&req->pool, vecs, H2O_STRLIT("SCRIPT_FILENAME"), filereq->local_path.base, filereq->local_path.len);
+        append_pair(&req->pool, vecs, H2O_STRLIT("SCRIPT_NAME"), filereq->script_name.base, filereq->script_name.len);
+        path_info = filereq->path_info;
+    } else {
+        append_pair(&req->pool, vecs, H2O_STRLIT("SCRIPT_NAME"), NULL, 0);
+        path_info = req->path_normalized;
+    }
+    if (path_info.base != NULL)
+        append_pair(&req->pool, vecs, H2O_STRLIT("PATH_INFO"), path_info.base, path_info.len);
+    /* DOCUMENT_ROOT and PATH_TRANSLATED */
+    if (config->document_root.base != NULL) {
+        append_pair(&req->pool, vecs, H2O_STRLIT("DOCUMENT_ROOT"), config->document_root.base, config->document_root.len);
+        if (path_info.base != NULL) {
+            append_pair(&req->pool, vecs, H2O_STRLIT("PATH_TRANSLATED"), NULL, config->document_root.len + path_info.len);
+            char *dst_end = vecs->entries[vecs->size - 1].base + vecs->entries[vecs->size - 1].len;
+            memcpy(dst_end - path_info.len, path_info.base, path_info.len);
+            memcpy(dst_end - path_info.len - config->document_root.len, config->document_root.base, config->document_root.len);
+        }
+    }
+    /* QUERY_STRING (and adjust PATH_INFO) */
+    if (req->query_at != SIZE_MAX) {
+        append_pair(&req->pool, vecs, H2O_STRLIT("QUERY_STRING"), req->path.base + req->query_at + 1,
+                    req->path.len - (req->query_at + 1));
+    } else {
+        append_pair(&req->pool, vecs, H2O_STRLIT("QUERY_STRING"), NULL, 0);
+    }
+    /* REMOTE_ADDR & REMOTE_PORT */
+    append_address_info(req, vecs, H2O_STRLIT("REMOTE_ADDR"), H2O_STRLIT("REMOTE_PORT"), req->conn->callbacks->get_peername);
+    { /* environment variables (REMOTE_USER, etc.) */
+        size_t i;
+        for (i = 0; i != req->env.size; i += 2) {
+            h2o_iovec_t *name = req->env.entries + i, *value = name + 1;
+            append_pair(&req->pool, vecs, name->base, name->len, value->base, value->len);
+        }
+    }
+    /* REQUEST_METHOD */
+    append_pair(&req->pool, vecs, H2O_STRLIT("REQUEST_METHOD"), req->method.base, req->method.len);
+    /* HTTP_HOST & REQUEST_URI */
+    if (config->send_delegated_uri) {
+        append_pair(&req->pool, vecs, H2O_STRLIT("HTTP_HOST"), req->authority.base, req->authority.len);
+        append_pair(&req->pool, vecs, H2O_STRLIT("REQUEST_URI"), req->path.base, req->path.len);
+    } else {
+        append_pair(&req->pool, vecs, H2O_STRLIT("HTTP_HOST"), req->input.authority.base, req->input.authority.len);
+        append_pair(&req->pool, vecs, H2O_STRLIT("REQUEST_URI"), req->input.path.base, req->input.path.len);
+    }
+    /* SERVER_ADDR & SERVER_PORT */
+    append_address_info(req, vecs, H2O_STRLIT("SERVER_ADDR"), H2O_STRLIT("SERVER_PORT"), req->conn->callbacks->get_sockname);
+    /* SERVER_NAME */
+    append_pair(&req->pool, vecs, H2O_STRLIT("SERVER_NAME"), req->hostconf->authority.host.base, req->hostconf->authority.host.len);
+    { /* SERVER_PROTOCOL */
+        char buf[sizeof("HTTP/1.1")];
+        size_t l = h2o_stringify_protocol_version(buf, req->version);
+        append_pair(&req->pool, vecs, H2O_STRLIT("SERVER_PROTOCOL"), buf, l);
+    }
+    /* SERVER_SOFTWARE */
+    append_pair(&req->pool, vecs, H2O_STRLIT("SERVER_SOFTWARE"), req->conn->ctx->globalconf->server_name.base,
+                req->conn->ctx->globalconf->server_name.len);
+    /* set HTTPS: on if necessary */
+    if (req->scheme == &H2O_URL_SCHEME_HTTPS)
+        append_pair(&req->pool, vecs, H2O_STRLIT("HTTPS"), H2O_STRLIT("on"));
+    { /* headers */
+        const h2o_header_t *h = req->headers.entries, *h_end = h + req->headers.size;
+        size_t cookie_length = 0;
+        int found_early_data = 0;
+        for (; h != h_end; ++h) {
+            if (h->name == &H2O_TOKEN_CONTENT_TYPE->buf) {
+                append_pair(&req->pool, vecs, H2O_STRLIT("CONTENT_TYPE"), h->value.base, h->value.len);
+            } else if (h->name == &H2O_TOKEN_COOKIE->buf) {
+                /* accumulate the length of the cookie, together with the separator */
+                cookie_length += h->value.len + 1;
+            } else {
+                if (h->name == &H2O_TOKEN_EARLY_DATA->buf)
+                    found_early_data = 1;
+                size_t i;
+                for (i = 0; i != req->env.size; i += 2) {
+                    h2o_iovec_t *envname = req->env.entries + i;
+                    if (envname_is_headername(envname, h->name))
+                        goto NextHeader;
+                }
+                char *dst = append_pair(&req->pool, vecs, NULL, h->name->len + sizeof("HTTP_") - 1, h->value.base, h->value.len);
+                const char *src = h->name->base, *src_end = src + h->name->len;
+                *dst++ = 'H';
+                *dst++ = 'T';
+                *dst++ = 'T';
+                *dst++ = 'P';
+                *dst++ = '_';
+                for (; src != src_end; ++src)
+                    *dst++ = *src == '-' ? '_' : h2o_toupper(*src);
+            }
+
+
+// Source: fastcgi.c
+// Lines 216-317

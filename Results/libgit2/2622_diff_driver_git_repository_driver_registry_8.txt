@@ -1,0 +1,1 @@
+reg,libgit2/src/libgit2/diff_driver.c,4,newreg,libgit2/src/libgit2/diff_driver.c,4,1

@@ -1,0 +1,52 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'wp' at line 3
+2. Pointer 'ttyctx' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+screen_write_set_client_cb(struct tty_ctx *ttyctx, struct client *c)
+{
+	struct window_pane	*wp = ttyctx->arg;
+
+	if (c->session->curw->window != wp->window)
+		return (0);
+	if (wp->layout_cell == NULL)
+		return (0);
+
+	if (wp->flags & (PANE_REDRAW|PANE_DROP))
+		return (-1);
+	if (c->flags & CLIENT_REDRAWPANES) {
+		/*
+		 * Redraw is already deferred to redraw another pane - redraw
+		 * this one also when that happens.
+		 */
+		log_debug("%s: adding %%%u to deferred redraw", __func__,
+		    wp->id);
+		wp->flags |= PANE_REDRAW;
+		return (-1);
+	}
+
+	ttyctx->bigger = tty_window_offset(&c->tty, &ttyctx->wox, &ttyctx->woy,
+	    &ttyctx->wsx, &ttyctx->wsy);
+
+	ttyctx->xoff = ttyctx->rxoff = wp->xoff;
+	ttyctx->yoff = ttyctx->ryoff = wp->yoff;
+
+	if (status_at_line(c) == 0)
+		ttyctx->yoff += status_line_size(c);
+
+	return (1);
+}
+
+
+// Source: screen-write.c
+// Lines 131-163
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,1 @@
+status_flags,libgit2/tests/libgit2/status/worktree_init.c,6,index,libgit2/tests/libgit2/status/worktree_init.c,4,2

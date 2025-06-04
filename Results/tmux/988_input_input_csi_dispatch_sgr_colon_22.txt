@@ -1,0 +1,1 @@
+ptr,tmux/input.c,4,copy,tmux/input.c,4,1

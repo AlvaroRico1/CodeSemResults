@@ -1,0 +1,36 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'candidate' at line 8
+2. Pointer 'target' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+find_closest_string (const char *target,
+		     const auto_vec<const char *> *candidates)
+{
+  gcc_assert (target);
+  gcc_assert (candidates);
+
+  int i;
+  const char *candidate;
+  best_match<const char *, const char *> bm (target);
+  FOR_EACH_VEC_ELT (*candidates, i, candidate)
+    {
+      gcc_assert (candidate);
+      bm.consider (candidate);
+    }
+
+  return bm.get_best_meaningful_candidate ();
+}
+
+
+// Source: spellcheck.c
+// Lines 147-163
+
+
+[ANSWER]
+MAY

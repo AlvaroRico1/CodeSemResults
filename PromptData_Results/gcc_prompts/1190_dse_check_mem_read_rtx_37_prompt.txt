@@ -1,0 +1,198 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'store_info' at line 110
+2. Pointer 'i_ptr' at line 91
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+check_mem_read_rtx (rtx *loc, bb_info_t bb_info)
+{
+  rtx mem = *loc, mem_addr;
+  insn_info_t insn_info;
+  poly_int64 offset = 0;
+  poly_int64 width = 0;
+  cselib_val *base = NULL;
+  int group_id;
+  read_info_t read_info;
+
+  insn_info = bb_info->last_insn;
+
+  if ((MEM_ALIAS_SET (mem) == ALIAS_SET_MEMORY_BARRIER)
+      || MEM_VOLATILE_P (mem))
+    {
+      if (crtl->stack_protect_guard
+	  && (MEM_EXPR (mem) == crtl->stack_protect_guard
+	      || (crtl->stack_protect_guard_decl
+		  && MEM_EXPR (mem) == crtl->stack_protect_guard_decl))
+	  && MEM_VOLATILE_P (mem))
+	{
+	  /* This is either the stack protector canary on the stack,
+	     which ought to be written by a MEM_VOLATILE_P store and
+	     thus shouldn't be deleted and is read at the very end of
+	     function, but shouldn't conflict with any other store.
+	     Or it is __stack_chk_guard variable or TLS or whatever else
+	     MEM holding the canary value, which really shouldn't be
+	     ever modified in -fstack-protector* protected functions,
+	     otherwise the prologue store wouldn't match the epilogue
+	     check.  */
+	  if (dump_file && (dump_flags & TDF_DETAILS))
+	    fprintf (dump_file, " stack protector canary read ignored.\n");
+	  insn_info->cannot_delete = true;
+	  return;
+	}
+
+      if (dump_file && (dump_flags & TDF_DETAILS))
+	fprintf (dump_file, " adding wild read, volatile or barrier.\n");
+      add_wild_read (bb_info);
+      insn_info->cannot_delete = true;
+      return;
+    }
+
+  /* If it is reading readonly mem, then there can be no conflict with
+     another write. */
+  if (MEM_READONLY_P (mem))
+    return;
+
+  if (!canon_address (mem, &group_id, &offset, &base))
+    {
+      if (dump_file && (dump_flags & TDF_DETAILS))
+	fprintf (dump_file, " adding wild read, canon_address failure.\n");
+      add_wild_read (bb_info);
+      return;
+    }
+
+  if (GET_MODE (mem) == BLKmode)
+    width = -1;
+  else
+    width = GET_MODE_SIZE (GET_MODE (mem));
+
+  if (!endpoint_representable_p (offset, known_eq (width, -1) ? 1 : width))
+    {
+      if (dump_file && (dump_flags & TDF_DETAILS))
+	fprintf (dump_file, " adding wild read, due to overflow.\n");
+      add_wild_read (bb_info);
+      return;
+    }
+
+  read_info = read_info_type_pool.allocate ();
+  read_info->group_id = group_id;
+  read_info->mem = mem;
+  read_info->offset = offset;
+  read_info->width = width;
+  read_info->next = insn_info->read_rec;
+  insn_info->read_rec = read_info;
+  if (group_id < 0)
+    mem_addr = base->val_rtx;
+  else
+    {
+      group_info *group = rtx_group_vec[group_id];
+      mem_addr = group->canon_base_addr;
+    }
+  if (maybe_ne (offset, 0))
+    mem_addr = plus_constant (get_address_mode (mem), mem_addr, offset);
+
+  if (group_id >= 0)
+    {
+      /* This is the restricted case where the base is a constant or
+	 the frame pointer and offset is a constant.  */
+      insn_info_t i_ptr = active_local_stores;
+      insn_info_t last = NULL;
+
+      if (dump_file && (dump_flags & TDF_DETAILS))
+	{
+	  if (!known_size_p (width))
+	    fprintf (dump_file, " processing const load gid=%d[BLK]\n",
+		     group_id);
+	  else
+	    {
+	      fprintf (dump_file, " processing const load gid=%d", group_id);
+	      print_range (dump_file, offset, width);
+	      fprintf (dump_file, "\n");
+	    }
+	}
+
+      while (i_ptr)
+	{
+	  bool remove = false;
+	  store_info *store_info = i_ptr->store_rec;
+
+	  /* Skip the clobbers.  */
+	  while (!store_info->is_set)
+	    store_info = store_info->next;
+
+	  /* There are three cases here.  */
+	  if (store_info->group_id < 0)
+	    /* We have a cselib store followed by a read from a
+	       const base. */
+	    remove
+	      = canon_true_dependence (store_info->mem,
+				       GET_MODE (store_info->mem),
+				       store_info->mem_addr,
+				       mem, mem_addr);
+
+	  else if (group_id == store_info->group_id)
+	    {
+	      /* This is a block mode load.  We may get lucky and
+		 canon_true_dependence may save the day.  */
+	      if (!known_size_p (width))
+		remove
+		  = canon_true_dependence (store_info->mem,
+					   GET_MODE (store_info->mem),
+					   store_info->mem_addr,
+					   mem, mem_addr);
+
+	      /* If this read is just reading back something that we just
+		 stored, rewrite the read.  */
+	      else
+		{
+		  if (store_info->rhs
+		      && known_subrange_p (offset, width, store_info->offset,
+					   store_info->width)
+		      && all_positions_needed_p (store_info,
+						 offset - store_info->offset,
+						 width)
+		      && replace_read (store_info, i_ptr, read_info,
+				       insn_info, loc, bb_info->regs_live))
+		    return;
+
+		  /* The bases are the same, just see if the offsets
+		     could overlap.  */
+		  if (ranges_maybe_overlap_p (offset, width,
+					      store_info->offset,
+					      store_info->width))
+		    remove = true;
+		}
+	    }
+
+	  /* else
+	     The else case that is missing here is that the
+	     bases are constant but different.  There is nothing
+	     to do here because there is no overlap.  */
+
+	  if (remove)
+	    {
+	      if (dump_file && (dump_flags & TDF_DETAILS))
+		dump_insn_info ("removing from active", i_ptr);
+
+	      active_local_stores_len--;
+	      if (last)
+		last->next_local_store = i_ptr->next_local_store;
+	      else
+		active_local_stores = i_ptr->next_local_store;
+	    }
+	  else
+	    last = i_ptr;
+	  i_ptr = i_ptr->next_local_store;
+	}
+
+
+// Source: dse.c
+// Lines 2117-2295
+
+
+[ANSWER]
+MUST

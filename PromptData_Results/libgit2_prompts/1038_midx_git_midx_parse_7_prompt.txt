@@ -1,0 +1,137 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'last_chunk' at line 8
+2. Pointer 'chunk_object_offsets' at line 17
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_midx_parse(
+		git_midx_file *idx,
+		const unsigned char *data,
+		size_t size)
+{
+	struct git_midx_header *hdr;
+	const unsigned char *chunk_hdr;
+	struct git_midx_chunk *last_chunk;
+	uint32_t i;
+	off64_t last_chunk_offset, chunk_offset, trailer_offset;
+	size_t checksum_size;
+	unsigned char checksum[GIT_HASH_SHA1_SIZE];
+	int error;
+	struct git_midx_chunk chunk_packfile_names = {0},
+					 chunk_oid_fanout = {0},
+					 chunk_oid_lookup = {0},
+					 chunk_object_offsets = {0},
+					 chunk_object_large_offsets = {0};
+
+	GIT_ASSERT_ARG(idx);
+
+	if (size < sizeof(struct git_midx_header) + GIT_OID_RAWSZ)
+		return midx_error("multi-pack index is too short");
+
+	hdr = ((struct git_midx_header *)data);
+
+	if (hdr->signature != htonl(MIDX_SIGNATURE) ||
+	    hdr->version != MIDX_VERSION ||
+	    hdr->object_id_version != MIDX_OBJECT_ID_VERSION) {
+		return midx_error("unsupported multi-pack index version");
+	}
+	if (hdr->chunks == 0)
+		return midx_error("no chunks in multi-pack index");
+
+	/*
+	 * The very first chunk's offset should be after the header, all the chunk
+	 * headers, and a special zero chunk.
+	 */
+	last_chunk_offset =
+			sizeof(struct git_midx_header) +
+			(1 + hdr->chunks) * 12;
+
+	checksum_size = GIT_HASH_SHA1_SIZE;
+	trailer_offset = size - checksum_size;
+
+	if (trailer_offset < last_chunk_offset)
+		return midx_error("wrong index size");
+	memcpy(idx->checksum, data + trailer_offset, checksum_size);
+
+	if (git_hash_buf(checksum, data, (size_t)trailer_offset, GIT_HASH_ALGORITHM_SHA1) < 0)
+		return midx_error("could not calculate signature");
+	if (memcmp(checksum, idx->checksum, checksum_size) != 0)
+		return midx_error("index signature mismatch");
+
+	chunk_hdr = data + sizeof(struct git_midx_header);
+	last_chunk = NULL;
+	for (i = 0; i < hdr->chunks; ++i, chunk_hdr += 12) {
+		chunk_offset = ((off64_t)ntohl(*((uint32_t *)(chunk_hdr + 4)))) << 32 |
+				((off64_t)ntohl(*((uint32_t *)(chunk_hdr + 8))));
+		if (chunk_offset < last_chunk_offset)
+			return midx_error("chunks are non-monotonic");
+		if (chunk_offset >= trailer_offset)
+			return midx_error("chunks extend beyond the trailer");
+		if (last_chunk != NULL)
+			last_chunk->length = (size_t)(chunk_offset - last_chunk_offset);
+		last_chunk_offset = chunk_offset;
+
+		switch (ntohl(*((uint32_t *)(chunk_hdr + 0)))) {
+		case MIDX_PACKFILE_NAMES_ID:
+			chunk_packfile_names.offset = last_chunk_offset;
+			last_chunk = &chunk_packfile_names;
+			break;
+
+		case MIDX_OID_FANOUT_ID:
+			chunk_oid_fanout.offset = last_chunk_offset;
+			last_chunk = &chunk_oid_fanout;
+			break;
+
+		case MIDX_OID_LOOKUP_ID:
+			chunk_oid_lookup.offset = last_chunk_offset;
+			last_chunk = &chunk_oid_lookup;
+			break;
+
+		case MIDX_OBJECT_OFFSETS_ID:
+			chunk_object_offsets.offset = last_chunk_offset;
+			last_chunk = &chunk_object_offsets;
+			break;
+
+		case MIDX_OBJECT_LARGE_OFFSETS_ID:
+			chunk_object_large_offsets.offset = last_chunk_offset;
+			last_chunk = &chunk_object_large_offsets;
+			break;
+
+		default:
+			return midx_error("unrecognized chunk ID");
+		}
+	}
+	last_chunk->length = (size_t)(trailer_offset - last_chunk_offset);
+
+	error = midx_parse_packfile_names(
+			idx, data, ntohl(hdr->packfiles), &chunk_packfile_names);
+	if (error < 0)
+		return error;
+	error = midx_parse_oid_fanout(idx, data, &chunk_oid_fanout);
+	if (error < 0)
+		return error;
+	error = midx_parse_oid_lookup(idx, data, &chunk_oid_lookup);
+	if (error < 0)
+		return error;
+	error = midx_parse_object_offsets(idx, data, &chunk_object_offsets);
+	if (error < 0)
+		return error;
+	error = midx_parse_object_large_offsets(idx, data, &chunk_object_large_offsets);
+	if (error < 0)
+		return error;
+
+	return 0;
+}
+
+
+// Source: midx.c
+// Lines 171-288
+
+
+[ANSWER]
+MUST

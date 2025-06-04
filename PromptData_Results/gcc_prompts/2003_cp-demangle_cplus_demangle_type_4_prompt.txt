@@ -1,0 +1,173 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'checkpoint' at line 141
+2. Pointer 'pret' at line 24
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+cplus_demangle_type (struct d_info *di)
+{
+  char peek;
+  struct demangle_component *ret;
+  int can_subst;
+
+  /* The ABI specifies that when CV-qualifiers are used, the base type
+     is substitutable, and the fully qualified type is substitutable,
+     but the base type with a strict subset of the CV-qualifiers is
+     not substitutable.  The natural recursive implementation of the
+     CV-qualifiers would cause subsets to be substitutable, so instead
+     we pull them all off now.
+
+     FIXME: The ABI says that order-insensitive vendor qualifiers
+     should be handled in the same way, but we have no way to tell
+     which vendor qualifiers are order-insensitive and which are
+     order-sensitive.  So we just assume that they are all
+     order-sensitive.  g++ 3.4 supports only one vendor qualifier,
+     __vector, and it treats it as order-sensitive when mangling
+     names.  */
+
+  if (next_is_type_qual (di))
+    {
+      struct demangle_component **pret;
+
+      pret = d_cv_qualifiers (di, &ret, 0);
+      if (pret == NULL)
+	return NULL;
+      if (d_peek_char (di) == 'F')
+	{
+	  /* cv-qualifiers before a function type apply to 'this',
+	     so avoid adding the unqualified function type to
+	     the substitution list.  */
+	  *pret = d_function_type (di);
+	}
+      else
+	*pret = cplus_demangle_type (di);
+      if (!*pret)
+	return NULL;
+      if ((*pret)->type == DEMANGLE_COMPONENT_RVALUE_REFERENCE_THIS
+	  || (*pret)->type == DEMANGLE_COMPONENT_REFERENCE_THIS)
+	{
+	  /* Move the ref-qualifier outside the cv-qualifiers so that
+	     they are printed in the right order.  */
+	  struct demangle_component *fn = d_left (*pret);
+	  d_left (*pret) = ret;
+	  ret = *pret;
+	  *pret = fn;
+	}
+      if (! d_add_substitution (di, ret))
+	return NULL;
+      return ret;
+    }
+
+  can_subst = 1;
+
+  peek = d_peek_char (di);
+  switch (peek)
+    {
+    case 'a': case 'b': case 'c': case 'd': case 'e': case 'f': case 'g':
+    case 'h': case 'i': case 'j':           case 'l': case 'm': case 'n':
+    case 'o':                               case 's': case 't':
+    case 'v': case 'w': case 'x': case 'y': case 'z':
+      ret = d_make_builtin_type (di,
+				 &cplus_demangle_builtin_types[peek - 'a']);
+      di->expansion += ret->u.s_builtin.type->len;
+      can_subst = 0;
+      d_advance (di, 1);
+      break;
+
+    case 'u':
+      d_advance (di, 1);
+      ret = d_make_comp (di, DEMANGLE_COMPONENT_VENDOR_TYPE,
+			 d_source_name (di), NULL);
+      break;
+
+    case 'F':
+      ret = d_function_type (di);
+      break;
+
+    case '0': case '1': case '2': case '3': case '4':
+    case '5': case '6': case '7': case '8': case '9':
+    case 'N':
+    case 'Z':
+      ret = d_class_enum_type (di);
+      break;
+
+    case 'A':
+      ret = d_array_type (di);
+      break;
+
+    case 'M':
+      ret = d_pointer_to_member_type (di);
+      break;
+
+    case 'T':
+      ret = d_template_param (di);
+      if (d_peek_char (di) == 'I')
+	{
+	  /* This may be <template-template-param> <template-args>.
+	     If this is the type for a conversion operator, we can
+	     have a <template-template-param> here only by following
+	     a derivation like this:
+
+	     <nested-name>
+	     -> <template-prefix> <template-args>
+	     -> <prefix> <template-unqualified-name> <template-args>
+	     -> <unqualified-name> <template-unqualified-name> <template-args>
+	     -> <source-name> <template-unqualified-name> <template-args>
+	     -> <source-name> <operator-name> <template-args>
+	     -> <source-name> cv <type> <template-args>
+	     -> <source-name> cv <template-template-param> <template-args> <template-args>
+
+	     where the <template-args> is followed by another.
+	     Otherwise, we must have a derivation like this:
+
+	     <nested-name>
+	     -> <template-prefix> <template-args>
+	     -> <prefix> <template-unqualified-name> <template-args>
+	     -> <unqualified-name> <template-unqualified-name> <template-args>
+	     -> <source-name> <template-unqualified-name> <template-args>
+	     -> <source-name> <operator-name> <template-args>
+	     -> <source-name> cv <type> <template-args>
+	     -> <source-name> cv <template-param> <template-args>
+
+	     where we need to leave the <template-args> to be processed
+	     by d_prefix (following the <template-prefix>).
+
+	     The <template-template-param> part is a substitution
+	     candidate.  */
+	  if (! di->is_conversion)
+	    {
+	      if (! d_add_substitution (di, ret))
+		return NULL;
+	      ret = d_make_comp (di, DEMANGLE_COMPONENT_TEMPLATE, ret,
+				 d_template_args (di));
+	    }
+	  else
+	    {
+	      struct demangle_component *args;
+	      struct d_info_checkpoint checkpoint;
+
+	      d_checkpoint (di, &checkpoint);
+	      args = d_template_args (di);
+	      if (d_peek_char (di) == 'I')
+		{
+		  if (! d_add_substitution (di, ret))
+		    return NULL;
+		  ret = d_make_comp (di, DEMANGLE_COMPONENT_TEMPLATE, ret,
+				     args);
+		}
+	      else
+		d_backtrack (di, &checkpoint);
+	    }
+
+
+// Source: cp-demangle.c
+// Lines 2389-2542
+
+
+[ANSWER]
+MAY

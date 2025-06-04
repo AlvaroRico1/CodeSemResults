@@ -1,0 +1,144 @@
+do_spec_1 (const char *spec, int inswitch, const char *soft_matched_part)
+{
+  const char *p = spec;
+  int c;
+  int i;
+  int value;
+
+  /* If it's an empty string argument to a switch, keep it as is.  */
+  if (inswitch && !*p)
+    arg_going = 1;
+
+  while ((c = *p++))
+    /* If substituting a switch, treat all chars like letters.
+       Otherwise, NL, SPC, TAB and % are special.  */
+    switch (inswitch ? 'a' : c)
+      {
+      case '\n':
+	end_going_arg ();
+
+	if (argbuf.length () > 0
+	    && !strcmp (argbuf.last (), "|"))
+	  {
+	    /* A `|' before the newline means use a pipe here,
+	       but only if -pipe was specified.
+	       Otherwise, execute now and don't pass the `|' as an arg.  */
+	    if (use_pipes)
+	      {
+		input_from_pipe = 1;
+		break;
+	      }
+	    else
+	      argbuf.pop ();
+	  }
+
+	set_collect_gcc_options ();
+
+	if (argbuf.length () > 0)
+	  {
+	    value = execute ();
+	    if (value)
+	      return value;
+	  }
+	/* Reinitialize for a new command, and for a new argument.  */
+	clear_args ();
+	arg_going = 0;
+	delete_this_arg = 0;
+	this_is_output_file = 0;
+	this_is_library_file = 0;
+	this_is_linker_script = 0;
+	input_from_pipe = 0;
+	break;
+
+      case '|':
+	end_going_arg ();
+
+	/* Use pipe */
+	obstack_1grow (&obstack, c);
+	arg_going = 1;
+	break;
+
+      case '\t':
+      case ' ':
+	end_going_arg ();
+
+	/* Reinitialize for a new argument.  */
+	delete_this_arg = 0;
+	this_is_output_file = 0;
+	this_is_library_file = 0;
+	this_is_linker_script = 0;
+	break;
+
+      case '%':
+	switch (c = *p++)
+	  {
+	  case 0:
+	    fatal_error (input_location, "spec %qs invalid", spec);
+
+	  case 'b':
+	    if (save_temps_length)
+	      obstack_grow (&obstack, save_temps_prefix, save_temps_length);
+	    else
+	      obstack_grow (&obstack, input_basename, basename_length);
+	    if (compare_debug < 0)
+	      obstack_grow (&obstack, ".gk", 3);
+	    arg_going = 1;
+	    break;
+
+	  case 'B':
+	    if (save_temps_length)
+	      obstack_grow (&obstack, save_temps_prefix, save_temps_length);
+	    else
+	      obstack_grow (&obstack, input_basename, suffixed_basename_length);
+	    if (compare_debug < 0)
+	      obstack_grow (&obstack, ".gk", 3);
+	    arg_going = 1;
+	    break;
+
+	  case 'd':
+	    delete_this_arg = 2;
+	    break;
+
+	  /* Dump out the directories specified with LIBRARY_PATH,
+	     followed by the absolute directories
+	     that we search for startfiles.  */
+	  case 'D':
+	    {
+	      struct spec_path_info info;
+
+	      info.option = "-L";
+	      info.append_len = 0;
+#ifdef RELATIVE_PREFIX_NOT_LINKDIR
+	      /* Used on systems which record the specified -L dirs
+		 and use them to search for dynamic linking.
+		 Relative directories always come from -B,
+		 and it is better not to use them for searching
+		 at run time.  In particular, stage1 loses.  */
+	      info.omit_relative = true;
+#else
+	      info.omit_relative = false;
+#endif
+	      info.separate_options = false;
+
+	      for_each_path (&startfile_prefixes, true, 0, spec_path, &info);
+	    }
+	    break;
+
+	  case 'e':
+	    /* %efoo means report an error with `foo' as error message
+	       and don't execute any more commands for this file.  */
+	    {
+	      const char *q = p;
+	      char *buf;
+	      while (*p != 0 && *p != '\n')
+		p++;
+	      buf = (char *) alloca (p - q + 1);
+	      strncpy (buf, q, p - q);
+	      buf[p - q] = 0;
+	      error ("%s", _(buf));
+	      return -1;
+	    }
+
+
+// Source: gcc.c
+// Lines 5286-5425

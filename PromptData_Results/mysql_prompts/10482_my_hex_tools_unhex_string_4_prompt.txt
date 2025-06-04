@@ -1,0 +1,38 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'p' at line 11
+2. Pointer 'first' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+unsigned long unhex_string(const char *first, const char *last, char *output) {
+  const std::ptrdiff_t length = last - first;
+  char *output0 = output;
+
+  if (length % 2) {
+    int hex_char = lookup_unhex_low[static_cast<unsigned char>(*first++)];
+    if (hex_char > 255) return 0;
+    *output++ = static_cast<char>(hex_char);
+  }
+
+  for (const char *p = first; p != last; p += 2) {
+    int hex_char = lookup_unhex_high[static_cast<unsigned char>(p[0])] |
+                   lookup_unhex_low[static_cast<unsigned char>(p[1])];
+    if (hex_char > 255) return 0;
+    *output++ = static_cast<char>(hex_char);
+  }
+
+  return (unsigned long)(output - output0);
+}
+
+
+// Source: my_hex_tools.cc
+// Lines 91-109
+
+
+[ANSWER]
+MUST

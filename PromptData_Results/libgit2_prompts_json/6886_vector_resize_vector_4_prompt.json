@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'v' at line 1\n2. Pointer 'new_contents' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nGIT_INLINE(int) resize_vector(git_vector *v, size_t new_size)\n{\n\tvoid *new_contents;\n\n\tif (new_size == 0)\n\t\treturn 0;\n\n\tnew_contents = git__reallocarray(v->contents, new_size, sizeof(void *));\n\tGIT_ERROR_CHECK_ALLOC(new_contents);\n\n\tv->_alloc_size = new_size;\n\tv->contents = new_contents;\n\n\treturn 0;\n}\n\n\n// Source: vector.c\n// Lines 31-45\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'clp' at line 3\n2. Pointer 'netns' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid nfs_netns_sysfs_destroy(struct nfs_net *netns)\n{\n\tstruct nfs_netns_client *clp = netns->nfs_client;\n\n\tif (clp) {\n\t\tkobject_uevent(&clp->kobject, KOBJ_REMOVE);\n\t\tkobject_del(&clp->kobject);\n\t\tkobject_put(&clp->kobject);\n\t\tnetns->nfs_client = NULL;\n\t}\n}\n\n\n// Source: sysfs.c\n// Lines 177-187\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,1 @@
+visible_length,mysql/client/mysql.cc,56,data_length,mysql/client/mysql.cc,54,0

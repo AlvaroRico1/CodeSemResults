@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'new_argv' at line 3\n2. Pointer 'argv' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ncmd_prepend_argv(int *argc, char ***argv, const char *arg)\n{\n\tchar\t**new_argv;\n\tint\t  i;\n\n\tnew_argv = xreallocarray(NULL, (*argc) + 1, sizeof *new_argv);\n\tnew_argv[0] = xstrdup(arg);\n\tfor (i = 0; i < *argc; i++)\n\t\tnew_argv[1 + i] = (*argv)[i];\n\n\tfree(*argv);\n\t*argv = new_argv;\n\t(*argc)++;\n}\n\n\n// Source: cmd.c\n// Lines 250-263\n",
+  "ANSWER": "MUST"
+}

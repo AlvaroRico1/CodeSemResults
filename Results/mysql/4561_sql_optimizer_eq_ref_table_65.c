@@ -1,0 +1,33 @@
+static bool eq_ref_table(JOIN *join, ORDER *start_order, JOIN_TAB *tab,
+                         table_map *cached_eq_ref_tables,
+                         table_map *eq_ref_tables) {
+  /* We can skip const tables only if not an outer table */
+  if (tab->type() == JT_CONST && tab->first_inner() == NO_PLAN_IDX) return true;
+  if (tab->type() != JT_EQ_REF || tab->table()->is_nullable()) return false;
+
+  const table_map map = tab->table_ref->map();
+  uint found = 0;
+
+  for (Item **ref_item = tab->ref().items,
+            **end = ref_item + tab->ref().key_parts;
+       ref_item != end; ref_item++) {
+    if (!(*ref_item)->const_item()) {  // Not a const ref
+      ORDER *order;
+      for (order = start_order; order; order = order->next) {
+        if ((*ref_item)->eq(order->item[0], false)) break;
+      }
+      if (order) {
+        if (!(order->used & map)) {
+          found++;
+          order->used |= map;
+        }
+        continue;  // Used in ORDER BY
+      }
+      if (!only_eq_ref_tables(join, start_order, (*ref_item)->used_tables(),
+                              cached_eq_ref_tables, eq_ref_tables))
+        return false;
+    }
+
+
+// Source: sql_optimizer.cc
+// Lines 9609-9637

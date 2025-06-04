@@ -1,0 +1,41 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 't' at line 3
+2. Pointer 'remote' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_fetch_negotiate(git_remote *remote, const git_fetch_options *opts)
+{
+	git_transport *t = remote->transport;
+
+	remote->need_pack = 0;
+
+	if (filter_wants(remote, opts) < 0)
+		return -1;
+
+	/* Don't try to negotiate when we don't want anything */
+	if (!remote->need_pack)
+		return 0;
+
+	/*
+	 * Now we have everything set up so we can start tell the
+	 * server what we want and what we have.
+	 */
+	return t->negotiate_fetch(t,
+		remote->repo,
+		(const git_remote_head * const *)remote->refs.contents,
+		remote->refs.length);
+}
+
+
+// Source: fetch.c
+// Lines 169-190
+
+
+[ANSWER]
+MUST

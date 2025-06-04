@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'name' at line 1
+2. Pointer 'k' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int set_method(const char *name)
+{
+	int k;
+
+	if (!name || !*name)
+		name = "printf";
+
+	for (k=0; (s_methods[k].name); k++) {
+		if (strcmp(name, s_methods[k].name) == 0) {
+			s_trace_method = &s_methods[k];
+			return 0;
+		}
+	}
+	fprintf(stderr, "Unknown CLAR_TRACE_METHOD: '%s'\n", name);
+	return -1;
+}
+
+
+// Source: clar_libgit2_trace.c
+// Lines 74-89
+
+
+[ANSWER]
+MUST-NOT

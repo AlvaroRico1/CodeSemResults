@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'end_pfn' at line 6\n2. Pointer 'start_pfn' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nunsigned long __init __absent_pages_in_range(int nid,\n\t\t\t\tunsigned long range_start_pfn,\n\t\t\t\tunsigned long range_end_pfn)\n{\n\tunsigned long nr_absent = range_end_pfn - range_start_pfn;\n\tunsigned long start_pfn, end_pfn;\n\tint i;\n\n\tfor_each_mem_pfn_range(i, nid, &start_pfn, &end_pfn, NULL) {\n\t\tstart_pfn = clamp(start_pfn, range_start_pfn, range_end_pfn);\n\t\tend_pfn = clamp(end_pfn, range_start_pfn, range_end_pfn);\n\t\tnr_absent -= end_pfn - start_pfn;\n\t}\n\treturn nr_absent;\n}\n\n\n// Source: page_alloc.c\n// Lines 6384-6398\n",
+  "ANSWER": "MAY"
+}

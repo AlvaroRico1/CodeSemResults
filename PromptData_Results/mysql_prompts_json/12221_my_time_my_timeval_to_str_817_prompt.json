@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'len' at line 2\n2. Pointer 'to' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint my_timeval_to_str(const struct timeval *tm, char *to, uint dec) {\n  int len = sprintf(to, \"%d\", static_cast<int>(tm->tv_sec));\n  if (dec) len += my_useconds_to_str(to + len, tm->tv_usec, dec);\n  return len;\n}\n\n\n// Source: my_time.cc\n// Lines 1427-1431\n",
+  "ANSWER": "MUST-NOT"
+}

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'd0' at line 7\n2. Pointer 'se' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic size_t my_strnxfrm_latin1_de(const CHARSET_INFO *cs, uchar *dst,\n                                    size_t dstlen, uint nweights,\n                                    const uchar *src, size_t srclen,\n                                    uint flags) {\n  uchar *de = dst + dstlen;\n  const uchar *se = src + srclen;\n  uchar *d0 = dst;\n  for (; src < se && dst < de && nweights; src++, nweights--) {\n    uchar chr = combo1map[*src];\n    *dst++ = chr;\n    if ((chr = combo2map[*src]) && dst < de) {\n      *dst++ = chr;\n    }\n  }\n  return my_strxfrm_pad(cs, d0, dst, de, nweights, flags);\n}\n\n\n// Source: ctype-latin1.cc\n// Lines 573-588\n",
+  "ANSWER": "MUST-NOT"
+}

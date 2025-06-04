@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ctx' at line 2
+2. Pointer 'ctx' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void Query_block::merge_contexts(Query_block *inner) {
+  for (Name_resolution_context *ctx = inner->first_context; ctx != nullptr;
+       ctx = ctx->next_context) {
+    ctx->query_block = this;
+    if (ctx->next_context == nullptr) {
+      ctx->next_context = first_context;
+      first_context = inner->first_context;
+      inner->first_context = nullptr;
+      break;
+    }
+  }
+}
+
+
+// Source: sql_resolver.cc
+// Lines 4028-4039
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,24 @@
+void ZSTD_updateTree_internal(
+                ZSTD_matchState_t* ms,
+                const BYTE* const ip, const BYTE* const iend,
+                const U32 mls, const ZSTD_dictMode_e dictMode)
+{
+    const BYTE* const base = ms->window.base;
+    U32 const target = (U32)(ip - base);
+    U32 idx = ms->nextToUpdate;
+    DEBUGLOG(6, "ZSTD_updateTree_internal, from %u to %u  (dictMode:%u)",
+                idx, target, dictMode);
+
+    while(idx < target) {
+        U32 const forward = ZSTD_insertBt1(ms, base+idx, iend, mls, dictMode == ZSTD_extDict);
+        assert(idx < (U32)(idx + forward));
+        idx += forward;
+    }
+    assert((size_t)(ip - base) <= (size_t)(U32)(-1));
+    assert((size_t)(iend - base) <= (size_t)(U32)(-1));
+    ms->nextToUpdate = target;
+}
+
+
+// Source: zstd_opt.c
+// Lines 519-538

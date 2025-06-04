@@ -1,0 +1,74 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'inode' at line 9
+2. Pointer 'mapping' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int nfs_readpages(struct file *filp, struct address_space *mapping,
+		struct list_head *pages, unsigned nr_pages)
+{
+	struct nfs_pageio_descriptor pgio;
+	struct nfs_pgio_mirror *pgm;
+	struct nfs_readdesc desc = {
+		.pgio = &pgio,
+	};
+	struct inode *inode = mapping->host;
+	unsigned long npages;
+	int ret = -ESTALE;
+
+	dprintk("NFS: nfs_readpages (%s/%Lu %d)\n",
+			inode->i_sb->s_id,
+			(unsigned long long)NFS_FILEID(inode),
+			nr_pages);
+	nfs_inc_stats(inode, NFSIOS_VFSREADPAGES);
+
+	if (NFS_STALE(inode))
+		goto out;
+
+	if (filp == NULL) {
+		desc.ctx = nfs_find_open_context(inode, NULL, FMODE_READ);
+		if (desc.ctx == NULL)
+			return -EBADF;
+	} else
+		desc.ctx = get_nfs_open_context(nfs_file_open_context(filp));
+
+	/* attempt to read as many of the pages as possible from the cache
+	 * - this returns -ENOBUFS immediately if the cookie is negative
+	 */
+	ret = nfs_readpages_from_fscache(desc.ctx, inode, mapping,
+					 pages, &nr_pages);
+	if (ret == 0)
+		goto read_complete; /* all pages were read */
+
+	nfs_pageio_init_read(&pgio, inode, false,
+			     &nfs_async_read_completion_ops);
+
+	ret = read_cache_pages(mapping, pages, readpage_async_filler, &desc);
+	nfs_pageio_complete(&pgio);
+
+	/* It doesn't make sense to do mirrored reads! */
+	WARN_ON_ONCE(pgio.pg_mirror_count != 1);
+
+	pgm = &pgio.pg_mirrors[0];
+	NFS_I(inode)->read_io += pgm->pg_bytes_written;
+	npages = (pgm->pg_bytes_written + PAGE_SIZE - 1) >>
+		 PAGE_SHIFT;
+	nfs_add_stats(inode, NFSIOS_READPAGES, npages);
+read_complete:
+	put_nfs_open_context(desc.ctx);
+out:
+	return ret;
+}
+
+
+// Source: read.c
+// Lines 404-458
+
+
+[ANSWER]
+MUST

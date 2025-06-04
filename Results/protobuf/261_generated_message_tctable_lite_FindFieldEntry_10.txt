@@ -1,0 +1,1 @@
+entry,protobuf/src/google/protobuf/generated_message_tctable_lite.cc,25,field_entries,protobuf/src/google/protobuf/generated_message_tctable_lite.cc,3,1

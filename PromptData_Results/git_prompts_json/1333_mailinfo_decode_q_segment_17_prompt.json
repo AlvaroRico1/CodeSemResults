@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'in' at line 3\n2. Pointer 'q_seg' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic struct strbuf *decode_q_segment(const struct strbuf *q_seg, int rfc2047)\n{\n\tconst char *in = q_seg->buf;\n\tint c;\n\tstruct strbuf *out = xmalloc(sizeof(struct strbuf));\n\tstrbuf_init(out, q_seg->len);\n\n\twhile ((c = *in++) != 0) {\n\t\tif (c == '=') {\n\t\t\tint ch, d = *in;\n\t\t\tif (d == '\\n' || !d)\n\t\t\t\tbreak; /* drop trailing newline */\n\t\t\tch = hex2chr(in);\n\t\t\tif (ch >= 0) {\n\t\t\t\tstrbuf_addch(out, ch);\n\t\t\t\tin += 2;\n\t\t\t\tcontinue;\n\t\t\t}\n\t\t\t/* garbage -- fall through */\n\t\t}\n\t\tif (rfc2047 && c == '_') /* rfc2047 4.2 (2) */\n\t\t\tc = 0x20;\n\t\tstrbuf_addch(out, c);\n\t}\n\treturn out;\n}\n\n\n// Source: mailinfo.c\n// Lines 377-402\n",
+  "ANSWER": "MUST"
+}

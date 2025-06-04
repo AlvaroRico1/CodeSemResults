@@ -1,0 +1,96 @@
+client_dispatch_wait(struct imsg *imsg)
+{
+	char		*data;
+	ssize_t		 datalen;
+	static int	 pledge_applied;
+
+	/*
+	 * "sendfd" is no longer required once all of the identify messages
+	 * have been sent. We know the server won't send us anything until that
+	 * point (because we don't ask it to), so we can drop "sendfd" once we
+	 * get the first message from the server.
+	 */
+	if (!pledge_applied) {
+		if (pledge(
+		    "stdio rpath wpath cpath unix proc exec tty",
+		    NULL) != 0)
+			fatal("pledge failed");
+		pledge_applied = 1;
+	}
+
+	data = imsg->data;
+	datalen = imsg->hdr.len - IMSG_HEADER_SIZE;
+
+	switch (imsg->hdr.type) {
+	case MSG_EXIT:
+	case MSG_SHUTDOWN:
+		client_dispatch_exit_message(data, datalen);
+		client_exitflag = 1;
+		client_exit();
+		break;
+	case MSG_READY:
+		if (datalen != 0)
+			fatalx("bad MSG_READY size");
+
+		client_attached = 1;
+		proc_send(client_peer, MSG_RESIZE, -1, NULL, 0);
+		break;
+	case MSG_VERSION:
+		if (datalen != 0)
+			fatalx("bad MSG_VERSION size");
+
+		fprintf(stderr, "protocol version mismatch "
+		    "(client %d, server %u)\n", PROTOCOL_VERSION,
+		    imsg->hdr.peerid & 0xff);
+		client_exitval = 1;
+		proc_exit(client_proc);
+		break;
+	case MSG_FLAGS:
+		if (datalen != sizeof client_flags)
+			fatalx("bad MSG_FLAGS string");
+
+		memcpy(&client_flags, data, sizeof client_flags);
+		log_debug("new flags are %#llx",
+		    (unsigned long long)client_flags);
+		break;
+	case MSG_SHELL:
+		if (datalen == 0 || data[datalen - 1] != '\0')
+			fatalx("bad MSG_SHELL string");
+
+		client_exec(data, shell_command);
+		/* NOTREACHED */
+	case MSG_DETACH:
+	case MSG_DETACHKILL:
+		proc_send(client_peer, MSG_EXITING, -1, NULL, 0);
+		break;
+	case MSG_EXITED:
+		proc_exit(client_proc);
+		break;
+	case MSG_READ_OPEN:
+		file_read_open(&client_files, client_peer, imsg, 1,
+		    !(client_flags & CLIENT_CONTROL), client_file_check_cb,
+		    NULL);
+		break;
+	case MSG_WRITE_OPEN:
+		file_write_open(&client_files, client_peer, imsg, 1,
+		    !(client_flags & CLIENT_CONTROL), client_file_check_cb,
+		    NULL);
+		break;
+	case MSG_WRITE:
+		file_write_data(&client_files, imsg);
+		break;
+	case MSG_WRITE_CLOSE:
+		file_write_close(&client_files, imsg);
+		break;
+	case MSG_OLDSTDERR:
+	case MSG_OLDSTDIN:
+	case MSG_OLDSTDOUT:
+		fprintf(stderr, "server version is too old for client\n");
+		proc_exit(client_proc);
+		break;
+	}
+}
+
+
+// Source: client.c
+// Lines 623-714

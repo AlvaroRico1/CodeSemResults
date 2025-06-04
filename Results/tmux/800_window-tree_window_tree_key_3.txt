@@ -1,0 +1,1 @@
+idx,tmux/window-tree.c,11,prompt,tmux/window-tree.c,8,2

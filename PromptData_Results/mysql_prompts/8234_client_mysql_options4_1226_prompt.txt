@@ -1,0 +1,76 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'key_len' at line 10
+2. Pointer 'mysql' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int STDCALL mysql_options4(MYSQL *mysql, enum mysql_option option,
+                           const void *arg1, const void *arg2) {
+  DBUG_TRACE;
+  DBUG_PRINT("enter", ("option: %d", (int)option));
+
+  switch (option) {
+    case MYSQL_OPT_CONNECT_ATTR_ADD: {
+      const char *key = static_cast<const char *>(arg1);
+      const char *value = static_cast<const char *>(arg2);
+      size_t key_len = arg1 ? strlen(key) : 0;
+      size_t value_len = arg2 ? strlen(value) : 0;
+      size_t attr_storage_length = key_len + value_len;
+
+      /* we can't have a zero length key */
+      if (!key_len) {
+        set_mysql_error(mysql, CR_INVALID_PARAMETER_NO, unknown_sqlstate);
+        return 1;
+      }
+
+      /* calculate the total storage length of the attribute */
+      attr_storage_length += get_length_store_length(key_len);
+      attr_storage_length += get_length_store_length(value_len);
+
+      ENSURE_EXTENSIONS_PRESENT(&mysql->options);
+
+      /*
+        Throw and error if the maximum combined length of the attribute value
+        will be greater than the maximum that we can safely transmit.
+      */
+      if (attr_storage_length +
+              mysql->options.extension->connection_attributes_length >
+          MAX_CONNECTION_ATTR_STORAGE_LENGTH) {
+        set_mysql_error(mysql, CR_INVALID_PARAMETER_NO, unknown_sqlstate);
+        return 1;
+      }
+
+      if (!mysql->options.extension->connection_attributes) {
+        mysql->options.extension->connection_attributes =
+            new (std::nothrow) My_hash();
+        if (!mysql->options.extension->connection_attributes) {
+          set_mysql_error(mysql, CR_OUT_OF_MEMORY, unknown_sqlstate);
+          return 1;
+        }
+      }
+      if (!mysql->options.extension->connection_attributes->hash
+               .emplace(key, value)
+               .second) {
+        /* can't insert the value */
+        set_mysql_error(mysql, CR_DUPLICATE_CONNECTION_ATTR, unknown_sqlstate);
+        return 1;
+      }
+
+      mysql->options.extension->connection_attributes_length +=
+          attr_storage_length;
+
+      break;
+    }
+
+
+// Source: client.cc
+// Lines 8394-8450
+
+
+[ANSWER]
+MUST-NOT

@@ -1,0 +1,1 @@
+bind_result,mysql/sql-common/client.cc,187,connect_done,mysql/sql-common/client.cc,10,0

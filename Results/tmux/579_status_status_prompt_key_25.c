@@ -1,0 +1,309 @@
+status_prompt_key(struct client *c, key_code key)
+{
+	struct options		*oo = c->session->options;
+	char			*s, *cp, prefix = '=';
+	const char		*histstr, *separators = NULL, *keystring;
+	size_t			 size, idx;
+	struct utf8_data	 tmp;
+	int			 keys, word_is_separators;
+
+	if (c->prompt_flags & PROMPT_KEY) {
+		keystring = key_string_lookup_key(key, 0);
+		c->prompt_inputcb(c, c->prompt_data, keystring, 1);
+		status_prompt_clear(c);
+		return (0);
+	}
+	size = utf8_strlen(c->prompt_buffer);
+
+	if (c->prompt_flags & PROMPT_NUMERIC) {
+		if (key >= '0' && key <= '9')
+			goto append_key;
+		s = utf8_tocstr(c->prompt_buffer);
+		c->prompt_inputcb(c, c->prompt_data, s, 1);
+		status_prompt_clear(c);
+		free(s);
+		return (1);
+	}
+	key &= ~KEYC_MASK_FLAGS;
+
+	keys = options_get_number(c->session->options, "status-keys");
+	if (keys == MODEKEY_VI) {
+		switch (status_prompt_translate_key(c, key, &key)) {
+		case 1:
+			goto process_key;
+		case 2:
+			goto append_key;
+		default:
+			return (0);
+		}
+	}
+
+process_key:
+	switch (key) {
+	case KEYC_LEFT:
+	case '\002': /* C-b */
+		if (c->prompt_index > 0) {
+			c->prompt_index--;
+			break;
+		}
+		break;
+	case KEYC_RIGHT:
+	case '\006': /* C-f */
+		if (c->prompt_index < size) {
+			c->prompt_index++;
+			break;
+		}
+		break;
+	case KEYC_HOME:
+	case '\001': /* C-a */
+		if (c->prompt_index != 0) {
+			c->prompt_index = 0;
+			break;
+		}
+		break;
+	case KEYC_END:
+	case '\005': /* C-e */
+		if (c->prompt_index != size) {
+			c->prompt_index = size;
+			break;
+		}
+		break;
+	case '\011': /* Tab */
+		if (status_prompt_replace_complete(c, NULL))
+			goto changed;
+		break;
+	case KEYC_BSPACE:
+	case '\010': /* C-h */
+		if (c->prompt_index != 0) {
+			if (c->prompt_index == size)
+				c->prompt_buffer[--c->prompt_index].size = 0;
+			else {
+				memmove(c->prompt_buffer + c->prompt_index - 1,
+				    c->prompt_buffer + c->prompt_index,
+				    (size + 1 - c->prompt_index) *
+				    sizeof *c->prompt_buffer);
+				c->prompt_index--;
+			}
+			goto changed;
+		}
+		break;
+	case KEYC_DC:
+	case '\004': /* C-d */
+		if (c->prompt_index != size) {
+			memmove(c->prompt_buffer + c->prompt_index,
+			    c->prompt_buffer + c->prompt_index + 1,
+			    (size + 1 - c->prompt_index) *
+			    sizeof *c->prompt_buffer);
+			goto changed;
+		}
+		break;
+	case '\025': /* C-u */
+		c->prompt_buffer[0].size = 0;
+		c->prompt_index = 0;
+		goto changed;
+	case '\013': /* C-k */
+		if (c->prompt_index < size) {
+			c->prompt_buffer[c->prompt_index].size = 0;
+			goto changed;
+		}
+		break;
+	case '\027': /* C-w */
+		separators = options_get_string(oo, "word-separators");
+		idx = c->prompt_index;
+
+		/* Find non-whitespace. */
+		while (idx != 0) {
+			idx--;
+			if (!status_prompt_space(&c->prompt_buffer[idx]))
+				break;
+		}
+		word_is_separators = status_prompt_in_list(separators,
+		    &c->prompt_buffer[idx]);
+
+		/* Find the character before the beginning of the word. */
+		while (idx != 0) {
+			idx--;
+			if (status_prompt_space(&c->prompt_buffer[idx]) ||
+			    word_is_separators != status_prompt_in_list(
+			    separators, &c->prompt_buffer[idx])) {
+				/* Go back to the word. */
+				idx++;
+				break;
+			}
+		}
+
+		free(c->prompt_saved);
+		c->prompt_saved = xcalloc(sizeof *c->prompt_buffer,
+		    (c->prompt_index - idx) + 1);
+		memcpy(c->prompt_saved, c->prompt_buffer + idx,
+		    (c->prompt_index - idx) * sizeof *c->prompt_buffer);
+
+		memmove(c->prompt_buffer + idx,
+		    c->prompt_buffer + c->prompt_index,
+		    (size + 1 - c->prompt_index) *
+		    sizeof *c->prompt_buffer);
+		memset(c->prompt_buffer + size - (c->prompt_index - idx),
+		    '\0', (c->prompt_index - idx) * sizeof *c->prompt_buffer);
+		c->prompt_index = idx;
+
+		goto changed;
+	case KEYC_RIGHT|KEYC_CTRL:
+	case 'f'|KEYC_META:
+		separators = options_get_string(oo, "word-separators");
+		status_prompt_forward_word(c, size, 0, separators);
+		goto changed;
+	case 'E'|KEYC_VI:
+		status_prompt_end_word(c, size, "");
+		goto changed;
+	case 'e'|KEYC_VI:
+		separators = options_get_string(oo, "word-separators");
+		status_prompt_end_word(c, size, separators);
+		goto changed;
+	case 'W'|KEYC_VI:
+		status_prompt_forward_word(c, size, 1, "");
+		goto changed;
+	case 'w'|KEYC_VI:
+		separators = options_get_string(oo, "word-separators");
+		status_prompt_forward_word(c, size, 1, separators);
+		goto changed;
+	case 'B'|KEYC_VI:
+		status_prompt_backward_word(c, "");
+		goto changed;
+	case KEYC_LEFT|KEYC_CTRL:
+	case 'b'|KEYC_META:
+		separators = options_get_string(oo, "word-separators");
+		status_prompt_backward_word(c, separators);
+		goto changed;
+	case KEYC_UP:
+	case '\020': /* C-p */
+		histstr = status_prompt_up_history(c->prompt_hindex,
+		    c->prompt_type);
+		if (histstr == NULL)
+			break;
+		free(c->prompt_buffer);
+		c->prompt_buffer = utf8_fromcstr(histstr);
+		c->prompt_index = utf8_strlen(c->prompt_buffer);
+		goto changed;
+	case KEYC_DOWN:
+	case '\016': /* C-n */
+		histstr = status_prompt_down_history(c->prompt_hindex,
+		    c->prompt_type);
+		if (histstr == NULL)
+			break;
+		free(c->prompt_buffer);
+		c->prompt_buffer = utf8_fromcstr(histstr);
+		c->prompt_index = utf8_strlen(c->prompt_buffer);
+		goto changed;
+	case '\031': /* C-y */
+		if (status_prompt_paste(c))
+			goto changed;
+		break;
+	case '\024': /* C-t */
+		idx = c->prompt_index;
+		if (idx < size)
+			idx++;
+		if (idx >= 2) {
+			utf8_copy(&tmp, &c->prompt_buffer[idx - 2]);
+			utf8_copy(&c->prompt_buffer[idx - 2],
+			    &c->prompt_buffer[idx - 1]);
+			utf8_copy(&c->prompt_buffer[idx - 1], &tmp);
+			c->prompt_index = idx;
+			goto changed;
+		}
+		break;
+	case '\r':
+	case '\n':
+		s = utf8_tocstr(c->prompt_buffer);
+		if (*s != '\0')
+			status_prompt_add_history(s, c->prompt_type);
+		if (c->prompt_inputcb(c, c->prompt_data, s, 1) == 0)
+			status_prompt_clear(c);
+		free(s);
+		break;
+	case '\033': /* Escape */
+	case '\003': /* C-c */
+	case '\007': /* C-g */
+		if (c->prompt_inputcb(c, c->prompt_data, NULL, 1) == 0)
+			status_prompt_clear(c);
+		break;
+	case '\022': /* C-r */
+		if (~c->prompt_flags & PROMPT_INCREMENTAL)
+			break;
+		if (c->prompt_buffer[0].size == 0) {
+			prefix = '=';
+			free(c->prompt_buffer);
+			c->prompt_buffer = utf8_fromcstr(c->prompt_last);
+			c->prompt_index = utf8_strlen(c->prompt_buffer);
+		} else
+			prefix = '-';
+		goto changed;
+	case '\023': /* C-s */
+		if (~c->prompt_flags & PROMPT_INCREMENTAL)
+			break;
+		if (c->prompt_buffer[0].size == 0) {
+			prefix = '=';
+			free(c->prompt_buffer);
+			c->prompt_buffer = utf8_fromcstr(c->prompt_last);
+			c->prompt_index = utf8_strlen(c->prompt_buffer);
+		} else
+			prefix = '+';
+		goto changed;
+	default:
+		goto append_key;
+	}
+
+	c->flags |= CLIENT_REDRAWSTATUS;
+	return (0);
+
+append_key:
+	if (key <= 0x1f || (key >= KEYC_BASE && key < KEYC_BASE_END))
+		return (0);
+	if (key <= 0x7f)
+		utf8_set(&tmp, key);
+	else if (KEYC_IS_UNICODE(key))
+		utf8_to_data(key, &tmp);
+	else
+		return (0);
+
+	c->prompt_buffer = xreallocarray(c->prompt_buffer, size + 2,
+	    sizeof *c->prompt_buffer);
+
+	if (c->prompt_index == size) {
+		utf8_copy(&c->prompt_buffer[c->prompt_index], &tmp);
+		c->prompt_index++;
+		c->prompt_buffer[c->prompt_index].size = 0;
+	} else {
+		memmove(c->prompt_buffer + c->prompt_index + 1,
+		    c->prompt_buffer + c->prompt_index,
+		    (size + 1 - c->prompt_index) *
+		    sizeof *c->prompt_buffer);
+		utf8_copy(&c->prompt_buffer[c->prompt_index], &tmp);
+		c->prompt_index++;
+	}
+
+	if (c->prompt_flags & PROMPT_SINGLE) {
+		if (utf8_strlen(c->prompt_buffer) != 1)
+			status_prompt_clear(c);
+		else {
+			s = utf8_tocstr(c->prompt_buffer);
+			if (c->prompt_inputcb(c, c->prompt_data, s, 1) == 0)
+				status_prompt_clear(c);
+			free(s);
+		}
+	}
+
+changed:
+	c->flags |= CLIENT_REDRAWSTATUS;
+	if (c->prompt_flags & PROMPT_INCREMENTAL) {
+		s = utf8_tocstr(c->prompt_buffer);
+		xasprintf(&cp, "%c%s", prefix, s);
+		c->prompt_inputcb(c, c->prompt_data, cp, 0);
+		free(cp);
+		free(s);
+	}
+	return (0);
+}
+
+
+// Source: status.c
+// Lines 1183-1487

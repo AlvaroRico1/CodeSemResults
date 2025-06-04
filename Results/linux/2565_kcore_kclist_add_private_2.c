@@ -1,0 +1,53 @@
+kclist_add_private(unsigned long pfn, unsigned long nr_pages, void *arg)
+{
+	struct list_head *head = (struct list_head *)arg;
+	struct kcore_list *ent;
+	struct page *p;
+
+	if (!pfn_valid(pfn))
+		return 1;
+
+	p = pfn_to_page(pfn);
+	if (!memmap_valid_within(pfn, p, page_zone(p)))
+		return 1;
+
+	ent = kmalloc(sizeof(*ent), GFP_KERNEL);
+	if (!ent)
+		return -ENOMEM;
+	ent->addr = (unsigned long)page_to_virt(p);
+	ent->size = nr_pages << PAGE_SHIFT;
+
+	if (!virt_addr_valid(ent->addr))
+		goto free_out;
+
+	/* cut not-mapped area. ....from ppc-32 code. */
+	if (ULONG_MAX - ent->addr < ent->size)
+		ent->size = ULONG_MAX - ent->addr;
+
+	/*
+	 * We've already checked virt_addr_valid so we know this address
+	 * is a valid pointer, therefore we can check against it to determine
+	 * if we need to trim
+	 */
+	if (VMALLOC_START > ent->addr) {
+		if (VMALLOC_START - ent->addr < ent->size)
+			ent->size = VMALLOC_START - ent->addr;
+	}
+
+	ent->type = KCORE_RAM;
+	list_add_tail(&ent->list, head);
+
+	if (!get_sparsemem_vmemmap_info(ent, head)) {
+		list_del(&ent->list);
+		goto free_out;
+	}
+
+	return 0;
+free_out:
+	kfree(ent);
+	return 1;
+}
+
+
+// Source: kcore.c
+// Lines 185-233

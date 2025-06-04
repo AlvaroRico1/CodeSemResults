@@ -1,0 +1,53 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'l_ctx' at line 4
+2. Pointer 'req' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int nfs_flush_incompatible(struct file *file, struct page *page)
+{
+	struct nfs_open_context *ctx = nfs_file_open_context(file);
+	struct nfs_lock_context *l_ctx;
+	struct file_lock_context *flctx = file_inode(file)->i_flctx;
+	struct nfs_page	*req;
+	int do_flush, status;
+	/*
+	 * Look for a request corresponding to this page. If there
+	 * is one, and it belongs to another file, we flush it out
+	 * before we try to copy anything into the page. Do this
+	 * due to the lack of an ACCESS-type call in NFSv2.
+	 * Also do the same if we find a request from an existing
+	 * dropped page.
+	 */
+	do {
+		req = nfs_page_find_head_request(page);
+		if (req == NULL)
+			return 0;
+		l_ctx = req->wb_lock_context;
+		do_flush = req->wb_page != page ||
+			!nfs_match_open_context(nfs_req_openctx(req), ctx);
+		if (l_ctx && flctx &&
+		    !(list_empty_careful(&flctx->flc_posix) &&
+		      list_empty_careful(&flctx->flc_flock))) {
+			do_flush |= l_ctx->lockowner != current->files;
+		}
+		nfs_release_request(req);
+		if (!do_flush)
+			return 0;
+		status = nfs_wb_page(page_file_mapping(page)->host, page);
+	} while (status == 0);
+	return status;
+}
+
+
+// Source: write.c
+// Lines 1194-1227
+
+
+[ANSWER]
+MUST

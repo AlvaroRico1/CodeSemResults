@@ -1,0 +1,1 @@
+gc,tmux/cmd-capture-pane.c,6,Eflag,tmux/cmd-capture-pane.c,10,0

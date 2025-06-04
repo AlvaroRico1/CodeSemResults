@@ -1,0 +1,52 @@
+static mysql_state_machine_status authsm_begin_plugin_auth(
+    mysql_async_auth *ctx) {
+  DBUG_TRACE;
+  MYSQL *mysql = ctx->mysql;
+  /* determine the default/initial plugin to use */
+  if (mysql->options.extension && mysql->options.extension->default_auth &&
+      mysql->server_capabilities & CLIENT_PLUGIN_AUTH) {
+    ctx->auth_plugin_name = mysql->options.extension->default_auth;
+    if (!(ctx->auth_plugin = (auth_plugin_t *)mysql_client_find_plugin(
+              mysql, ctx->auth_plugin_name,
+              MYSQL_CLIENT_AUTHENTICATION_PLUGIN)))
+      return STATE_MACHINE_FAILED; /* oops, not found */
+  } else {
+    ctx->auth_plugin = &caching_sha2_password_client_plugin;
+    ctx->auth_plugin_name = ctx->auth_plugin->name;
+  }
+
+  if (check_plugin_enabled(mysql, ctx)) return STATE_MACHINE_FAILED;
+
+  DBUG_PRINT("info", ("using plugin %s", ctx->auth_plugin_name));
+
+  mysql->net.last_errno = 0; /* just in case */
+
+  if (ctx->data_plugin && strcmp(ctx->data_plugin, ctx->auth_plugin_name)) {
+    /* data was prepared for a different plugin, don't show it to this one */
+    ctx->data = nullptr;
+    ctx->data_len = 0;
+  }
+
+  ctx->mpvio.mysql_change_user = ctx->data_plugin == nullptr;
+  ctx->mpvio.cached_server_reply.pkt = (uchar *)ctx->data;
+  ctx->mpvio.cached_server_reply.pkt_len = ctx->data_len;
+  ctx->mpvio.read_packet = client_mpvio_read_packet;
+  ctx->mpvio.write_packet = client_mpvio_write_packet;
+  ctx->mpvio.read_packet_nonblocking = client_mpvio_read_packet_nonblocking;
+  ctx->mpvio.write_packet_nonblocking = client_mpvio_write_packet_nonblocking;
+  ctx->mpvio.info = client_mpvio_info;
+  ctx->mpvio.mysql = mysql;
+  ctx->mpvio.packets_read = ctx->mpvio.packets_written = 0;
+  ctx->mpvio.db = ctx->db;
+  ctx->mpvio.plugin = ctx->auth_plugin;
+  ctx->client_auth_plugin_state =
+      (int)(client_auth_caching_sha2_password_plugin_status::
+                CACHING_SHA2_READING_PASSWORD);
+
+  ctx->state_function = authsm_run_first_authenticate_user;
+  return STATE_MACHINE_CONTINUE;
+}
+
+
+// Source: client.cc
+// Lines 5320-5367

@@ -1,0 +1,53 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 's' at line 4
+2. Pointer 'wl' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+alerts_check_activity(struct window *w)
+{
+	struct winlink	*wl;
+	struct session	*s;
+
+	if (~w->flags & WINDOW_ACTIVITY)
+		return (0);
+	if (!options_get_number(w->options, "monitor-activity"))
+		return (0);
+
+	TAILQ_FOREACH(wl, &w->winlinks, wentry)
+		wl->session->flags &= ~SESSION_ALERTED;
+
+	TAILQ_FOREACH(wl, &w->winlinks, wentry) {
+		if (wl->flags & WINLINK_ACTIVITY)
+			continue;
+		s = wl->session;
+		if (s->curw != wl || s->attached == 0) {
+			wl->flags |= WINLINK_ACTIVITY;
+			server_status_session(s);
+		}
+		if (!alerts_action_applies(wl, "activity-action"))
+			continue;
+		notify_winlink("alert-activity", wl);
+
+		if (s->flags & SESSION_ALERTED)
+			continue;
+		s->flags |= SESSION_ALERTED;
+
+		alerts_set_message(wl, "Activity", "visual-activity");
+	}
+
+	return (WINDOW_ACTIVITY);
+}
+
+
+// Source: alerts.c
+// Lines 221-254
+
+
+[ANSWER]
+MUST

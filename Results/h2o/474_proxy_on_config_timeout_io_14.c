@@ -1,0 +1,17 @@
+static int on_config_timeout_io(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    int ret;
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
+    ret = h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->conf.io_timeout);
+    if (ret < 0)
+        return ret;
+    if (!self->connect_timeout_set)
+        self->vars->conf.connect_timeout = self->vars->conf.io_timeout;
+    if (!self->first_byte_timeout_set)
+        self->vars->conf.first_byte_timeout = self->vars->conf.io_timeout;
+    return ret;
+}
+
+
+// Source: proxy.c
+// Lines 46-58

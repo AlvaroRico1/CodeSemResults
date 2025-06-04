@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'type_url_field' at line 2
+2. Pointer 'value_field' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool GetAnyFieldDescriptors(const Message& message,
+                            const FieldDescriptor** type_url_field,
+                            const FieldDescriptor** value_field) {
+  const Descriptor* descriptor = message.GetDescriptor();
+  if (descriptor->full_name() != kAnyFullTypeName) {
+    return false;
+  }
+  *type_url_field = descriptor->FindFieldByNumber(1);
+  *value_field = descriptor->FindFieldByNumber(2);
+  return (*type_url_field != nullptr &&
+          (*type_url_field)->type() == FieldDescriptor::TYPE_STRING &&
+          *value_field != nullptr &&
+          (*value_field)->type() == FieldDescriptor::TYPE_BYTES);
+}
+
+}  // namespace internal
+
+
+// Source: any.cc
+// Lines 63-78
+
+
+[ANSWER]
+MAY

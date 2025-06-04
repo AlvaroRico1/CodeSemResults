@@ -1,0 +1,41 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tp' at line 1
+2. Pointer 'vars' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+c_check_omp_declare_reduction_r (tree *tp, int *, void *data)
+{
+  tree *vars = (tree *) data;
+  if (SSA_VAR_P (*tp)
+      && !DECL_ARTIFICIAL (*tp)
+      && *tp != vars[0]
+      && *tp != vars[1])
+    {
+      location_t loc = DECL_SOURCE_LOCATION (vars[0]);
+      if (strcmp (IDENTIFIER_POINTER (DECL_NAME (vars[0])), "omp_out") == 0)
+	error_at (loc, "%<#pragma omp declare reduction%> combiner refers to "
+		       "variable %qD which is not %<omp_out%> nor %<omp_in%>",
+		  *tp);
+      else
+	error_at (loc, "%<#pragma omp declare reduction%> initializer refers "
+		       "to variable %qD which is not %<omp_priv%> nor "
+		       "%<omp_orig%>",
+		  *tp);
+      return *tp;
+    }
+  return NULL_TREE;
+}
+
+
+// Source: c-decl.c
+// Lines 12028-12049
+
+
+[ANSWER]
+MUST-NOT

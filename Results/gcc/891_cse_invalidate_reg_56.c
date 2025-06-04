@@ -1,0 +1,63 @@
+invalidate_reg (rtx x)
+{
+  gcc_assert (GET_CODE (x) == REG);
+
+  /* If X is a register, dependencies on its contents are recorded
+     through the qty number mechanism.  Just change the qty number of
+     the register, mark it as invalid for expressions that refer to it,
+     and remove it itself.  */
+  unsigned int regno = REGNO (x);
+  unsigned int hash = HASH (x, GET_MODE (x));
+
+  /* Remove REGNO from any quantity list it might be on and indicate
+     that its value might have changed.  If it is a pseudo, remove its
+     entry from the hash table.
+
+     For a hard register, we do the first two actions above for any
+     additional hard registers corresponding to X.  Then, if any of these
+     registers are in the table, we must remove any REG entries that
+     overlap these registers.  */
+
+  delete_reg_equiv (regno);
+  REG_TICK (regno)++;
+  SUBREG_TICKED (regno) = -1;
+
+  if (regno >= FIRST_PSEUDO_REGISTER)
+    remove_pseudo_from_table (x, hash);
+  else
+    {
+      HOST_WIDE_INT in_table = TEST_HARD_REG_BIT (hard_regs_in_table, regno);
+      unsigned int endregno = END_REGNO (x);
+      unsigned int rn;
+      struct table_elt *p, *next;
+
+      CLEAR_HARD_REG_BIT (hard_regs_in_table, regno);
+
+      for (rn = regno + 1; rn < endregno; rn++)
+	{
+	  in_table |= TEST_HARD_REG_BIT (hard_regs_in_table, rn);
+	  CLEAR_HARD_REG_BIT (hard_regs_in_table, rn);
+	  delete_reg_equiv (rn);
+	  REG_TICK (rn)++;
+	  SUBREG_TICKED (rn) = -1;
+	}
+
+      if (in_table)
+	for (hash = 0; hash < HASH_SIZE; hash++)
+	  for (p = table[hash]; p; p = next)
+	    {
+	      next = p->next_same_hash;
+
+	      if (!REG_P (p->exp) || REGNO (p->exp) >= FIRST_PSEUDO_REGISTER)
+		continue;
+
+	      unsigned int tregno = REGNO (p->exp);
+	      unsigned int tendregno = END_REGNO (p->exp);
+	      if (tendregno > regno && tregno < endregno)
+		remove_from_table (p, hash);
+	    }
+    }
+
+
+// Source: cse.c
+// Lines 1825-1883

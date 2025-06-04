@@ -1,0 +1,48 @@
+static int submodules_from_head(git_strmap *map, git_tree *head, git_config *cfg)
+{
+	int error;
+	git_iterator *i = NULL;
+	const git_index_entry *entry;
+	git_strmap *names;
+
+	if ((error = load_submodule_names(&names, git_tree_owner(head), cfg)))
+		goto done;
+
+	if ((error = git_iterator_for_tree(&i, head, NULL)) < 0)
+		goto done;
+
+	while (!(error = git_iterator_advance(&entry, i))) {
+		git_submodule *sm;
+
+		if ((sm = git_strmap_get(map, entry->path)) != NULL) {
+			if (S_ISGITLINK(entry->mode))
+				submodule_update_from_head_data(sm, entry->mode, &entry->id);
+			else
+				sm->flags |= GIT_SUBMODULE_STATUS__HEAD_NOT_SUBMODULE;
+		} else if (S_ISGITLINK(entry->mode)) {
+			const char *name;
+
+			if ((name = git_strmap_get(names, entry->path)) == NULL)
+				name = entry->path;
+
+			if (!submodule_get_or_create(&sm, git_tree_owner(head), map, name)) {
+				submodule_update_from_head_data(
+					sm, entry->mode, &entry->id);
+				git_submodule_free(sm);
+			}
+		}
+	}
+
+	if (error == GIT_ITEROVER)
+		error = 0;
+
+done:
+	git_iterator_free(i);
+	free_submodule_names(names);
+
+	return error;
+}
+
+
+// Source: submodule.c
+// Lines 504-547

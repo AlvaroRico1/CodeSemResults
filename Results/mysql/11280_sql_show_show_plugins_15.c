@@ -1,0 +1,108 @@
+static bool show_plugins(THD *thd, plugin_ref plugin, void *arg) {
+  TABLE *table = (TABLE *)arg;
+  struct st_mysql_plugin *plug = plugin_decl(plugin);
+  struct st_plugin_dl *plugin_dl = plugin_dlib(plugin);
+  CHARSET_INFO *cs = system_charset_info;
+  char version_buf[20];
+
+  restore_record(table, s->default_values);
+
+  DBUG_EXECUTE_IF("set_uninstall_sync_point", {
+    if (strcmp(plugin_name(plugin)->str, "EXAMPLE") == 0)
+      DEBUG_SYNC(thd, "before_store_plugin_name");
+  });
+
+  mysql_mutex_lock(&LOCK_plugin);
+  if (plugin == nullptr || plugin_state(plugin) == PLUGIN_IS_FREED) {
+    mysql_mutex_unlock(&LOCK_plugin);
+    return false;
+  }
+
+  table->field[0]->store(plugin_name(plugin)->str, plugin_name(plugin)->length,
+                         cs);
+
+  table->field[1]->store(
+      version_buf,
+      make_version_string(version_buf, sizeof(version_buf), plug->version), cs);
+
+  switch (plugin_state(plugin)) {
+    /* case PLUGIN_IS_FREED: does not happen */
+    case PLUGIN_IS_DELETED:
+      table->field[2]->store(STRING_WITH_LEN("DELETED"), cs);
+      break;
+    case PLUGIN_IS_UNINITIALIZED:
+    case PLUGIN_IS_WAITING_FOR_UPGRADE:
+      table->field[2]->store(STRING_WITH_LEN("INACTIVE"), cs);
+      break;
+    case PLUGIN_IS_READY:
+      table->field[2]->store(STRING_WITH_LEN("ACTIVE"), cs);
+      break;
+    case PLUGIN_IS_DYING:
+      table->field[2]->store(STRING_WITH_LEN("DELETING"), cs);
+      break;
+    case PLUGIN_IS_DISABLED:
+      table->field[2]->store(STRING_WITH_LEN("DISABLED"), cs);
+      break;
+    default:
+      assert(0);
+  }
+
+  table->field[3]->store(plugin_type_names[plug->type].str,
+                         plugin_type_names[plug->type].length, cs);
+  table->field[4]->store(version_buf,
+                         make_version_string(version_buf, sizeof(version_buf),
+                                             *(uint *)plug->info),
+                         cs);
+
+  if (plugin_dl) {
+    table->field[5]->store(plugin_dl->dl.str, plugin_dl->dl.length, cs);
+    table->field[5]->set_notnull();
+    table->field[6]->store(version_buf,
+                           make_version_string(version_buf, sizeof(version_buf),
+                                               plugin_dl->version),
+                           cs);
+    table->field[6]->set_notnull();
+  } else {
+    table->field[5]->set_null();
+    table->field[6]->set_null();
+  }
+
+  if (plug->author) {
+    table->field[7]->store(plug->author, strlen(plug->author), cs);
+    table->field[7]->set_notnull();
+  } else
+    table->field[7]->set_null();
+
+  if (plug->descr) {
+    table->field[8]->store(plug->descr, strlen(plug->descr), cs);
+    table->field[8]->set_notnull();
+  } else
+    table->field[8]->set_null();
+
+  switch (plug->license) {
+    case PLUGIN_LICENSE_GPL:
+      table->field[9]->store(PLUGIN_LICENSE_GPL_STRING,
+                             strlen(PLUGIN_LICENSE_GPL_STRING), cs);
+      break;
+    case PLUGIN_LICENSE_BSD:
+      table->field[9]->store(PLUGIN_LICENSE_BSD_STRING,
+                             strlen(PLUGIN_LICENSE_BSD_STRING), cs);
+      break;
+    default:
+      table->field[9]->store(PLUGIN_LICENSE_PROPRIETARY_STRING,
+                             strlen(PLUGIN_LICENSE_PROPRIETARY_STRING), cs);
+      break;
+  }
+  table->field[9]->set_notnull();
+
+  table->field[10]->store(
+      global_plugin_typelib_names[plugin_load_option(plugin)],
+      strlen(global_plugin_typelib_names[plugin_load_option(plugin)]), cs);
+  mysql_mutex_unlock(&LOCK_plugin);
+
+  return schema_table_store_record(thd, table);
+}
+
+
+// Source: sql_show.cc
+// Lines 771-874

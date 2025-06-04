@@ -1,0 +1,50 @@
+static int dup_listener(struct listener_config_t *config)
+{
+    int reuseport = 0;
+
+#if H2O_USE_REUSEPORT
+    socklen_t reuseportlen = sizeof(reuseport);
+    if (getsockopt(config->fds.entries[0], SOL_SOCKET, H2O_SO_REUSEPORT, &reuseport, &reuseportlen) != 0) {
+        perror("gestockopt(SO_REUSEPORT) failed");
+        abort();
+    }
+    assert(reuseportlen == sizeof(reuseport));
+#endif
+
+    int fd = -1;
+#if H2O_USE_REUSEPORT
+    if (reuseport) {
+        int type;
+        socklen_t typelen = sizeof(type);
+        struct sockaddr_storage ss;
+        socklen_t sslen = sizeof(ss);
+        if (getsockopt(config->fds.entries[0], SOL_SOCKET, SO_TYPE, &type, &typelen) != 0) {
+            perror("failed to obtain the type of a listening socket");
+            abort();
+        }
+        assert(type == SOCK_DGRAM || type == SOCK_STREAM);
+        if (getsockname(config->fds.entries[0], (struct sockaddr *)&ss, &sslen) != 0) {
+            perror("failed to obtain local address of a listening socket");
+            abort();
+        }
+        if ((fd = open_listener(ss.ss_family, type, type == SOCK_STREAM ? IPPROTO_TCP : IPPROTO_UDP, (struct sockaddr *)&ss,
+                                sslen)) != -1) {
+            if (type == SOCK_DGRAM)
+                set_quic_sockopts(fd, ss.ss_family, config->quic.sndbuf, config->quic.rcvbuf);
+        } else {
+            perror("failed to bind additional listener");
+            abort();
+        }
+    }
+#endif
+    if (!reuseport && (fd = dup(config->fds.entries[0])) == -1) {
+        perror("failed to dup listening socket");
+        abort();
+    }
+    set_cloexec(fd);
+    return fd;
+}
+
+
+// Source: main.c
+// Lines 3517-3562

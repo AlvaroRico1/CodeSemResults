@@ -1,0 +1,30 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'envconf' at line 3
+2. Pointer 'parent' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+h2o_envconf_t *h2o_config_create_envconf(h2o_envconf_t *parent)
+{
+    h2o_envconf_t *envconf = h2o_mem_alloc_shared(NULL, sizeof(*envconf), on_dispose_envconf);
+    *envconf = (h2o_envconf_t){NULL};
+
+    if (parent != NULL) {
+        envconf->parent = parent;
+        h2o_mem_addref_shared(parent);
+    }
+    return envconf;
+}
+
+
+// Source: config.c
+// Lines 82-92
+
+
+[ANSWER]
+MUST

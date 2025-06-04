@@ -1,0 +1,1 @@
+slave_addr,redis/src/sentinel.c,127,master,redis/src/sentinel.c,31,1

@@ -1,0 +1,29 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'p' at line 4
+2. Pointer 'p' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void find_abbrev_len_packed(struct min_abbrev_data *mad)
+{
+	struct multi_pack_index *m;
+	struct packed_git *p;
+
+	for (m = get_multi_pack_index(mad->repo); m; m = m->next)
+		find_abbrev_len_for_midx(m, mad);
+	for (p = get_packed_git(mad->repo); p; p = p->next)
+		find_abbrev_len_for_pack(p, mad);
+}
+
+
+// Source: object-name.c
+// Lines 652-661
+
+
+[ANSWER]
+MUST

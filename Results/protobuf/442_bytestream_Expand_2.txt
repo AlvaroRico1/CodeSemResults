@@ -1,0 +1,1 @@
+bigger,protobuf/src/google/protobuf/stubs/bytestream.cc,3,new_capacity,protobuf/src/google/protobuf/stubs/bytestream.cc,2,1

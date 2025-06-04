@@ -1,0 +1,1 @@
+row,mysql/sql-common/client.cc,4,server_capabilities,mysql/sql-common/client.cc,3,0

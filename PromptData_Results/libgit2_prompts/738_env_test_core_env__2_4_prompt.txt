@@ -1,0 +1,69 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'testname' at line 6
+2. Pointer 'val' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_core_env__2(void)
+{
+	git_str path = GIT_STR_INIT, found = GIT_STR_INIT;
+	char testfile[16], tidx = '0';
+	char **val;
+	const char *testname = "alternate";
+	size_t testlen = strlen(testname);
+
+	strncpy(testfile, testname, sizeof(testfile));
+	cl_assert_equal_s(testname, testfile);
+
+	for (val = home_values; *val != NULL; val++) {
+
+		/* if we can't make the directory, let's just assume
+		 * we are on a filesystem that doesn't support the
+		 * characters in question and skip this test...
+		 */
+		if (p_mkdir(*val, 0777) != 0 && errno != EEXIST) {
+			*val = ""; /* mark as not created */
+			continue;
+		}
+
+		cl_git_pass(git_fs_path_prettify(&path, *val, NULL));
+
+		/* vary testfile name so any sloppiness is resetting variables or
+		 * deleting files won't accidentally make a test pass.
+		 */
+		testfile[testlen] = tidx++;
+		cl_git_pass(git_str_joinpath(&path, path.ptr, testfile));
+		cl_git_mkfile(path.ptr, "find me");
+		git_str_rtruncate_at_char(&path, '/');
+
+		/* default should be NOTFOUND */
+		cl_assert_equal_i(
+			GIT_ENOTFOUND, git_sysdir_find_global_file(&found, testfile));
+
+		/* try plain, append $PATH, and prepend $PATH */
+		check_global_searchpath(path.ptr,  0, testfile, &found);
+		check_global_searchpath(path.ptr, -1, testfile, &found);
+		check_global_searchpath(path.ptr,  1, testfile, &found);
+
+		/* cleanup */
+		cl_git_pass(git_str_joinpath(&path, path.ptr, testfile));
+		(void)p_unlink(path.ptr);
+		(void)p_rmdir(*val);
+	}
+
+	git_str_dispose(&path);
+	git_str_dispose(&found);
+}
+
+
+// Source: env.c
+// Lines 250-299
+
+
+[ANSWER]
+MUST-NOT

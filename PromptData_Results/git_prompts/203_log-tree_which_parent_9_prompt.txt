@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'parent' at line 4
+2. Pointer 'parent' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int which_parent(const struct object_id *oid, const struct commit *commit)
+{
+	int nth;
+	const struct commit_list *parent;
+
+	for (nth = 0, parent = commit->parents; parent; parent = parent->next) {
+		if (oideq(&parent->item->object.oid, oid))
+			return nth;
+		nth++;
+	}
+	return -1;
+}
+
+
+// Source: log-tree.c
+// Lines 529-540
+
+
+[ANSWER]
+MUST

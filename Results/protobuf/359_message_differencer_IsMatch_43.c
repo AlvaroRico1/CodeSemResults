@@ -1,0 +1,45 @@
+bool MessageDifferencer::IsMatch(
+    const FieldDescriptor* repeated_field,
+    const MapKeyComparator* key_comparator, const Message* message1,
+    const Message* message2, const std::vector<SpecificField>& parent_fields,
+    Reporter* reporter, int index1, int index2) {
+  std::vector<SpecificField> current_parent_fields(parent_fields);
+  if (repeated_field->cpp_type() != FieldDescriptor::CPPTYPE_MESSAGE) {
+    return CompareFieldValueUsingParentFields(*message1, *message2,
+                                              repeated_field, index1, index2,
+                                              &current_parent_fields);
+  }
+  // Back up the Reporter and output_string_.  They will be reset in the
+  // following code.
+  Reporter* backup_reporter = reporter_;
+  std::string* output_string = output_string_;
+  reporter_ = reporter;
+  output_string_ = NULL;
+  bool match;
+
+  if (key_comparator == NULL) {
+    match = CompareFieldValueUsingParentFields(*message1, *message2,
+                                               repeated_field, index1, index2,
+                                               &current_parent_fields);
+  } else {
+    const Reflection* reflection1 = message1->GetReflection();
+    const Reflection* reflection2 = message2->GetReflection();
+    const Message& m1 =
+        reflection1->GetRepeatedMessage(*message1, repeated_field, index1);
+    const Message& m2 =
+        reflection2->GetRepeatedMessage(*message2, repeated_field, index2);
+    SpecificField specific_field;
+    specific_field.field = repeated_field;
+    if (repeated_field->is_map()) {
+      specific_field.map_entry1 = &m1;
+      specific_field.map_entry2 = &m2;
+    }
+    specific_field.index = index1;
+    specific_field.new_index = index2;
+    current_parent_fields.push_back(specific_field);
+    match = key_comparator->IsMatch(m1, m2, current_parent_fields);
+  }
+
+
+// Source: message_differencer.cc
+// Lines 934-974

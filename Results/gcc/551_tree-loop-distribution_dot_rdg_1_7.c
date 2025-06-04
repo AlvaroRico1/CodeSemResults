@@ -1,0 +1,51 @@
+dot_rdg_1 (FILE *file, struct graph *rdg)
+{
+  int i;
+  pretty_printer buffer;
+  pp_needs_newline (&buffer) = false;
+  buffer.buffer->stream = file;
+
+  fprintf (file, "digraph RDG {\n");
+
+  for (i = 0; i < rdg->n_vertices; i++)
+    {
+      struct vertex *v = &(rdg->vertices[i]);
+      struct graph_edge *e;
+
+      fprintf (file, "%d [label=\"[%d] ", i, i);
+      pp_gimple_stmt_1 (&buffer, RDGV_STMT (v), 0, TDF_SLIM);
+      pp_flush (&buffer);
+      fprintf (file, "\"]\n");
+
+      /* Highlight reads from memory.  */
+      if (RDG_MEM_READS_STMT (rdg, i))
+       fprintf (file, "%d [style=filled, fillcolor=green]\n", i);
+
+      /* Highlight stores to memory.  */
+      if (RDG_MEM_WRITE_STMT (rdg, i))
+       fprintf (file, "%d [style=filled, fillcolor=red]\n", i);
+
+      if (v->succ)
+       for (e = v->succ; e; e = e->succ_next)
+         switch (RDGE_TYPE (e))
+           {
+           case flow_dd:
+             /* These are the most common dependences: don't print these. */
+             fprintf (file, "%d -> %d \n", i, e->dest);
+             break;
+
+	   case control_dd:
+             fprintf (file, "%d -> %d [label=control] \n", i, e->dest);
+             break;
+
+           default:
+             gcc_unreachable ();
+           }
+    }
+
+  fprintf (file, "}\n\n");
+}
+
+
+// Source: tree-loop-distribution.c
+// Lines 339-385

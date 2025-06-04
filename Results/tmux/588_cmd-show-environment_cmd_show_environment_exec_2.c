@@ -1,0 +1,50 @@
+cmd_show_environment_exec(struct cmd *self, struct cmdq_item *item)
+{
+	struct args		*args = cmd_get_args(self);
+	struct cmd_find_state	*target = cmdq_get_target(item);
+	struct environ		*env;
+	struct environ_entry	*envent;
+	const char		*tflag, *name = args_string(args, 0);
+
+	if ((tflag = args_get(args, 't')) != NULL) {
+		if (target->s == NULL) {
+			cmdq_error(item, "no such session: %s", tflag);
+			return (CMD_RETURN_ERROR);
+		}
+	}
+
+	if (args_has(args, 'g'))
+		env = global_environ;
+	else {
+		if (target->s == NULL) {
+			tflag = args_get(args, 't');
+			if (tflag != NULL)
+				cmdq_error(item, "no such session: %s", tflag);
+			else
+				cmdq_error(item, "no current session");
+			return (CMD_RETURN_ERROR);
+		}
+		env = target->s->environ;
+	}
+
+	if (name != NULL) {
+		envent = environ_find(env, name);
+		if (envent == NULL) {
+			cmdq_error(item, "unknown variable: %s", name);
+			return (CMD_RETURN_ERROR);
+		}
+		cmd_show_environment_print(self, item, envent);
+		return (CMD_RETURN_NORMAL);
+	}
+
+	envent = environ_first(env);
+	while (envent != NULL) {
+		cmd_show_environment_print(self, item, envent);
+		envent = environ_next(envent);
+	}
+	return (CMD_RETURN_NORMAL);
+}
+
+
+// Source: cmd-show-environment.c
+// Lines 98-143

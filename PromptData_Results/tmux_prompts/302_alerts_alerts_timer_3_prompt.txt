@@ -1,0 +1,26 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'w' at line 3
+2. Pointer 'arg' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+alerts_timer(__unused int fd, __unused short events, void *arg)
+{
+	struct window	*w = arg;
+
+	log_debug("@%u alerts timer expired", w->id);
+	alerts_queue(w, WINDOW_SILENCE);
+}
+
+
+// Source: alerts.c
+// Lines 43-49
+
+
+[ANSWER]
+MUST

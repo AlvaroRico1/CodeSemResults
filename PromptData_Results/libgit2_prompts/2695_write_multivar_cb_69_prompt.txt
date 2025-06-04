@@ -1,0 +1,29 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'entry' at line 1
+2. Pointer 'n' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int multivar_cb(const git_config_entry *entry, void *data)
+{
+	int *n = (int *)data;
+
+	cl_assert_equal_s(entry->value, "newurl");
+
+	(*n)++;
+
+	return 0;
+}
+
+
+// Source: write.c
+// Lines 236-245
+
+
+[ANSWER]
+MUST-NOT

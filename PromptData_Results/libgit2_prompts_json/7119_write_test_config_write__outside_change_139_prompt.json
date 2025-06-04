@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'filename' at line 5\n2. Pointer 'cfg' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid test_config_write__outside_change(void)\n{\n\tint32_t tmp;\n\tgit_config *cfg;\n\tconst char *filename = \"config-ext-change\";\n\n\tcl_git_mkfile(filename, \"[old]\\nvalue = 5\\n\");\n\n\tcl_git_pass(git_config_open_ondisk(&cfg, filename));\n\n\tcl_git_pass(git_config_get_int32(&tmp, cfg, \"old.value\"));\n\n\t/* Change the value on the file itself (simulate external process) */\n\tcl_git_mkfile(filename, \"[old]\\nvalue = 6\\n\");\n\n\tcl_git_pass(git_config_set_int32(cfg, \"new.value\", 7));\n\n\tcl_git_pass(git_config_get_int32(&tmp, cfg, \"old.value\"));\n\tcl_assert_equal_i(6, tmp);\n\n\tgit_config_free(cfg);\n}\n\n\n// Source: write.c\n// Lines 510-531\n",
+  "ANSWER": "MUST-NOT"
+}

@@ -1,0 +1,1 @@
+cmdname,redis/src/t_hash.c,None,c,redis/src/t_hash.c,6,1

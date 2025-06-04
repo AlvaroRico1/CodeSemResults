@@ -1,0 +1,1 @@
+item,tmux/window-client.c,5,itemdata,tmux/window-client.c,1,1

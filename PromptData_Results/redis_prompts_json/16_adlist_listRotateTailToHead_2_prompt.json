@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'tail' at line 4\n2. Pointer 'list' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid listRotateTailToHead(list *list) {\n    if (listLength(list) <= 1) return;\n\n    /* Detach current tail */\n    listNode *tail = list->tail;\n    list->tail = tail->prev;\n    list->tail->next = NULL;\n    /* Move it as head */\n    list->head->prev = tail;\n    tail->prev = NULL;\n    tail->next = list->head;\n    list->head = tail;\n}\n\n\n// Source: adlist.c\n// Lines 331-343\n",
+  "ANSWER": "MUST"
+}

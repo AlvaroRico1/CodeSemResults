@@ -1,0 +1,83 @@
+int git_str_join_n(git_str *buf, char separator, int nbuf, ...)
+{
+	va_list ap;
+	int i;
+	size_t total_size = 0, original_size = buf->size;
+	char *out, *original = buf->ptr;
+
+	if (buf->size > 0 && buf->ptr[buf->size - 1] != separator)
+		++total_size; /* space for initial separator */
+
+	/* Make two passes to avoid multiple reallocation */
+
+	va_start(ap, nbuf);
+	for (i = 0; i < nbuf; ++i) {
+		const char *segment;
+		size_t segment_len;
+
+		segment = va_arg(ap, const char *);
+		if (!segment)
+			continue;
+
+		segment_len = strlen(segment);
+
+		GIT_ERROR_CHECK_ALLOC_ADD(&total_size, total_size, segment_len);
+
+		if (segment_len == 0 || segment[segment_len - 1] != separator)
+			GIT_ERROR_CHECK_ALLOC_ADD(&total_size, total_size, 1);
+	}
+	va_end(ap);
+
+	/* expand buffer if needed */
+	if (total_size == 0)
+		return 0;
+
+	GIT_ERROR_CHECK_ALLOC_ADD(&total_size, total_size, 1);
+	if (git_str_grow_by(buf, total_size) < 0)
+		return -1;
+
+	out = buf->ptr + buf->size;
+
+	/* append separator to existing buf if needed */
+	if (buf->size > 0 && out[-1] != separator)
+		*out++ = separator;
+
+	va_start(ap, nbuf);
+	for (i = 0; i < nbuf; ++i) {
+		const char *segment;
+		size_t segment_len;
+
+		segment = va_arg(ap, const char *);
+		if (!segment)
+			continue;
+
+		/* deal with join that references buffer's original content */
+		if (segment >= original && segment < original + original_size) {
+			size_t offset = (segment - original);
+			segment = buf->ptr + offset;
+			segment_len = original_size - offset;
+		} else {
+			segment_len = strlen(segment);
+		}
+
+		/* skip leading separators */
+		if (out > buf->ptr && out[-1] == separator)
+			while (segment_len > 0 && *segment == separator) {
+				segment++;
+				segment_len--;
+			}
+
+		/* copy over next buffer */
+		if (segment_len > 0) {
+			memmove(out, segment, segment_len);
+			out += segment_len;
+		}
+
+		/* append trailing separator (except for last item) */
+		if (i < nbuf - 1 && out > buf->ptr && out[-1] != separator)
+			*out++ = separator;
+	}
+
+
+// Source: str.c
+// Lines 672-750

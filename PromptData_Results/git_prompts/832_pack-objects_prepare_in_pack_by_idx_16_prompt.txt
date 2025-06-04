@@ -1,0 +1,40 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'p' at line 3
+2. Pointer 'p' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void prepare_in_pack_by_idx(struct packing_data *pdata)
+{
+	struct packed_git **mapping, *p;
+	int cnt = 0, nr = 1U << OE_IN_PACK_BITS;
+
+	ALLOC_ARRAY(mapping, nr);
+	/*
+	 * oe_in_pack() on an all-zero'd object_entry
+	 * (i.e. in_pack_idx also zero) should return NULL.
+	 */
+	mapping[cnt++] = NULL;
+	for (p = get_all_packs(pdata->repo); p; p = p->next, cnt++) {
+		if (cnt == nr) {
+			free(mapping);
+			return;
+		}
+		p->index = cnt;
+		mapping[cnt] = p;
+	}
+	pdata->in_pack_by_idx = mapping;
+}
+
+
+// Source: pack-objects.c
+// Lines 87-107
+
+
+[ANSWER]
+MUST

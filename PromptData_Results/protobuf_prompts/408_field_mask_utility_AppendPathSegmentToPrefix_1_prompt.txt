@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'segment' at line 2
+2. Pointer 'prefix' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+std::string AppendPathSegmentToPrefix(StringPiece prefix,
+                                      StringPiece segment) {
+  if (prefix.empty()) {
+    return std::string(segment);
+  }
+  if (segment.empty()) {
+    return std::string(prefix);
+  }
+  // If the segment is a map key, appends it to the prefix without the ".".
+  if (HasPrefixString(segment, "[\"")) {
+    return StrCat(prefix, segment);
+  }
+  return StrCat(prefix, ".", segment);
+}
+
+}  // namespace
+
+
+// Source: field_mask_utility.cc
+// Lines 49-64
+
+
+[ANSWER]
+MAY

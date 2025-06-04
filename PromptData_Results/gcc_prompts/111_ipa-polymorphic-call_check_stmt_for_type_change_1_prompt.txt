@@ -1,0 +1,145 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tci' at line 4
+2. Pointer 'data' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+check_stmt_for_type_change (ao_ref *ao ATTRIBUTE_UNUSED, tree vdef, void *data)
+{
+  gimple *stmt = SSA_NAME_DEF_STMT (vdef);
+  struct type_change_info *tci = (struct type_change_info *) data;
+  tree fn;
+
+  /* If we already gave up, just terminate the rest of walk.  */
+  if (tci->multiple_types_encountered)
+    return true;
+
+  if (is_gimple_call (stmt))
+    {
+      if (gimple_call_flags (stmt) & (ECF_CONST | ECF_PURE))
+	return false;
+
+      /* Check for a constructor call.  */
+      if ((fn = gimple_call_fndecl (stmt)) != NULL_TREE
+	  && DECL_CXX_CONSTRUCTOR_P (fn)
+	  && TREE_CODE (TREE_TYPE (fn)) == METHOD_TYPE
+	  && gimple_call_num_args (stmt))
+      {
+	tree op = walk_ssa_copies (gimple_call_arg (stmt, 0));
+	tree type = TYPE_METHOD_BASETYPE (TREE_TYPE (fn));
+	HOST_WIDE_INT offset = 0;
+	bool reverse;
+
+	if (dump_file)
+	  {
+	    fprintf (dump_file, "  Checking constructor call: ");
+	    print_gimple_stmt (dump_file, stmt, 0);
+	  }
+
+	/* See if THIS parameter seems like instance pointer.  */
+	if (TREE_CODE (op) == ADDR_EXPR)
+	  {
+	    HOST_WIDE_INT size;
+	    op = get_ref_base_and_extent_hwi (TREE_OPERAND (op, 0),
+					      &offset, &size, &reverse);
+	    if (!op)
+	      {
+                tci->speculative++;
+	        return csftc_abort_walking_p (tci->speculative);
+	      }
+	    if (TREE_CODE (op) == MEM_REF)
+	      {
+		if (!tree_fits_shwi_p (TREE_OPERAND (op, 1)))
+		  {
+                    tci->speculative++;
+		    return csftc_abort_walking_p (tci->speculative);
+		  }
+		offset += tree_to_shwi (TREE_OPERAND (op, 1))
+			  * BITS_PER_UNIT;
+		op = TREE_OPERAND (op, 0);
+	      }
+	    else if (DECL_P (op))
+	      ;
+	    else
+	      {
+                tci->speculative++;
+	        return csftc_abort_walking_p (tci->speculative);
+	      }
+	    op = walk_ssa_copies (op);
+	  }
+	if (operand_equal_p (op, tci->instance, 0)
+	    && TYPE_SIZE (type)
+	    && TREE_CODE (TYPE_SIZE (type)) == INTEGER_CST
+	    && tree_fits_shwi_p (TYPE_SIZE (type))
+	    && tree_to_shwi (TYPE_SIZE (type)) + offset > tci->offset
+	    /* Some inlined constructors may look as follows:
+		  _3 = operator new (16);
+		  MEM[(struct  &)_3] ={v} {CLOBBER};
+		  MEM[(struct CompositeClass *)_3]._vptr.CompositeClass
+		    = &MEM[(void *)&_ZTV14CompositeClass + 16B];
+		  _7 = &MEM[(struct CompositeClass *)_3].object;
+		  EmptyClass::EmptyClass (_7);
+
+	       When determining dynamic type of _3 and because we stop at first
+	       dynamic type found, we would stop on EmptyClass::EmptyClass (_7).
+	       In this case the emptyclass is not even polymorphic and we miss
+	       it is contained in an outer type that is polymorphic.  */
+
+	    && (tci->offset == offset || contains_polymorphic_type_p (type)))
+	  {
+	    record_known_type (tci, type, tci->offset - offset);
+	    return true;
+	  }
+      }
+     /* Calls may possibly change dynamic type by placement new. Assume
+        it will not happen, but make result speculative only.  */
+     if (dump_file)
+	{
+          fprintf (dump_file, "  Function call may change dynamic type:");
+	  print_gimple_stmt (dump_file, stmt, 0);
+	}
+     tci->speculative++;
+     return csftc_abort_walking_p (tci->speculative);
+   }
+  /* Check for inlined virtual table store.  */
+  else if (noncall_stmt_may_be_vtbl_ptr_store (stmt))
+    {
+      tree type;
+      HOST_WIDE_INT offset = 0;
+      if (dump_file)
+	{
+	  fprintf (dump_file, "  Checking vtbl store: ");
+	  print_gimple_stmt (dump_file, stmt, 0);
+	}
+
+      type = extr_type_from_vtbl_ptr_store (stmt, tci, &offset);
+      if (type == error_mark_node)
+	return false;
+      gcc_assert (!type || TYPE_MAIN_VARIANT (type) == type);
+      if (!type)
+	{
+	  if (dump_file)
+	    fprintf (dump_file, "  Unanalyzed store may change type.\n");
+	  tci->seen_unanalyzed_store = true;
+	  tci->speculative++;
+	}
+      else
+        record_known_type (tci, type, offset);
+      return true;
+    }
+  else
+    return false;
+}
+
+
+// Source: ipa-polymorphic-call.c
+// Lines 1413-1538
+
+
+[ANSWER]
+MUST

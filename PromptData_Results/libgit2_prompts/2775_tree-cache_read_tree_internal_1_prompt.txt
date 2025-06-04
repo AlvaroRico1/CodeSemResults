@@ -1,0 +1,91 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tree' at line 5
+2. Pointer 'buffer' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int read_tree_internal(git_tree_cache **out,
+			      const char **buffer_in, const char *buffer_end,
+			      git_pool *pool)
+{
+	git_tree_cache *tree = NULL;
+	const char *name_start, *buffer;
+	int count;
+
+	buffer = name_start = *buffer_in;
+
+	if ((buffer = memchr(buffer, '\0', buffer_end - buffer)) == NULL)
+		goto corrupted;
+
+	if (++buffer >= buffer_end)
+		goto corrupted;
+
+	if (git_tree_cache_new(&tree, name_start, pool) < 0)
+		return -1;
+
+	/* Blank-terminated ASCII decimal number of entries in this tree */
+	if (git__strntol32(&count, buffer, buffer_end - buffer, &buffer, 10) < 0)
+		goto corrupted;
+
+	tree->entry_count = count;
+
+	if (*buffer != ' ' || ++buffer >= buffer_end)
+		goto corrupted;
+
+	 /* Number of children of the tree, newline-terminated */
+	if (git__strntol32(&count, buffer, buffer_end - buffer, &buffer, 10) < 0 || count < 0)
+		goto corrupted;
+
+	tree->children_count = count;
+
+	if (*buffer != '\n' || ++buffer > buffer_end)
+		goto corrupted;
+
+	/* The SHA1 is only there if it's not invalidated */
+	if (tree->entry_count >= 0) {
+		/* 160-bit SHA-1 for this tree and it's children */
+		if (buffer + GIT_OID_RAWSZ > buffer_end)
+			goto corrupted;
+
+		git_oid_fromraw(&tree->oid, (const unsigned char *)buffer);
+		buffer += GIT_OID_RAWSZ;
+	}
+
+	/* Parse children: */
+	if (tree->children_count > 0) {
+		size_t i, bufsize;
+
+		GIT_ERROR_CHECK_ALLOC_MULTIPLY(&bufsize, tree->children_count, sizeof(git_tree_cache*));
+
+		tree->children = git_pool_malloc(pool, bufsize);
+		GIT_ERROR_CHECK_ALLOC(tree->children);
+
+		memset(tree->children, 0x0, bufsize);
+
+		for (i = 0; i < tree->children_count; ++i) {
+			if (read_tree_internal(&tree->children[i], &buffer, buffer_end, pool) < 0)
+				goto corrupted;
+		}
+	}
+
+	*buffer_in = buffer;
+	*out = tree;
+	return 0;
+
+ corrupted:
+	git_error_set(GIT_ERROR_INDEX, "corrupted TREE extension in index");
+	return -1;
+}
+
+
+// Source: tree-cache.c
+// Lines 74-145
+
+
+[ANSWER]
+MAY

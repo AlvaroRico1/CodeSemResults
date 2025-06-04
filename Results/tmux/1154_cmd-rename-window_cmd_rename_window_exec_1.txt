@@ -1,0 +1,1 @@
+wl,tmux/cmd-rename-window.c,5,target,tmux/cmd-rename-window.c,4,1

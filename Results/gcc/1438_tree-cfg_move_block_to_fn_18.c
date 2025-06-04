@@ -1,0 +1,153 @@
+move_block_to_fn (struct function *dest_cfun, basic_block bb,
+		  basic_block after, bool update_edge_count_p,
+		  struct move_stmt_d *d)
+{
+  struct control_flow_graph *cfg;
+  edge_iterator ei;
+  edge e;
+  gimple_stmt_iterator si;
+  unsigned old_len, new_len;
+
+  /* Remove BB from dominance structures.  */
+  delete_from_dominance_info (CDI_DOMINATORS, bb);
+
+  /* Move BB from its current loop to the copy in the new function.  */
+  if (current_loops)
+    {
+      class loop *new_loop = (class loop *)bb->loop_father->aux;
+      if (new_loop)
+	bb->loop_father = new_loop;
+    }
+
+  /* Link BB to the new linked list.  */
+  move_block_after (bb, after);
+
+  /* Update the edge count in the corresponding flowgraphs.  */
+  if (update_edge_count_p)
+    FOR_EACH_EDGE (e, ei, bb->succs)
+      {
+	cfun->cfg->x_n_edges--;
+	dest_cfun->cfg->x_n_edges++;
+      }
+
+  /* Remove BB from the original basic block array.  */
+  (*cfun->cfg->x_basic_block_info)[bb->index] = NULL;
+  cfun->cfg->x_n_basic_blocks--;
+
+  /* Grow DEST_CFUN's basic block array if needed.  */
+  cfg = dest_cfun->cfg;
+  cfg->x_n_basic_blocks++;
+  if (bb->index >= cfg->x_last_basic_block)
+    cfg->x_last_basic_block = bb->index + 1;
+
+  old_len = vec_safe_length (cfg->x_basic_block_info);
+  if ((unsigned) cfg->x_last_basic_block >= old_len)
+    {
+      new_len = cfg->x_last_basic_block + (cfg->x_last_basic_block + 3) / 4;
+      vec_safe_grow_cleared (cfg->x_basic_block_info, new_len);
+    }
+
+  (*cfg->x_basic_block_info)[bb->index] = bb;
+
+  /* Remap the variables in phi nodes.  */
+  for (gphi_iterator psi = gsi_start_phis (bb);
+       !gsi_end_p (psi); )
+    {
+      gphi *phi = psi.phi ();
+      use_operand_p use;
+      tree op = PHI_RESULT (phi);
+      ssa_op_iter oi;
+      unsigned i;
+
+      if (virtual_operand_p (op))
+	{
+	  /* Remove the phi nodes for virtual operands (alias analysis will be
+	     run for the new function, anyway).  But replace all uses that
+	     might be outside of the region we move.  */
+	  use_operand_p use_p;
+	  imm_use_iterator iter;
+	  gimple *use_stmt;
+	  FOR_EACH_IMM_USE_STMT (use_stmt, iter, op)
+	    FOR_EACH_IMM_USE_ON_STMT (use_p, iter)
+	      SET_USE (use_p, SSA_NAME_VAR (op));
+          remove_phi_node (&psi, true);
+	  continue;
+	}
+
+      SET_PHI_RESULT (phi,
+		      replace_ssa_name (op, d->vars_map, dest_cfun->decl));
+      FOR_EACH_PHI_ARG (use, phi, oi, SSA_OP_USE)
+	{
+	  op = USE_FROM_PTR (use);
+	  if (TREE_CODE (op) == SSA_NAME)
+	    SET_USE (use, replace_ssa_name (op, d->vars_map, dest_cfun->decl));
+	}
+
+      for (i = 0; i < EDGE_COUNT (bb->preds); i++)
+	{
+	  location_t locus = gimple_phi_arg_location (phi, i);
+	  tree block = LOCATION_BLOCK (locus);
+
+	  if (locus == UNKNOWN_LOCATION)
+	    continue;
+	  if (d->orig_block == NULL_TREE || block == d->orig_block)
+	    {
+	      locus = set_block (locus, d->new_block);
+	      gimple_phi_arg_set_location (phi, i, locus);
+	    }
+	}
+
+      gsi_next (&psi);
+    }
+
+  for (si = gsi_start_bb (bb); !gsi_end_p (si); gsi_next (&si))
+    {
+      gimple *stmt = gsi_stmt (si);
+      struct walk_stmt_info wi;
+
+      memset (&wi, 0, sizeof (wi));
+      wi.info = d;
+      walk_gimple_stmt (&si, move_stmt_r, move_stmt_op, &wi);
+
+      if (glabel *label_stmt = dyn_cast <glabel *> (stmt))
+	{
+	  tree label = gimple_label_label (label_stmt);
+	  int uid = LABEL_DECL_UID (label);
+
+	  gcc_assert (uid > -1);
+
+	  old_len = vec_safe_length (cfg->x_label_to_block_map);
+	  if (old_len <= (unsigned) uid)
+	    {
+	      new_len = 3 * uid / 2 + 1;
+	      vec_safe_grow_cleared (cfg->x_label_to_block_map, new_len);
+	    }
+
+	  (*cfg->x_label_to_block_map)[uid] = bb;
+	  (*cfun->cfg->x_label_to_block_map)[uid] = NULL;
+
+	  gcc_assert (DECL_CONTEXT (label) == dest_cfun->decl);
+
+	  if (uid >= dest_cfun->cfg->last_label_uid)
+	    dest_cfun->cfg->last_label_uid = uid + 1;
+	}
+
+      maybe_duplicate_eh_stmt_fn (dest_cfun, stmt, cfun, stmt, d->eh_map, 0);
+      remove_stmt_from_eh_lp_fn (cfun, stmt);
+
+      gimple_duplicate_stmt_histograms (dest_cfun, stmt, cfun, stmt);
+      gimple_remove_stmt_histograms (cfun, stmt);
+
+      /* We cannot leave any operands allocated from the operand caches of
+	 the current function.  */
+      free_stmt_operands (cfun, stmt);
+      push_cfun (dest_cfun);
+      update_stmt (stmt);
+      if (is_gimple_call (stmt))
+	notice_special_calls (as_a <gcall *> (stmt));
+      pop_cfun ();
+    }
+
+
+// Source: tree-cfg.c
+// Lines 7103-7251

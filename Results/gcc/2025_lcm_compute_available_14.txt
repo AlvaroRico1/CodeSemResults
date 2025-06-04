@@ -1,0 +1,1 @@
+qin,gcc/gcc/lcm.c,5,qout,gcc/gcc/lcm.c,5,1

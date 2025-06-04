@@ -1,0 +1,97 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'first_cluster' at line 5
+2. Pointer 'last_cluster' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int ext4_trim_fs(struct super_block *sb, struct fstrim_range *range)
+{
+	struct ext4_group_info *grp;
+	ext4_group_t group, first_group, last_group;
+	ext4_grpblk_t cnt = 0, first_cluster, last_cluster;
+	uint64_t start, end, minlen, trimmed = 0;
+	ext4_fsblk_t first_data_blk =
+			le32_to_cpu(EXT4_SB(sb)->s_es->s_first_data_block);
+	ext4_fsblk_t max_blks = ext4_blocks_count(EXT4_SB(sb)->s_es);
+	int ret = 0;
+
+	start = range->start >> sb->s_blocksize_bits;
+	end = start + (range->len >> sb->s_blocksize_bits) - 1;
+	minlen = EXT4_NUM_B2C(EXT4_SB(sb),
+			      range->minlen >> sb->s_blocksize_bits);
+
+	if (minlen > EXT4_CLUSTERS_PER_GROUP(sb) ||
+	    start >= max_blks ||
+	    range->len < sb->s_blocksize)
+		return -EINVAL;
+	if (end >= max_blks)
+		end = max_blks - 1;
+	if (end <= first_data_blk)
+		goto out;
+	if (start < first_data_blk)
+		start = first_data_blk;
+
+	/* Determine first and last group to examine based on start and end */
+	ext4_get_group_no_and_offset(sb, (ext4_fsblk_t) start,
+				     &first_group, &first_cluster);
+	ext4_get_group_no_and_offset(sb, (ext4_fsblk_t) end,
+				     &last_group, &last_cluster);
+
+	/* end now represents the last cluster to discard in this group */
+	end = EXT4_CLUSTERS_PER_GROUP(sb) - 1;
+
+	for (group = first_group; group <= last_group; group++) {
+		grp = ext4_get_group_info(sb, group);
+		/* We only do this if the grp has never been initialized */
+		if (unlikely(EXT4_MB_GRP_NEED_INIT(grp))) {
+			ret = ext4_mb_init_group(sb, group, GFP_NOFS);
+			if (ret)
+				break;
+		}
+
+		/*
+		 * For all the groups except the last one, last cluster will
+		 * always be EXT4_CLUSTERS_PER_GROUP(sb)-1, so we only need to
+		 * change it for the last group, note that last_cluster is
+		 * already computed earlier by ext4_get_group_no_and_offset()
+		 */
+		if (group == last_group)
+			end = last_cluster;
+
+		if (grp->bb_free >= minlen) {
+			cnt = ext4_trim_all_free(sb, group, first_cluster,
+						end, minlen);
+			if (cnt < 0) {
+				ret = cnt;
+				break;
+			}
+			trimmed += cnt;
+		}
+
+		/*
+		 * For every group except the first one, we are sure
+		 * that the first cluster to discard will be cluster #0.
+		 */
+		first_cluster = 0;
+	}
+
+	if (!ret)
+		atomic_set(&EXT4_SB(sb)->s_last_trim_minblks, minlen);
+
+out:
+	range->len = EXT4_C2B(EXT4_SB(sb), trimmed) << sb->s_blocksize_bits;
+	return ret;
+}
+
+
+// Source: mballoc.c
+// Lines 5239-5316
+
+
+[ANSWER]
+MAY

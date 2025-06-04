@@ -1,0 +1,52 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'r' at line 1
+2. Pointer 'obj' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int processLineItem(redisReader *r) {
+    redisReadTask *cur = &(r->rstack[r->ridx]);
+    void *obj;
+    char *p;
+    int len;
+
+    if ((p = readLine(r,&len)) != NULL) {
+        if (cur->type == REDIS_REPLY_INTEGER) {
+            if (r->fn && r->fn->createInteger)
+                obj = r->fn->createInteger(cur,readLongLong(p));
+            else
+                obj = (void*)REDIS_REPLY_INTEGER;
+        } else {
+            /* Type will be error or status. */
+            if (r->fn && r->fn->createString)
+                obj = r->fn->createString(cur,p,len);
+            else
+                obj = (void*)(size_t)(cur->type);
+        }
+
+        if (obj == NULL) {
+            __redisReaderSetErrorOOM(r);
+            return REDIS_ERR;
+        }
+
+        /* Set reply if this is the root object. */
+        if (r->ridx == 0) r->reply = obj;
+        moveToNextTask(r);
+        return REDIS_OK;
+    }
+
+    return REDIS_ERR;
+}
+
+
+// Source: read.c
+// Lines 215-247
+
+
+[ANSWER]
+MUST

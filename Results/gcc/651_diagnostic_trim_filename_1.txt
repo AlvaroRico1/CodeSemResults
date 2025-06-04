@@ -1,0 +1,1 @@
+q,gcc/gcc/diagnostic.c,4,p,gcc/gcc/diagnostic.c,4,0

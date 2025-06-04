@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'subject_len' at line None
+2. Pointer 'subject' at line 11
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int subject2item_cmp(const void *fndata,
+			    const struct hashmap_entry *eptr,
+			    const struct hashmap_entry *entry_or_key,
+			    const void *key)
+{
+	const struct subject2item_entry *a, *b;
+
+	a = container_of(eptr, const struct subject2item_entry, entry);
+	b = container_of(entry_or_key, const struct subject2item_entry, entry);
+
+	return key ? strcmp(a->subject, key) : strcmp(a->subject, b->subject);
+}
+
+
+// Source: sequencer.c
+// Lines 5741-5752
+
+
+[ANSWER]
+MAY

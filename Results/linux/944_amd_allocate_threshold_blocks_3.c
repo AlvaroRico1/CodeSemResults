@@ -1,0 +1,83 @@
+static int allocate_threshold_blocks(unsigned int cpu, unsigned int bank,
+				     unsigned int block, u32 address)
+{
+	struct threshold_block *b = NULL;
+	u32 low, high;
+	int err;
+
+	if ((bank >= per_cpu(mce_num_banks, cpu)) || (block >= NR_BLOCKS))
+		return 0;
+
+	if (rdmsr_safe_on_cpu(cpu, address, &low, &high))
+		return 0;
+
+	if (!(high & MASK_VALID_HI)) {
+		if (block)
+			goto recurse;
+		else
+			return 0;
+	}
+
+	if (!(high & MASK_CNTP_HI)  ||
+	     (high & MASK_LOCKED_HI))
+		goto recurse;
+
+	b = kzalloc(sizeof(struct threshold_block), GFP_KERNEL);
+	if (!b)
+		return -ENOMEM;
+
+	b->block		= block;
+	b->bank			= bank;
+	b->cpu			= cpu;
+	b->address		= address;
+	b->interrupt_enable	= 0;
+	b->interrupt_capable	= lvt_interrupt_supported(bank, high);
+	b->threshold_limit	= THRESHOLD_MAX;
+
+	if (b->interrupt_capable) {
+		threshold_ktype.default_attrs[2] = &interrupt_enable.attr;
+		b->interrupt_enable = 1;
+	} else {
+		threshold_ktype.default_attrs[2] = NULL;
+	}
+
+	INIT_LIST_HEAD(&b->miscj);
+
+	if (per_cpu(threshold_banks, cpu)[bank]->blocks) {
+		list_add(&b->miscj,
+			 &per_cpu(threshold_banks, cpu)[bank]->blocks->miscj);
+	} else {
+		per_cpu(threshold_banks, cpu)[bank]->blocks = b;
+	}
+
+	err = kobject_init_and_add(&b->kobj, &threshold_ktype,
+				   per_cpu(threshold_banks, cpu)[bank]->kobj,
+				   get_name(bank, b));
+	if (err)
+		goto out_free;
+recurse:
+	address = get_block_address(address, low, high, bank, ++block, cpu);
+	if (!address)
+		return 0;
+
+	err = allocate_threshold_blocks(cpu, bank, block, address);
+	if (err)
+		goto out_free;
+
+	if (b)
+		kobject_uevent(&b->kobj, KOBJ_ADD);
+
+	return err;
+
+out_free:
+	if (b) {
+		kobject_put(&b->kobj);
+		list_del(&b->miscj);
+		kfree(b);
+	}
+	return err;
+}
+
+
+// Source: amd.c
+// Lines 1199-1277

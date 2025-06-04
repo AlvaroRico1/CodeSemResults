@@ -1,0 +1,63 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'src_end' at line 3
+2. Pointer 'src' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int CEscapeInternal(const char* src, int src_len, char* dest,
+                    int dest_len, bool use_hex, bool utf8_safe) {
+  const char* src_end = src + src_len;
+  int used = 0;
+  bool last_hex_escape = false; // true if last output char was \xNN
+
+  for (; src < src_end; src++) {
+    if (dest_len - used < 2)   // Need space for two letter escape
+      return -1;
+
+    bool is_hex_escape = false;
+    switch (*src) {
+      case '\n': dest[used++] = '\\'; dest[used++] = 'n';  break;
+      case '\r': dest[used++] = '\\'; dest[used++] = 'r';  break;
+      case '\t': dest[used++] = '\\'; dest[used++] = 't';  break;
+      case '\"': dest[used++] = '\\'; dest[used++] = '\"'; break;
+      case '\'': dest[used++] = '\\'; dest[used++] = '\''; break;
+      case '\\': dest[used++] = '\\'; dest[used++] = '\\'; break;
+      default:
+        // Note that if we emit \xNN and the src character after that is a hex
+        // digit then that digit must be escaped too to prevent it being
+        // interpreted as part of the character code by C.
+        if ((!utf8_safe || static_cast<uint8>(*src) < 0x80) &&
+            (!isprint(*src) ||
+             (last_hex_escape && isxdigit(*src)))) {
+          if (dest_len - used < 4) // need space for 4 letter escape
+            return -1;
+          sprintf(dest + used, (use_hex ? "\\x%02x" : "\\%03o"),
+                  static_cast<uint8>(*src));
+          is_hex_escape = use_hex;
+          used += 4;
+        } else {
+          dest[used++] = *src; break;
+        }
+    }
+    last_hex_escape = is_hex_escape;
+  }
+
+  if (dest_len - used < 1)   // make sure that there is room for \0
+    return -1;
+
+  dest[used] = '\0';   // doesn't count towards return value though
+  return used;
+}
+
+
+// Source: strutil.cc
+// Lines 479-522
+
+
+[ANSWER]
+MUST

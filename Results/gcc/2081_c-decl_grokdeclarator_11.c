@@ -1,0 +1,621 @@
+grokdeclarator (const struct c_declarator *declarator,
+		struct c_declspecs *declspecs,
+		enum decl_context decl_context, bool initialized, tree *width,
+		tree *decl_attrs, tree *expr, bool *expr_const_operands,
+		enum deprecated_states deprecated_state)
+{
+  tree type = declspecs->type;
+  bool threadp = declspecs->thread_p;
+  enum c_storage_class storage_class = declspecs->storage_class;
+  int constp;
+  int restrictp;
+  int volatilep;
+  int atomicp;
+  int type_quals = TYPE_UNQUALIFIED;
+  tree name = NULL_TREE;
+  bool funcdef_flag = false;
+  bool funcdef_syntax = false;
+  bool size_varies = false;
+  tree decl_attr = declspecs->decl_attr;
+  int array_ptr_quals = TYPE_UNQUALIFIED;
+  tree array_ptr_attrs = NULL_TREE;
+  bool array_parm_static = false;
+  bool array_parm_vla_unspec_p = false;
+  tree returned_attrs = NULL_TREE;
+  tree decl_id_attrs = NULL_TREE;
+  bool bitfield = width != NULL;
+  tree element_type;
+  tree orig_qual_type = NULL;
+  size_t orig_qual_indirect = 0;
+  struct c_arg_info *arg_info = 0;
+  addr_space_t as1, as2, address_space;
+  location_t loc = UNKNOWN_LOCATION;
+  tree expr_dummy;
+  bool expr_const_operands_dummy;
+  enum c_declarator_kind first_non_attr_kind;
+  unsigned int alignas_align = 0;
+
+  if (TREE_CODE (type) == ERROR_MARK)
+    return error_mark_node;
+  if (expr == NULL)
+    {
+      expr = &expr_dummy;
+      expr_dummy = NULL_TREE;
+    }
+  if (expr_const_operands == NULL)
+    expr_const_operands = &expr_const_operands_dummy;
+
+  if (declspecs->expr)
+    {
+      if (*expr)
+	*expr = build2 (COMPOUND_EXPR, TREE_TYPE (declspecs->expr), *expr,
+			declspecs->expr);
+      else
+	*expr = declspecs->expr;
+    }
+  *expr_const_operands = declspecs->expr_const_operands;
+
+  if (decl_context == FUNCDEF)
+    funcdef_flag = true, decl_context = NORMAL;
+
+  /* Look inside a declarator for the name being declared
+     and get it as an IDENTIFIER_NODE, for an error message.  */
+  {
+    const struct c_declarator *decl = declarator;
+
+    first_non_attr_kind = cdk_attrs;
+    while (decl)
+      switch (decl->kind)
+	{
+	case cdk_array:
+	  loc = decl->id_loc;
+	  /* FALL THRU.  */
+
+	case cdk_function:
+	case cdk_pointer:
+	  funcdef_syntax = (decl->kind == cdk_function);
+	  if (first_non_attr_kind == cdk_attrs)
+	    first_non_attr_kind = decl->kind;
+	  decl = decl->declarator;
+	  break;
+
+	case cdk_attrs:
+	  decl = decl->declarator;
+	  break;
+
+	case cdk_id:
+	  loc = decl->id_loc;
+	  if (decl->u.id.id)
+	    name = decl->u.id.id;
+	  decl_id_attrs = decl->u.id.attrs;
+	  if (first_non_attr_kind == cdk_attrs)
+	    first_non_attr_kind = decl->kind;
+	  decl = 0;
+	  break;
+
+	default:
+	  gcc_unreachable ();
+	}
+    if (name == NULL_TREE)
+      {
+	gcc_assert (decl_context == PARM
+		    || decl_context == TYPENAME
+		    || (decl_context == FIELD
+			&& declarator->kind == cdk_id));
+	gcc_assert (!initialized);
+      }
+  }
+
+  /* A function definition's declarator must have the form of
+     a function declarator.  */
+
+  if (funcdef_flag && !funcdef_syntax)
+    return NULL_TREE;
+
+  /* If this looks like a function definition, make it one,
+     even if it occurs where parms are expected.
+     Then store_parm_decls will reject it and not use it as a parm.  */
+  if (decl_context == NORMAL && !funcdef_flag && current_scope->parm_flag)
+    decl_context = PARM;
+
+  if (declspecs->deprecated_p && deprecated_state != DEPRECATED_SUPPRESS)
+    warn_deprecated_use (declspecs->type, declspecs->decl_attr);
+
+  if ((decl_context == NORMAL || decl_context == FIELD)
+      && current_scope == file_scope
+      && variably_modified_type_p (type, NULL_TREE))
+    {
+      if (name)
+	error_at (loc, "variably modified %qE at file scope", name);
+      else
+	error_at (loc, "variably modified field at file scope");
+      type = integer_type_node;
+    }
+
+  size_varies = C_TYPE_VARIABLE_SIZE (type) != 0;
+
+  /* Diagnose defaulting to "int".  */
+
+  if (declspecs->default_int_p && !in_system_header_at (input_location))
+    {
+      /* Issue a warning if this is an ISO C 99 program or if
+	 -Wreturn-type and this is a function, or if -Wimplicit;
+	 prefer the former warning since it is more explicit.  */
+      if ((warn_implicit_int || warn_return_type > 0 || flag_isoc99)
+	  && funcdef_flag)
+	warn_about_return_type = 1;
+      else
+	{
+	  if (name)
+	    warn_defaults_to (loc, OPT_Wimplicit_int,
+			      "type defaults to %<int%> in declaration "
+			      "of %qE", name);
+	  else
+	    warn_defaults_to (loc, OPT_Wimplicit_int,
+			      "type defaults to %<int%> in type name");
+	}
+    }
+
+  /* Adjust the type if a bit-field is being declared,
+     -funsigned-bitfields applied and the type is not explicitly
+     "signed".  */
+  if (bitfield && !flag_signed_bitfields && !declspecs->explicit_signed_p
+      && TREE_CODE (type) == INTEGER_TYPE)
+    type = unsigned_type_for (type);
+
+  /* Figure out the type qualifiers for the declaration.  There are
+     two ways a declaration can become qualified.  One is something
+     like `const int i' where the `const' is explicit.  Another is
+     something like `typedef const int CI; CI i' where the type of the
+     declaration contains the `const'.  A third possibility is that
+     there is a type qualifier on the element type of a typedefed
+     array type, in which case we should extract that qualifier so
+     that c_apply_type_quals_to_decl receives the full list of
+     qualifiers to work with (C90 is not entirely clear about whether
+     duplicate qualifiers should be diagnosed in this case, but it
+     seems most appropriate to do so).  */
+  element_type = strip_array_types (type);
+  constp = declspecs->const_p + TYPE_READONLY (element_type);
+  restrictp = declspecs->restrict_p + TYPE_RESTRICT (element_type);
+  volatilep = declspecs->volatile_p + TYPE_VOLATILE (element_type);
+  atomicp = declspecs->atomic_p + TYPE_ATOMIC (element_type);
+  as1 = declspecs->address_space;
+  as2 = TYPE_ADDR_SPACE (element_type);
+  address_space = ADDR_SPACE_GENERIC_P (as1)? as2 : as1;
+
+  if (constp > 1)
+    pedwarn_c90 (loc, OPT_Wpedantic, "duplicate %<const%>");
+  if (restrictp > 1)
+    pedwarn_c90 (loc, OPT_Wpedantic, "duplicate %<restrict%>");
+  if (volatilep > 1)
+    pedwarn_c90 (loc, OPT_Wpedantic, "duplicate %<volatile%>");
+  if (atomicp > 1)
+    pedwarn_c90 (loc, OPT_Wpedantic, "duplicate %<_Atomic%>");
+
+  if (!ADDR_SPACE_GENERIC_P (as1) && !ADDR_SPACE_GENERIC_P (as2) && as1 != as2)
+    error_at (loc, "conflicting named address spaces (%s vs %s)",
+	      c_addr_space_name (as1), c_addr_space_name (as2));
+
+  if ((TREE_CODE (type) == ARRAY_TYPE
+       || first_non_attr_kind == cdk_array)
+      && TYPE_QUALS (element_type))
+    {
+      orig_qual_type = type;
+      type = TYPE_MAIN_VARIANT (type);
+    }
+  type_quals = ((constp ? TYPE_QUAL_CONST : 0)
+		| (restrictp ? TYPE_QUAL_RESTRICT : 0)
+		| (volatilep ? TYPE_QUAL_VOLATILE : 0)
+		| (atomicp ? TYPE_QUAL_ATOMIC : 0)
+		| ENCODE_QUAL_ADDR_SPACE (address_space));
+  if (type_quals != TYPE_QUALS (element_type))
+    orig_qual_type = NULL_TREE;
+
+  /* Applying the _Atomic qualifier to an array type (through the use
+     of typedefs or typeof) must be detected here.  If the qualifier
+     is introduced later, any appearance of applying it to an array is
+     actually applying it to an element of that array.  */
+  if (declspecs->atomic_p && TREE_CODE (type) == ARRAY_TYPE)
+    error_at (loc, "%<_Atomic%>-qualified array type");
+
+  /* Warn about storage classes that are invalid for certain
+     kinds of declarations (parameters, typenames, etc.).  */
+
+  if (funcdef_flag
+      && (threadp
+	  || storage_class == csc_auto
+	  || storage_class == csc_register
+	  || storage_class == csc_typedef))
+    {
+      if (storage_class == csc_auto)
+	pedwarn (loc,
+		 (current_scope == file_scope) ? 0 : OPT_Wpedantic,
+		 "function definition declared %<auto%>");
+      if (storage_class == csc_register)
+	error_at (loc, "function definition declared %<register%>");
+      if (storage_class == csc_typedef)
+	error_at (loc, "function definition declared %<typedef%>");
+      if (threadp)
+	error_at (loc, "function definition declared %qs",
+		  declspecs->thread_gnu_p ? "__thread" : "_Thread_local");
+      threadp = false;
+      if (storage_class == csc_auto
+	  || storage_class == csc_register
+	  || storage_class == csc_typedef)
+	storage_class = csc_none;
+    }
+  else if (decl_context != NORMAL && (storage_class != csc_none || threadp))
+    {
+      if (decl_context == PARM && storage_class == csc_register)
+	;
+      else
+	{
+	  switch (decl_context)
+	    {
+	    case FIELD:
+	      if (name)
+		error_at (loc, "storage class specified for structure "
+		    	  "field %qE", name);
+	      else
+		error_at (loc, "storage class specified for structure field");
+	      break;
+	    case PARM:
+	      if (name)
+		error_at (loc, "storage class specified for parameter %qE",
+		    	  name);
+	      else
+		error_at (loc, "storage class specified for unnamed parameter");
+	      break;
+	    default:
+	      error_at (loc, "storage class specified for typename");
+	      break;
+	    }
+	  storage_class = csc_none;
+	  threadp = false;
+	}
+    }
+  else if (storage_class == csc_extern
+	   && initialized
+	   && !funcdef_flag)
+    {
+      /* 'extern' with initialization is invalid if not at file scope.  */
+       if (current_scope == file_scope)
+         {
+           /* It is fine to have 'extern const' when compiling at C
+              and C++ intersection.  */
+           if (!(warn_cxx_compat && constp))
+             warning_at (loc, 0, "%qE initialized and declared %<extern%>",
+		 	 name);
+         }
+      else
+	error_at (loc, "%qE has both %<extern%> and initializer", name);
+    }
+  else if (current_scope == file_scope)
+    {
+      if (storage_class == csc_auto)
+	error_at (loc, "file-scope declaration of %qE specifies %<auto%>",
+	    	  name);
+      if (pedantic && storage_class == csc_register)
+	pedwarn (input_location, OPT_Wpedantic,
+		 "file-scope declaration of %qE specifies %<register%>", name);
+    }
+  else
+    {
+      if (storage_class == csc_extern && funcdef_flag)
+	error_at (loc, "nested function %qE declared %<extern%>", name);
+      else if (threadp && storage_class == csc_none)
+	{
+	  error_at (loc, "function-scope %qE implicitly auto and declared "
+		    "%qs", name,
+		    declspecs->thread_gnu_p ? "__thread" : "_Thread_local");
+	  threadp = false;
+	}
+    }
+
+  /* Now figure out the structure of the declarator proper.
+     Descend through it, creating more complex types, until we reach
+     the declared identifier (or NULL_TREE, in an absolute declarator).
+     At each stage we maintain an unqualified version of the type
+     together with any qualifiers that should be applied to it with
+     c_build_qualified_type; this way, array types including
+     multidimensional array types are first built up in unqualified
+     form and then the qualified form is created with
+     TYPE_MAIN_VARIANT pointing to the unqualified form.  */
+
+  while (declarator && declarator->kind != cdk_id)
+    {
+      if (type == error_mark_node)
+	{
+	  declarator = declarator->declarator;
+	  continue;
+	}
+
+      /* Each level of DECLARATOR is either a cdk_array (for ...[..]),
+	 a cdk_pointer (for *...),
+	 a cdk_function (for ...(...)),
+	 a cdk_attrs (for nested attributes),
+	 or a cdk_id (for the name being declared
+	 or the place in an absolute declarator
+	 where the name was omitted).
+	 For the last case, we have just exited the loop.
+
+	 At this point, TYPE is the type of elements of an array,
+	 or for a function to return, or for a pointer to point to.
+	 After this sequence of ifs, TYPE is the type of the
+	 array or function or pointer, and DECLARATOR has had its
+	 outermost layer removed.  */
+
+      if (array_ptr_quals != TYPE_UNQUALIFIED
+	  || array_ptr_attrs != NULL_TREE
+	  || array_parm_static)
+	{
+	  /* Only the innermost declarator (making a parameter be of
+	     array type which is converted to pointer type)
+	     may have static or type qualifiers.  */
+	  error_at (loc, "static or type qualifiers in non-parameter array declarator");
+	  array_ptr_quals = TYPE_UNQUALIFIED;
+	  array_ptr_attrs = NULL_TREE;
+	  array_parm_static = false;
+	}
+
+      switch (declarator->kind)
+	{
+	case cdk_attrs:
+	  {
+	    /* A declarator with embedded attributes.  */
+	    tree attrs = declarator->u.attrs;
+	    const struct c_declarator *inner_decl;
+	    int attr_flags = 0;
+	    declarator = declarator->declarator;
+	    /* Standard attribute syntax precisely defines what entity
+	       an attribute in each position appertains to, so only
+	       apply laxity about positioning to GNU attribute syntax.
+	       Standard attributes applied to a function or array
+	       declarator apply exactly to that type; standard
+	       attributes applied to the identifier apply to the
+	       declaration rather than to the type, and are specified
+	       using a cdk_id declarator rather than using
+	       cdk_attrs.  */
+	    inner_decl = declarator;
+	    while (inner_decl->kind == cdk_attrs)
+	      inner_decl = inner_decl->declarator;
+	    if (!cxx11_attribute_p (attrs))
+	      {
+		if (inner_decl->kind == cdk_id)
+		  attr_flags |= (int) ATTR_FLAG_DECL_NEXT;
+		else if (inner_decl->kind == cdk_function)
+		  attr_flags |= (int) ATTR_FLAG_FUNCTION_NEXT;
+		else if (inner_decl->kind == cdk_array)
+		  attr_flags |= (int) ATTR_FLAG_ARRAY_NEXT;
+	      }
+	    attrs = c_warn_type_attributes (attrs);
+	    returned_attrs = decl_attributes (&type,
+					      chainon (returned_attrs, attrs),
+					      attr_flags);
+	    break;
+	  }
+	case cdk_array:
+	  {
+	    tree itype = NULL_TREE;
+	    tree size = declarator->u.array.dimen;
+	    /* The index is a signed object `sizetype' bits wide.  */
+	    tree index_type = c_common_signed_type (sizetype);
+
+	    array_ptr_quals = declarator->u.array.quals;
+	    array_ptr_attrs = declarator->u.array.attrs;
+	    array_parm_static = declarator->u.array.static_p;
+	    array_parm_vla_unspec_p = declarator->u.array.vla_unspec_p;
+
+	    declarator = declarator->declarator;
+
+	    /* Check for some types that there cannot be arrays of.  */
+
+	    if (VOID_TYPE_P (type))
+	      {
+		if (name)
+		  error_at (loc, "declaration of %qE as array of voids", name);
+		else
+		  error_at (loc, "declaration of type name as array of voids");
+		type = error_mark_node;
+	      }
+
+	    if (TREE_CODE (type) == FUNCTION_TYPE)
+	      {
+		if (name)
+		  error_at (loc, "declaration of %qE as array of functions",
+		      	    name);
+		else
+		  error_at (loc, "declaration of type name as array of "
+		            "functions");
+		type = error_mark_node;
+	      }
+
+	    if (pedantic && !in_system_header_at (input_location)
+		&& flexible_array_type_p (type))
+	      pedwarn (loc, OPT_Wpedantic,
+		       "invalid use of structure with flexible array member");
+
+	    if (size == error_mark_node)
+	      type = error_mark_node;
+
+	    if (type == error_mark_node)
+	      continue;
+
+	    if (!verify_type_context (loc, TCTX_ARRAY_ELEMENT, type))
+	      {
+		type = error_mark_node;
+		continue;
+	      }
+
+	    /* If size was specified, set ITYPE to a range-type for
+	       that size.  Otherwise, ITYPE remains null.  finish_decl
+	       may figure it out from an initial value.  */
+
+	    if (size)
+	      {
+		bool size_maybe_const = true;
+		bool size_int_const = (TREE_CODE (size) == INTEGER_CST
+				       && !TREE_OVERFLOW (size));
+		bool this_size_varies = false;
+
+		/* Strip NON_LVALUE_EXPRs since we aren't using as an
+		   lvalue.  */
+		STRIP_TYPE_NOPS (size);
+
+		if (!INTEGRAL_TYPE_P (TREE_TYPE (size)))
+		  {
+		    if (name)
+		      error_at (loc, "size of array %qE has non-integer type",
+				name);
+		    else
+		      error_at (loc,
+				"size of unnamed array has non-integer type");
+		    size = integer_one_node;
+		    size_int_const = true;
+		  }
+		/* This can happen with enum forward declaration.  */
+		else if (!COMPLETE_TYPE_P (TREE_TYPE (size)))
+		  {
+		    if (name)
+		      error_at (loc, "size of array %qE has incomplete type",
+				name);
+		    else
+		      error_at (loc, "size of unnamed array has incomplete "
+				"type");
+		    size = integer_one_node;
+		    size_int_const = true;
+		  }
+
+		size = c_fully_fold (size, false, &size_maybe_const);
+
+		if (pedantic && size_maybe_const && integer_zerop (size))
+		  {
+		    if (name)
+		      pedwarn (loc, OPT_Wpedantic,
+			       "ISO C forbids zero-size array %qE", name);
+		    else
+		      pedwarn (loc, OPT_Wpedantic,
+			       "ISO C forbids zero-size array");
+		  }
+
+		if (TREE_CODE (size) == INTEGER_CST && size_maybe_const)
+		  {
+		    constant_expression_warning (size);
+		    if (tree_int_cst_sgn (size) < 0)
+		      {
+			if (name)
+			  error_at (loc, "size of array %qE is negative", name);
+			else
+			  error_at (loc, "size of unnamed array is negative");
+			size = integer_one_node;
+			size_int_const = true;
+		      }
+		    /* Handle a size folded to an integer constant but
+		       not an integer constant expression.  */
+		    if (!size_int_const)
+		      {
+			/* If this is a file scope declaration of an
+			   ordinary identifier, this is invalid code;
+			   diagnosing it here and not subsequently
+			   treating the type as variable-length avoids
+			   more confusing diagnostics later.  */
+			if ((decl_context == NORMAL || decl_context == FIELD)
+			    && current_scope == file_scope)
+			  pedwarn (input_location, 0,
+				   "variably modified %qE at file scope",
+				   name);
+			else
+			  this_size_varies = size_varies = true;
+			warn_variable_length_array (name, size);
+		      }
+		  }
+		else if ((decl_context == NORMAL || decl_context == FIELD)
+			 && current_scope == file_scope)
+		  {
+		    error_at (loc, "variably modified %qE at file scope", name);
+		    size = integer_one_node;
+		  }
+		else
+		  {
+		    /* Make sure the array size remains visibly
+		       nonconstant even if it is (eg) a const variable
+		       with known value.  */
+		    this_size_varies = size_varies = true;
+		    warn_variable_length_array (name, size);
+		    if (sanitize_flags_p (SANITIZE_VLA)
+			&& current_function_decl != NULL_TREE
+			&& decl_context == NORMAL)
+		      {
+			/* Evaluate the array size only once.  */
+			size = save_expr (size);
+			size = c_fully_fold (size, false, NULL);
+		        size = fold_build2 (COMPOUND_EXPR, TREE_TYPE (size),
+					    ubsan_instrument_vla (loc, size),
+					    size);
+		      }
+		  }
+
+		if (integer_zerop (size) && !this_size_varies)
+		  {
+		    /* A zero-length array cannot be represented with
+		       an unsigned index type, which is what we'll
+		       get with build_index_type.  Create an
+		       open-ended range instead.  */
+		    itype = build_range_type (sizetype, size, NULL_TREE);
+		  }
+		else
+		  {
+		    /* Arrange for the SAVE_EXPR on the inside of the
+		       MINUS_EXPR, which allows the -1 to get folded
+		       with the +1 that happens when building TYPE_SIZE.  */
+		    if (size_varies)
+		      size = save_expr (size);
+		    if (this_size_varies && TREE_CODE (size) == INTEGER_CST)
+		      size = build2 (COMPOUND_EXPR, TREE_TYPE (size),
+				     integer_zero_node, size);
+
+		    /* Compute the maximum valid index, that is, size
+		       - 1.  Do the calculation in index_type, so that
+		       if it is a variable the computations will be
+		       done in the proper mode.  */
+		    itype = fold_build2_loc (loc, MINUS_EXPR, index_type,
+					     convert (index_type, size),
+					     convert (index_type,
+						      size_one_node));
+
+		    /* The above overflows when size does not fit
+		       in index_type.
+		       ???  While a size of INT_MAX+1 technically shouldn't
+		       cause an overflow (because we subtract 1), handling
+		       this case seems like an unnecessary complication.  */
+		    if (TREE_CODE (size) == INTEGER_CST
+			&& !int_fits_type_p (size, index_type))
+		      {
+			if (name)
+			  error_at (loc, "size of array %qE is too large",
+			            name);
+			else
+			  error_at (loc, "size of unnamed array is too large");
+			type = error_mark_node;
+			continue;
+		      }
+
+		    itype = build_index_type (itype);
+		  }
+		if (this_size_varies)
+		  {
+		    if (TREE_SIDE_EFFECTS (size))
+		      {
+			if (*expr)
+			  *expr = build2 (COMPOUND_EXPR, TREE_TYPE (size),
+					  *expr, size);
+			else
+			  *expr = size;
+		      }
+		    *expr_const_operands &= size_maybe_const;
+		  }
+	      }
+
+
+// Source: c-decl.c
+// Lines 5946-6562

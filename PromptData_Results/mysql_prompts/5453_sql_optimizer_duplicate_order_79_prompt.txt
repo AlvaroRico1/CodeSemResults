@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'order' at line 3
+2. Pointer 'order' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static bool duplicate_order(const ORDER *first_order,
+                            const ORDER *possible_dup) {
+  const ORDER *order;
+  for (order = first_order; order; order = order->next) {
+    if (order == possible_dup) {
+      // all expressions preceding possible_dup have been checked.
+      return false;
+    } else {
+      const Item *it1 = order->item[0]->real_item();
+      const Item *it2 = possible_dup->item[0]->real_item();
+
+      if (it1->eq(it2, false)) return true;
+    }
+  }
+  return false;
+}
+
+
+// Source: sql_optimizer.cc
+// Lines 9688-9703
+
+
+[ANSWER]
+MUST

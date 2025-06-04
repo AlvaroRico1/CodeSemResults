@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'value' at line 3\n2. Pointer 'newvalue2' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid test_threads_atomic__cas_pointer(void)\n{\n\tint *value = NULL;\n\tint newvalue1 = 1, newvalue2 = 2;\n\n\t/* value is updated */\n\tcl_assert_equal_p(git_atomic_compare_and_swap(&value, NULL, &newvalue1), NULL);\n\tcl_assert_equal_p(value, &newvalue1);\n\n\t/* value is not updated */\n\tcl_assert_equal_p(git_atomic_compare_and_swap(&value, NULL, &newvalue2), &newvalue1);\n\tcl_assert_equal_p(value, &newvalue1);\n}\n\n\n// Source: atomic.c\n// Lines 69-81\n",
+  "ANSWER": "MAY"
+}

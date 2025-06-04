@@ -1,0 +1,1 @@
+edge,gcc/gcc/ipa-fnsummary.c,26,cnode,gcc/gcc/ipa-fnsummary.c,11,1

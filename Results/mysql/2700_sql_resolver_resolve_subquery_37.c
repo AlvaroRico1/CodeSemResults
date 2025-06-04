@@ -1,0 +1,224 @@
+bool Query_block::resolve_subquery(THD *thd) {
+  DBUG_TRACE;
+
+  bool choice_made = false;  // becomes true when subquery strategy is chosen
+  bool deterministic = true;
+  Query_block *const outer = outer_query_block();
+
+  /*
+    @todo for PS, make the whole block execute only on the first execution.
+    resolve_subquery() is only invoked in the first execution for subqueries
+    that are transformed to semijoin, but for other subqueries, this function
+    is called for every execution. One solution is perhaps to define
+    exec_method in class Item_subselect and exit immediately if unequal to
+    SubqueryExecMethod::EXEC_UNSPECIFIED.
+  */
+  Item_subselect *subq_predicate = master_query_expression()->item;
+  assert(subq_predicate != nullptr);
+  /**
+    @note
+    In this case: IN (SELECT ... UNION SELECT ...), Query_block::prepare() is
+    called for each of the two UNION members, and in those two calls,
+    subq_predicate is the same, not sure this is desired (double work?).
+  */
+
+  // Predicate for possible semi-join candidates (IN and EXISTS)
+  Item_exists_subselect *const predicate =
+      subq_predicate->substype() == Item_subselect::EXISTS_SUBS ||
+              subq_predicate->substype() == Item_subselect::IN_SUBS
+          ? down_cast<Item_exists_subselect *>(subq_predicate)
+          : nullptr;
+
+  // Predicate for IN subquery predicate
+  Item_in_subselect *const in_predicate =
+      subq_predicate->substype() == Item_subselect::IN_SUBS
+          ? down_cast<Item_in_subselect *>(subq_predicate)
+          : nullptr;
+
+  if (in_predicate != nullptr) {
+    thd->lex->set_current_query_block(outer);
+    char const *save_where = thd->where;
+    thd->where = "IN/ALL/ANY subquery";
+    Condition_context CCT(outer);
+
+    bool result =
+        !in_predicate->left_expr->fixed &&
+        in_predicate->left_expr->fix_fields(thd, &in_predicate->left_expr);
+    thd->lex->set_current_query_block(this);
+    thd->where = save_where;
+    if (result) return true;
+
+    /*
+      Check if the left and right expressions have the same # of
+      columns, i.e. we don't have a case like
+        (oe1, oe2) IN (SELECT ie1, ie2, ie3 ...)
+
+      TODO why do we have this duplicated in IN->EXISTS transformers?
+      psergey-todo: fix these: grep for duplicated_subselect_card_check
+    */
+    if (num_visible_fields() != in_predicate->left_expr->cols()) {
+      my_error(ER_OPERAND_COLUMNS, MYF(0), in_predicate->left_expr->cols());
+      return true;
+    }
+    if (in_predicate->left_expr->is_non_deterministic()) deterministic = false;
+  }
+
+  // (a) A certain secondary engine doesn't support antijoin transforms
+  // (b) For NOT EXISTS (non-correlated subquery), or
+  // <constant> NOT IN (non-correlated subquery): it is more efficient to
+  // evaluate it once for all during optimization:
+  // - if it is false, we may be able to skip reading the outer table,
+  // - if it is true, we'll avoid reading the inner table many times.
+  // So we leave it as a subquery.
+  // todo: revisit this when (a) becomes false, or when the cost optimizer
+  // is made to prefer hash antijoin over nested loop antijoin for the cases of
+  // (b) (hash antijoin has efficient handling of them).
+  const bool cannot_do_antijoin =
+      (thd->lex->m_sql_cmd != nullptr &&  // (a)
+       thd->secondary_engine_optimization() ==
+           Secondary_engine_optimization::SECONDARY) ||
+      ((in_predicate == nullptr ||
+        in_predicate->left_expr->const_item()) &&  // (b)
+       (master_query_expression()->uncacheable & UNCACHEABLE_DEPENDENT) == 0);
+  const bool try_convert_to_derived =
+      (thd->optimizer_switch_flag(OPTIMIZER_SWITCH_SUBQUERY_TO_DERIVED) ||
+       // a certain secondary engine doesn't support subqueries
+       (thd->lex->m_sql_cmd != nullptr &&
+        thd->secondary_engine_optimization() ==
+            Secondary_engine_optimization::SECONDARY));
+
+  DBUG_PRINT("info", ("Checking if subq can be converted to semi-join"));
+  const bool no_aggregates = !is_grouped() && !with_sum_func &&
+                             having_cond() == nullptr && !has_windows();
+
+  /*
+    Check if we're in subquery that is a candidate for flattening into a
+    semi-join (which is done in flatten_subqueries()). The requirements are:
+      0. Semi-join is enabled (cf. hints)
+      1. Subquery predicate is an IN/=ANY or EXISTS predicate
+      2. Subquery is a single query block (not a UNION)
+      3. Subquery is not grouped (explicitly or implicitly)
+         3x: outer aggregated expression are not accepted
+      4. Subquery does not use HAVING
+      5. Subquery does not use windowing functions
+      6. Subquery predicate is (a) in an ON/WHERE clause,
+         and (b) at the AND-top-level of that clause. Note for 6a:
+         Semijoin transformations of subqueries in ON cause the
+         join nests to no longer be acceptable as a join tree, which
+         disturbs the hypergraph optimizer, so we disable them
+         for that case (6x).
+      7. Parent query block accepts semijoins (i.e we are not in a subquery of
+      a single table UPDATE/DELETE (TODO: We should handle this at some
+      point by switching to multi-table UPDATE/DELETE)
+      8. We're not in a confluent table-less subquery, like "SELECT 1".
+      9. No execution method was already chosen (by a prepared statement)
+      10. Parent query block is not a confluent table-less query block.
+      11. Neither parent nor child query block has straight join.
+      12. Parent query block does not prohibit semi-join.
+      13. LHS of IN predicate is deterministic
+      14. The surrounding truth test, and the nullability of expressions,
+      are compatible with the conversion.
+      15. Antijoins are supported, or it's not an antijoin (it's a semijoin).
+      16. OFFSET starts from the first row and LIMIT is not 0.
+  */
+  if (semijoin_enabled(thd) &&                                     // 0
+      predicate != nullptr &&                                      // 1
+      !is_part_of_union() &&                                       // 2
+      no_aggregates &&                                             // 3,3x,4,5
+      (outer->resolve_place == Query_block::RESOLVE_CONDITION ||   // 6a
+       (outer->resolve_place == Query_block::RESOLVE_JOIN_NEST &&  // 6a
+        !thd->lex->using_hypergraph_optimizer)) &&                 // 6x
+      outer->condition_context == enum_condition_context::ANDS &&  // 6b
+      outer->sj_candidates &&                                      // 7
+      leaf_table_count > 0 &&                                      // 8
+      predicate->strategy ==                                       //  9
+          Subquery_strategy::UNSPECIFIED &&                        //  9
+      outer->leaf_table_count > 0 &&                               // 10
+      !((active_options() | outer->active_options()) &             // 11
+        SELECT_STRAIGHT_JOIN) &&                                   // 11
+      !(outer->active_options() & SELECT_NO_SEMI_JOIN) &&          // 12
+      deterministic &&                                             // 13
+      predicate->choose_semijoin_or_antijoin() &&                  // 14
+      (!cannot_do_antijoin || !predicate->can_do_aj) &&            // 15
+      is_row_count_valid_for_semi_join()) {                        // 16
+    DBUG_PRINT("info", ("Subquery is semi-join conversion candidate"));
+
+    /* Notify in the subquery predicate where it belongs in the query graph */
+    predicate->embedding_join_nest = outer->resolve_nest;
+
+    /* Register the subquery for further processing in flatten_subqueries() */
+    predicate->strategy = Subquery_strategy::CANDIDATE_FOR_SEMIJOIN;
+    outer->sj_candidates->push_back(predicate);
+    choice_made = true;
+  }
+
+  /*
+    If semijoin failed, try a transformation to a derived table:
+    FROM ot WHERE ot.x IN (SELECT y FROM it1, it2)
+    =>
+    FROM ot LEFT JOIN (SELECT DISTINCT y FROM it1, it2) AS derived
+            ON ot.x=derived.y
+    WHERE derived.y IS NOT NULL.
+
+    Applicability constraints have numbers which are the same as in the list of
+    the previous block. Reasons may be different though.
+      1. Subquery predicate is an IN/=ANY or EXISTS predicate
+      2. Subquery is a single query block (not a UNION); this is because
+      a certain secondary engine has no support for UNION DISTINCT
+      3. If this is [NOT] EXISTS, there is no aggregation; see
+      transform_table_subquery_to_join_with_derived()
+      6. Subquery predicate is
+        6a. in WHERE clause (we have not implemented the transformation for the
+        ON clause)
+        6b. linked to the root of that clause with ANDs or ORs.
+      7. Parent query block accepts semijoins (i.e we are not in a subquery of
+      a single table UPDATE/DELETE (TODO: We should handle this at some
+      point by switching to multi-table UPDATE/DELETE)
+      9. No execution method was already chosen (by a prepared statement)
+      10. Parent select has tables, as we'll link to them with LEFT JOIN
+      12. Parent query block does not prohibit semi-join.
+      13. LHS of IN predicate is deterministic
+      14. The surrounding truth test, and the nullability of expressions,
+      are compatible with the conversion.
+      16. The left argument isn't a row (multi-column) subquery; it would lead
+      to creating conditions like WHERE (outer_subq) =
+      ROW(derived.col1,derived.col2), which would complicate code.
+      17. Certain other subquery transformations, incompatible with this one,
+      have not been done.
+  */
+
+  if (!choice_made && try_convert_to_derived && predicate != nullptr &&  // 1
+      !is_part_of_union() &&                                             // 2
+      (in_predicate != nullptr || no_aggregates) &&                      // 3
+      outer->resolve_place == Query_block::RESOLVE_CONDITION &&          // 6a
+      outer->condition_context != enum_condition_context::NEITHER &&     // 6b
+      outer->sj_candidates &&                                            // 7
+      predicate->strategy ==                                             //  9
+          Subquery_strategy::UNSPECIFIED &&                              //  9
+      outer->leaf_table_count &&                                         // 10
+      !(outer->active_options() & SELECT_NO_SEMI_JOIN) &&                // 12
+      deterministic &&                                                   // 13
+      predicate->choose_semijoin_or_antijoin() &&                        // 14
+      !(in_predicate != nullptr &&                                       // 16
+        in_predicate->left_expr->type() == Item::SUBSELECT_ITEM &&
+        in_predicate->left_expr->cols() > 1) &&
+      !thd->lex->m_subquery_to_derived_is_impossible) {  // 17
+    assert(outer->resolve_nest == nullptr);
+    /* Register the subquery for further processing in flatten_subqueries() */
+    outer->sj_candidates->push_back(predicate);
+    predicate->strategy = Subquery_strategy::CANDIDATE_FOR_DERIVED_TABLE;
+    predicate->outer_condition_context = outer->condition_context;
+    choice_made = true;
+  }
+
+  if (!choice_made) {
+    if (subq_predicate->select_transformer(thd, this) ==
+        Item_subselect::RES_ERROR)
+      return true;
+  }
+  return false;
+}
+
+
+// Source: sql_resolver.cc
+// Lines 1326-1545

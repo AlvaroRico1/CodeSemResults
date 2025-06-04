@@ -1,0 +1,29 @@
+cmdq_insert_after(struct cmdq_item *after, struct cmdq_item *item)
+{
+	struct client		*c = after->client;
+	struct cmdq_list	*queue = after->queue;
+	struct cmdq_item	*next;
+
+	do {
+		next = item->next;
+		item->next = after->next;
+		after->next = item;
+
+		if (c != NULL)
+			c->references++;
+		item->client = c;
+
+		item->queue = queue;
+		TAILQ_INSERT_AFTER(&queue->list, after, item, entry);
+		log_debug("%s %s: %s after %s", __func__, cmdq_name(c),
+		    item->name, after->name);
+
+		after = item;
+		item = next;
+	} while (item != NULL);
+	return (after);
+}
+
+
+// Source: cmd-queue.c
+// Lines 321-345

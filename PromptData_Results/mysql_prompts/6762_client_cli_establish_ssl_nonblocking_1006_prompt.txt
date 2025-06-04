@@ -1,0 +1,181 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ctx' at line 5
+2. Pointer 'net' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static net_async_status cli_establish_ssl_nonblocking(MYSQL *mysql, int *res) {
+  DBUG_TRACE;
+  NET *net = &mysql->net;
+  NET_ASYNC *net_async = NET_ASYNC_DATA(net);
+  mysql_async_connect *ctx = ASYNC_DATA(mysql)->connect_context;
+
+  if (ctx->ssl_state == SSL_NONE) {
+    /* Don't fallback on unencrypted connection if SSL required. */
+    if (mysql->options.extension &&
+        mysql->options.extension->ssl_mode >= SSL_MODE_REQUIRED &&
+        !(mysql->server_capabilities & CLIENT_SSL)) {
+      set_mysql_extended_error(mysql, CR_SSL_CONNECTION_ERROR, unknown_sqlstate,
+                               ER_CLIENT(CR_SSL_CONNECTION_ERROR),
+                               "SSL is required but the server doesn't "
+                               "support it");
+      goto error;
+    }
+
+    /*
+      If the ssl_mode is VERIFY_CA or VERIFY_IDENTITY, make sure
+      that the connection doesn't succeed without providing the
+      CA certificate.
+    */
+    if (mysql->options.extension &&
+        mysql->options.extension->ssl_mode > SSL_MODE_REQUIRED &&
+        !(mysql->options.ssl_ca || mysql->options.ssl_capath)) {
+      set_mysql_extended_error(mysql, CR_SSL_CONNECTION_ERROR, unknown_sqlstate,
+                               ER_CLIENT(CR_SSL_CONNECTION_ERROR),
+                               "CA certificate is required if ssl-mode "
+                               "is VERIFY_CA or VERIFY_IDENTITY");
+      goto error;
+    }
+
+    /*
+      Attempt SSL connection if ssl_mode != SSL_MODE_DISABLED and
+      the server supports SSL. Fallback on unencrypted
+      connection otherwise.
+    */
+    if (!mysql->options.extension ||
+        mysql->options.extension->ssl_mode == SSL_MODE_DISABLED ||
+        !(mysql->server_capabilities & CLIENT_SSL)) {
+      goto done;
+    }
+    ctx->ssl_state = SSL_REQUEST;
+  }
+
+  if (ctx->ssl_state == SSL_REQUEST) {
+    char buff[33], *end;
+
+    end = mysql_fill_packet_header(mysql, buff, sizeof(buff));
+
+    /*
+      Send mysql->client_flag, max_packet_size - unencrypted
+      otherwise the server does not know we want to do SSL
+    */
+    MYSQL_TRACE(SEND_SSL_REQUEST, mysql,
+                ((size_t)(end - buff), (const unsigned char *)buff));
+    bool ret;
+    if (my_net_write_nonblocking(net, (uchar *)buff, (size_t)(end - buff),
+                                 &ret) == NET_ASYNC_NOT_READY) {
+      return NET_ASYNC_NOT_READY;
+    }
+
+    if (ret) {
+      set_mysql_extended_error(mysql, CR_SERVER_LOST, unknown_sqlstate,
+                               ER_CLIENT(CR_SERVER_LOST_EXTENDED),
+                               "sending connection information to server",
+                               errno);
+      goto error;
+    }
+
+    ctx->ssl_state = SSL_CONNECT;
+  }
+
+  if (ctx->ssl_state == SSL_CONNECT) {
+    /* Do the SSL layering. */
+    struct st_mysql_options *options = &mysql->options;
+    struct st_VioSSLFd *ssl_fd;
+    enum enum_ssl_init_error ssl_init_error;
+    const char *cert_error;
+    unsigned long ssl_error;
+    size_t ret;
+    const bool verify_identity =
+        mysql->client_flag & CLIENT_SSL_VERIFY_SERVER_CERT;
+
+    MYSQL_TRACE_STAGE(mysql, SSL_NEGOTIATION);
+
+    if (!mysql->connector_fd) {
+      /* Create the VioSSLConnectorFd - init SSL and load certs */
+      if (!(ssl_fd = new_VioSSLConnectorFd(
+                options->ssl_key, options->ssl_cert, options->ssl_ca,
+                options->ssl_capath, options->ssl_cipher,
+                options->extension ? options->extension->tls_ciphersuites
+                                   : nullptr,
+                &ssl_init_error,
+                options->extension ? options->extension->ssl_crl : nullptr,
+                options->extension ? options->extension->ssl_crlpath : nullptr,
+                options->extension ? options->extension->ssl_ctx_flags : 0,
+                verify_identity ? mysql->host : nullptr))) {
+        set_mysql_extended_error(mysql, CR_SSL_CONNECTION_ERROR,
+                                 unknown_sqlstate,
+                                 ER_CLIENT(CR_SSL_CONNECTION_ERROR),
+                                 sslGetErrString(ssl_init_error));
+        goto error;
+      }
+      mysql->connector_fd = (unsigned char *)ssl_fd;
+    } else {
+      ssl_fd = (struct st_VioSSLFd *)mysql->connector_fd;
+    }
+
+    /* Connect to the server */
+    DBUG_PRINT("info", ("IO layer change in progress..."));
+    MYSQL_TRACE(SSL_CONNECT, mysql, ());
+    if ((ret = sslconnect(ssl_fd, net->vio,
+                          (long)(mysql->options.connect_timeout), &ssl_error,
+                          &ctx->ssl))) {
+      switch (ret) {
+        case VIO_SOCKET_WANT_READ:
+          net_async->async_blocking_state = NET_NONBLOCKING_READ;
+          return NET_ASYNC_NOT_READY;
+        case VIO_SOCKET_WANT_WRITE:
+          net_async->async_blocking_state = NET_NONBLOCKING_WRITE;
+          return NET_ASYNC_NOT_READY;
+        default:
+          break;
+          /* continue for error handling */
+      }
+
+      char buf[512];
+      ERR_error_string_n(ssl_error, buf, 512);
+      buf[511] = 0;
+      set_mysql_extended_error(mysql, CR_SSL_CONNECTION_ERROR, unknown_sqlstate,
+                               ER_CLIENT(CR_SSL_CONNECTION_ERROR), buf);
+      goto error;
+    }
+    DBUG_PRINT("info", ("IO layer change done!"));
+
+    /* sslconnect creates a new vio, so update it. */
+    vio_set_blocking_flag(net->vio, !ctx->non_blocking);
+
+    /* Verify server cert */
+    if (verify_identity &&
+        ssl_verify_server_cert(net->vio, mysql->host, &cert_error)) {
+      set_mysql_extended_error(mysql, CR_SSL_CONNECTION_ERROR, unknown_sqlstate,
+                               ER_CLIENT(CR_SSL_CONNECTION_ERROR), cert_error);
+      goto error;
+    }
+
+    MYSQL_TRACE(SSL_CONNECTED, mysql, ());
+    MYSQL_TRACE_STAGE(mysql, AUTHENTICATE);
+  }
+
+done:
+  *res = 0;
+  ctx->ssl_state = SSL_COMPLETE;
+  return NET_ASYNC_COMPLETE;
+
+error:
+  *res = 1;
+  ctx->ssl_state = SSL_COMPLETE;
+  return NET_ASYNC_COMPLETE;
+}
+
+
+// Source: client.cc
+// Lines 4286-4447
+
+
+[ANSWER]
+MUST-NOT

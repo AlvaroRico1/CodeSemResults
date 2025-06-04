@@ -1,0 +1,83 @@
+static int nfs_init_server(struct nfs_server *server,
+			   const struct nfs_parsed_mount_data *data,
+			   struct nfs_subversion *nfs_mod)
+{
+	struct rpc_timeout timeparms;
+	struct nfs_client_initdata cl_init = {
+		.hostname = data->nfs_server.hostname,
+		.addr = (const struct sockaddr *)&data->nfs_server.address,
+		.addrlen = data->nfs_server.addrlen,
+		.nfs_mod = nfs_mod,
+		.proto = data->nfs_server.protocol,
+		.net = data->net,
+		.timeparms = &timeparms,
+		.cred = server->cred,
+		.nconnect = data->nfs_server.nconnect,
+	};
+	struct nfs_client *clp;
+	int error;
+
+	nfs_init_timeout_values(&timeparms, data->nfs_server.protocol,
+			data->timeo, data->retrans);
+	if (data->flags & NFS_MOUNT_NORESVPORT)
+		set_bit(NFS_CS_NORESVPORT, &cl_init.init_flags);
+
+	/* Allocate or find a client reference we can use */
+	clp = nfs_get_client(&cl_init);
+	if (IS_ERR(clp))
+		return PTR_ERR(clp);
+
+	server->nfs_client = clp;
+
+	/* Initialise the client representation from the mount data */
+	server->flags = data->flags;
+	server->options = data->options;
+	server->caps |= NFS_CAP_HARDLINKS|NFS_CAP_SYMLINKS|NFS_CAP_FILEID|
+		NFS_CAP_MODE|NFS_CAP_NLINK|NFS_CAP_OWNER|NFS_CAP_OWNER_GROUP|
+		NFS_CAP_ATIME|NFS_CAP_CTIME|NFS_CAP_MTIME;
+
+	if (data->rsize)
+		server->rsize = nfs_block_size(data->rsize, NULL);
+	if (data->wsize)
+		server->wsize = nfs_block_size(data->wsize, NULL);
+
+	server->acregmin = data->acregmin * HZ;
+	server->acregmax = data->acregmax * HZ;
+	server->acdirmin = data->acdirmin * HZ;
+	server->acdirmax = data->acdirmax * HZ;
+
+	/* Start lockd here, before we might error out */
+	error = nfs_start_lockd(server);
+	if (error < 0)
+		goto error;
+
+	server->port = data->nfs_server.port;
+	server->auth_info = data->auth_info;
+
+	error = nfs_init_server_rpcclient(server, &timeparms,
+					  data->selected_flavor);
+	if (error < 0)
+		goto error;
+
+	/* Preserve the values of mount_server-related mount options */
+	if (data->mount_server.addrlen) {
+		memcpy(&server->mountd_address, &data->mount_server.address,
+			data->mount_server.addrlen);
+		server->mountd_addrlen = data->mount_server.addrlen;
+	}
+	server->mountd_version = data->mount_server.version;
+	server->mountd_port = data->mount_server.port;
+	server->mountd_protocol = data->mount_server.protocol;
+
+	server->namelen  = data->namlen;
+	return 0;
+
+error:
+	server->nfs_client = NULL;
+	nfs_put_client(clp);
+	return error;
+}
+
+
+// Source: client.c
+// Lines 650-728

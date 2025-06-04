@@ -1,0 +1,40 @@
+int git_blame_buffer(
+		git_blame **out,
+		git_blame *reference,
+		const char *buffer,
+		size_t buffer_len)
+{
+	git_blame *blame;
+	git_diff_options diffopts = GIT_DIFF_OPTIONS_INIT;
+	size_t i;
+	git_blame_hunk *hunk;
+
+	diffopts.context_lines = 0;
+
+	GIT_ASSERT_ARG(out);
+	GIT_ASSERT_ARG(reference);
+	GIT_ASSERT_ARG(buffer && buffer_len);
+
+	blame = git_blame__alloc(reference->repository, reference->options, reference->path);
+	GIT_ERROR_CHECK_ALLOC(blame);
+
+	/* Duplicate all of the hunk structures in the reference blame */
+	git_vector_foreach(&reference->hunks, i, hunk) {
+		git_blame_hunk *h = dup_hunk(hunk);
+		GIT_ERROR_CHECK_ALLOC(h);
+
+		git_vector_insert(&blame->hunks, h);
+	}
+
+	/* Diff to the reference blob */
+	git_diff_blob_to_buffer(reference->final_blob, blame->path,
+		buffer, buffer_len, blame->path, &diffopts,
+		NULL, NULL, buffer_hunk_cb, buffer_line_cb, blame);
+
+	*out = blame;
+	return 0;
+}
+
+
+// Source: blame.c
+// Lines 508-543

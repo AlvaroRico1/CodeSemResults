@@ -1,0 +1,95 @@
+acpi_ds_eval_table_region_operands(struct acpi_walk_state *walk_state,
+				   union acpi_parse_object *op)
+{
+	acpi_status status;
+	union acpi_operand_object *obj_desc;
+	union acpi_operand_object **operand;
+	struct acpi_namespace_node *node;
+	union acpi_parse_object *next_op;
+	struct acpi_table_header *table;
+	u32 table_index;
+
+	ACPI_FUNCTION_TRACE_PTR(ds_eval_table_region_operands, op);
+
+	/*
+	 * This is where we evaluate the Signature string, oem_id string,
+	 * and oem_table_id string of the Data Table Region declaration
+	 */
+	node = op->common.node;
+
+	/* next_op points to Signature string op */
+
+	next_op = op->common.value.arg;
+
+	/*
+	 * Evaluate/create the Signature string, oem_id string,
+	 * and oem_table_id string operands
+	 */
+	status = acpi_ds_create_operands(walk_state, next_op);
+	if (ACPI_FAILURE(status)) {
+		return_ACPI_STATUS(status);
+	}
+
+	operand = &walk_state->operands[0];
+
+	/*
+	 * Resolve the Signature string, oem_id string,
+	 * and oem_table_id string operands
+	 */
+	status =
+	    acpi_ex_resolve_operands(op->common.aml_opcode, ACPI_WALK_OPERANDS,
+				     walk_state);
+	if (ACPI_FAILURE(status)) {
+		goto cleanup;
+	}
+
+	/* Find the ACPI table */
+
+	status = acpi_tb_find_table(operand[0]->string.pointer,
+				    operand[1]->string.pointer,
+				    operand[2]->string.pointer, &table_index);
+	if (ACPI_FAILURE(status)) {
+		if (status == AE_NOT_FOUND) {
+			ACPI_ERROR((AE_INFO,
+				    "ACPI Table [%4.4s] OEM:(%s, %s) not found in RSDT/XSDT",
+				    operand[0]->string.pointer,
+				    operand[1]->string.pointer,
+				    operand[2]->string.pointer));
+		}
+		goto cleanup;
+	}
+
+	status = acpi_get_table_by_index(table_index, &table);
+	if (ACPI_FAILURE(status)) {
+		goto cleanup;
+	}
+
+	obj_desc = acpi_ns_get_attached_object(node);
+	if (!obj_desc) {
+		status = AE_NOT_EXIST;
+		goto cleanup;
+	}
+
+	obj_desc->region.address = ACPI_PTR_TO_PHYSADDR(table);
+	obj_desc->region.length = table->length;
+
+	ACPI_DEBUG_PRINT((ACPI_DB_EXEC, "RgnObj %p Addr %8.8X%8.8X Len %X\n",
+			  obj_desc,
+			  ACPI_FORMAT_UINT64(obj_desc->region.address),
+			  obj_desc->region.length));
+
+	/* Now the address and length are valid for this opregion */
+
+	obj_desc->region.flags |= AOPOBJ_DATA_VALID;
+
+cleanup:
+	acpi_ut_remove_reference(operand[0]);
+	acpi_ut_remove_reference(operand[1]);
+	acpi_ut_remove_reference(operand[2]);
+
+	return_ACPI_STATUS(status);
+}
+
+
+// Source: dsopcode.c
+// Lines 458-548

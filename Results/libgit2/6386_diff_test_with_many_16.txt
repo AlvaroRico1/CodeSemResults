@@ -1,0 +1,1 @@
+diff,libgit2/tests/libgit2/stress/diff.c,5,index,libgit2/tests/libgit2/stress/diff.c,3,2

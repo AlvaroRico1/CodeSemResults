@@ -1,0 +1,53 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'block' at line 7
+2. Pointer 'base' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+base_auto_thp_switch(tsdn_t *tsdn, base_t *base) {
+	assert(opt_metadata_thp == metadata_thp_auto);
+	malloc_mutex_assert_owner(tsdn, &base->mtx);
+	if (base->auto_thp_switched) {
+		return;
+	}
+	/* Called when adding a new block. */
+	bool should_switch;
+	if (base_ind_get(base) != 0) {
+		should_switch = (base_get_num_blocks(base, true) ==
+		    BASE_AUTO_THP_THRESHOLD);
+	} else {
+		should_switch = (base_get_num_blocks(base, true) ==
+		    BASE_AUTO_THP_THRESHOLD_A0);
+	}
+	if (!should_switch) {
+		return;
+	}
+
+	base->auto_thp_switched = true;
+	assert(!config_stats || base->n_thp == 0);
+	/* Make the initial blocks THP lazily. */
+	base_block_t *block = base->blocks;
+	while (block != NULL) {
+		assert((block->size & HUGEPAGE_MASK) == 0);
+		pages_huge(block, block->size);
+		if (config_stats) {
+			base->n_thp += HUGEPAGE_CEILING(block->size -
+			    extent_bsize_get(&block->extent)) >> LG_HUGEPAGE;
+		}
+		block = block->next;
+		assert(block == NULL || (base_ind_get(base) == 0));
+	}
+}
+
+
+// Source: base.c
+// Lines 144-177
+
+
+[ANSWER]
+MUST

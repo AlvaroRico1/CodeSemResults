@@ -1,0 +1,53 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'last' at line 3
+2. Pointer 'lcchild' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+layout_search_by_border(struct layout_cell *lc, u_int x, u_int y)
+{
+	struct layout_cell	*lcchild, *last = NULL;
+
+	TAILQ_FOREACH(lcchild, &lc->cells, entry) {
+		if (x >= lcchild->xoff && x < lcchild->xoff + lcchild->sx &&
+		    y >= lcchild->yoff && y < lcchild->yoff + lcchild->sy) {
+			/* Inside the cell - recurse. */
+			return (layout_search_by_border(lcchild, x, y));
+		}
+
+		if (last == NULL) {
+			last = lcchild;
+			continue;
+		}
+
+		switch (lc->type) {
+		case LAYOUT_LEFTRIGHT:
+			if (x < lcchild->xoff && x >= last->xoff + last->sx)
+				return (last);
+			break;
+		case LAYOUT_TOPBOTTOM:
+			if (y < lcchild->yoff && y >= last->yoff + last->sy)
+				return (last);
+			break;
+		case LAYOUT_WINDOWPANE:
+			break;
+		}
+
+		last = lcchild;
+	}
+
+	return (NULL);
+}
+
+
+// Source: layout.c
+// Lines 130-163
+
+
+[ANSWER]
+MUST

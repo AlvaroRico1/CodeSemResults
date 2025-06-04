@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'B' at line 1\n2. Pointer 'L' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nLUALIB_API void luaL_buffinit (lua_State *L, luaL_Buffer *B) {\n  B->L = L;\n  B->p = B->buffer;\n  B->lvl = 0;\n}\n\n/* }====================================================== */\n\n\n// Source: lauxlib.c\n// Lines 472-478\n",
+  "ANSWER": "MUST"
+}

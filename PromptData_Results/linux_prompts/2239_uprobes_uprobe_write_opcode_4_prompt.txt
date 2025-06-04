@@ -1,0 +1,77 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'vma' at line 6
+2. Pointer 'old_page' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int uprobe_write_opcode(struct arch_uprobe *auprobe, struct mm_struct *mm,
+			unsigned long vaddr, uprobe_opcode_t opcode)
+{
+	struct uprobe *uprobe;
+	struct page *old_page, *new_page;
+	struct vm_area_struct *vma;
+	int ret, is_register, ref_ctr_updated = 0;
+
+	is_register = is_swbp_insn(&opcode);
+	uprobe = container_of(auprobe, struct uprobe, arch);
+
+retry:
+	/* Read the page with vaddr into memory */
+	ret = get_user_pages_remote(NULL, mm, vaddr, 1,
+			FOLL_FORCE | FOLL_SPLIT, &old_page, &vma, NULL);
+	if (ret <= 0)
+		return ret;
+
+	ret = verify_opcode(old_page, vaddr, &opcode);
+	if (ret <= 0)
+		goto put_old;
+
+	/* We are going to replace instruction, update ref_ctr. */
+	if (!ref_ctr_updated && uprobe->ref_ctr_offset) {
+		ret = update_ref_ctr(uprobe, mm, is_register ? 1 : -1);
+		if (ret)
+			goto put_old;
+
+		ref_ctr_updated = 1;
+	}
+
+	ret = anon_vma_prepare(vma);
+	if (ret)
+		goto put_old;
+
+	ret = -ENOMEM;
+	new_page = alloc_page_vma(GFP_HIGHUSER_MOVABLE, vma, vaddr);
+	if (!new_page)
+		goto put_old;
+
+	__SetPageUptodate(new_page);
+	copy_highpage(new_page, old_page);
+	copy_to_page(new_page, vaddr, &opcode, UPROBE_SWBP_INSN_SIZE);
+
+	ret = __replace_page(vma, vaddr, old_page, new_page);
+	put_page(new_page);
+put_old:
+	put_page(old_page);
+
+	if (unlikely(ret == -EAGAIN))
+		goto retry;
+
+	/* Revert back reference counter if instruction update failed. */
+	if (ret && is_register && ref_ctr_updated)
+		update_ref_ctr(uprobe, mm, -1);
+
+	return ret;
+}
+
+
+// Source: uprobes.c
+// Lines 460-517
+
+
+[ANSWER]
+MAY

@@ -1,0 +1,70 @@
+static int append_edit(int argc, const char **argv, const char *prefix)
+{
+	int allow_empty = 0;
+	const char *object_ref;
+	struct notes_tree *t;
+	struct object_id object, new_note;
+	const struct object_id *note;
+	char *logmsg;
+	const char * const *usage;
+	struct note_data d = { 0, 0, NULL, STRBUF_INIT };
+	struct option options[] = {
+		OPT_CALLBACK_F('m', "message", &d, N_("message"),
+			N_("note contents as a string"), PARSE_OPT_NONEG,
+			parse_msg_arg),
+		OPT_CALLBACK_F('F', "file", &d, N_("file"),
+			N_("note contents in a file"), PARSE_OPT_NONEG,
+			parse_file_arg),
+		OPT_CALLBACK_F('c', "reedit-message", &d, N_("object"),
+			N_("reuse and edit specified note object"), PARSE_OPT_NONEG,
+			parse_reedit_arg),
+		OPT_CALLBACK_F('C', "reuse-message", &d, N_("object"),
+			N_("reuse specified note object"), PARSE_OPT_NONEG,
+			parse_reuse_arg),
+		OPT_BOOL(0, "allow-empty", &allow_empty,
+			N_("allow storing empty note")),
+		OPT_END()
+	};
+	int edit = !strcmp(argv[0], "edit");
+
+	usage = edit ? git_notes_edit_usage : git_notes_append_usage;
+	argc = parse_options(argc, argv, prefix, options, usage,
+			     PARSE_OPT_KEEP_ARGV0);
+
+	if (2 < argc) {
+		error(_("too many arguments"));
+		usage_with_options(usage, options);
+	}
+
+	if (d.given && edit)
+		fprintf(stderr, _("The -m/-F/-c/-C options have been deprecated "
+			"for the 'edit' subcommand.\n"
+			"Please use 'git notes add -f -m/-F/-c/-C' instead.\n"));
+
+	object_ref = 1 < argc ? argv[1] : "HEAD";
+
+	if (get_oid(object_ref, &object))
+		die(_("failed to resolve '%s' as a valid ref."), object_ref);
+
+	t = init_notes_check(argv[0], NOTES_INIT_WRITABLE);
+	note = get_note(t, &object);
+
+	prepare_note_data(&object, &d, edit && note ? note : NULL);
+
+	if (note && !edit) {
+		/* Append buf to previous note contents */
+		unsigned long size;
+		enum object_type type;
+		char *prev_buf = read_object_file(note, &type, &size);
+
+		strbuf_grow(&d.buf, size + 1);
+		if (d.buf.len && prev_buf && size)
+			strbuf_insertstr(&d.buf, 0, "\n");
+		if (prev_buf && size)
+			strbuf_insert(&d.buf, 0, prev_buf, size);
+		free(prev_buf);
+	}
+
+
+// Source: notes.c
+// Lines 562-627

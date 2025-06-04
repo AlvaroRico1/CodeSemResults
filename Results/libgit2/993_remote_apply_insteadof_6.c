@@ -1,0 +1,72 @@
+static int apply_insteadof(char **out, git_config *config, const char *url, int direction, bool use_default_if_empty)
+{
+	size_t match_length, prefix_length, suffix_length;
+	char *replacement = NULL;
+	const char *regexp;
+
+	git_str result = GIT_STR_INIT;
+	git_config_entry *entry;
+	git_config_iterator *iter;
+
+	GIT_ASSERT_ARG(out);
+	GIT_ASSERT_ARG(config);
+	GIT_ASSERT_ARG(url);
+	GIT_ASSERT_ARG(direction == GIT_DIRECTION_FETCH || direction == GIT_DIRECTION_PUSH);
+
+	/* Add 1 to prefix/suffix length due to the additional escaped dot */
+	prefix_length = strlen(PREFIX) + 1;
+	if (direction == GIT_DIRECTION_FETCH) {
+		regexp = PREFIX "\\..*\\." SUFFIX_FETCH;
+		suffix_length = strlen(SUFFIX_FETCH) + 1;
+	} else {
+		regexp = PREFIX "\\..*\\." SUFFIX_PUSH;
+		suffix_length = strlen(SUFFIX_PUSH) + 1;
+	}
+
+	if (git_config_iterator_glob_new(&iter, config, regexp) < 0)
+		return -1;
+
+	match_length = 0;
+	while (git_config_next(&entry, iter) == 0) {
+		size_t n, replacement_length;
+
+		/* Check if entry value is a prefix of URL */
+		if (git__prefixcmp(url, entry->value))
+			continue;
+
+		/* Check if entry value is longer than previous
+		 * prefixes */
+		if ((n = strlen(entry->value)) <= match_length)
+			continue;
+
+		git__free(replacement);
+		match_length = n;
+
+		/* Cut off prefix and suffix of the value */
+		replacement_length =
+		    strlen(entry->name) - (prefix_length + suffix_length);
+		replacement = git__strndup(entry->name + prefix_length,
+				replacement_length);
+	}
+
+	git_config_iterator_free(iter);
+
+	if (match_length == 0 && use_default_if_empty) {
+		*out = git__strdup(url);
+		return *out ? 0 : -1;
+	} else if (match_length == 0) {
+		*out = NULL;
+		return 0;
+	}
+
+	git_str_printf(&result, "%s%s", replacement, url + match_length);
+
+	git__free(replacement);
+
+	*out = git_str_detach(&result);
+	return 0;
+}
+
+
+// Source: remote.c
+// Lines 3006-3073

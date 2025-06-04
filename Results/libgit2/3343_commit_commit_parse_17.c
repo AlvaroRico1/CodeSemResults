@@ -1,0 +1,91 @@
+static int commit_parse(git_commit *commit, const char *data, size_t size, unsigned int flags)
+{
+	const char *buffer_start = data, *buffer;
+	const char *buffer_end = buffer_start + size;
+	git_oid parent_id;
+	size_t header_len;
+	git_signature dummy_sig;
+	int error;
+
+	GIT_ASSERT_ARG(commit);
+	GIT_ASSERT_ARG(data);
+
+	buffer = buffer_start;
+
+	/* Allocate for one, which will allow not to realloc 90% of the time  */
+	git_array_init_to_size(commit->parent_ids, 1);
+	GIT_ERROR_CHECK_ARRAY(commit->parent_ids);
+
+	/* The tree is always the first field */
+	if (!(flags & GIT_COMMIT_PARSE_QUICK)) {
+	    if (git_oid__parse(&commit->tree_id, &buffer, buffer_end, "tree ") < 0)
+			goto bad_buffer;
+	} else {
+		size_t tree_len = strlen("tree ") + GIT_OID_HEXSZ + 1;
+		if (buffer + tree_len > buffer_end)
+			goto bad_buffer;
+		buffer += tree_len;
+	}
+
+	/*
+	 * TODO: commit grafts!
+	 */
+
+	while (git_oid__parse(&parent_id, &buffer, buffer_end, "parent ") == 0) {
+		git_oid *new_id = git_array_alloc(commit->parent_ids);
+		GIT_ERROR_CHECK_ALLOC(new_id);
+
+		git_oid_cpy(new_id, &parent_id);
+	}
+
+	if (!(flags & GIT_COMMIT_PARSE_QUICK)) {
+		commit->author = git__malloc(sizeof(git_signature));
+		GIT_ERROR_CHECK_ALLOC(commit->author);
+
+		if ((error = git_signature__parse(commit->author, &buffer, buffer_end, "author ", '\n')) < 0)
+			return error;
+	}
+
+	/* Some tools create multiple author fields, ignore the extra ones */
+	while (!git__prefixncmp(buffer, buffer_end - buffer, "author ")) {
+		if ((error = git_signature__parse(&dummy_sig, &buffer, buffer_end, "author ", '\n')) < 0)
+			return error;
+
+		git__free(dummy_sig.name);
+		git__free(dummy_sig.email);
+	}
+
+	/* Always parse the committer; we need the commit time */
+	commit->committer = git__malloc(sizeof(git_signature));
+	GIT_ERROR_CHECK_ALLOC(commit->committer);
+
+	if ((error = git_signature__parse(commit->committer, &buffer, buffer_end, "committer ", '\n')) < 0)
+		return error;
+
+	if (flags & GIT_COMMIT_PARSE_QUICK)
+		return 0;
+
+	/* Parse add'l header entries */
+	while (buffer < buffer_end) {
+		const char *eoln = buffer;
+		if (buffer[-1] == '\n' && buffer[0] == '\n')
+			break;
+
+		while (eoln < buffer_end && *eoln != '\n')
+			++eoln;
+
+		if (git__prefixncmp(buffer, buffer_end - buffer, "encoding ") == 0) {
+			buffer += strlen("encoding ");
+
+			commit->message_encoding = git__strndup(buffer, eoln - buffer);
+			GIT_ERROR_CHECK_ALLOC(commit->message_encoding);
+		}
+
+		if (eoln < buffer_end && *eoln == '\n')
+			++eoln;
+		buffer = eoln;
+	}
+
+
+// Source: commit.c
+// Lines 391-477

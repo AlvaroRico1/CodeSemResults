@@ -1,0 +1,91 @@
+static int _cp_r_callback(void *ref, git_str *from)
+{
+	int error = 0;
+	cp_r_info *info = ref;
+	struct stat from_st, to_st;
+	bool exists = false;
+
+	if ((info->flags & GIT_CPDIR_COPY_DOTFILES) == 0 &&
+		from->ptr[git_fs_path_basename_offset(from)] == '.')
+		return 0;
+
+	if ((error = git_str_joinpath(
+			&info->to, info->to_root, from->ptr + info->from_prefix)) < 0)
+		return error;
+
+	if (!(error = git_fs_path_lstat(info->to.ptr, &to_st)))
+		exists = true;
+	else if (error != GIT_ENOTFOUND)
+		return error;
+	else {
+		git_error_clear();
+		error = 0;
+	}
+
+	if ((error = git_fs_path_lstat(from->ptr, &from_st)) < 0)
+		return error;
+
+	if (S_ISDIR(from_st.st_mode)) {
+		mode_t oldmode = info->dirmode;
+
+		/* if we are not chmod'ing, then overwrite dirmode */
+		if ((info->flags & GIT_CPDIR_CHMOD_DIRS) == 0)
+			info->dirmode = from_st.st_mode;
+
+		/* make directory now if CREATE_EMPTY_DIRS is requested and needed */
+		if (!exists && (info->flags & GIT_CPDIR_CREATE_EMPTY_DIRS) != 0)
+			error = _cp_r_mkdir(info, from);
+
+		/* recurse onto target directory */
+		if (!error && (!exists || S_ISDIR(to_st.st_mode)))
+			error = git_fs_path_direach(from, 0, _cp_r_callback, info);
+
+		if (oldmode != 0)
+			info->dirmode = oldmode;
+
+		return error;
+	}
+
+	if (exists) {
+		if ((info->flags & GIT_CPDIR_OVERWRITE) == 0)
+			return 0;
+
+		if (p_unlink(info->to.ptr) < 0) {
+			git_error_set(GIT_ERROR_OS, "cannot overwrite existing file '%s'",
+				info->to.ptr);
+			return GIT_EEXISTS;
+		}
+	}
+
+	/* Done if this isn't a regular file or a symlink */
+	if (!S_ISREG(from_st.st_mode) &&
+		(!S_ISLNK(from_st.st_mode) ||
+		 (info->flags & GIT_CPDIR_COPY_SYMLINKS) == 0))
+		return 0;
+
+	/* Make container directory on demand if needed */
+	if ((info->flags & GIT_CPDIR_CREATE_EMPTY_DIRS) == 0 &&
+		(error = _cp_r_mkdir(info, from)) < 0)
+		return error;
+
+	/* make symlink or regular file */
+	if (info->flags & GIT_CPDIR_LINK_FILES) {
+		if ((error = p_link(from->ptr, info->to.ptr)) < 0)
+			git_error_set(GIT_ERROR_OS, "failed to link '%s'", from->ptr);
+	} else if (S_ISLNK(from_st.st_mode)) {
+		error = cp_link(from->ptr, info->to.ptr, (size_t)from_st.st_size);
+	} else {
+		mode_t usemode = from_st.st_mode;
+
+		if ((info->flags & GIT_CPDIR_SIMPLE_TO_MODE) != 0)
+			usemode = GIT_PERMS_FOR_WRITE(usemode);
+
+		error = git_futils_cp(from->ptr, info->to.ptr, usemode);
+	}
+
+	return error;
+}
+
+
+// Source: futils.c
+// Lines 1017-1103

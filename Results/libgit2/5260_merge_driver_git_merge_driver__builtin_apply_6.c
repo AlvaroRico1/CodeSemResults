@@ -1,0 +1,54 @@
+int git_merge_driver__builtin_apply(
+	git_merge_driver *self,
+	const char **path_out,
+	uint32_t *mode_out,
+	git_buf *merged_out,
+	const char *filter_name,
+	const git_merge_driver_source *src)
+{
+	git_merge_driver__builtin *driver = (git_merge_driver__builtin *)self;
+	git_merge_file_options file_opts = GIT_MERGE_FILE_OPTIONS_INIT;
+	git_merge_file_result result = {0};
+	int error;
+
+	GIT_UNUSED(filter_name);
+
+	if (src->file_opts)
+		memcpy(&file_opts, src->file_opts, sizeof(git_merge_file_options));
+
+	if (driver->favor)
+		file_opts.favor = driver->favor;
+
+	if ((error = git_merge_file_from_index(&result, src->repo,
+		src->ancestor, src->ours, src->theirs, &file_opts)) < 0)
+		goto done;
+
+	if (!result.automergeable &&
+		!(file_opts.flags & GIT_MERGE_FILE_ACCEPT_CONFLICTS)) {
+		error = GIT_EMERGECONFLICT;
+		goto done;
+	}
+
+	*path_out = git_merge_file__best_path(
+		src->ancestor ? src->ancestor->path : NULL,
+		src->ours ? src->ours->path : NULL,
+		src->theirs ? src->theirs->path : NULL);
+
+	*mode_out = git_merge_file__best_mode(
+		src->ancestor ? src->ancestor->mode : 0,
+		src->ours ? src->ours->mode : 0,
+		src->theirs ? src->theirs->mode : 0);
+
+	merged_out->ptr = (char *)result.ptr;
+	merged_out->size = result.len;
+	merged_out->reserved = 0;
+	result.ptr = NULL;
+
+done:
+	git_merge_file_result_free(&result);
+	return error;
+}
+
+
+// Source: merge_driver.c
+// Lines 70-119

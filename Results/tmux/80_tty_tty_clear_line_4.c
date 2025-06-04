@@ -1,0 +1,53 @@
+tty_clear_line(struct tty *tty, const struct grid_cell *defaults, u_int py,
+    u_int px, u_int nx, u_int bg)
+{
+	struct client		*c = tty->client;
+	struct overlay_ranges	 r;
+	u_int			 i;
+
+	log_debug("%s: %s, %u at %u,%u", __func__, c->name, nx, px, py);
+
+	/* Nothing to clear. */
+	if (nx == 0)
+		return;
+
+	/* If genuine BCE is available, can try escape sequences. */
+	if (c->overlay_check == NULL && !tty_fake_bce(tty, defaults, bg)) {
+		/* Off the end of the line, use EL if available. */
+		if (px + nx >= tty->sx && tty_term_has(tty->term, TTYC_EL)) {
+			tty_cursor(tty, px, py);
+			tty_putcode(tty, TTYC_EL);
+			return;
+		}
+
+		/* At the start of the line. Use EL1. */
+		if (px == 0 && tty_term_has(tty->term, TTYC_EL1)) {
+			tty_cursor(tty, px + nx - 1, py);
+			tty_putcode(tty, TTYC_EL1);
+			return;
+		}
+
+		/* Section of line. Use ECH if possible. */
+		if (tty_term_has(tty->term, TTYC_ECH)) {
+			tty_cursor(tty, px, py);
+			tty_putcode1(tty, TTYC_ECH, nx);
+			return;
+		}
+	}
+
+	/*
+	 * Couldn't use an escape sequence, use spaces. Clear only the visible
+	 * bit if there is an overlay.
+	 */
+	tty_check_overlay_range(tty, px, py, nx, &r);
+	for (i = 0; i < OVERLAY_MAX_RANGES; i++) {
+		if (r.nx[i] == 0)
+			continue;
+		tty_cursor(tty, r.px[i], py);
+		tty_repeat_space(tty, r.nx[i]);
+	}
+}
+
+
+// Source: tty.c
+// Lines 1048-1096

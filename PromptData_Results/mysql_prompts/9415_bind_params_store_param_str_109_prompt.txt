@@ -1,0 +1,26 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'length' at line 2
+2. Pointer 'param' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void store_param_str(NET *net, MYSQL_BIND *param) {
+  /* param->length is always set in mysql_stmt_bind_param */
+  ulong length = *param->length;
+  uchar *to = net_store_length(net->write_pos, length);
+  memcpy(to, param->buffer, length);
+  net->write_pos = to + length;
+}
+
+
+// Source: bind_params.cc
+// Lines 223-229
+
+
+[ANSWER]
+MUST-NOT

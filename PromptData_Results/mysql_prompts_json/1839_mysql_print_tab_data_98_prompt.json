@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'lengths' at line 4\n2. Pointer 'first' at line 7\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void print_tab_data(MYSQL_RES *result) {\n  MYSQL_ROW cur;\n  MYSQL_FIELD *field;\n  ulong *lengths;\n\n  if (opt_silent < 2 && column_names) {\n    int first = 0;\n    while ((field = mysql_fetch_field(result))) {\n      if (first++) (void)tee_fputs(\"\\t\", PAGER);\n      (void)tee_fputs(field->name, PAGER);\n    }\n    (void)tee_fputs(\"\\n\", PAGER);\n  }\n\n\n// Source: mysql.cc\n// Lines 3938-3950\n",
+  "ANSWER": "MUST-NOT"
+}

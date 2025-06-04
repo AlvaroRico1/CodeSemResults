@@ -1,0 +1,33 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'released' at line 6
+2. Pointer 'copy_from_arena' at line 11
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+Message* Reflection::ReleaseMessage(Message* message,
+                                    const FieldDescriptor* field,
+                                    MessageFactory* factory) const {
+  CheckInvalidAccess(schema_, field);
+
+  Message* released = UnsafeArenaReleaseMessage(message, field, factory);
+#ifdef PROTOBUF_FORCE_COPY_IN_RELEASE
+  released = MaybeForceCopy(message->GetArenaForAllocation(), released);
+#endif  // PROTOBUF_FORCE_COPY_IN_RELEASE
+  if (message->GetArenaForAllocation() != nullptr && released != nullptr) {
+    Message* copy_from_arena = released->New();
+    copy_from_arena->CopyFrom(*released);
+    released = copy_from_arena;
+  }
+
+
+// Source: generated_message_reflection.cc
+// Lines 2134-2147
+
+
+[ANSWER]
+MUST

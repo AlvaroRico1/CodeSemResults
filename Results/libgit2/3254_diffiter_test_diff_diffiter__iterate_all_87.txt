@@ -1,0 +1,1 @@
+line,libgit2/tests/libgit2/diff/diffiter.c,34,num_d,libgit2/tests/libgit2/diff/diffiter.c,7,0

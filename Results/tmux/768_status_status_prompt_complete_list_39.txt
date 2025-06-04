@@ -1,0 +1,1 @@
+layout,tmux/status.c,4,cmdent,tmux/status.c,5,2

@@ -1,0 +1,24 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'pv' at line 3
+2. Pointer 'pv' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void restore_pluginvar_names(sys_var *first) {
+  for (sys_var *var = first; var; var = var->next) {
+    sys_var_pluginvar *pv = var->cast_pluginvar();
+    pv->plugin_var->name = pv->orig_pluginvar_name;
+  }
+
+
+// Source: sql_plugin.cc
+// Lines 2917-2921
+
+
+[ANSWER]
+MUST

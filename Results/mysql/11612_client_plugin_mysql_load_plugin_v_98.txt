@@ -1,0 +1,1 @@
+sym,mysql/sql-common/client_plugin.cc,6,well_formed_error,mysql/sql-common/client_plugin.cc,11,0

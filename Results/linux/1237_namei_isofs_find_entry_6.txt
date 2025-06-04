@@ -1,0 +1,1 @@
+dpnt,linux/fs/isofs/namei.c,21,de,linux/fs/isofs/namei.c,19,2

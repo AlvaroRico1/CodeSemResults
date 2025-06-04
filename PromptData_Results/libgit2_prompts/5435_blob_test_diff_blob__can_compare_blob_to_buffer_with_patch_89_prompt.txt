@@ -1,0 +1,88 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'b_content' at line 7
+2. Pointer 'a' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_diff_blob__can_compare_blob_to_buffer_with_patch(void)
+{
+	git_patch *p;
+	git_blob *a;
+	git_oid a_oid;
+	const char *a_content = "Hello from the root\n";
+	const char *b_content = "Hello from the root\n\nSome additional lines\n\nDown here below\n\n";
+	size_t tc, ta, td;
+
+	/* tests/resources/attr/root_test1 */
+	cl_git_pass(git_oid_fromstrn(&a_oid, "45141a79", 8));
+	cl_git_pass(git_blob_lookup_prefix(&a, g_repo, &a_oid, 8));
+
+	/* diff from blob a to content of b */
+	cl_git_pass(git_patch_from_blob_and_buffer(
+		&p, a, NULL, b_content, strlen(b_content), NULL, &opts));
+
+	cl_assert(p != NULL);
+	cl_assert_equal_i(GIT_DELTA_MODIFIED, git_patch_get_delta(p)->status);
+	cl_assert_equal_i(1, (int)git_patch_num_hunks(p));
+	cl_assert_equal_i(6, git_patch_num_lines_in_hunk(p, 0));
+
+	cl_git_pass(git_patch_line_stats(&tc, &ta, &td, p));
+	cl_assert_equal_i(1, (int)tc);
+	cl_assert_equal_i(5, (int)ta);
+	cl_assert_equal_i(0, (int)td);
+
+	git_patch_free(p);
+
+	/* diff from blob a to content of a */
+	opts.flags |= GIT_DIFF_INCLUDE_UNMODIFIED;
+	cl_git_pass(git_patch_from_blob_and_buffer(
+		&p, a, NULL, a_content, strlen(a_content), NULL, &opts));
+	cl_assert(p != NULL);
+	cl_assert_equal_i(GIT_DELTA_UNMODIFIED, git_patch_get_delta(p)->status);
+	cl_assert_equal_i(0, (int)git_patch_num_hunks(p));
+	git_patch_free(p);
+
+	/* diff from NULL blob to content of a */
+	cl_git_pass(git_patch_from_blob_and_buffer(
+		&p, NULL, NULL, a_content, strlen(a_content), NULL, &opts));
+	cl_assert(p != NULL);
+	cl_assert_equal_i(GIT_DELTA_ADDED, git_patch_get_delta(p)->status);
+	cl_assert_equal_i(1, (int)git_patch_num_hunks(p));
+	cl_assert_equal_i(1, git_patch_num_lines_in_hunk(p, 0));
+	git_patch_free(p);
+
+	/* diff from blob a to NULL buffer */
+	cl_git_pass(git_patch_from_blob_and_buffer(
+		&p, a, NULL, NULL, 0, NULL, &opts));
+	cl_assert(p != NULL);
+	cl_assert_equal_i(GIT_DELTA_DELETED, git_patch_get_delta(p)->status);
+	cl_assert_equal_i(1, (int)git_patch_num_hunks(p));
+	cl_assert_equal_i(1, git_patch_num_lines_in_hunk(p, 0));
+	git_patch_free(p);
+
+	/* diff with reverse */
+	opts.flags ^= GIT_DIFF_REVERSE;
+
+	cl_git_pass(git_patch_from_blob_and_buffer(
+		&p, a, NULL, NULL, 0, NULL, &opts));
+	cl_assert(p != NULL);
+	cl_assert_equal_i(GIT_DELTA_ADDED, git_patch_get_delta(p)->status);
+	cl_assert_equal_i(1, (int)git_patch_num_hunks(p));
+	cl_assert_equal_i(1, git_patch_num_lines_in_hunk(p, 0));
+	git_patch_free(p);
+
+	git_blob_free(a);
+}
+
+
+// Source: blob.c
+// Lines 687-755
+
+
+[ANSWER]
+MUST-NOT

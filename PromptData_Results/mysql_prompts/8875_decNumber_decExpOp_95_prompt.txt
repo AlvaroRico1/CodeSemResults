@@ -1,0 +1,166 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'x' at line 8
+2. Pointer 'newrhs' at line 134
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+decNumber * decExpOp(decNumber *res, const decNumber *rhs,
+                         decContext *set, uInt *status) {
+  uInt ignore=0;                   /* working status  */
+  Int h;                           /* adjusted exponent for 0.xxxx  */
+  Int p;                           /* working precision  */
+  Int residue;                     /* rounding residue  */
+  uInt needbytes;                  /* for space calculations  */
+  const decNumber *x=rhs;          /* (may point to safe copy later)  */
+  decContext aset, tset, dset;     /* working contexts  */
+  Int comp;                        /* work  */
+
+  /* the argument is often copied to normalize it, so (unusually) it  */
+  /* is treated like other buffers, using DECBUFFER, +1 in case  */
+  /* DECBUFFER is 0  */
+  decNumber bufr[D2N(DECBUFFER*2+1)];
+  decNumber *allocrhs=NULL;        /* non-NULL if rhs buffer allocated  */
+
+  /* the working precision will be no more than set->digits+8+1  */
+  /* so for on-stack buffers DECBUFFER+9 is used, +1 in case DECBUFFER  */
+  /* is 0 (and twice that for the accumulator)  */
+
+  /* buffer for t, term (working precision plus)  */
+  decNumber buft[D2N(DECBUFFER*2+9+1)];
+  decNumber *allocbuft=NULL;       /* -> allocated buft, iff allocated  */
+  decNumber *t=buft;               /* term  */
+  /* buffer for a, accumulator (working precision * 2), at least 9  */
+  decNumber bufa[D2N(DECBUFFER*4+18+1)];
+  decNumber *allocbufa=NULL;       /* -> allocated bufa, iff allocated  */
+  decNumber *a=bufa;               /* accumulator  */
+  /* decNumber for the divisor term; this needs at most 9 digits  */
+  /* and so can be fixed size [16 so can use standard context]  */
+  decNumber bufd[D2N(16)];
+  decNumber *d=bufd;               /* divisor  */
+  decNumber numone;                /* constant 1  */
+
+  #if DECCHECK
+  Int iterations=0;                /* for later sanity check  */
+  if (decCheckOperands(res, DECUNUSED, rhs, set)) return res;
+  #endif
+
+  do {                                  /* protect allocated storage  */
+    if (SPECIALARG) {                   /* handle infinities and NaNs  */
+      if (decNumberIsInfinite(rhs)) {   /* an infinity  */
+        if (decNumberIsNegative(rhs))   /* -Infinity -> +0  */
+          uprv_decNumberZero(res);
+         else uprv_decNumberCopy(res, rhs);  /* +Infinity -> self  */
+        }
+       else decNaNs(res, rhs, NULL, set, status); /* a NaN  */
+      break;}
+
+    if (ISZERO(rhs)) {                  /* zeros -> exact 1  */
+      uprv_decNumberZero(res);               /* make clean 1  */
+      *res->lsu=1;                      /* ..  */
+      break;}                           /* [no status to set]  */
+
+    /* e**x when 0 < x < 0.66 is < 1+3x/2, hence can fast-path  */
+    /* positive and negative tiny cases which will result in inexact  */
+    /* 1.  This also allows the later add-accumulate to always be  */
+    /* exact (because its length will never be more than twice the  */
+    /* working precision).  */
+    /* The comparator (tiny) needs just one digit, so use the  */
+    /* decNumber d for it (reused as the divisor, etc., below); its  */
+    /* exponent is such that if x is positive it will have  */
+    /* set->digits-1 zeros between the decimal point and the digit,  */
+    /* which is 4, and if x is negative one more zero there as the  */
+    /* more precise result will be of the form 0.9999999 rather than  */
+    /* 1.0000001.  Hence, tiny will be 0.0000004  if digits=7 and x>0  */
+    /* or 0.00000004 if digits=7 and x<0.  If RHS not larger than  */
+    /* this then the result will be 1.000000  */
+    uprv_decNumberZero(d);                   /* clean  */
+    *d->lsu=4;                          /* set 4 ..  */
+    d->exponent=-set->digits;           /* * 10**(-d)  */
+    if (decNumberIsNegative(rhs)) d->exponent--;  /* negative case  */
+    comp=decCompare(d, rhs, 1);         /* signless compare  */
+    if (comp==BADINT) {
+      *status|=DEC_Insufficient_storage;
+      break;}
+    if (comp>=0) {                      /* rhs < d  */
+      Int shift=set->digits-1;
+      uprv_decNumberZero(res);               /* set 1  */
+      *res->lsu=1;                      /* ..  */
+      res->digits=decShiftToMost(res->lsu, 1, shift);
+      res->exponent=-shift;                  /* make 1.0000...  */
+      *status|=DEC_Inexact | DEC_Rounded;    /* .. inexactly  */
+      break;} /* tiny  */
+
+    /* set up the context to be used for calculating a, as this is  */
+    /* used on both paths below  */
+    uprv_decContextDefault(&aset, DEC_INIT_DECIMAL64);
+    /* accumulator bounds are as requested (could underflow)  */
+    aset.emax=set->emax;                /* usual bounds  */
+    aset.emin=set->emin;                /* ..  */
+    aset.clamp=0;                       /* and no concrete format  */
+
+    /* calculate the adjusted (Hull & Abrham) exponent (where the  */
+    /* decimal point is just to the left of the coefficient msd)  */
+    h=rhs->exponent+rhs->digits;
+    /* if h>8 then 10**h cannot be calculated safely; however, when  */
+    /* h=8 then exp(|rhs|) will be at least exp(1E+7) which is at  */
+    /* least 6.59E+4342944, so (due to the restriction on Emax/Emin)  */
+    /* overflow (or underflow to 0) is guaranteed -- so this case can  */
+    /* be handled by simply forcing the appropriate excess  */
+    if (h>8) {                          /* overflow/underflow  */
+      /* set up here so Power call below will over or underflow to  */
+      /* zero; set accumulator to either 2 or 0.02  */
+      /* [stack buffer for a is always big enough for this]  */
+      uprv_decNumberZero(a);
+      *a->lsu=2;                        /* not 1 but < exp(1)  */
+      if (decNumberIsNegative(rhs)) a->exponent=-2; /* make 0.02  */
+      h=8;                              /* clamp so 10**h computable  */
+      p=9;                              /* set a working precision  */
+      }
+     else {                             /* h<=8  */
+      Int maxlever=(rhs->digits>8?1:0);
+      /* [could/should increase this for precisions >40 or so, too]  */
+
+      /* if h is 8, cannot normalize to a lower upper limit because  */
+      /* the final result will not be computable (see notes above),  */
+      /* but leverage can be applied whenever h is less than 8.  */
+      /* Apply as much as possible, up to a MAXLEVER digits, which  */
+      /* sets the tradeoff against the cost of the later a**(10**h).  */
+      /* As h is increased, the working precision below also  */
+      /* increases to compensate for the "constant digits at the  */
+      /* front" effect.  */
+      Int lever=MINI(8-h, maxlever);    /* leverage attainable  */
+      Int use=-rhs->digits-lever;       /* exponent to use for RHS  */
+      h+=lever;                         /* apply leverage selected  */
+      if (h<0) {                        /* clamp  */
+        use+=h;                         /* [may end up subnormal]  */
+        h=0;
+        }
+      /* Take a copy of RHS if it needs normalization (true whenever x>=1)  */
+      if (rhs->exponent!=use) {
+        decNumber *newrhs=bufr;         /* assume will fit on stack  */
+        needbytes=sizeof(decNumber)+(D2U(rhs->digits)-1)*sizeof(Unit);
+        if (needbytes>sizeof(bufr)) {   /* need malloc space  */
+          allocrhs=(decNumber *)malloc(needbytes);
+          if (allocrhs==NULL) {         /* hopeless -- abandon  */
+            *status|=DEC_Insufficient_storage;
+            break;}
+          newrhs=allocrhs;              /* use the allocated space  */
+          }
+        uprv_decNumberCopy(newrhs, rhs);     /* copy to safe space  */
+        newrhs->exponent=use;           /* normalize; now <1  */
+        x=newrhs;                       /* ready for use  */
+        /* decNumberShow(x);  */
+        }
+
+
+// Source: decNumber.cpp
+// Lines 5266-5412
+
+
+[ANSWER]
+MUST

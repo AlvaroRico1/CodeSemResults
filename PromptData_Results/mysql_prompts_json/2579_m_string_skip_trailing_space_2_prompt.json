@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'chunk' at line 4\n2. Pointer 'len' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic inline const uchar *skip_trailing_space(const uchar *ptr, size_t len) {\n  const uchar *end = ptr + len;\n  while (end - ptr >= 8) {\n    uint64_t chunk;\n    memcpy(&chunk, end - 8, sizeof(chunk));\n    if (chunk != 0x2020202020202020ULL) break;\n    end -= 8;\n  }\n\n\n// Source: m_string.h\n// Lines 328-335\n",
+  "ANSWER": "MUST-NOT"
+}

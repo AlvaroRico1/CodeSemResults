@@ -1,0 +1,29 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'create_count' at line 3
+2. Pointer 'compress_count' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_refs_create__fsyncs_when_global_opt_set(void)
+{
+	size_t create_count, compress_count;
+
+	cl_git_pass(git_libgit2_opts(GIT_OPT_ENABLE_FSYNC_GITDIR, 1));
+	count_fsyncs(&create_count, &compress_count);
+
+	cl_assert_equal_i(expected_fsyncs_create, create_count);
+	cl_assert_equal_i(expected_fsyncs_compress, compress_count);
+}
+
+
+// Source: create.c
+// Lines 341-350
+
+
+[ANSWER]
+MAY

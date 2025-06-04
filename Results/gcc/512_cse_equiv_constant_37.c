@@ -1,0 +1,81 @@
+equiv_constant (rtx x)
+{
+  if (REG_P (x)
+      && REGNO_QTY_VALID_P (REGNO (x)))
+    {
+      int x_q = REG_QTY (REGNO (x));
+      struct qty_table_elem *x_ent = &qty_table[x_q];
+
+      if (x_ent->const_rtx)
+	x = gen_lowpart (GET_MODE (x), x_ent->const_rtx);
+    }
+
+  if (x == 0 || CONSTANT_P (x))
+    return x;
+
+  if (GET_CODE (x) == SUBREG)
+    {
+      machine_mode mode = GET_MODE (x);
+      machine_mode imode = GET_MODE (SUBREG_REG (x));
+      rtx new_rtx;
+
+      /* See if we previously assigned a constant value to this SUBREG.  */
+      if ((new_rtx = lookup_as_function (x, CONST_INT)) != 0
+	  || (new_rtx = lookup_as_function (x, CONST_WIDE_INT)) != 0
+	  || (NUM_POLY_INT_COEFFS > 1
+	      && (new_rtx = lookup_as_function (x, CONST_POLY_INT)) != 0)
+          || (new_rtx = lookup_as_function (x, CONST_DOUBLE)) != 0
+          || (new_rtx = lookup_as_function (x, CONST_FIXED)) != 0)
+        return new_rtx;
+
+      /* If we didn't and if doing so makes sense, see if we previously
+	 assigned a constant value to the enclosing word mode SUBREG.  */
+      if (known_lt (GET_MODE_SIZE (mode), UNITS_PER_WORD)
+	  && known_lt (UNITS_PER_WORD, GET_MODE_SIZE (imode)))
+	{
+	  poly_int64 byte = (SUBREG_BYTE (x)
+			     - subreg_lowpart_offset (mode, word_mode));
+	  if (known_ge (byte, 0) && multiple_p (byte, UNITS_PER_WORD))
+	    {
+	      rtx y = gen_rtx_SUBREG (word_mode, SUBREG_REG (x), byte);
+	      new_rtx = lookup_as_function (y, CONST_INT);
+	      if (new_rtx)
+		return gen_lowpart (mode, new_rtx);
+	    }
+	}
+
+      /* Otherwise see if we already have a constant for the inner REG,
+	 and if that is enough to calculate an equivalent constant for
+	 the subreg.  Note that the upper bits of paradoxical subregs
+	 are undefined, so they cannot be said to equal anything.  */
+      if (REG_P (SUBREG_REG (x))
+	  && !paradoxical_subreg_p (x)
+	  && (new_rtx = equiv_constant (SUBREG_REG (x))) != 0)
+        return simplify_subreg (mode, new_rtx, imode, SUBREG_BYTE (x));
+
+      return 0;
+    }
+
+  /* If X is a MEM, see if it is a constant-pool reference, or look it up in
+     the hash table in case its value was seen before.  */
+
+  if (MEM_P (x))
+    {
+      struct table_elt *elt;
+
+      x = avoid_constant_pool_reference (x);
+      if (CONSTANT_P (x))
+	return x;
+
+      elt = lookup (x, SAFE_HASH (x, GET_MODE (x)), GET_MODE (x));
+      if (elt == 0)
+	return 0;
+
+      for (elt = elt->first_same_value; elt; elt = elt->next_same_value)
+	if (elt->is_const && CONSTANT_P (elt->exp))
+	  return elt->exp;
+    }
+
+
+// Source: cse.c
+// Lines 3788-3864

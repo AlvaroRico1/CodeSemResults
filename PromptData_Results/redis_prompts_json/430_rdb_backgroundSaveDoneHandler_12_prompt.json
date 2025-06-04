@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'argv' at line None\n2. Pointer 'keyobj' at line None\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid backgroundSaveDoneHandler(int exitcode, int bysignal) {\n    int type = server.rdb_child_type;\n    switch(server.rdb_child_type) {\n    case RDB_CHILD_TYPE_DISK:\n        backgroundSaveDoneHandlerDisk(exitcode,bysignal);\n        break;\n    case RDB_CHILD_TYPE_SOCKET:\n        backgroundSaveDoneHandlerSocket(exitcode,bysignal);\n        break;\n    default:\n        serverPanic(\"Unknown RDB child type.\");\n        break;\n    }\n\n\n// Source: rdb.c\n// Lines 2824-2836\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,101 @@
+bool JOIN::estimate_rowcount() {
+  Opt_trace_context *const trace = &thd->opt_trace;
+  Opt_trace_object trace_wrapper(trace);
+  Opt_trace_array trace_records(trace, "rows_estimation");
+
+  JOIN_TAB *const tab_end = join_tab + tables;
+  for (JOIN_TAB *tab = join_tab; tab < tab_end; tab++) {
+    const Cost_model_table *const cost_model = tab->table()->cost_model();
+    Opt_trace_object trace_table(trace);
+    trace_table.add_utf8_table(tab->table_ref);
+    if (tab->type() == JT_SYSTEM || tab->type() == JT_CONST) {
+      trace_table.add("rows", 1)
+          .add("cost", 1)
+          .add_alnum("table_type",
+                     (tab->type() == JT_SYSTEM) ? "system" : "const")
+          .add("empty", tab->table()->has_null_row());
+
+      // Only one matching row and one block to read
+      tab->set_records(tab->found_records = 1);
+      tab->worst_seeks = cost_model->page_read_cost(1.0);
+      tab->read_time = tab->worst_seeks;
+      continue;
+    }
+    // Approximate number of found rows and cost to read them
+    tab->set_records(tab->found_records = tab->table()->file->stats.records);
+    const Cost_estimate table_scan_time = tab->table()->file->table_scan_cost();
+    tab->read_time = table_scan_time.total_cost();
+
+    tab->worst_seeks =
+        find_worst_seeks(cost_model, tab->found_records, tab->read_time);
+
+    /*
+      Add to tab->const_keys the indexes for which all group fields or
+      all select distinct fields participate in one index.
+      Add to tab->skip_scan_keys indexes which can be used for skip
+      scan access if no aggregates are present.
+    */
+    add_loose_index_scan_and_skip_scan_keys(this, tab);
+
+    /*
+      Perform range analysis if there are keys it could use (1).
+      Don't do range analysis if on the inner side of an outer join (2).
+      Do range analysis if on the inner side of a semi-join (3).
+    */
+    TABLE_LIST *const tl = tab->table_ref;
+    if ((!tab->const_keys.is_clear_all() ||
+         !tab->skip_scan_keys.is_clear_all()) &&                 // (1)
+        (!tl->embedding ||                                       // (2)
+         (tl->embedding && tl->embedding->is_sj_or_aj_nest())))  // (3)
+    {
+      /*
+        This call fills tab->quick() with the best QUICK access method
+        possible for this table, and only if it's better than table scan.
+        It also fills tab->needed_reg.
+      */
+      ha_rows records = get_quick_record_count(thd, tab, row_limit);
+
+      if (records == 0 && thd->is_error()) return true;
+
+      /*
+        Check for "impossible range", but make sure that we do not attempt
+        to mark semi-joined tables as "const" (only semi-joined tables that
+        are functionally dependent can be marked "const", and subsequently
+        pulled out of their semi-join nests).
+      */
+      if (records == 0 && tab->table()->reginfo.impossible_range &&
+          (!(tl->embedding && tl->embedding->is_sj_or_aj_nest()))) {
+        /*
+          Impossible WHERE condition or join condition
+          In case of join cond, mark that one empty NULL row is matched.
+          In case of WHERE, don't set found_const_table_map to get the
+          caller to abort with a zero row result.
+        */
+        mark_const_table(tab, nullptr);
+        tab->set_type(JT_CONST);  // Override setting made in mark_const_table()
+        if (tab->join_cond()) {
+          // Generate an empty row
+          trace_table.add("returning_empty_null_row", true)
+              .add_alnum("cause", "impossible_on_condition");
+          found_const_table_map |= tl->map();
+          tab->table()->set_null_row();  // All fields are NULL
+        } else {
+          trace_table.add("rows", 0).add_alnum("cause",
+                                               "impossible_where_condition");
+        }
+      }
+      if (records != HA_POS_ERROR) {
+        tab->found_records = records;
+        tab->read_time =
+            tab->quick() ? tab->quick()->cost_est.total_cost() : 0.0;
+      }
+    } else {
+      Opt_trace_object(trace, "table_scan")
+          .add("rows", tab->found_records)
+          .add("cost", tab->read_time);
+    }
+  }
+
+
+// Source: sql_optimizer.cc
+// Lines 5580-5676

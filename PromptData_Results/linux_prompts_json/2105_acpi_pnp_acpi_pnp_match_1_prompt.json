@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'devid' at line 3\n2. Pointer 'idstr' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic bool acpi_pnp_match(const char *idstr, const struct acpi_device_id **matchid)\n{\n\tconst struct acpi_device_id *devid;\n\n\tfor (devid = acpi_pnp_device_ids; devid->id[0]; devid++)\n\t\tif (matching_id(idstr, (char *)devid->id)) {\n\t\t\tif (matchid)\n\t\t\t\t*matchid = devid;\n\n\t\t\treturn true;\n\t\t}\n\n\treturn false;\n}\n\n\n// Source: acpi_pnp.c\n// Lines 333-346\n",
+  "ANSWER": "MAY"
+}

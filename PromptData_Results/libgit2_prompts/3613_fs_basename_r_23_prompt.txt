@@ -1,0 +1,43 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'in' at line 1
+2. Pointer 'in_len' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void basename_r(const char **out, int *out_len, const char *in)
+{
+	size_t in_len = strlen(in), start_pos;
+
+	for (in_len = strlen(in); in_len; in_len--) {
+		if (in[in_len - 1] != '/')
+			break;
+	}
+
+	for (start_pos = in_len; start_pos; start_pos--) {
+		if (in[start_pos - 1] == '/')
+			break;
+	}
+
+	cl_assert(in_len - start_pos < INT_MAX);
+
+	if (in_len - start_pos > 0) {
+		*out = &in[start_pos];
+		*out_len = (in_len - start_pos);
+	} else {
+		*out = "/";
+		*out_len = 1;
+	}
+}
+
+
+// Source: fs.h
+// Lines 320-343
+
+
+[ANSWER]
+MUST-NOT

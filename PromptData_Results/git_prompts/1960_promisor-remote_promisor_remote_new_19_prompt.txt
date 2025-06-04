@@ -1,0 +1,37 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'config' at line 1
+2. Pointer 'r' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static struct promisor_remote *promisor_remote_new(struct promisor_remote_config *config,
+						   const char *remote_name)
+{
+	struct promisor_remote *r;
+
+	if (*remote_name == '/') {
+		warning(_("promisor remote name cannot begin with '/': %s"),
+			remote_name);
+		return NULL;
+	}
+
+	FLEX_ALLOC_STR(r, name, remote_name);
+
+	*config->promisors_tail = r;
+	config->promisors_tail = &r->next;
+
+	return r;
+}
+
+
+// Source: promisor-remote.c
+// Lines 48-65
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,156 @@
+split_live_ranges_for_shrink_wrap (void)
+{
+  basic_block bb, call_dom = NULL;
+  basic_block first = single_succ (ENTRY_BLOCK_PTR_FOR_FN (cfun));
+  rtx_insn *insn, *last_interesting_insn = NULL;
+  auto_bitmap need_new, reachable;
+  vec<basic_block> queue;
+
+  if (!SHRINK_WRAPPING_ENABLED)
+    return false;
+
+  queue.create (n_basic_blocks_for_fn (cfun));
+
+  FOR_EACH_BB_FN (bb, cfun)
+    FOR_BB_INSNS (bb, insn)
+      if (CALL_P (insn) && !SIBLING_CALL_P (insn))
+	{
+	  if (bb == first)
+	    {
+	      queue.release ();
+	      return false;
+	    }
+
+	  bitmap_set_bit (need_new, bb->index);
+	  bitmap_set_bit (reachable, bb->index);
+	  queue.quick_push (bb);
+	  break;
+	}
+
+  if (queue.is_empty ())
+    {
+      queue.release ();
+      return false;
+    }
+
+  while (!queue.is_empty ())
+    {
+      edge e;
+      edge_iterator ei;
+
+      bb = queue.pop ();
+      FOR_EACH_EDGE (e, ei, bb->succs)
+	if (e->dest != EXIT_BLOCK_PTR_FOR_FN (cfun)
+	    && bitmap_set_bit (reachable, e->dest->index))
+	  queue.quick_push (e->dest);
+    }
+  queue.release ();
+
+  FOR_BB_INSNS (first, insn)
+    {
+      rtx dest = interesting_dest_for_shprep (insn, NULL);
+      if (!dest)
+	continue;
+
+      if (DF_REG_DEF_COUNT (REGNO (dest)) > 1)
+	return false;
+
+      for (df_ref use = DF_REG_USE_CHAIN (REGNO(dest));
+	   use;
+	   use = DF_REF_NEXT_REG (use))
+	{
+	  int ubbi = DF_REF_BB (use)->index;
+	  if (bitmap_bit_p (reachable, ubbi))
+	    bitmap_set_bit (need_new, ubbi);
+	}
+      last_interesting_insn = insn;
+    }
+
+  if (!last_interesting_insn)
+    return false;
+
+  call_dom = nearest_common_dominator_for_set (CDI_DOMINATORS, need_new);
+  if (call_dom == first)
+    return false;
+
+  loop_optimizer_init (AVOID_CFG_MODIFICATIONS);
+  while (bb_loop_depth (call_dom) > 0)
+    call_dom = get_immediate_dominator (CDI_DOMINATORS, call_dom);
+  loop_optimizer_finalize ();
+
+  if (call_dom == first)
+    return false;
+
+  calculate_dominance_info (CDI_POST_DOMINATORS);
+  if (dominated_by_p (CDI_POST_DOMINATORS, first, call_dom))
+    {
+      free_dominance_info (CDI_POST_DOMINATORS);
+      return false;
+    }
+  free_dominance_info (CDI_POST_DOMINATORS);
+
+  if (dump_file)
+    fprintf (dump_file, "Will split live ranges of parameters at BB %i\n",
+	     call_dom->index);
+
+  bool ret = false;
+  FOR_BB_INSNS (first, insn)
+    {
+      rtx dest = interesting_dest_for_shprep (insn, call_dom);
+      if (!dest || dest == pic_offset_table_rtx)
+	continue;
+
+      bool need_newreg = false;
+      df_ref use, next;
+      for (use = DF_REG_USE_CHAIN (REGNO (dest)); use; use = next)
+	{
+	  rtx_insn *uin = DF_REF_INSN (use);
+	  next = DF_REF_NEXT_REG (use);
+
+	  if (DEBUG_INSN_P (uin))
+	    continue;
+
+	  basic_block ubb = BLOCK_FOR_INSN (uin);
+	  if (ubb == call_dom
+	      || dominated_by_p (CDI_DOMINATORS, ubb, call_dom))
+	    {
+	      need_newreg = true;
+	      break;
+	    }
+	}
+
+      if (need_newreg)
+	{
+	  rtx newreg = ira_create_new_reg (dest);
+
+	  for (use = DF_REG_USE_CHAIN (REGNO (dest)); use; use = next)
+	    {
+	      rtx_insn *uin = DF_REF_INSN (use);
+	      next = DF_REF_NEXT_REG (use);
+
+	      basic_block ubb = BLOCK_FOR_INSN (uin);
+	      if (ubb == call_dom
+		  || dominated_by_p (CDI_DOMINATORS, ubb, call_dom))
+		validate_change (uin, DF_REF_REAL_LOC (use), newreg, true);
+	    }
+
+	  rtx_insn *new_move = gen_move_insn (newreg, dest);
+	  emit_insn_after (new_move, bb_note (call_dom));
+	  if (dump_file)
+	    {
+	      fprintf (dump_file, "Split live-range of register ");
+	      print_rtl_single (dump_file, dest);
+	    }
+	  ret = true;
+	}
+
+      if (insn == last_interesting_insn)
+	break;
+    }
+  apply_change_group ();
+  return ret;
+}
+
+
+// Source: ira.c
+// Lines 4940-5091

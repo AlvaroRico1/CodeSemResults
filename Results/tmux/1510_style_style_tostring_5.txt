@@ -1,0 +1,1 @@
+tmp,tmux/style.c,5,b,tmux/style.c,7,1

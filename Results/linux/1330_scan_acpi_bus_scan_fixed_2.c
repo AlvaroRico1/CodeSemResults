@@ -1,0 +1,40 @@
+static int acpi_bus_scan_fixed(void)
+{
+	int result = 0;
+
+	/*
+	 * Enumerate all fixed-feature devices.
+	 */
+	if (!(acpi_gbl_FADT.flags & ACPI_FADT_POWER_BUTTON)) {
+		struct acpi_device *device = NULL;
+
+		result = acpi_add_single_object(&device, NULL,
+						ACPI_BUS_TYPE_POWER_BUTTON,
+						ACPI_STA_DEFAULT);
+		if (result)
+			return result;
+
+		device->flags.match_driver = true;
+		result = device_attach(&device->dev);
+		if (result < 0)
+			return result;
+
+		device_init_wakeup(&device->dev, true);
+	}
+
+	if (!(acpi_gbl_FADT.flags & ACPI_FADT_SLEEP_BUTTON)) {
+		struct acpi_device *device = NULL;
+
+		result = acpi_add_single_object(&device, NULL,
+						ACPI_BUS_TYPE_SLEEP_BUTTON,
+						ACPI_STA_DEFAULT);
+		if (result)
+			return result;
+
+		device->flags.match_driver = true;
+		result = device_attach(&device->dev);
+	}
+
+
+// Source: scan.c
+// Lines 2113-2148

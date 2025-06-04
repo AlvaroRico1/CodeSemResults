@@ -1,0 +1,58 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'res' at line 7
+2. Pointer 'data' at line 18
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+const char* EpsCopyInputStream::NextBuffer(int overrun, int depth) {
+  if (next_chunk_ == nullptr) return nullptr;  // We've reached end of stream.
+  if (next_chunk_ != buffer_) {
+    GOOGLE_DCHECK(size_ > kSlopBytes);
+    // The chunk is large enough to be used directly
+    buffer_end_ = next_chunk_ + size_ - kSlopBytes;
+    auto res = next_chunk_;
+    next_chunk_ = buffer_;
+    if (aliasing_ == kOnPatch) aliasing_ = kNoDelta;
+    return res;
+  }
+  // Move the slop bytes of previous buffer to start of the patch buffer.
+  // Note we must use memmove because the previous buffer could be part of
+  // buffer_.
+  std::memmove(buffer_, buffer_end_, kSlopBytes);
+  if (overall_limit_ > 0 &&
+      (depth < 0 || !ParseEndsInSlopRegion(buffer_, overrun, depth))) {
+    const void* data;
+    // ZeroCopyInputStream indicates Next may return 0 size buffers. Hence
+    // we loop.
+    while (StreamNext(&data)) {
+      if (size_ > kSlopBytes) {
+        // We got a large chunk
+        std::memcpy(buffer_ + kSlopBytes, data, kSlopBytes);
+        next_chunk_ = static_cast<const char*>(data);
+        buffer_end_ = buffer_ + kSlopBytes;
+        if (aliasing_ >= kNoDelta) aliasing_ = kOnPatch;
+        return buffer_;
+      } else if (size_ > 0) {
+        std::memcpy(buffer_ + kSlopBytes, data, size_);
+        next_chunk_ = buffer_;
+        buffer_end_ = buffer_ + size_;
+        if (aliasing_ >= kNoDelta) aliasing_ = kOnPatch;
+        return buffer_;
+      }
+      GOOGLE_DCHECK(size_ == 0) << size_;
+    }
+    overall_limit_ = 0;  // Next failed, no more needs for next
+  }
+
+
+// Source: parse_context.cc
+// Lines 102-140
+
+
+[ANSWER]
+MAY

@@ -1,0 +1,1 @@
+ptr,gcc/gcc/plugin.c,4,arg,gcc/gcc/plugin.c,1,1

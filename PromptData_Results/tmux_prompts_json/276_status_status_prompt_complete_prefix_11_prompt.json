@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'list' at line 1\n2. Pointer 'out' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatus_prompt_complete_prefix(char **list, u_int size)\n{\n\tchar\t *out;\n\tu_int\t  i;\n\tsize_t\t  j;\n\n\tif (list == NULL || size == 0)\n\t\treturn (NULL);\n\tout = xstrdup(list[0]);\n\tfor (i = 1; i < size; i++) {\n\t\tj = strlen(list[i]);\n\t\tif (j > strlen(out))\n\t\t\tj = strlen(out);\n\t\tfor (; j > 0; j--) {\n\t\t\tif (out[j - 1] != list[i][j - 1])\n\t\t\t\tout[j - 1] = '\\0';\n\t\t}\n\t}\n\treturn (out);\n}\n\n\n// Source: status.c\n// Lines 1631-1650\n",
+  "ANSWER": "MAY"
+}

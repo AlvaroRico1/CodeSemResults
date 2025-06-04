@@ -1,0 +1,45 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'list' at line 4
+2. Pointer 'out' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int line_log_filter(struct rev_info *rev)
+{
+	struct commit *commit;
+	struct commit_list *list = rev->commits;
+	struct commit_list *out = NULL, **pp = &out;
+
+	while (list) {
+		struct commit_list *to_free = NULL;
+		commit = list->item;
+		if (line_log_process_ranges_arbitrary_commit(rev, commit)) {
+			*pp = list;
+			pp = &list->next;
+		} else
+			to_free = list;
+		list = list->next;
+		free(to_free);
+	}
+	*pp = NULL;
+
+	for (list = out; list; list = list->next)
+		rewrite_parents(rev, list->item, line_log_rewrite_one);
+
+	rev->commits = out;
+
+	return 0;
+}
+
+
+// Source: line-log.c
+// Lines 1301-1326
+
+
+[ANSWER]
+MUST

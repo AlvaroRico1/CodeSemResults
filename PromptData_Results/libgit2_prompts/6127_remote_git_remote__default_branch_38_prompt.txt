@@ -1,0 +1,84 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'heads_len' at line 6
+2. Pointer 'heads' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_remote__default_branch(git_str *out, git_remote *remote)
+{
+	const git_remote_head **heads;
+	const git_remote_head *guess = NULL;
+	const git_oid *head_id;
+	size_t heads_len, i;
+	git_str local_default = GIT_STR_INIT;
+	int error;
+
+	GIT_ASSERT_ARG(out);
+
+	if ((error = git_remote_ls(&heads, &heads_len, remote)) < 0)
+		goto done;
+
+	if (heads_len == 0 || strcmp(heads[0]->name, GIT_HEAD_FILE)) {
+		error = GIT_ENOTFOUND;
+		goto done;
+	}
+
+	/* the first one must be HEAD so if that has the symref info, we're done */
+	if (heads[0]->symref_target) {
+		error = git_str_puts(out, heads[0]->symref_target);
+		goto done;
+	}
+
+	/*
+	 * If there's no symref information, we have to look over them
+	 * and guess. We return the first match unless the default
+	 * branch is a candidate. Then we return the default branch.
+	 */
+
+	if ((error = git_repository_initialbranch(&local_default, remote->repo)) < 0)
+		goto done;
+
+	head_id = &heads[0]->oid;
+
+	for (i = 1; i < heads_len; i++) {
+		if (git_oid_cmp(head_id, &heads[i]->oid))
+			continue;
+
+		if (git__prefixcmp(heads[i]->name, GIT_REFS_HEADS_DIR))
+			continue;
+
+		if (!guess) {
+			guess = heads[i];
+			continue;
+		}
+
+		if (!git__strcmp(local_default.ptr, heads[i]->name)) {
+			guess = heads[i];
+			break;
+		}
+	}
+
+	if (!guess) {
+		error = GIT_ENOTFOUND;
+		goto done;
+	}
+
+	error = git_str_puts(out, guess->name);
+
+done:
+	git_str_dispose(&local_default);
+	return error;
+}
+
+
+// Source: remote.c
+// Lines 2833-2897
+
+
+[ANSWER]
+MAY

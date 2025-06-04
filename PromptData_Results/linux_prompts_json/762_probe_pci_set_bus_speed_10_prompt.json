@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'agpcmd' at line 10\n2. Pointer 'agpstat' at line 10\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void pci_set_bus_speed(struct pci_bus *bus)\n{\n\tstruct pci_dev *bridge = bus->self;\n\tint pos;\n\n\tpos = pci_find_capability(bridge, PCI_CAP_ID_AGP);\n\tif (!pos)\n\t\tpos = pci_find_capability(bridge, PCI_CAP_ID_AGP3);\n\tif (pos) {\n\t\tu32 agpstat, agpcmd;\n\n\t\tpci_read_config_dword(bridge, pos + PCI_AGP_STATUS, &agpstat);\n\t\tbus->max_bus_speed = agp_speed(agpstat & 8, agpstat & 7);\n\n\t\tpci_read_config_dword(bridge, pos + PCI_AGP_COMMAND, &agpcmd);\n\t\tbus->cur_bus_speed = agp_speed(agpstat & 8, agpcmd & 7);\n\t}\n\n\n// Source: probe.c\n// Lines 721-737\n",
+  "ANSWER": "MAY"
+}

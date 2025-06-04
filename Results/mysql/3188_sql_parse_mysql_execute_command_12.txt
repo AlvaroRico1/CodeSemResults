@@ -1,0 +1,1 @@
+table,mysql/sql/sql_parse.cc,6,first_table,mysql/sql/sql_parse.cc,7,1

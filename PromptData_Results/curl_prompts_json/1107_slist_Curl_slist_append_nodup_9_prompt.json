@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'last' at line 3\n2. Pointer 'new_item' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstruct curl_slist *Curl_slist_append_nodup(struct curl_slist *list, char *data)\n{\n  struct curl_slist     *last;\n  struct curl_slist     *new_item;\n\n  DEBUGASSERT(data);\n\n  new_item = malloc(sizeof(struct curl_slist));\n  if(!new_item)\n    return NULL;\n\n  new_item->next = NULL;\n  new_item->data = data;\n\n  /* if this is the first item, then new_item *is* the list */\n  if(!list)\n    return new_item;\n\n  last = slist_get_last(list);\n  last->next = new_item;\n  return list;\n}\n\n\n// Source: slist.c\n// Lines 59-80\n",
+  "ANSWER": "MUST"
+}

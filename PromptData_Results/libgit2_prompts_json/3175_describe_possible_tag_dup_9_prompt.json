@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'out' at line 1\n2. Pointer 'tag' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int possible_tag_dup(struct possible_tag **out, struct possible_tag *in)\n{\n\tstruct possible_tag *tag;\n\tint error;\n\n\ttag = git__malloc(sizeof(struct possible_tag));\n\tGIT_ERROR_CHECK_ALLOC(tag);\n\n\tmemcpy(tag, in, sizeof(struct possible_tag));\n\ttag->name = NULL;\n\n\tif ((error = commit_name_dup(&tag->name, in->name)) < 0) {\n\t\tgit__free(tag);\n\t\t*out = NULL;\n\t\treturn error;\n\t}\n\n\t*out = tag;\n\treturn 0;\n}\n\n\n// Source: describe.c\n// Lines 256-275\n",
+  "ANSWER": "MUST"
+}

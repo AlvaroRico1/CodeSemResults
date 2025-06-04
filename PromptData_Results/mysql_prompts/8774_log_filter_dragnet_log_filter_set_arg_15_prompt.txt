@@ -1,0 +1,210 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'num_read' at line 111
+2. Pointer 'token' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static set_arg_result log_filter_set_arg(const char **token, const size_t *len,
+                                         log_item *li, const char **state) {
+  char *val;
+  size_t val_len;
+  bool is_symbol = false;
+
+  // sanity check
+  assert(!(li->alloc & LOG_ITEM_FREE_VALUE));
+  if (li->alloc & LOG_ITEM_FREE_VALUE) {
+    log_bs->free(const_cast<char *>(li->data.data_string.str));
+    li->data.data_string.str = nullptr;
+    li->alloc &= ~LOG_ITEM_FREE_VALUE;
+  }
+
+  *state = "Setting argument ...";
+
+  // ER_* -- convenience: we convert symbol(ER_STARTUP) -> int(1234)
+  if ((is_symbol = (log_bs->compare(*token, "ER_", 3, false) == 0)) ||
+      (log_bs->compare(*token, "MY-", 3, true) == 0)) {
+    char *sym = log_bs->strndup(*token, *len);
+    longlong errcode = 0;
+
+    *state = is_symbol ? "Resolving ER_symbol ..." : "Resolving MY-code ...";
+
+    if (sym == nullptr) return SET_ARG_OOM; /* purecov: inspected */
+
+    errcode = log_bi->errcode_by_errsymbol(sym);
+
+    log_bs->free(sym);
+
+    if (errcode < 1) {
+      *state = is_symbol ? "unknown ER_code" : "invalid MY-code";
+      return SET_ARG_MALFORMED_VALUE;
+    }
+
+    // if it's any ad hoc type, we set it to "ad hoc int"
+    if (log_filter_generic_type(li->type)) {
+      li->type = LOG_ITEM_GEN_INTEGER;
+      li->item_class = LOG_INTEGER;
+    }
+    // if it's a well-known type, but not errcode, we fail
+    else if (li->type != LOG_ITEM_SQL_ERRCODE) {
+      *state =
+          "\'err_code\' is the only built-in field-type "
+          "we will resolve ER_symbols and MY-codes for";
+      return SET_ARG_UNWANTED_NUMERIC;
+    }
+
+    li->data.data_integer = errcode;
+
+    return SET_ARG_SUCCESS;
+  }
+
+  // prio -- convenience: we convert ERROR / WARNING / INFO -> int
+  else if ((li->type == LOG_ITEM_LOG_PRIO) && !isdigit(**token)) {
+    int prio = -1;
+
+    *state = "Resolving prio ...";
+
+    if (log_bs->compare(*token, "ERROR", 5, true) == 0)
+      prio = ERROR_LEVEL;
+    else if (log_bs->compare(*token, "WARNING", 7, true) == 0)
+      prio = WARNING_LEVEL;
+    else if ((log_bs->compare(*token, "NOTE", 4, true) == 0) ||
+             (log_bs->compare(*token, "INFO", 4, true) == 0) ||
+             (log_bs->compare(*token, "INFORMATION", 11, true) == 0))
+      prio = INFORMATION_LEVEL;
+    else {
+      *state = "unknown prio";
+      return SET_ARG_MALFORMED_VALUE;
+    }
+
+    li->data.data_integer = prio;
+
+    return SET_ARG_SUCCESS;
+  }
+
+  // quoted string
+  else if (((**token == '\"') || (**token == '\''))) {
+    *state = "setting quoted string argument";
+
+    // if it's any ad hoc type, we set it to "ad hoc string"
+    if (log_filter_generic_type(li->type)) {
+      li->type = LOG_ITEM_GEN_LEX_STRING;
+      li->item_class = LOG_LEX_STRING;
+    }
+    // if it's a well-known type, but not a string type, we fail
+    else if (!log_bi->item_string_class(li->item_class)) {
+      *state = "Argument is of string type, field is not.";
+      return SET_ARG_UNWANTED_STRING;
+    }
+
+    val_len = *len - 1;
+
+    if ((val = log_bs->strndup(*token + 1, val_len)) == nullptr)
+      return SET_ARG_OOM; /* purecov: inspected */
+
+    assert(val_len > 0);
+    val[--val_len] = '\0';  // cut trailing quotation mark
+
+    li->data.data_string.str = val;
+    li->data.data_string.length = val_len;
+    li->alloc |= LOG_ITEM_FREE_VALUE;
+
+    return SET_ARG_SUCCESS;
+  }
+
+  // numeric
+  else {
+    set_arg_result ret = SET_ARG_SUCCESS;
+    const char *num_read;
+    uint dots = 0;
+
+    num_read = *token;
+    val_len = *len;
+
+    if ((val_len > 0) && ((*num_read == '+') || (*num_read == '-'))) {
+      val_len--;
+      num_read++;
+    }
+
+    while (val_len > 0) {
+      if (*num_read == '.')
+        dots++;
+      else if (*num_read == '/') {
+        *state = "fraction found";
+        ret = SET_ARG_FRACTION_FOUND;
+        break;
+      } else if (!isdigit(*num_read)) {
+        *state = "malformed number";
+        return SET_ARG_MALFORMED_VALUE;
+      }
+      num_read++;
+      val_len--;
+    }
+
+    // floats should not contain multiple decimal points
+    if (dots > 1) {
+      *state =
+          "There should only be one decimal point "
+          "in a floating point number.";
+      return SET_ARG_MALFORMED_FLOAT;
+    }
+
+    if ((val = log_bs->strndup(*token, *len - val_len)) == nullptr)
+      return SET_ARG_OOM;
+
+    // found integer
+    if (dots == 0) {
+      long long num_temp;
+
+      // if it's any ad hoc type, we set it to "ad hoc int"
+      if (log_filter_generic_type(li->type)) {
+        li->type = LOG_ITEM_GEN_INTEGER;
+        li->item_class = LOG_INTEGER;
+      }
+
+      num_temp = (long long)atoll(val);
+
+      if (li->item_class == LOG_FLOAT)
+        li->data.data_float = (double)num_temp;
+      else if (li->item_class == LOG_INTEGER)
+        li->data.data_integer = num_temp;
+      // if it's a well-known type, but not a numeric type, we fail
+      else {
+        *state = "Argument is of numeric type, field is not.";
+        ret = SET_ARG_UNWANTED_NUMERIC;
+      }
+    }
+
+    // found float
+    else {
+      // if it's any ad hoc type, we set it to "ad hoc float"
+      if (log_filter_generic_type(li->type)) {
+        li->type = LOG_ITEM_GEN_FLOAT;
+        li->item_class = LOG_FLOAT;
+      }
+
+      // if it's a well-known type, but not of float class, we fail
+      if (li->item_class != LOG_FLOAT) {
+        *state = "Argument is of float type, field is not.";
+        ret = SET_ARG_UNWANTED_FLOAT;
+      } else {
+        li->data.data_float = atof(val);
+      }
+    }
+
+    log_bs->free(val);
+
+    return ret;
+  }
+
+
+// Source: log_filter_dragnet.cc
+// Lines 774-964
+
+
+[ANSWER]
+MUST

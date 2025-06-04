@@ -1,0 +1,45 @@
+static int merge_annotated_commits(
+	git_index **index_out,
+	git_annotated_commit **base_out,
+	git_repository *repo,
+	git_annotated_commit *ours,
+	git_annotated_commit *theirs,
+	size_t recursion_level,
+	const git_merge_options *opts)
+{
+	git_annotated_commit *base = NULL;
+	git_iterator *base_iter = NULL, *our_iter = NULL, *their_iter = NULL;
+	int error;
+
+	if ((error = compute_base(&base, repo, ours, theirs, opts,
+		recursion_level)) < 0) {
+
+		if (error != GIT_ENOTFOUND)
+			goto done;
+
+		git_error_clear();
+	}
+
+	if ((error = iterator_for_annotated_commit(&base_iter, base)) < 0 ||
+		(error = iterator_for_annotated_commit(&our_iter, ours)) < 0 ||
+		(error = iterator_for_annotated_commit(&their_iter, theirs)) < 0 ||
+		(error = git_merge__iterators(index_out, repo, base_iter, our_iter,
+			their_iter, opts)) < 0)
+		goto done;
+
+	if (base_out) {
+		*base_out = base;
+		base = NULL;
+	}
+
+done:
+	git_annotated_commit_free(base);
+	git_iterator_free(base_iter);
+	git_iterator_free(our_iter);
+	git_iterator_free(their_iter);
+	return error;
+}
+
+
+// Source: merge.c
+// Lines 2402-2442

@@ -1,0 +1,1 @@
+copied,git/diff.c,18,added,git/diff.c,18,2

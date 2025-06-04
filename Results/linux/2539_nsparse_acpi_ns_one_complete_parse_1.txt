@@ -1,0 +1,1 @@
+owner_id,linux/drivers/acpi/acpica/nsparse.c,11,table,linux/drivers/acpi/acpica/nsparse.c,10,2

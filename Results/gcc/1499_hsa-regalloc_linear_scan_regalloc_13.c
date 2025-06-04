@@ -1,0 +1,147 @@
+linear_scan_regalloc (struct m_reg_class_desc *classes)
+{
+  /* Compute liveness.  */
+  bool changed;
+  int i, n;
+  int insn_order;
+  int *bbs = XNEWVEC (int, n_basic_blocks_for_fn (cfun));
+  bitmap work = BITMAP_ALLOC (NULL);
+  vec<hsa_op_reg*> ind2reg = vNULL;
+  vec<hsa_op_reg*> active[4] = {vNULL, vNULL, vNULL, vNULL};
+  hsa_insn_basic *m_last_insn;
+
+  /* We will need the reverse post order for linearization,
+     and the post order for liveness analysis, which is the same
+     backward.  */
+  n = pre_and_rev_post_order_compute (NULL, bbs, true);
+  ind2reg.safe_grow_cleared (hsa_cfun->m_reg_count);
+
+  /* Give all instructions a linearized number, at the same time
+     build a mapping from register index to register.  */
+  insn_order = 1;
+  for (i = 0; i < n; i++)
+    {
+      basic_block bb = BASIC_BLOCK_FOR_FN (cfun, bbs[i]);
+      hsa_bb *hbb = hsa_bb_for_bb (bb);
+      hsa_insn_basic *insn;
+      for (insn = hbb->m_first_insn; insn; insn = insn->m_next)
+	{
+	  unsigned opi;
+	  insn->m_number = insn_order++;
+	  for (opi = 0; opi < insn->operand_count (); opi++)
+	    {
+	      gcc_checking_assert (insn->get_op (opi));
+	      hsa_op_reg **regaddr = insn_reg_addr (insn, opi);
+	      if (regaddr)
+		ind2reg[(*regaddr)->m_order] = *regaddr;
+	    }
+	}
+    }
+
+  /* Initialize all live ranges to [after-end, 0).  */
+  for (i = 0; i < hsa_cfun->m_reg_count; i++)
+    if (ind2reg[i])
+      ind2reg[i]->m_lr_begin = insn_order, ind2reg[i]->m_lr_end = 0;
+
+  /* Classic liveness analysis, as long as something changes:
+       m_liveout is union (m_livein of successors)
+       m_livein is m_liveout minus defs plus uses.  */
+  do
+    {
+      changed = false;
+      for (i = n - 1; i >= 0; i--)
+	{
+	  edge e;
+	  edge_iterator ei;
+	  basic_block bb = BASIC_BLOCK_FOR_FN (cfun, bbs[i]);
+	  hsa_bb *hbb = hsa_bb_for_bb (bb);
+
+	  /* Union of successors m_livein (or empty if none).  */
+	  bool first = true;
+	  FOR_EACH_EDGE (e, ei, bb->succs)
+	    if (e->dest != EXIT_BLOCK_PTR_FOR_FN (cfun))
+	      {
+		hsa_bb *succ = hsa_bb_for_bb (e->dest);
+		if (first)
+		  {
+		    bitmap_copy (work, succ->m_livein);
+		    first = false;
+		  }
+		else
+		  bitmap_ior_into (work, succ->m_livein);
+	      }
+	  if (first)
+	    bitmap_clear (work);
+
+	  bitmap_copy (hbb->m_liveout, work);
+
+	  /* Remove defs, include uses in a backward insn walk.  */
+	  hsa_insn_basic *insn;
+	  for (insn = hbb->m_last_insn; insn; insn = insn->m_prev)
+	    {
+	      unsigned opi;
+	      unsigned ndefs = insn->input_count ();
+	      for (opi = 0; opi < ndefs && insn->get_op (opi); opi++)
+		{
+		  gcc_checking_assert (insn->get_op (opi));
+		  hsa_op_reg **regaddr = insn_reg_addr (insn, opi);
+		  if (regaddr)
+		    bitmap_clear_bit (work, (*regaddr)->m_order);
+		}
+	      for (; opi < insn->operand_count (); opi++)
+		{
+		  gcc_checking_assert (insn->get_op (opi));
+		  hsa_op_reg **regaddr = insn_reg_addr (insn, opi);
+		  if (regaddr)
+		    bitmap_set_bit (work, (*regaddr)->m_order);
+		}
+	    }
+
+	  /* Note if that changed something.  */
+	  if (bitmap_ior_into (hbb->m_livein, work))
+	    changed = true;
+	}
+    }
+  while (changed);
+
+  /* Make one pass through all instructions in linear order,
+     noting and merging possible live range start and end points.  */
+  m_last_insn = NULL;
+  for (i = n - 1; i >= 0; i--)
+    {
+      basic_block bb = BASIC_BLOCK_FOR_FN (cfun, bbs[i]);
+      hsa_bb *hbb = hsa_bb_for_bb (bb);
+      hsa_insn_basic *insn;
+      int after_end_number;
+      unsigned bit;
+      bitmap_iterator bi;
+
+      if (m_last_insn)
+	after_end_number = m_last_insn->m_number;
+      else
+	after_end_number = insn_order;
+      /* Everything live-out in this BB has at least an end point
+	 after us.  */
+      EXECUTE_IF_SET_IN_BITMAP (hbb->m_liveout, 0, bit, bi)
+	note_lr_end (ind2reg[bit], after_end_number);
+
+      for (insn = hbb->m_last_insn; insn; insn = insn->m_prev)
+	{
+	  unsigned opi;
+	  unsigned ndefs = insn->input_count ();
+	  for (opi = 0; opi < insn->operand_count (); opi++)
+	    {
+	      gcc_checking_assert (insn->get_op (opi));
+	      hsa_op_reg **regaddr = insn_reg_addr (insn, opi);
+	      if (regaddr)
+		{
+		  hsa_op_reg *reg = *regaddr;
+		  if (opi < ndefs)
+		    note_lr_begin (reg, insn->m_number);
+		  else
+		    note_lr_end (reg, insn->m_number);
+		}
+
+
+// Source: hsa-regalloc.c
+// Lines 415-557

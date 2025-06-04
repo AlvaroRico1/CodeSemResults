@@ -1,0 +1,1 @@
+ptr,mysql/sql/sql_parse.cc,42,schema_table,mysql/sql/sql_parse.cc,87,1

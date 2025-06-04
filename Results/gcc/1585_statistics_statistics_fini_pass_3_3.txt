@@ -1,0 +1,1 @@
+counter,gcc/gcc/statistics.c,4,slot,gcc/gcc/statistics.c,1,1

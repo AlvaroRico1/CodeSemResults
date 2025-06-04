@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'start' at line 9
+2. Pointer 'data' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool MessageLite::SerializePartialToArray(void* data, int size) const {
+  const size_t byte_size = ByteSizeLong();
+  if (byte_size > INT_MAX) {
+    GOOGLE_LOG(ERROR) << GetTypeName()
+               << " exceeded maximum protobuf size of 2GB: " << byte_size;
+    return false;
+  }
+  if (size < static_cast<int64_t>(byte_size)) return false;
+  uint8_t* start = reinterpret_cast<uint8_t*>(data);
+  SerializeToArrayImpl(*this, start, byte_size);
+  return true;
+}
+
+
+// Source: message_lite.cc
+// Lines 476-487
+
+
+[ANSWER]
+MUST

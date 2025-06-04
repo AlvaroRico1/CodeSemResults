@@ -1,0 +1,396 @@
+inline_small_functions (void)
+{
+  struct cgraph_node *node;
+  struct cgraph_edge *edge;
+  edge_heap_t edge_heap (sreal::min ());
+  auto_bitmap updated_nodes;
+  int min_size;
+  auto_vec<cgraph_edge *> new_indirect_edges;
+  int initial_size = 0;
+  struct cgraph_node **order = XCNEWVEC (cgraph_node *, symtab->cgraph_count);
+  struct cgraph_edge_hook_list *edge_removal_hook_holder;
+  new_indirect_edges.create (8);
+
+  edge_removal_hook_holder
+    = symtab->add_edge_removal_hook (&heap_edge_removal_hook, &edge_heap);
+
+  /* Compute overall unit size and other global parameters used by badness
+     metrics.  */
+
+  max_count = profile_count::uninitialized ();
+  ipa_reduced_postorder (order, true, ignore_edge_p);
+  free (order);
+
+  FOR_EACH_DEFINED_FUNCTION (node)
+    if (!node->inlined_to)
+      {
+	if (!node->alias && node->analyzed
+	    && (node->has_gimple_body_p () || node->thunk.thunk_p)
+	    && opt_for_fn (node->decl, optimize))
+	  {
+	    class ipa_fn_summary *info = ipa_fn_summaries->get (node);
+	    struct ipa_dfs_info *dfs = (struct ipa_dfs_info *) node->aux;
+
+	    /* Do not account external functions, they will be optimized out
+	       if not inlined.  Also only count the non-cold portion of program.  */
+	    if (inline_account_function_p (node))
+	      initial_size += ipa_size_summaries->get (node)->size;
+	    info->growth = estimate_growth (node);
+
+	    int num_calls = 0;
+	    node->call_for_symbol_and_aliases (sum_callers, &num_calls,
+					       true);
+	    if (num_calls == 1)
+	      info->single_caller = true;
+	    if (dfs && dfs->next_cycle)
+	      {
+		struct cgraph_node *n2;
+		int id = dfs->scc_no + 1;
+		for (n2 = node; n2;
+		     n2 = ((struct ipa_dfs_info *) n2->aux)->next_cycle)
+		  if (opt_for_fn (n2->decl, optimize))
+		    {
+		      ipa_fn_summary *info2 = ipa_fn_summaries->get
+			 (n2->inlined_to ? n2->inlined_to : n2);
+		      if (info2->scc_no)
+			break;
+		      info2->scc_no = id;
+		    }
+	      }
+	  }
+
+	for (edge = node->callers; edge; edge = edge->next_caller)
+	  max_count = max_count.max (edge->count.ipa ());
+      }
+  ipa_free_postorder_info ();
+  initialize_growth_caches ();
+
+  if (dump_file)
+    fprintf (dump_file,
+	     "\nDeciding on inlining of small functions.  Starting with size %i.\n",
+	     initial_size);
+
+  overall_size = initial_size;
+  min_size = overall_size;
+
+  /* Populate the heap with all edges we might inline.  */
+
+  FOR_EACH_DEFINED_FUNCTION (node)
+    {
+      bool update = false;
+      struct cgraph_edge *next = NULL;
+      bool has_speculative = false;
+
+      if (!opt_for_fn (node->decl, optimize))
+	continue;
+
+      if (dump_file)
+	fprintf (dump_file, "Enqueueing calls in %s.\n", node->dump_name ());
+
+      for (edge = node->callees; edge; edge = edge->next_callee)
+	{
+	  if (edge->inline_failed
+	      && !edge->aux
+	      && can_inline_edge_p (edge, true)
+	      && want_inline_small_function_p (edge, true)
+	      && can_inline_edge_by_limits_p (edge, true)
+	      && edge->inline_failed)
+	    {
+	      gcc_assert (!edge->aux);
+	      update_edge_key (&edge_heap, edge);
+	    }
+	  if (edge->speculative)
+	    has_speculative = true;
+	}
+      if (has_speculative)
+	for (edge = node->callees; edge; edge = next)
+	  {
+	    next = edge->next_callee;
+	    if (edge->speculative
+		&& !speculation_useful_p (edge, edge->aux != NULL))
+	      {
+		cgraph_edge::resolve_speculation (edge);
+		update = true;
+	      }
+	  }
+      if (update)
+	{
+	  struct cgraph_node *where = node->inlined_to
+				      ? node->inlined_to : node;
+	  ipa_update_overall_fn_summary (where);
+	  reset_edge_caches (where);
+          update_caller_keys (&edge_heap, where,
+			      updated_nodes, NULL);
+          update_callee_keys (&edge_heap, where, NULL,
+			      updated_nodes);
+          bitmap_clear (updated_nodes);
+	}
+    }
+
+  gcc_assert (in_lto_p
+	      || !(max_count > 0)
+	      || (profile_info && flag_branch_probabilities));
+
+  while (!edge_heap.empty ())
+    {
+      int old_size = overall_size;
+      struct cgraph_node *where, *callee;
+      sreal badness = edge_heap.min_key ();
+      sreal current_badness;
+      int growth;
+
+      edge = edge_heap.extract_min ();
+      gcc_assert (edge->aux);
+      edge->aux = NULL;
+      if (!edge->inline_failed || !edge->callee->analyzed)
+	continue;
+
+      /* Be sure that caches are maintained consistent.
+	 This check is affected by scaling roundoff errors when compiling for
+	 IPA this we skip it in that case.  */
+      if (flag_checking && !edge->callee->count.ipa_p ()
+	  && (!max_count.initialized_p () || !max_count.nonzero_p ()))
+	{
+	  sreal cached_badness = edge_badness (edge, false);
+     
+	  int old_size_est = estimate_edge_size (edge);
+	  sreal old_time_est = estimate_edge_time (edge);
+	  int old_hints_est = estimate_edge_hints (edge);
+
+	  if (edge_growth_cache != NULL)
+	    edge_growth_cache->remove (edge);
+	  reset_node_cache (edge->caller->inlined_to
+			    ? edge->caller->inlined_to
+			    : edge->caller);
+	  gcc_assert (old_size_est == estimate_edge_size (edge));
+	  gcc_assert (old_time_est == estimate_edge_time (edge));
+	  /* FIXME:
+
+	     gcc_assert (old_hints_est == estimate_edge_hints (edge));
+
+	     fails with profile feedback because some hints depends on
+	     maybe_hot_edge_p predicate and because callee gets inlined to other
+	     calls, the edge may become cold.
+	     This ought to be fixed by computing relative probabilities
+	     for given invocation but that will be better done once whole
+	     code is converted to sreals.  Disable for now and revert to "wrong"
+	     value so enable/disable checking paths agree.  */
+	  edge_growth_cache->get (edge)->hints = old_hints_est + 1;
+
+	  /* When updating the edge costs, we only decrease badness in the keys.
+	     Increases of badness are handled lazily; when we see key with out
+	     of date value on it, we re-insert it now.  */
+	  current_badness = edge_badness (edge, false);
+	  gcc_assert (cached_badness == current_badness);
+	  gcc_assert (current_badness >= badness);
+	}
+      else
+        current_badness = edge_badness (edge, false);
+      if (current_badness != badness)
+	{
+	  if (edge_heap.min () && current_badness > edge_heap.min_key ())
+	    {
+	      edge->aux = edge_heap.insert (current_badness, edge);
+	      continue;
+	    }
+	  else
+	    badness = current_badness;
+	}
+
+      if (!can_inline_edge_p (edge, true)
+	  || !can_inline_edge_by_limits_p (edge, true))
+	{
+	  resolve_noninline_speculation (&edge_heap, edge);
+	  continue;
+	}
+      
+      callee = edge->callee->ultimate_alias_target ();
+      growth = estimate_edge_growth (edge);
+      if (dump_file)
+	{
+	  fprintf (dump_file,
+		   "\nConsidering %s with %i size\n",
+		   callee->dump_name (),
+		   ipa_size_summaries->get (callee)->size);
+	  fprintf (dump_file,
+		   " to be inlined into %s in %s:%i\n"
+		   " Estimated badness is %f, frequency %.2f.\n",
+		   edge->caller->dump_name (),
+		   edge->call_stmt
+		   && (LOCATION_LOCUS (gimple_location ((const gimple *)
+							edge->call_stmt))
+		       > BUILTINS_LOCATION)
+		   ? gimple_filename ((const gimple *) edge->call_stmt)
+		   : "unknown",
+		   edge->call_stmt
+		   ? gimple_lineno ((const gimple *) edge->call_stmt)
+		   : -1,
+		   badness.to_double (),
+		   edge->sreal_frequency ().to_double ());
+	  if (edge->count.ipa ().initialized_p ())
+	    {
+	      fprintf (dump_file, " Called ");
+	      edge->count.ipa ().dump (dump_file);
+	      fprintf (dump_file, " times\n");
+            }
+	  if (dump_flags & TDF_DETAILS)
+	    edge_badness (edge, true);
+	}
+
+      where = edge->caller;
+
+      if (overall_size + growth > compute_max_insns (where, min_size)
+	  && !DECL_DISREGARD_INLINE_LIMITS (callee->decl))
+	{
+	  edge->inline_failed = CIF_INLINE_UNIT_GROWTH_LIMIT;
+	  report_inline_failed_reason (edge);
+	  resolve_noninline_speculation (&edge_heap, edge);
+	  continue;
+	}
+
+      if (!want_inline_small_function_p (edge, true))
+	{
+	  resolve_noninline_speculation (&edge_heap, edge);
+	  continue;
+	}
+
+      profile_count old_count = callee->count;
+
+      /* Heuristics for inlining small functions work poorly for
+	 recursive calls where we do effects similar to loop unrolling.
+	 When inlining such edge seems profitable, leave decision on
+	 specific inliner.  */
+      if (edge->recursive_p ())
+	{
+	  if (where->inlined_to)
+	    where = where->inlined_to;
+	  if (!recursive_inlining (edge,
+				   opt_for_fn (edge->caller->decl,
+					       flag_indirect_inlining)
+				   ? &new_indirect_edges : NULL))
+	    {
+	      edge->inline_failed = CIF_RECURSIVE_INLINING;
+	      resolve_noninline_speculation (&edge_heap, edge);
+	      continue;
+	    }
+	  reset_edge_caches (where);
+	  /* Recursive inliner inlines all recursive calls of the function
+	     at once. Consequently we need to update all callee keys.  */
+	  if (opt_for_fn (edge->caller->decl, flag_indirect_inlining))
+	    add_new_edges_to_heap (&edge_heap, new_indirect_edges);
+          update_callee_keys (&edge_heap, where, where, updated_nodes);
+	  bitmap_clear (updated_nodes);
+	}
+      else
+	{
+	  struct cgraph_node *outer_node = NULL;
+	  int depth = 0;
+
+	  /* Consider the case where self recursive function A is inlined
+	     into B.  This is desired optimization in some cases, since it
+	     leads to effect similar of loop peeling and we might completely
+	     optimize out the recursive call.  However we must be extra
+	     selective.  */
+
+	  where = edge->caller;
+	  while (where->inlined_to)
+	    {
+	      if (where->decl == callee->decl)
+		outer_node = where, depth++;
+	      where = where->callers->caller;
+	    }
+	  if (outer_node
+	      && !want_inline_self_recursive_call_p (edge, outer_node,
+						     true, depth))
+	    {
+	      edge->inline_failed
+		= (DECL_DISREGARD_INLINE_LIMITS (edge->callee->decl)
+		   ? CIF_RECURSIVE_INLINING : CIF_UNSPECIFIED);
+	      resolve_noninline_speculation (&edge_heap, edge);
+	      continue;
+	    }
+	  else if (depth && dump_file)
+	    fprintf (dump_file, " Peeling recursion with depth %i\n", depth);
+
+	  gcc_checking_assert (!callee->inlined_to);
+
+	  int old_size = ipa_size_summaries->get (where)->size;
+	  sreal old_time = ipa_fn_summaries->get (where)->time;
+
+	  inline_call (edge, true, &new_indirect_edges, &overall_size, true);
+	  reset_edge_caches (edge->callee);
+	  add_new_edges_to_heap (&edge_heap, new_indirect_edges);
+
+	  /* If caller's size and time increased we do not need to update
+	     all edges because badness is not going to decrease.  */
+	  if (old_size <= ipa_size_summaries->get (where)->size
+	      && old_time <= ipa_fn_summaries->get (where)->time
+	      /* Wrapper penalty may be non-monotonous in this respect.
+	         Fortunately it only affects small functions.  */
+	      && !wrapper_heuristics_may_apply (where, old_size))
+	    update_callee_keys (&edge_heap, edge->callee, edge->callee,
+			   	updated_nodes);
+	  else
+	    update_callee_keys (&edge_heap, where,
+				edge->callee,
+			   	updated_nodes);
+	}
+      where = edge->caller;
+      if (where->inlined_to)
+	where = where->inlined_to;
+
+      /* Our profitability metric can depend on local properties
+	 such as number of inlinable calls and size of the function body.
+	 After inlining these properties might change for the function we
+	 inlined into (since it's body size changed) and for the functions
+	 called by function we inlined (since number of it inlinable callers
+	 might change).  */
+      update_caller_keys (&edge_heap, where, updated_nodes, NULL);
+      /* Offline copy count has possibly changed, recompute if profile is
+	 available.  */
+      struct cgraph_node *n
+	      = cgraph_node::get (edge->callee->decl)->ultimate_alias_target ();
+      if (n != edge->callee && n->analyzed && !(n->count == old_count)
+	  && n->count.ipa_p ())
+	update_callee_keys (&edge_heap, n, NULL, updated_nodes);
+      bitmap_clear (updated_nodes);
+
+      if (dump_enabled_p ())
+	{
+	  ipa_fn_summary *s = ipa_fn_summaries->get (where);
+
+	  /* dump_printf can't handle %+i.  */
+	  char buf_net_change[100];
+	  snprintf (buf_net_change, sizeof buf_net_change, "%+i",
+		    overall_size - old_size);
+
+	  dump_printf_loc (MSG_OPTIMIZED_LOCATIONS, edge->call_stmt,
+			   " Inlined %C into %C which now has time %f and "
+			   "size %i, net change of %s%s.\n",
+			   edge->callee, edge->caller,
+			   s->time.to_double (),
+			   ipa_size_summaries->get (edge->caller)->size,
+			   buf_net_change,
+			   cross_module_call_p (edge) ? " (cross module)":"");
+	}
+      if (min_size > overall_size)
+	{
+	  min_size = overall_size;
+
+	  if (dump_file)
+	    fprintf (dump_file, "New minimal size reached: %i\n", min_size);
+	}
+    }
+
+  free_growth_caches ();
+  if (dump_enabled_p ())
+    dump_printf (MSG_NOTE,
+		 "Unit growth for small function inlining: %i->%i (%i%%)\n",
+		 initial_size, overall_size,
+		 initial_size ? overall_size * 100 / (initial_size) - 100: 0);
+  symtab->remove_edge_removal_hook (edge_removal_hook_holder);
+}
+
+
+// Source: ipa-inline.c
+// Lines 1889-2280

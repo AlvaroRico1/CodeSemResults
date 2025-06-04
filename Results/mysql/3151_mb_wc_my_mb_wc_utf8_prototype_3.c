@@ -1,0 +1,70 @@
+static ALWAYS_INLINE int my_mb_wc_utf8_prototype(my_wc_t *pwc, const uchar *s,
+                                                 const uchar *e) {
+  if (RANGE_CHECK && s >= e) return MY_CS_TOOSMALL;
+
+  uchar c = s[0];
+  if (c < 0x80) {
+    *pwc = c;
+    return 1;
+  }
+
+  if (c < 0xe0) {
+    if (c < 0xc2)  // Resulting code point would be less than 0x80.
+      return MY_CS_ILSEQ;
+
+    if (RANGE_CHECK && s + 2 > e) return MY_CS_TOOSMALL2;
+
+    if ((s[1] & 0xc0) != 0x80)  // Next byte must be a continuation byte.
+      return MY_CS_ILSEQ;
+
+    *pwc = ((my_wc_t)(c & 0x1f) << 6) + (my_wc_t)(s[1] & 0x3f);
+    return 2;
+  }
+
+  if (c < 0xf0) {
+    if (RANGE_CHECK && s + 3 > e) return MY_CS_TOOSMALL3;
+
+    // Next two bytes must be continuation bytes.
+    uint16 two_bytes;
+    memcpy(&two_bytes, s + 1, sizeof(two_bytes));
+    if ((two_bytes & 0xc0c0) != 0x8080)  // Endianness does not matter.
+      return MY_CS_ILSEQ;
+
+    *pwc = ((my_wc_t)(c & 0x0f) << 12) + ((my_wc_t)(s[1] & 0x3f) << 6) +
+           (my_wc_t)(s[2] & 0x3f);
+    if (*pwc < 0x800) return MY_CS_ILSEQ;
+    /*
+      According to RFC 3629, UTF-8 should prohibit characters between
+      U+D800 and U+DFFF, which are reserved for surrogate pairs and do
+      not directly represent characters.
+    */
+    if (*pwc >= 0xd800 && *pwc <= 0xdfff) return MY_CS_ILSEQ;
+    return 3;
+  }
+
+  if (SUPPORT_MB4) {
+    if (RANGE_CHECK && s + 4 > e) /* We need 4 characters */
+      return MY_CS_TOOSMALL4;
+
+    /*
+      This byte must be of the form 11110xxx, and the next three bytes
+      must be continuation bytes.
+    */
+    uint32 four_bytes;
+    memcpy(&four_bytes, s, sizeof(four_bytes));
+#ifdef WORDS_BIGENDIAN
+    if ((four_bytes & 0xf8c0c0c0) != 0xf0808080)
+#else
+    if ((four_bytes & 0xc0c0c0f8) != 0x808080f0)
+#endif
+      return MY_CS_ILSEQ;
+
+    *pwc = ((my_wc_t)(c & 0x07) << 18) + ((my_wc_t)(s[1] & 0x3f) << 12) +
+           ((my_wc_t)(s[2] & 0x3f) << 6) + (my_wc_t)(s[3] & 0x3f);
+    if (*pwc < 0x10000 || *pwc > 0x10ffff) return MY_CS_ILSEQ;
+    return 4;
+  }
+
+
+// Source: mb_wc.h
+// Lines 111-176

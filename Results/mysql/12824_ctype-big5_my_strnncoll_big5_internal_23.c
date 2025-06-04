@@ -1,0 +1,22 @@
+static int my_strnncoll_big5_internal(const uchar **a_res, const uchar **b_res,
+                                      size_t length) {
+  const uchar *a = *a_res, *b = *b_res;
+
+  while (length--) {
+    if ((length > 0) && isbig5code(*a, *(a + 1)) && isbig5code(*b, *(b + 1))) {
+      if (*a != *b || *(a + 1) != *(b + 1))
+        return ((int)big5code(*a, *(a + 1)) - (int)big5code(*b, *(b + 1)));
+      a += 2;
+      b += 2;
+      length--;
+    } else if (sort_order_big5[*a++] != sort_order_big5[*b++])
+      return ((int)sort_order_big5[a[-1]] - (int)sort_order_big5[b[-1]]);
+  }
+  *a_res = a;
+  *b_res = b;
+  return 0;
+}
+
+
+// Source: ctype-big5.cc
+// Lines 1201-1218

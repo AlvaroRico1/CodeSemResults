@@ -1,0 +1,71 @@
+cmd_display_menu_exec(struct cmd *self, struct cmdq_item *item)
+{
+	struct args		*args = cmd_get_args(self);
+	struct cmd_find_state	*target = cmdq_get_target(item);
+	struct key_event	*event = cmdq_get_event(item);
+	struct client		*tc = cmdq_get_target_client(item);
+	struct menu		*menu = NULL;
+	struct menu_item	 menu_item;
+	const char		*key, *name;
+	char			*title;
+	int			 flags = 0;
+	u_int			 px, py, i, count = args_count(args);
+
+	if (tc->overlay_draw != NULL)
+		return (CMD_RETURN_NORMAL);
+
+	if (args_has(args, 'T'))
+		title = format_single_from_target(item, args_get(args, 'T'));
+	else
+		title = xstrdup("");
+	menu = menu_create(title);
+
+	for (i = 0; i != count; /* nothing */) {
+		name = args_string(args, i++);
+		if (*name == '\0') {
+			menu_add_item(menu, NULL, item, tc, target);
+			continue;
+		}
+
+		if (count - i < 2) {
+			cmdq_error(item, "not enough arguments");
+			free(title);
+			menu_free(menu);
+			return (CMD_RETURN_ERROR);
+		}
+		key = args_string(args, i++);
+
+		menu_item.name = name;
+		menu_item.key = key_string_lookup_string(key);
+		menu_item.command = args_string(args, i++);
+
+		menu_add_item(menu, &menu_item, item, tc, target);
+	}
+	free(title);
+	if (menu == NULL) {
+		cmdq_error(item, "invalid menu arguments");
+		return (CMD_RETURN_ERROR);
+	}
+	if (menu->count == 0) {
+		menu_free(menu);
+		return (CMD_RETURN_NORMAL);
+	}
+	if (!cmd_display_menu_get_position(tc, item, args, &px, &py,
+	    menu->width + 4, menu->count + 2)) {
+		menu_free(menu);
+		return (CMD_RETURN_NORMAL);
+	}
+
+	if (args_has(args, 'O'))
+		flags |= MENU_STAYOPEN;
+	if (!event->m.valid)
+		flags |= MENU_NOMOUSE;
+	if (menu_display(menu, flags, item, px, py, tc, target, NULL,
+	    NULL) != 0)
+		return (CMD_RETURN_NORMAL);
+	return (CMD_RETURN_WAIT);
+}
+
+
+// Source: cmd-display-menu.c
+// Lines 280-346

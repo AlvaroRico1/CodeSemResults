@@ -1,0 +1,1 @@
+caller,gcc/gcc/ipa-inline.c,5,edge,gcc/gcc/ipa-inline.c,1,1

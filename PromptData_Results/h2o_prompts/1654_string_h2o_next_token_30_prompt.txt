@@ -1,0 +1,75 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'token_end' at line 3
+2. Pointer 'cur' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+const char *h2o_next_token(h2o_iovec_t *iter, int inner, int outer, size_t *element_len, h2o_iovec_t *value)
+{
+    const char *cur = iter->base, *end = iter->base + iter->len, *token_start, *token_end;
+
+    /* find start */
+    for (;; ++cur) {
+        if (cur == end)
+            return NULL;
+        if (!(*cur == ' ' || *cur == '\t'))
+            break;
+    }
+    token_start = cur;
+    token_end = cur;
+
+    /* find last */
+    for (;; ++cur) {
+        if (cur == end)
+            break;
+        if (*cur == inner) {
+            ++cur;
+            break;
+        }
+        if (*cur == outer) {
+            if (token_start == cur) {
+                ++cur;
+                token_end = cur;
+            }
+            break;
+        }
+        if (value != NULL && *cur == '=') {
+            ++cur;
+            goto FindValue;
+        }
+        if (!(*cur == ' ' || *cur == '\t'))
+            token_end = cur + 1;
+    }
+
+    /* found */
+    *iter = h2o_iovec_init(cur, end - cur);
+    *element_len = token_end - token_start;
+    if (value != NULL)
+        *value = (h2o_iovec_t){NULL};
+    return token_start;
+
+FindValue:
+    *iter = h2o_iovec_init(cur, end - cur);
+    *element_len = token_end - token_start;
+    if ((value->base = (char *)h2o_next_token(iter, inner, outer, &value->len, NULL)) == NULL) {
+        *value = (h2o_iovec_t){"", 0};
+    } else if (h2o_memis(value->base, value->len, H2O_STRLIT(","))) {
+        *value = (h2o_iovec_t){"", 0};
+        iter->base -= 1;
+        iter->len += 1;
+    }
+    return token_start;
+}
+
+
+// Source: string.c
+// Lines 406-461
+
+
+[ANSWER]
+MUST

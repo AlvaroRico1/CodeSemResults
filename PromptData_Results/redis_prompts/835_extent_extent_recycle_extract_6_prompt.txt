@@ -1,0 +1,64 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'unlock_extent' at line 36
+2. Pointer 'extent' at line 12
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+extent_recycle_extract(tsdn_t *tsdn, arena_t *arena,
+    extent_hooks_t **r_extent_hooks, rtree_ctx_t *rtree_ctx, extents_t *extents,
+    void *new_addr, size_t size, size_t pad, size_t alignment, bool slab,
+    bool growing_retained) {
+	witness_assert_depth_to_rank(tsdn_witness_tsdp_get(tsdn),
+	    WITNESS_RANK_CORE, growing_retained ? 1 : 0);
+	assert(alignment > 0);
+	if (config_debug && new_addr != NULL) {
+		/*
+		 * Non-NULL new_addr has two use cases:
+		 *
+		 *   1) Recycle a known-extant extent, e.g. during purging.
+		 *   2) Perform in-place expanding reallocation.
+		 *
+		 * Regardless of use case, new_addr must either refer to a
+		 * non-existing extent, or to the base of an extant extent,
+		 * since only active slabs support interior lookups (which of
+		 * course cannot be recycled).
+		 */
+		assert(PAGE_ADDR2BASE(new_addr) == new_addr);
+		assert(pad == 0);
+		assert(alignment <= PAGE);
+	}
+
+	size_t esize = size + pad;
+	malloc_mutex_lock(tsdn, &extents->mtx);
+	extent_hooks_assure_initialized(arena, r_extent_hooks);
+	extent_t *extent;
+	if (new_addr != NULL) {
+		extent = extent_lock_from_addr(tsdn, rtree_ctx, new_addr);
+		if (extent != NULL) {
+			/*
+			 * We might null-out extent to report an error, but we
+			 * still need to unlock the associated mutex after.
+			 */
+			extent_t *unlock_extent = extent;
+			assert(extent_base_get(extent) == new_addr);
+			if (extent_arena_get(extent) != arena ||
+			    extent_size_get(extent) < esize ||
+			    extent_state_get(extent) !=
+			    extents_state_get(extents)) {
+				extent = NULL;
+			}
+			extent_unlock(tsdn, unlock_extent);
+		}
+
+
+// Source: extent.c
+// Lines 848-892
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,83 @@
+int git_blob__create_from_paths(
+	git_oid *id,
+	struct stat *out_st,
+	git_repository *repo,
+	const char *content_path,
+	const char *hint_path,
+	mode_t hint_mode,
+	bool try_load_filters)
+{
+	int error;
+	struct stat st;
+	git_odb *odb = NULL;
+	git_object_size_t size;
+	mode_t mode;
+	git_str path = GIT_STR_INIT;
+
+	GIT_ASSERT_ARG(hint_path || !try_load_filters);
+
+	if (!content_path) {
+		if (git_repository_workdir_path(&path, repo, hint_path) < 0)
+			return -1;
+
+		content_path = path.ptr;
+	}
+
+	if ((error = git_fs_path_lstat(content_path, &st)) < 0 ||
+		(error = git_repository_odb(&odb, repo)) < 0)
+		goto done;
+
+	if (S_ISDIR(st.st_mode)) {
+		git_error_set(GIT_ERROR_ODB, "cannot create blob from '%s': it is a directory", content_path);
+		error = GIT_EDIRECTORY;
+		goto done;
+	}
+
+	if (out_st)
+		memcpy(out_st, &st, sizeof(st));
+
+	size = st.st_size;
+	mode = hint_mode ? hint_mode : st.st_mode;
+
+	if (S_ISLNK(mode)) {
+		error = write_symlink(id, odb, content_path, (size_t)size);
+	} else {
+		git_filter_list *fl = NULL;
+
+		if (try_load_filters)
+			/* Load the filters for writing this file to the ODB */
+			error = git_filter_list_load(
+				&fl, repo, NULL, hint_path,
+				GIT_FILTER_TO_ODB, GIT_FILTER_DEFAULT);
+
+		if (error < 0)
+			/* well, that didn't work */;
+		else if (fl == NULL)
+			/* No filters need to be applied to the document: we can stream
+			 * directly from disk */
+			error = write_file_stream(id, odb, content_path, size);
+		else {
+			/* We need to apply one or more filters */
+			error = write_file_filtered(id, &size, odb, content_path, fl, repo);
+
+			git_filter_list_free(fl);
+		}
+
+		/*
+		 * TODO: eventually support streaming filtered files, for files
+		 * which are bigger than a given threshold. This is not a priority
+		 * because applying a filter in streaming mode changes the final
+		 * size of the blob, and without knowing its final size, the blob
+		 * cannot be written in stream mode to the ODB.
+		 *
+		 * The plan is to do streaming writes to a tempfile on disk and then
+		 * opening streaming that file to the ODB, using
+		 * `write_file_stream`.
+		 *
+		 * CAREFULLY DESIGNED APIS YO
+		 */
+	}
+
+
+// Source: blob.c
+// Lines 183-261

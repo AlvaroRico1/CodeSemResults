@@ -1,0 +1,74 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'head_ref' at line 8
+2. Pointer 'onto_commit' at line 9
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int rebase_init_merge(
+	git_rebase *rebase,
+	git_repository *repo,
+	const git_annotated_commit *branch,
+	const git_annotated_commit *upstream,
+	const git_annotated_commit *onto)
+{
+	git_reference *head_ref = NULL;
+	git_commit *onto_commit = NULL;
+	git_str reflog = GIT_STR_INIT;
+	git_str state_path = GIT_STR_INIT;
+	int error;
+
+	GIT_UNUSED(upstream);
+
+	if ((error = git_str_joinpath(&state_path, repo->gitdir, REBASE_MERGE_DIR)) < 0)
+		goto done;
+
+	rebase->state_path = git_str_detach(&state_path);
+	GIT_ERROR_CHECK_ALLOC(rebase->state_path);
+
+	if (branch->ref_name && strcmp(branch->ref_name, "HEAD")) {
+		rebase->orig_head_name = git__strdup(branch->ref_name);
+		GIT_ERROR_CHECK_ALLOC(rebase->orig_head_name);
+	} else {
+		rebase->head_detached = 1;
+	}
+
+	rebase->onto_name = git__strdup(rebase_onto_name(onto));
+	GIT_ERROR_CHECK_ALLOC(rebase->onto_name);
+
+	rebase->quiet = rebase->options.quiet;
+
+	git_oid_cpy(&rebase->orig_head_id, git_annotated_commit_id(branch));
+	git_oid_cpy(&rebase->onto_id, git_annotated_commit_id(onto));
+
+	if ((error = rebase_setupfiles(rebase)) < 0 ||
+		(error = git_str_printf(&reflog,
+			"rebase: checkout %s", rebase_onto_name(onto))) < 0 ||
+		(error = git_commit_lookup(
+			&onto_commit, repo, git_annotated_commit_id(onto))) < 0 ||
+		(error = git_checkout_tree(repo,
+			(git_object *)onto_commit, &rebase->options.checkout_options)) < 0 ||
+		(error = git_reference_create(&head_ref, repo, GIT_HEAD_FILE,
+			git_annotated_commit_id(onto), 1, reflog.ptr)) < 0)
+		goto done;
+
+done:
+	git_reference_free(head_ref);
+	git_commit_free(onto_commit);
+	git_str_dispose(&reflog);
+	git_str_dispose(&state_path);
+
+	return error;
+}
+
+
+// Source: rebase.c
+// Lines 621-675
+
+
+[ANSWER]
+MAY

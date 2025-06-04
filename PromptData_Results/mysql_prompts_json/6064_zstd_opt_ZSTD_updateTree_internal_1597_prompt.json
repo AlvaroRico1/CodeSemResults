@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'dictMode' at line 4\n2. Pointer 'forward' at line 13\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid ZSTD_updateTree_internal(\n                ZSTD_matchState_t* ms,\n                const BYTE* const ip, const BYTE* const iend,\n                const U32 mls, const ZSTD_dictMode_e dictMode)\n{\n    const BYTE* const base = ms->window.base;\n    U32 const target = (U32)(ip - base);\n    U32 idx = ms->nextToUpdate;\n    DEBUGLOG(6, \"ZSTD_updateTree_internal, from %u to %u  (dictMode:%u)\",\n                idx, target, dictMode);\n\n    while(idx < target) {\n        U32 const forward = ZSTD_insertBt1(ms, base+idx, iend, mls, dictMode == ZSTD_extDict);\n        assert(idx < (U32)(idx + forward));\n        idx += forward;\n    }\n\n\n// Source: zstd_opt.c\n// Lines 519-534\n",
+  "ANSWER": "MAY"
+}

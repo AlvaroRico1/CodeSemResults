@@ -1,0 +1,28 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ci' at line 2
+2. Pointer 'L' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+LUA_API const char *lua_getlocal (lua_State *L, const lua_Debug *ar, int n) {
+  CallInfo *ci = L->base_ci + ar->i_ci;
+  const char *name = findlocal(L, ci, n);
+  lua_lock(L);
+  if (name)
+      luaA_pushobject(L, ci->base + (n - 1));
+  lua_unlock(L);
+  return name;
+}
+
+
+// Source: ldebug.c
+// Lines 127-135
+
+
+[ANSWER]
+MUST

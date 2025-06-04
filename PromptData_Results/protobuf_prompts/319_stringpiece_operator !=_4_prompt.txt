@@ -1,0 +1,46 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'x' at line 1
+2. Pointer 'y' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+inline bool operator!=(StringPiece x, StringPiece y) {
+  return !(x == y);
+}
+
+inline bool operator<(StringPiece x, StringPiece y) {
+  const StringPiece::size_type min_size =
+      x.size() < y.size() ? x.size() : y.size();
+  const int r = memcmp(x.data(), y.data(), static_cast<size_t>(min_size));
+  return (r < 0) || (r == 0 && x.size() < y.size());
+}
+
+inline bool operator>(StringPiece x, StringPiece y) {
+  return y < x;
+}
+
+inline bool operator<=(StringPiece x, StringPiece y) {
+  return !(x > y);
+}
+
+inline bool operator>=(StringPiece x, StringPiece y) {
+  return !(x < y);
+}
+
+// allow StringPiece to be logged
+extern std::ostream& operator<<(std::ostream& o, StringPiece piece);
+
+}  // namespace stringpiece_internal
+
+
+// Source: stringpiece.h
+// Lines 355-381
+
+
+[ANSWER]
+MAY

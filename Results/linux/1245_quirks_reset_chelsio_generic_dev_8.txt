@@ -1,0 +1,1 @@
+msix_flags,linux/drivers/pci/quirks.c,4,old_command,linux/drivers/pci/quirks.c,3,2

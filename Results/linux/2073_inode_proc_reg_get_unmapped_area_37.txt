@@ -1,0 +1,1 @@
+get_area,linux/fs/proc/inode.c,9,pde,linux/fs/proc/inode.c,5,1

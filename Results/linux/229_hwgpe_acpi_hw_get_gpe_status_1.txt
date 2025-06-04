@@ -1,0 +1,1 @@
+event_status,linux/drivers/acpi/acpica/hwgpe.c,2,in_byte,linux/drivers/acpi/acpica/hwgpe.c,4,2

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'x' at line 5\n2. Pointer 'dst' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void bisort(\n\tvoid **dst, size_t start, size_t size, git__sort_r_cmp cmp, void *payload)\n{\n\tsize_t i;\n\tvoid *x;\n\tint location;\n\n\tfor (i = start; i < size; i++) {\n\t\tint j;\n\t\t/* If this entry is already correct, just move along */\n\t\tif (cmp(dst[i - 1], dst[i], payload) <= 0)\n\t\t\tcontinue;\n\n\t\t/* Else we need to find the right place, shift everything over, and squeeze in */\n\t\tx = dst[i];\n\t\tlocation = binsearch(dst, x, i, cmp, payload);\n\t\tfor (j = (int)i - 1; j >= location; j--) {\n\t\t\tdst[j + 1] = dst[j];\n\t\t}\n\t\tdst[location] = x;\n\t}\n}\n\n\n// Source: tsort.c\n// Lines 71-92\n",
+  "ANSWER": "MUST"
+}

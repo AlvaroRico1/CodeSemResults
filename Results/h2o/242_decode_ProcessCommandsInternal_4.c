@@ -1,0 +1,123 @@
+static BROTLI_INLINE BrotliDecoderErrorCode ProcessCommandsInternal(
+    int safe, BrotliDecoderState* s) {
+  int pos = s->pos;
+  int i = s->loop_counter;
+  BrotliDecoderErrorCode result = BROTLI_DECODER_SUCCESS;
+  BrotliBitReader* br = &s->br;
+
+  if (!CheckInputAmount(safe, br, 28)) {
+    result = BROTLI_DECODER_NEEDS_MORE_INPUT;
+    goto saveStateAndReturn;
+  }
+  if (!safe) {
+    BROTLI_UNUSED(BrotliWarmupBitReader(br));
+  }
+
+  /* Jump into state machine. */
+  if (s->state == BROTLI_STATE_COMMAND_BEGIN) {
+    goto CommandBegin;
+  } else if (s->state == BROTLI_STATE_COMMAND_INNER) {
+    goto CommandInner;
+  } else if (s->state == BROTLI_STATE_COMMAND_POST_DECODE_LITERALS) {
+    goto CommandPostDecodeLiterals;
+  } else if (s->state == BROTLI_STATE_COMMAND_POST_WRAP_COPY) {
+    goto CommandPostWrapCopy;
+  } else {
+    return BROTLI_FAILURE(BROTLI_DECODER_ERROR_UNREACHABLE);
+  }
+
+CommandBegin:
+  if (safe) {
+    s->state = BROTLI_STATE_COMMAND_BEGIN;
+  }
+  if (!CheckInputAmount(safe, br, 28)) { /* 156 bits + 7 bytes */
+    s->state = BROTLI_STATE_COMMAND_BEGIN;
+    result = BROTLI_DECODER_NEEDS_MORE_INPUT;
+    goto saveStateAndReturn;
+  }
+  if (BROTLI_PREDICT_FALSE(s->block_length[1] == 0)) {
+    BROTLI_SAFE(DecodeCommandBlockSwitch(s));
+    goto CommandBegin;
+  }
+  /* Read the insert/copy length in the command */
+  BROTLI_SAFE(ReadCommand(s, br, &i));
+  BROTLI_LOG(("[ProcessCommandsInternal] pos = %d insert = %d copy = %d\n",
+              pos, i, s->copy_length));
+  if (i == 0) {
+    goto CommandPostDecodeLiterals;
+  }
+  s->meta_block_remaining_len -= i;
+
+CommandInner:
+  if (safe) {
+    s->state = BROTLI_STATE_COMMAND_INNER;
+  }
+  /* Read the literals in the command */
+  if (s->trivial_literal_context) {
+    uint32_t bits;
+    uint32_t value;
+    PreloadSymbol(safe, s->literal_htree, br, &bits, &value);
+    do {
+      if (!CheckInputAmount(safe, br, 28)) { /* 162 bits + 7 bytes */
+        s->state = BROTLI_STATE_COMMAND_INNER;
+        result = BROTLI_DECODER_NEEDS_MORE_INPUT;
+        goto saveStateAndReturn;
+      }
+      if (BROTLI_PREDICT_FALSE(s->block_length[0] == 0)) {
+        BROTLI_SAFE(DecodeLiteralBlockSwitch(s));
+        PreloadSymbol(safe, s->literal_htree, br, &bits, &value);
+        if (!s->trivial_literal_context) goto CommandInner;
+      }
+      if (!safe) {
+        s->ringbuffer[pos] =
+            (uint8_t)ReadPreloadedSymbol(s->literal_htree, br, &bits, &value);
+      } else {
+        uint32_t literal;
+        if (!SafeReadSymbol(s->literal_htree, br, &literal)) {
+          result = BROTLI_DECODER_NEEDS_MORE_INPUT;
+          goto saveStateAndReturn;
+        }
+        s->ringbuffer[pos] = (uint8_t)literal;
+      }
+      --s->block_length[0];
+      BROTLI_LOG_ARRAY_INDEX(s->ringbuffer, pos);
+      ++pos;
+      if (BROTLI_PREDICT_FALSE(pos == s->ringbuffer_size)) {
+        s->state = BROTLI_STATE_COMMAND_INNER_WRITE;
+        --i;
+        goto saveStateAndReturn;
+      }
+    } while (--i != 0);
+  } else {
+    uint8_t p1 = s->ringbuffer[(pos - 1) & s->ringbuffer_mask];
+    uint8_t p2 = s->ringbuffer[(pos - 2) & s->ringbuffer_mask];
+    do {
+      const HuffmanCode* hc;
+      uint8_t context;
+      if (!CheckInputAmount(safe, br, 28)) { /* 162 bits + 7 bytes */
+        s->state = BROTLI_STATE_COMMAND_INNER;
+        result = BROTLI_DECODER_NEEDS_MORE_INPUT;
+        goto saveStateAndReturn;
+      }
+      if (BROTLI_PREDICT_FALSE(s->block_length[0] == 0)) {
+        BROTLI_SAFE(DecodeLiteralBlockSwitch(s));
+        if (s->trivial_literal_context) goto CommandInner;
+      }
+      context = s->context_lookup1[p1] | s->context_lookup2[p2];
+      BROTLI_LOG_UINT(context);
+      hc = s->literal_hgroup.htrees[s->context_map_slice[context]];
+      p2 = p1;
+      if (!safe) {
+        p1 = (uint8_t)ReadSymbol(hc, br);
+      } else {
+        uint32_t literal;
+        if (!SafeReadSymbol(hc, br, &literal)) {
+          result = BROTLI_DECODER_NEEDS_MORE_INPUT;
+          goto saveStateAndReturn;
+        }
+        p1 = (uint8_t)literal;
+      }
+
+
+// Source: decode.c
+// Lines 1585-1703

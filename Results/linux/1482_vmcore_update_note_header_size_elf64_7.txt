@@ -1,0 +1,1 @@
+nhdr_ptr,linux/fs/proc/vmcore.c,5,notes_section,linux/fs/proc/vmcore.c,9,1

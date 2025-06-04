@@ -1,0 +1,59 @@
+FORCE_INLINE_TEMPLATE U32 XXH32_endian_align(const void* input, size_t len, U32 seed, XXH_endianess endian, XXH_alignment align)
+{
+    const BYTE* p = (const BYTE*)input;
+    const BYTE* bEnd = p + len;
+    U32 h32;
+#define XXH_get32bits(p) XXH_readLE32_align(p, endian, align)
+
+#ifdef XXH_ACCEPT_NULL_INPUT_POINTER
+    if (p==NULL) {
+        len=0;
+        bEnd=p=(const BYTE*)(size_t)16;
+    }
+#endif
+
+    if (len>=16) {
+        const BYTE* const limit = bEnd - 16;
+        U32 v1 = seed + PRIME32_1 + PRIME32_2;
+        U32 v2 = seed + PRIME32_2;
+        U32 v3 = seed + 0;
+        U32 v4 = seed - PRIME32_1;
+
+        do {
+            v1 = XXH32_round(v1, XXH_get32bits(p)); p+=4;
+            v2 = XXH32_round(v2, XXH_get32bits(p)); p+=4;
+            v3 = XXH32_round(v3, XXH_get32bits(p)); p+=4;
+            v4 = XXH32_round(v4, XXH_get32bits(p)); p+=4;
+        } while (p<=limit);
+
+        h32 = XXH_rotl32(v1, 1) + XXH_rotl32(v2, 7) + XXH_rotl32(v3, 12) + XXH_rotl32(v4, 18);
+    } else {
+        h32  = seed + PRIME32_5;
+    }
+
+    h32 += (U32) len;
+
+    while (p+4<=bEnd) {
+        h32 += XXH_get32bits(p) * PRIME32_3;
+        h32  = XXH_rotl32(h32, 17) * PRIME32_4 ;
+        p+=4;
+    }
+
+    while (p<bEnd) {
+        h32 += (*p) * PRIME32_5;
+        h32 = XXH_rotl32(h32, 11) * PRIME32_1 ;
+        p++;
+    }
+
+    h32 ^= h32 >> 15;
+    h32 *= PRIME32_2;
+    h32 ^= h32 >> 13;
+    h32 *= PRIME32_3;
+    h32 ^= h32 >> 16;
+
+    return h32;
+}
+
+
+// Source: xxhash.c
+// Lines 351-405

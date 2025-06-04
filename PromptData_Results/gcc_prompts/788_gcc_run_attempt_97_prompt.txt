@@ -1,0 +1,78 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'exit_status' at line 13
+2. Pointer 'err' at line 16
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+run_attempt (const char **new_argv, const char *out_temp,
+	     const char *err_temp, int emit_system_info, int append)
+{
+
+  if (emit_system_info)
+    {
+      FILE *file_out = fopen (err_temp, "a");
+      print_configuration (file_out);
+      fputs ("\n", file_out);
+      fclose (file_out);
+    }
+
+  int exit_status;
+  const char *errmsg;
+  struct pex_obj *pex;
+  int err;
+  int pex_flags = PEX_USE_PIPES | PEX_LAST;
+  enum attempt_status status = ATTEMPT_STATUS_FAIL_TO_RUN;
+
+  if (append)
+    pex_flags |= PEX_STDOUT_APPEND | PEX_STDERR_APPEND;
+
+  pex = pex_init (PEX_USE_PIPES, new_argv[0], NULL);
+  if (!pex)
+    fatal_error (input_location, "%<pex_init%> failed: %m");
+
+  errmsg = pex_run (pex, pex_flags, new_argv[0],
+		    CONST_CAST2 (char *const *, const char **, &new_argv[1]),
+		    out_temp, err_temp, &err);
+  if (errmsg != NULL)
+    {
+      errno = err;
+      fatal_error (input_location,
+		   err ? G_ ("cannot execute %qs: %s: %m")
+		   : G_ ("cannot execute %qs: %s"),
+		   new_argv[0], errmsg);
+    }
+
+  if (!pex_get_status (pex, 1, &exit_status))
+    goto out;
+
+  switch (WEXITSTATUS (exit_status))
+    {
+      case ICE_EXIT_CODE:
+	status = ATTEMPT_STATUS_ICE;
+	break;
+
+      case SUCCESS_EXIT_CODE:
+	status = ATTEMPT_STATUS_SUCCESS;
+	break;
+
+      default:
+	;
+    }
+
+out:
+  pex_free (pex);
+  return status;
+}
+
+
+// Source: gcc.c
+// Lines 6939-6997
+
+
+[ANSWER]
+MUST-NOT

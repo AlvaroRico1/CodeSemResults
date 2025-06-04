@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'fs' at line 3\n2. Pointer 'ls' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void localfunc (LexState *ls) {\n  expdesc v, b;\n  FuncState *fs = ls->fs;\n  new_localvar(ls, str_checkname(ls), 0);\n  init_exp(&v, VLOCAL, fs->freereg);\n  luaK_reserveregs(fs, 1);\n  adjustlocalvars(ls, 1);\n  body(ls, &b, 0, ls->linenumber);\n  luaK_storevar(fs, &v, &b);\n  /* debug information will only see the variable after this point! */\n  getlocvar(fs, fs->nactvar - 1).startpc = fs->pc;\n}\n\n\n// Source: lparser.c\n// Lines 1165-1176\n",
+  "ANSWER": "MUST"
+}

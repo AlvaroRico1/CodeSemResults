@@ -1,0 +1,1 @@
+table,mysql/sql/sql_optimizer.cc,9,ft_func,mysql/sql/sql_optimizer.cc,37,1

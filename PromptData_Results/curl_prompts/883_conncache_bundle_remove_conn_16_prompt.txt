@@ -1,0 +1,37 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'curr' at line 4
+2. Pointer 'curr' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int bundle_remove_conn(struct connectbundle *bundle,
+                              struct connectdata *conn)
+{
+  struct Curl_llist_element *curr;
+
+  curr = bundle->conn_list.head;
+  while(curr) {
+    if(curr->ptr == conn) {
+      Curl_llist_remove(&bundle->conn_list, curr, NULL);
+      bundle->num_connections--;
+      conn->bundle = NULL;
+      return 1; /* we removed a handle */
+    }
+    curr = curr->next;
+  }
+  DEBUGASSERT(0);
+  return 0;
+}
+
+
+// Source: conncache.c
+// Lines 88-105
+
+
+[ANSWER]
+MUST

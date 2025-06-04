@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'de' at line 5\n2. Pointer 'bh' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic struct dentry *fat_get_parent(struct dentry *child_dir)\n{\n\tstruct super_block *sb = child_dir->d_sb;\n\tstruct buffer_head *bh = NULL;\n\tstruct msdos_dir_entry *de;\n\tstruct inode *parent_inode = NULL;\n\tstruct msdos_sb_info *sbi = MSDOS_SB(sb);\n\n\tif (!fat_get_dotdot_entry(d_inode(child_dir), &bh, &de)) {\n\t\tint parent_logstart = fat_get_start(sbi, de);\n\t\tparent_inode = fat_dget(sb, parent_logstart);\n\t\tif (!parent_inode && sbi->options.nfs == FAT_NFS_NOSTALE_RO)\n\t\t\tparent_inode = fat_rebuild_parent(sb, parent_logstart);\n\t}\n\tbrelse(bh);\n\n\treturn d_obtain_alias(parent_inode);\n}\n\n\n// Source: nfs.c\n// Lines 262-279\n",
+  "ANSWER": "MAY"
+}

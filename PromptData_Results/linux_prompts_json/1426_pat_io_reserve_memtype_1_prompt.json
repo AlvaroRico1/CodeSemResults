@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'new_type' at line 6\n2. Pointer 'type' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint io_reserve_memtype(resource_size_t start, resource_size_t end,\n\t\t\tenum page_cache_mode *type)\n{\n\tresource_size_t size = end - start;\n\tenum page_cache_mode req_type = *type;\n\tenum page_cache_mode new_type;\n\tint ret;\n\n\tWARN_ON_ONCE(iomem_map_sanity_check(start, size));\n\n\tret = reserve_memtype(start, end, req_type, &new_type);\n\tif (ret)\n\t\tgoto out_err;\n\n\tif (!is_new_memtype_allowed(start, size, req_type, new_type))\n\t\tgoto out_free;\n\n\tif (kernel_map_sync_memtype(start, size, new_type) < 0)\n\t\tgoto out_free;\n\n\t*type = new_type;\n\treturn 0;\n\nout_free:\n\tfree_memtype(start, end);\n\tret = -EBUSY;\nout_err:\n\treturn ret;\n}\n\n\n// Source: pat.c\n// Lines 735-763\n",
+  "ANSWER": "MAY"
+}

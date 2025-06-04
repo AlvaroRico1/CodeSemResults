@@ -1,0 +1,29 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'hostconf' at line 3
+2. Pointer 'globalconf' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static h2o_hostconf_t *create_hostconf(h2o_globalconf_t *globalconf)
+{
+    h2o_hostconf_t *hostconf = h2o_mem_alloc(sizeof(*hostconf));
+    *hostconf = (h2o_hostconf_t){globalconf};
+    hostconf->http2.push_preload = 1; /* enabled by default */
+    h2o_config_init_pathconf(&hostconf->fallback_path, globalconf, NULL, globalconf->mimemap);
+    hostconf->mimemap = globalconf->mimemap;
+    h2o_mem_addref_shared(hostconf->mimemap);
+    return hostconf;
+}
+
+
+// Source: config.c
+// Lines 36-45
+
+
+[ANSWER]
+MUST

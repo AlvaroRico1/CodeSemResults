@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'line' at line 2\n2. Pointer 'last' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid cl_git_report_failure(\n\tint error, int expected, const char *file, const char *func, int line, const char *fncall)\n{\n\tchar msg[4096];\n\tconst git_error *last = git_error_last();\n\n\tif (expected)\n\t\tp_snprintf(msg, 4096, \"error %d (expected %d) - %s\",\n\t\t\terror, expected, last ? last->message : \"<no message>\");\n\telse if (error || last)\n\t\tp_snprintf(msg, 4096, \"error %d - %s\",\n\t\t\terror, last ? last->message : \"<no message>\");\n\telse\n\t\tp_snprintf(msg, 4096, \"no error, expected non-zero return\");\n\n\tclar__assert(0, file, func, line, fncall, msg, 1);\n}\n\n\n// Source: clar_libgit2.c\n// Lines 6-22\n",
+  "ANSWER": "MUST-NOT"
+}

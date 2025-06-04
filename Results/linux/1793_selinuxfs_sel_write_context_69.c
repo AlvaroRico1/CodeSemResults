@@ -1,0 +1,39 @@
+static ssize_t sel_write_context(struct file *file, char *buf, size_t size)
+{
+	struct selinux_fs_info *fsi = file_inode(file)->i_sb->s_fs_info;
+	struct selinux_state *state = fsi->state;
+	char *canon = NULL;
+	u32 sid, len;
+	ssize_t length;
+
+	length = avc_has_perm(&selinux_state,
+			      current_sid(), SECINITSID_SECURITY,
+			      SECCLASS_SECURITY, SECURITY__CHECK_CONTEXT, NULL);
+	if (length)
+		goto out;
+
+	length = security_context_to_sid(state, buf, size, &sid, GFP_KERNEL);
+	if (length)
+		goto out;
+
+	length = security_sid_to_context(state, sid, &canon, &len);
+	if (length)
+		goto out;
+
+	length = -ERANGE;
+	if (len > SIMPLE_TRANSACTION_LIMIT) {
+		pr_err("SELinux: %s:  context size (%u) exceeds "
+			"payload max\n", __func__, len);
+		goto out;
+	}
+
+	memcpy(buf, canon, len);
+	length = len;
+out:
+	kfree(canon);
+	return length;
+}
+
+
+// Source: selinuxfs.c
+// Lines 592-626

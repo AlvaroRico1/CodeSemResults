@@ -1,0 +1,79 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'name' at line 1
+2. Pointer 'chain' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+register_pragma_1 (cpp_reader *pfile, const char *space, const char *name,
+		   bool allow_name_expansion)
+{
+  struct pragma_entry **chain = &pfile->pragmas;
+  struct pragma_entry *entry;
+  const cpp_hashnode *node;
+
+  if (space)
+    {
+      node = cpp_lookup (pfile, UC space, strlen (space));
+      entry = lookup_pragma_entry (*chain, node);
+      if (!entry)
+	{
+	  entry = new_pragma_entry (pfile, chain);
+	  entry->pragma = node;
+	  entry->is_nspace = true;
+	  entry->allow_expansion = allow_name_expansion;
+	}
+      else if (!entry->is_nspace)
+	goto clash;
+      else if (entry->allow_expansion != allow_name_expansion)
+	{
+	  cpp_error (pfile, CPP_DL_ICE,
+		     "registering pragmas in namespace \"%s\" with mismatched "
+		     "name expansion", space);
+	  return NULL;
+	}
+      chain = &entry->u.space;
+    }
+  else if (allow_name_expansion)
+    {
+      cpp_error (pfile, CPP_DL_ICE,
+		 "registering pragma \"%s\" with name expansion "
+		 "and no namespace", name);
+      return NULL;
+    }
+
+  /* Check for duplicates.  */
+  node = cpp_lookup (pfile, UC name, strlen (name));
+  entry = lookup_pragma_entry (*chain, node);
+  if (entry == NULL)
+    {
+      entry = new_pragma_entry (pfile, chain);
+      entry->pragma = node;
+      return entry;
+    }
+
+  if (entry->is_nspace)
+    clash:
+    cpp_error (pfile, CPP_DL_ICE,
+	       "registering \"%s\" as both a pragma and a pragma namespace",
+	       NODE_NAME (node));
+  else if (space)
+    cpp_error (pfile, CPP_DL_ICE, "#pragma %s %s is already registered",
+	       space, name);
+  else
+    cpp_error (pfile, CPP_DL_ICE, "#pragma %s is already registered", name);
+
+  return NULL;
+}
+
+
+// Source: directives.c
+// Lines 1230-1289
+
+
+[ANSWER]
+MAY

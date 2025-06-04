@@ -1,0 +1,63 @@
+int git_smart__store_refs(transport_smart *t, int flushes)
+{
+	gitno_buffer *buf = &t->buffer;
+	git_vector *refs = &t->refs;
+	int error, flush = 0, recvd;
+	const char *line_end = NULL;
+	git_pkt *pkt = NULL;
+	size_t i;
+
+	/* Clear existing refs in case git_remote_connect() is called again
+	 * after git_remote_disconnect().
+	 */
+	git_vector_foreach(refs, i, pkt) {
+		git_pkt_free(pkt);
+	}
+	git_vector_clear(refs);
+	pkt = NULL;
+
+	do {
+		if (buf->offset > 0)
+			error = git_pkt_parse_line(&pkt, &line_end, buf->data, buf->offset);
+		else
+			error = GIT_EBUFS;
+
+		if (error < 0 && error != GIT_EBUFS)
+			return error;
+
+		if (error == GIT_EBUFS) {
+			if ((recvd = gitno_recv(buf)) < 0)
+				return recvd;
+
+			if (recvd == 0) {
+				git_error_set(GIT_ERROR_NET, "early EOF");
+				return GIT_EEOF;
+			}
+
+			continue;
+		}
+
+		if (gitno_consume(buf, line_end) < 0)
+			return -1;
+
+		if (pkt->type == GIT_PKT_ERR) {
+			git_error_set(GIT_ERROR_NET, "remote error: %s", ((git_pkt_err *)pkt)->error);
+			git__free(pkt);
+			return -1;
+		}
+
+		if (pkt->type != GIT_PKT_FLUSH && git_vector_insert(refs, pkt) < 0)
+			return -1;
+
+		if (pkt->type == GIT_PKT_FLUSH) {
+			flush++;
+			git_pkt_free(pkt);
+		}
+	} while (flush < flushes);
+
+	return flush;
+}
+
+
+// Source: smart_protocol.c
+// Lines 28-86

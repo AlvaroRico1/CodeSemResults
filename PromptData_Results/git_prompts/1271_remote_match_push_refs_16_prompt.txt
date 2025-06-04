@@ -1,0 +1,75 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'dst_name' at line 22
+2. Pointer 'dst' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int match_push_refs(struct ref *src, struct ref **dst,
+		    struct refspec *rs, int flags)
+{
+	int send_all = flags & MATCH_REFS_ALL;
+	int send_mirror = flags & MATCH_REFS_MIRROR;
+	int send_prune = flags & MATCH_REFS_PRUNE;
+	int errs;
+	struct ref *ref, **dst_tail = tail_ref(dst);
+	struct string_list dst_ref_index = STRING_LIST_INIT_NODUP;
+
+	/* If no refspec is provided, use the default ":" */
+	if (!rs->nr)
+		refspec_append(rs, ":");
+
+	errs = match_explicit_refs(src, *dst, &dst_tail, rs);
+
+	/* pick the remainder */
+	for (ref = src; ref; ref = ref->next) {
+		struct string_list_item *dst_item;
+		struct ref *dst_peer;
+		const struct refspec_item *pat = NULL;
+		char *dst_name;
+
+		dst_name = get_ref_match(rs, ref, send_mirror, FROM_SRC, &pat);
+		if (!dst_name)
+			continue;
+
+		if (!dst_ref_index.nr)
+			prepare_ref_index(&dst_ref_index, *dst);
+
+		dst_item = string_list_lookup(&dst_ref_index, dst_name);
+		dst_peer = dst_item ? dst_item->util : NULL;
+		if (dst_peer) {
+			if (dst_peer->peer_ref)
+				/* We're already sending something to this ref. */
+				goto free_name;
+		} else {
+			if (pat->matching && !(send_all || send_mirror))
+				/*
+				 * Remote doesn't have it, and we have no
+				 * explicit pattern, and we don't have
+				 * --all or --mirror.
+				 */
+				goto free_name;
+
+			/* Create a new one and link it */
+			dst_peer = make_linked_ref(dst_name, &dst_tail);
+			oidcpy(&dst_peer->new_oid, &ref->new_oid);
+			string_list_insert(&dst_ref_index,
+				dst_peer->name)->util = dst_peer;
+		}
+		dst_peer->peer_ref = copy_ref(ref);
+		dst_peer->force = pat->force;
+	free_name:
+		free(dst_name);
+	}
+
+
+// Source: remote.c
+// Lines 1460-1515
+
+
+[ANSWER]
+MAY

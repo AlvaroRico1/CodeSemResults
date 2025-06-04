@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'parent' at line 1\n2. Pointer 'm' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic struct tool_mime *tool_mime_new(struct tool_mime *parent,\n                                       toolmimekind kind)\n{\n  struct tool_mime *m = (struct tool_mime *) calloc(1, sizeof(*m));\n\n  if(m) {\n    m->kind = kind;\n    m->parent = parent;\n    if(parent) {\n      m->prev = parent->subparts;\n      parent->subparts = m;\n    }\n  }\n  return m;\n}\n\n\n// Source: tool_formparse.c\n// Lines 45-59\n",
+  "ANSWER": "MUST"
+}

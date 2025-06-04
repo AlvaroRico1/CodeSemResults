@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'mpol' at line 5\n2. Pointer 'nodemask' at line 8\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstruct page *alloc_buddy_huge_page_with_mpol(struct hstate *h,\n\t\tstruct vm_area_struct *vma, unsigned long addr)\n{\n\tstruct page *page;\n\tstruct mempolicy *mpol;\n\tgfp_t gfp_mask = htlb_alloc_mask(h);\n\tint nid;\n\tnodemask_t *nodemask;\n\n\tnid = huge_node(vma, addr, gfp_mask, &mpol, &nodemask);\n\tpage = alloc_surplus_huge_page(h, gfp_mask, nid, nodemask);\n\tmpol_cond_put(mpol);\n\n\treturn page;\n}\n\n\n// Source: hugetlb.c\n// Lines 1657-1671\n",
+  "ANSWER": "MAY"
+}

@@ -1,0 +1,88 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'rebase' at line 9
+2. Pointer 'head_branch' at line 10
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_rebase_init(
+	git_rebase **out,
+	git_repository *repo,
+	const git_annotated_commit *branch,
+	const git_annotated_commit *upstream,
+	const git_annotated_commit *onto,
+	const git_rebase_options *given_opts)
+{
+	git_rebase *rebase = NULL;
+	git_annotated_commit *head_branch = NULL;
+	git_reference *head_ref = NULL;
+	bool inmemory = (given_opts && given_opts->inmemory);
+	int error;
+
+	GIT_ASSERT_ARG(repo);
+	GIT_ASSERT_ARG(upstream || onto);
+
+	*out = NULL;
+
+	if (!onto)
+		onto = upstream;
+
+	if ((error = rebase_check_versions(given_opts)) < 0)
+		goto done;
+
+	if (!inmemory) {
+		if ((error = git_repository__ensure_not_bare(repo, "rebase")) < 0 ||
+			(error = rebase_ensure_not_in_progress(repo)) < 0 ||
+			(error = rebase_ensure_not_dirty(repo, true, true, GIT_ERROR)) < 0)
+			goto done;
+	}
+
+	if (!branch) {
+		if ((error = git_repository_head(&head_ref, repo)) < 0 ||
+			(error = git_annotated_commit_from_ref(&head_branch, repo, head_ref)) < 0)
+			goto done;
+
+		branch = head_branch;
+	}
+
+	if (rebase_alloc(&rebase, given_opts) < 0)
+		return -1;
+
+	rebase->repo = repo;
+	rebase->inmemory = inmemory;
+	rebase->type = GIT_REBASE_MERGE;
+
+	if ((error = rebase_init_operations(rebase, repo, branch, upstream, onto)) < 0)
+		goto done;
+
+	if (inmemory)
+		error = rebase_init_inmemory(rebase, repo, branch, upstream, onto);
+	else
+		error = rebase_init_merge(rebase, repo, branch ,upstream, onto);
+
+	if (error == 0)
+		*out = rebase;
+
+done:
+	git_reference_free(head_ref);
+	git_annotated_commit_free(head_branch);
+
+	if (error < 0) {
+		rebase_cleanup(rebase);
+		git_rebase_free(rebase);
+	}
+
+	return error;
+}
+
+
+// Source: rebase.c
+// Lines 691-759
+
+
+[ANSWER]
+MAY

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'loop' at line 3\n2. Pointer 'mti' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nmode_tree_search_set(struct mode_tree_data *mtd)\n{\n\tstruct mode_tree_item\t*mti, *loop;\n\tuint64_t\t\t tag;\n\n\tmti = mode_tree_search_for(mtd);\n\tif (mti == NULL)\n\t\treturn;\n\ttag = mti->tag;\n\n\tloop = mti->parent;\n\twhile (loop != NULL) {\n\t\tloop->expanded = 1;\n\t\tloop = loop->parent;\n\t}\n\n\tmode_tree_build(mtd);\n\tmode_tree_set_current(mtd, tag);\n\tmode_tree_draw(mtd);\n\tmtd->wp->flags |= PANE_REDRAW;\n}\n\n\n// Source: mode-tree.c\n// Lines 831-851\n",
+  "ANSWER": "MUST"
+}

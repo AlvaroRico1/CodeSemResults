@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer '_loop' at line 3\n2. Pointer 'loop' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nbb_top_order_cmp_r (const void *x, const void *y, void *loop)\n{\n  loop_distribution *_loop =\n    (loop_distribution *) loop;\n\n  basic_block bb1 = *(const basic_block *) x;\n  basic_block bb2 = *(const basic_block *) y;\n\n  int bb_top_order_index_size = _loop->get_bb_top_order_index_size ();\n\n  gcc_assert (bb1->index < bb_top_order_index_size\n\t      && bb2->index < bb_top_order_index_size);\n  gcc_assert (bb1 == bb2\n\t      || _loop->get_bb_top_order_index(bb1->index)\n\t\t != _loop->get_bb_top_order_index(bb2->index));\n\n  return (_loop->get_bb_top_order_index(bb1->index) - \n\t  _loop->get_bb_top_order_index(bb2->index));\n}\n\n\n// Source: tree-loop-distribution.c\n// Lines 680-698\n",
+  "ANSWER": "MUST"
+}

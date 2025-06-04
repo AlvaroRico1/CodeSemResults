@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'nid' at line 5
+2. Pointer 'end_pfn' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static unsigned long __init early_calculate_totalpages(void)
+{
+	unsigned long totalpages = 0;
+	unsigned long start_pfn, end_pfn;
+	int i, nid;
+
+	for_each_mem_pfn_range(i, MAX_NUMNODES, &start_pfn, &end_pfn, &nid) {
+		unsigned long pages = end_pfn - start_pfn;
+
+		totalpages += pages;
+		if (pages)
+			node_set_state(nid, N_MEMORY);
+	}
+	return totalpages;
+}
+
+
+// Source: page_alloc.c
+// Lines 7031-7045
+
+
+[ANSWER]
+MAY

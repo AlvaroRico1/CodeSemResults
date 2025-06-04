@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'init_fns' at line 1\n2. Pointer 'i' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int init_common(git_runtime_init_fn init_fns[], size_t cnt)\n{\n\tsize_t i;\n\tint ret;\n\n\t/* Initialize subsystems that have global state */\n\tfor (i = 0; i < cnt; i++) {\n\t\tif ((ret = init_fns[i]()) != 0)\n\t\t\tbreak;\n\t}\n\n\tGIT_MEMORY_BARRIER;\n\n\treturn ret;\n}\n\n\n// Source: runtime.c\n// Lines 16-30\n",
+  "ANSWER": "MAY"
+}

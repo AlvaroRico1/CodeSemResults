@@ -1,0 +1,29 @@
+screen_write_linefeed(struct screen_write_ctx *ctx, int wrapped, u_int bg)
+{
+	struct screen		*s = ctx->s;
+	struct grid		*gd = s->grid;
+	struct grid_line	*gl;
+
+	gl = grid_get_line(gd, gd->hsize + s->cy);
+	if (wrapped)
+		gl->flags |= GRID_LINE_WRAPPED;
+
+	log_debug("%s: at %u,%u (region %u-%u)", __func__, s->cx, s->cy,
+	    s->rupper, s->rlower);
+
+	if (bg != ctx->bg) {
+		screen_write_collect_flush(ctx, 1, __func__);
+		ctx->bg = bg;
+	}
+
+	if (s->cy == s->rlower) {
+		grid_view_scroll_region_up(gd, s->rupper, s->rlower, bg);
+		screen_write_collect_scroll(ctx, bg);
+		ctx->scrolled++;
+	} else if (s->cy < screen_size_y(s) - 1)
+		screen_write_set_cursor(ctx, -1, s->cy + 1);
+}
+
+
+// Source: screen-write.c
+// Lines 1330-1354

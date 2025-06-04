@@ -1,0 +1,64 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'needle' at line 9
+2. Pointer 'email' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+const git_mailmap_entry *git_mailmap_entry_lookup(
+	const git_mailmap *mm, const char *name, const char *email)
+{
+	int error;
+	ssize_t fallback = -1;
+	size_t idx;
+	git_mailmap_entry *entry;
+
+	/* The lookup needle we want to use only sets the replace_email. */
+	git_mailmap_entry needle = { NULL };
+	needle.replace_email = (char *)email;
+
+	GIT_ASSERT_ARG_WITH_RETVAL(email, NULL);
+
+	if (!mm)
+		return NULL;
+
+	/*
+	 * We want to find the place to start looking. so we do a binary search for
+	 * the "fallback" nameless entry. If we find it, we advance past it and record
+	 * the index.
+	 */
+	error = git_vector_bsearch(&idx, (git_vector *)&mm->entries, &needle);
+	if (error >= 0)
+		fallback = idx++;
+	else if (error != GIT_ENOTFOUND)
+		return NULL;
+
+	/* do a linear search for an exact match */
+	for (; idx < git_vector_length(&mm->entries); ++idx) {
+		entry = git_vector_get(&mm->entries, idx);
+
+		if (git__strcmp(entry->replace_email, email))
+			break; /* it's a different email, so we're done looking */
+
+		 /* should be specific */
+		GIT_ASSERT_WITH_RETVAL(entry->replace_name, NULL);
+		if (!name || !git__strcmp(entry->replace_name, name))
+			return entry;
+	}
+
+	if (fallback < 0)
+		return NULL; /* no fallback */
+	return git_vector_get(&mm->entries, fallback);
+}
+
+
+// Source: mailmap.c
+// Lines 411-455
+
+
+[ANSWER]
+MUST

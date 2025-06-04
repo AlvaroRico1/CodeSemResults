@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'index' at line 3\n2. Pointer 'tree' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid test_win32_forbidden__can_diff_index_to_workdir(void)\n{\n\tgit_index *index;\n\tgit_diff *diff;\n\tconst git_diff_delta *delta;\n\tgit_tree *tree;\n\tsize_t i;\n\n\tcl_git_pass(git_repository_index(&index, repo));\n\tcl_git_pass(git_repository_head_tree(&tree, repo));\n\tcl_git_pass(git_diff_index_to_workdir(&diff, repo, index, NULL));\n\n\tfor (i = 0; i < git_diff_num_deltas(diff); i++) {\n\t\tdelta = git_diff_get_delta(diff, i);\n\t\tcl_assert_equal_i(GIT_DELTA_DELETED, delta->status);\n\t}\n\n\tgit_diff_free(diff);\n\tgit_tree_free(tree);\n\tgit_index_free(index);\n}\n\n\n// Source: forbidden.c\n// Lines 116-136\n",
+  "ANSWER": "MAY"
+}

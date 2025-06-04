@@ -1,0 +1,33 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'len' at line 3
+2. Pointer 's' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static char *readLine(redisReader *r, int *_len) {
+    char *p, *s;
+    int len;
+
+    p = r->buf+r->pos;
+    s = seekNewline(p,(r->len-r->pos));
+    if (s != NULL) {
+        len = s-(r->buf+r->pos);
+        r->pos += len+2; /* skip \r\n */
+        if (_len) *_len = len;
+        return p;
+    }
+    return NULL;
+}
+
+
+// Source: read.c
+// Lines 175-188
+
+
+[ANSWER]
+MUST

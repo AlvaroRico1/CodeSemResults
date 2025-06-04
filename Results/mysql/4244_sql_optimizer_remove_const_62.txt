@@ -1,0 +1,1 @@
+prev_ptr,mysql/sql/sql_optimizer.cc,31,first_order,mysql/sql/sql_optimizer.cc,1,1

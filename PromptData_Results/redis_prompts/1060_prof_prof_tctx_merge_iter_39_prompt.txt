@@ -1,0 +1,38 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tsdn' at line 2
+2. Pointer 'arg' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+prof_tctx_merge_iter(prof_tctx_tree_t *tctxs, prof_tctx_t *tctx, void *arg) {
+	tsdn_t *tsdn = (tsdn_t *)arg;
+
+	malloc_mutex_assert_owner(tsdn, tctx->gctx->lock);
+
+	switch (tctx->state) {
+	case prof_tctx_state_nominal:
+		/* New since dumping started; ignore. */
+		break;
+	case prof_tctx_state_dumping:
+	case prof_tctx_state_purgatory:
+		prof_tctx_merge_gctx(tsdn, tctx, tctx->gctx);
+		break;
+	default:
+		not_reached();
+	}
+
+	return NULL;
+}
+
+
+// Source: prof.c
+// Lines 1099-1117
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,30 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'data' at line 4
+2. Pointer 'ctx' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static struct st_h2o_accept_data_t *create_accept_data(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at,
+                                                       h2o_timer_cb timeout_cb, size_t sz)
+{
+    struct st_h2o_accept_data_t *data = h2o_mem_alloc(sz);
+    data->ctx = ctx;
+    data->sock = sock;
+    h2o_timer_init(&data->timeout, timeout_cb);
+    h2o_timer_link(ctx->ctx->loop, ctx->ctx->globalconf->handshake_timeout, &data->timeout);
+    data->connected_at = connected_at;
+    return data;
+}
+
+
+// Source: util.c
+// Lines 67-77
+
+
+[ANSWER]
+MUST

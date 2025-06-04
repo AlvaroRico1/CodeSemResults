@@ -1,0 +1,1 @@
+in_value,linux/drivers/acpi/acpica/hwsleep.c,7,pm1a_control,linux/drivers/acpi/acpica/hwsleep.c,5,2

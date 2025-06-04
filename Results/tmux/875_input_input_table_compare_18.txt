@@ -1,0 +1,1 @@
+ictx,tmux/input.c,3,key,tmux/input.c,1,1

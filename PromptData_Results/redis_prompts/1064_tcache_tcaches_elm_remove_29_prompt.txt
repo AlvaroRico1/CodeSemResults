@@ -1,0 +1,29 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tcache' at line 4
+2. Pointer 'elm' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+tcaches_elm_remove(tsd_t *tsd, tcaches_t *elm) {
+	malloc_mutex_assert_owner(tsd_tsdn(tsd), &tcaches_mtx);
+
+	if (elm->tcache == NULL) {
+		return NULL;
+	}
+	tcache_t *tcache = elm->tcache;
+	elm->tcache = NULL;
+	return tcache;
+}
+
+
+// Source: tcache.c
+// Lines 617-626
+
+
+[ANSWER]
+MUST

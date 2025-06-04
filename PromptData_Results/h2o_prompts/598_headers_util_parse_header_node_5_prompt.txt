@@ -1,0 +1,61 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'headers' at line 1
+2. Pointer 'header_node' at line 14
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int parse_header_node(h2o_configurator_command_t *cmd, yoml_t **node, yoml_t ***headers, size_t *num_headers,
+                             h2o_headers_command_when_t *when)
+{
+
+    if ((*node)->type == YOML_TYPE_SCALAR) {
+        *headers = node;
+        *num_headers = 1;
+        *when = H2O_HEADERS_CMD_WHEN_FINAL;
+    } else if ((*node)->type == YOML_TYPE_SEQUENCE) {
+        *headers = (*node)->data.sequence.elements;
+        *num_headers = (*node)->data.sequence.size;
+        *when = H2O_HEADERS_CMD_WHEN_FINAL;
+    } else {
+        yoml_t **header_node;
+        yoml_t **when_node = NULL;
+        if (h2o_configurator_parse_mapping(cmd, *node, "header:sa", "when:*", &header_node, &when_node) != 0)
+            return -1;
+        if ((*header_node)->type == YOML_TYPE_SEQUENCE) {
+            *headers = (*header_node)->data.sequence.elements;
+            *num_headers = (*header_node)->data.sequence.size;
+        } else {
+            *headers = header_node;
+            *num_headers = 1;
+        }
+        if (when_node == NULL) {
+            *when = H2O_HEADERS_CMD_WHEN_FINAL;
+        } else {
+            switch (h2o_configurator_get_one_of(cmd, *when_node, "final,early,all")) {
+            case 0:
+                *when = H2O_HEADERS_CMD_WHEN_FINAL;
+                break;
+            case 1:
+                *when = H2O_HEADERS_CMD_WHEN_EARLY;
+                break;
+            case 2:
+                *when = H2O_HEADERS_CMD_WHEN_ALL;
+                break;
+            default:
+                return -1;
+            }
+        }
+    }
+
+
+// Source: headers_util.c
+// Lines 84-125
+
+
+[ANSWER]
+MUST

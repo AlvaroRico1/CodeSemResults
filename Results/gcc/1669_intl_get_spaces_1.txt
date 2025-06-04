@@ -1,0 +1,1 @@
+spaces,gcc/gcc/intl.c,4,str,gcc/gcc/intl.c,1,2

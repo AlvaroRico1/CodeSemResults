@@ -1,0 +1,738 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'src_end' at line 2
+2. Pointer 'src' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static char *write_string(char *dest, char *dest_end, const uchar *src,
+                          const uchar *src_end) {
+  size_t src_len = (size_t)(src_end - src);
+  uchar *to = nullptr;
+  if (src_len >= 251) return nullptr;
+  *dest = (uchar)src_len;
+  to = (uchar *)dest + 1;
+  if ((char *)(to + src_len) >= dest_end) return nullptr;
+  memcpy(to, src, src_len);
+  return (char *)(to + src_len);
+}
+/**
+  Sends a @ref page_protocol_com_change_user
+  with a caller provided payload
+
+  @retval 0 ok
+  @retval 1 error
+*/
+static int send_change_user_packet(MCPVIO_EXT *mpvio, const uchar *data,
+                                   int data_len) {
+  MYSQL *mysql = mpvio->mysql;
+  char *buff, *end;
+  int res = 1;
+  size_t connect_attrs_len =
+      (mysql->server_capabilities & CLIENT_CONNECT_ATTRS &&
+       mysql->options.extension)
+          ? mysql->options.extension->connection_attributes_length
+          : 0;
+
+  buff = static_cast<char *>(
+      my_alloca(USERNAME_LENGTH + data_len + 1 + NAME_LEN + 2 + NAME_LEN +
+                connect_attrs_len + 9 /* for the length of the attrs */));
+
+  end = strmake(buff, mysql->user, USERNAME_LENGTH) + 1;
+
+  if (!data_len)
+    *end++ = 0;
+  else {
+    assert(data_len <= 255);
+    if (data_len > 255) {
+      set_mysql_error(mysql, CR_MALFORMED_PACKET, unknown_sqlstate);
+      goto error;
+    }
+    *end++ = data_len;
+    memcpy(end, data, data_len);
+    end += data_len;
+  }
+  end = strmake(end, mpvio->db ? mpvio->db : "", NAME_LEN) + 1;
+
+  if (mysql->server_capabilities & CLIENT_PROTOCOL_41) {
+    int2store((uchar *)end, (ushort)mysql->charset->number);
+    end += 2;
+  }
+
+  if (mysql->server_capabilities & CLIENT_PLUGIN_AUTH)
+    end = strmake(end, mpvio->plugin->name, NAME_LEN) + 1;
+
+  end = (char *)send_client_connect_attrs(mysql, (uchar *)end);
+
+  res = simple_command(mysql, COM_CHANGE_USER, (uchar *)buff,
+                       (ulong)(end - buff), 1);
+
+error:
+  return res;
+}
+
+/* clang-format off */
+/**
+  @page page_protocol_connection_phase_packets_protocol_ssl_request Protocol::SSLRequest:
+
+  SSL Connection Request Packet. It is like
+  @ref page_protocol_connection_phase_packets_protocol_handshake_response but is
+  truncated right before username field. If server supports ::CLIENT_SSL
+  capability, client can send this packet to request a secure SSL connection.
+  The ::CLIENT_SSL capability flag must be set inside the SSL Connection Request Packet.
+
+  <table>
+  <caption>Payload</caption>
+  <tr><th>Type</th><th>Name</th><th>Description</th></tr>
+  <tr><td colspan="3">if capabilities @& ::CLIENT_PROTOCOL_41 {</td></tr>
+  <tr><td>@ref a_protocol_type_int4 "int&lt;4&gt;"</td>
+    <td>client_flag</td>
+    <td>\ref group_cs_capabilities_flags</td></tr>
+  <tr><td>@ref a_protocol_type_int4 "int&lt;4&gt;"</td>
+    <td>max_packet_size</td>
+    <td>maximum packet size</td></tr>
+  <tr><td>@ref a_protocol_type_int1 "int&lt;1&gt;"</td>
+    <td>character_set</td>
+    <td>client charset \ref a_protocol_character_set, only the lower 8-bits</td></tr>
+  <tr><td>@ref sect_protocol_basic_dt_string_fix "string[23]"</td>
+    <td>filler</td>
+    <td>filler to the size of the handhshake response packet. All 0s.</td></tr>
+  <tr><td colspan="3">} else {</td></tr>
+  <tr><td>@ref a_protocol_type_int2 "int&lt;2&gt;"</td>
+    <td>client_flag</td>
+    <td>\ref group_cs_capabilities_flags, only the lower 16 bits</td></tr>
+  <tr><td>@ref a_protocol_type_int3 "int&lt;3&gt;"</td>
+    <td>max_packet_size</td>
+    <td>maximum packet size, 0xFFFFFF max</td></tr>
+  <tr><td colspan="3">}</td></tr>
+  </table>
+
+  @sa int2store(), int3store(), int4store(), mysql_fill_packet_header()
+*/
+/* clang-format on */
+/**
+  Fill in the beginning of the client reply packet.
+
+  Used to fill in the beginning of the client reply packet
+  or the ssl request packet.
+
+  @param       mysql     The mysql handler to operate
+  @param[out]  buff      The buffer to receive the packet
+  @param       buff_size The max size of the buffer. Used in debug only.
+  @return                one past to where the buffer is filled
+
+  @sa page_protocol_conn_packets_protocol_ssl_request
+  send_client_reply_packet()
+*/
+static char *mysql_fill_packet_header(MYSQL *mysql, char *buff,
+                                      size_t buff_size MY_ATTRIBUTE((unused))) {
+  NET *net = &mysql->net;
+  char *end;
+  uchar *buff_p = (uchar *)buff;
+  /*
+    Always send CLIENT_LOCAL_FILES to the server.
+    This needs to be done since the client can always decide to support
+    local files even if this option is disabled by enabling the directory.
+    But we can't turn it on in the client flag since it's used throughout the
+    code base if the option is enabled or not.
+  */
+  unsigned long client_flag = mysql->client_flag | CLIENT_LOCAL_FILES;
+
+  if (client_flag & CLIENT_PROTOCOL_41) {
+    /* 4.1 server and 4.1 client has a 32 byte option flag */
+    assert(buff_size >= 32);
+
+    int4store(buff_p, client_flag);
+    int4store(buff_p + 4, net->max_packet_size);
+    buff[8] = (char)mysql->charset->number;
+    memset(buff + 9, 0, 32 - 9);
+    end = buff + 32;
+  } else {
+    assert(buff_size >= 5);
+    assert(client_flag <= UINT_MAX16);
+
+    int2store(buff_p, (uint16)client_flag);
+    int3store(buff_p + 2, net->max_packet_size);
+    end = buff + 5;
+  }
+  return end;
+}
+
+/**
+  Calcualtes client capabilities in effect (mysql->client_flag)
+
+  Needs to be called immediately after receiving the server handshake packet.
+
+  @param  mysql   the connection context
+  @param  db      The database specified by the client app
+  @param  client_flag The client flag as specified by the client app
+  */
+
+static void cli_calculate_client_flag(MYSQL *mysql, const char *db,
+                                      ulong client_flag) {
+  mysql->client_flag = client_flag;
+  mysql->client_flag |= mysql->options.client_flag;
+  mysql->client_flag |= CLIENT_CAPABILITIES;
+
+  if (mysql->client_flag & CLIENT_MULTI_STATEMENTS)
+    mysql->client_flag |= CLIENT_MULTI_RESULTS;
+
+  if (mysql->options.extension &&
+      mysql->options.extension->ssl_mode != SSL_MODE_DISABLED)
+    mysql->client_flag |= CLIENT_SSL;
+
+  if (db)
+    mysql->client_flag |= CLIENT_CONNECT_WITH_DB;
+  else
+    mysql->client_flag &= ~CLIENT_CONNECT_WITH_DB;
+
+  /* Remove options that server doesn't support */
+  mysql->client_flag = mysql->client_flag &
+                       (~(CLIENT_COMPRESS | CLIENT_SSL | CLIENT_PROTOCOL_41 |
+                          CLIENT_OPTIONAL_RESULTSET_METADATA) |
+                        mysql->server_capabilities);
+
+  if (mysql->options.protocol == MYSQL_PROTOCOL_SOCKET &&
+      mysql->options.extension &&
+      mysql->options.extension->ssl_mode <= SSL_MODE_PREFERRED) {
+    mysql->client_flag &= ~CLIENT_SSL;
+    mysql->options.extension->ssl_mode = SSL_MODE_DISABLED;
+  }
+}
+
+/**
+Establishes SSL if requested and supported.
+
+@param  mysql   the connection handle
+@retval 0       success
+@retval 1       failure
+*/
+static int cli_establish_ssl(MYSQL *mysql) {
+  NET *net = &mysql->net;
+
+  /* Don't fallback on unencrypted connection if SSL required. */
+  if (mysql->options.extension &&
+      mysql->options.extension->ssl_mode >= SSL_MODE_REQUIRED &&
+      !(mysql->server_capabilities & CLIENT_SSL)) {
+    set_mysql_extended_error(mysql, CR_SSL_CONNECTION_ERROR, unknown_sqlstate,
+                             ER_CLIENT(CR_SSL_CONNECTION_ERROR),
+                             "SSL is required but the server doesn't "
+                             "support it");
+    goto error;
+  }
+
+  /*
+    If the ssl_mode is VERIFY_CA or VERIFY_IDENTITY, make sure that the
+    connection doesn't succeed without providing the CA certificate.
+  */
+  if (mysql->options.extension &&
+      mysql->options.extension->ssl_mode > SSL_MODE_REQUIRED &&
+      !(mysql->options.ssl_ca || mysql->options.ssl_capath)) {
+    set_mysql_extended_error(mysql, CR_SSL_CONNECTION_ERROR, unknown_sqlstate,
+                             ER_CLIENT(CR_SSL_CONNECTION_ERROR),
+                             "CA certificate is required if ssl-mode "
+                             "is VERIFY_CA or VERIFY_IDENTITY");
+    goto error;
+  }
+
+  /*
+    Attempt SSL connection if ssl_mode != SSL_MODE_DISABLED and the
+    server supports SSL. Fallback on unencrypted connection otherwise.
+  */
+  if (mysql->options.extension &&
+      mysql->options.extension->ssl_mode != SSL_MODE_DISABLED &&
+      (mysql->server_capabilities & CLIENT_SSL)) {
+    /* Do the SSL layering. */
+    struct st_mysql_options *options = &mysql->options;
+    struct st_VioSSLFd *ssl_fd;
+    enum enum_ssl_init_error ssl_init_error = SSL_INITERR_NOERROR;
+    const char *cert_error;
+    unsigned long ssl_error;
+    char buff[33], *end;
+    const bool verify_identity =
+        mysql->client_flag & CLIENT_SSL_VERIFY_SERVER_CERT;
+
+    /* check if server supports compression else turn off client capability */
+    if (!(mysql->server_capabilities & CLIENT_ZSTD_COMPRESSION_ALGORITHM))
+      mysql->client_flag &= ~CLIENT_ZSTD_COMPRESSION_ALGORITHM;
+    if (!(mysql->server_capabilities & CLIENT_COMPRESS))
+      mysql->client_flag &= ~CLIENT_COMPRESS;
+
+    end = mysql_fill_packet_header(mysql, buff, sizeof(buff));
+
+    /*
+    Send mysql->client_flag, max_packet_size - unencrypted otherwise
+    the server does not know we want to do SSL
+    */
+    MYSQL_TRACE(SEND_SSL_REQUEST, mysql,
+                ((size_t)(end - buff), (const unsigned char *)buff));
+    if (my_net_write(net, (uchar *)buff, (size_t)(end - buff)) ||
+        net_flush(net)) {
+      set_mysql_extended_error(mysql, CR_SERVER_LOST, unknown_sqlstate,
+                               ER_CLIENT(CR_SERVER_LOST_EXTENDED),
+                               "sending connection information to server",
+                               errno);
+      goto error;
+    }
+
+    MYSQL_TRACE_STAGE(mysql, SSL_NEGOTIATION);
+
+    /* Create the VioSSLConnectorFd - init SSL and load certs */
+    if (!(ssl_fd = new_VioSSLConnectorFd(
+              options->ssl_key, options->ssl_cert, options->ssl_ca,
+              options->ssl_capath, options->ssl_cipher,
+              options->extension ? options->extension->tls_ciphersuites
+                                 : nullptr,
+              &ssl_init_error,
+              options->extension ? options->extension->ssl_crl : nullptr,
+              options->extension ? options->extension->ssl_crlpath : nullptr,
+              options->extension ? options->extension->ssl_ctx_flags : 0,
+              verify_identity ? mysql->host : nullptr))) {
+      set_mysql_extended_error(mysql, CR_SSL_CONNECTION_ERROR, unknown_sqlstate,
+                               ER_CLIENT(CR_SSL_CONNECTION_ERROR),
+                               sslGetErrString(ssl_init_error));
+      goto error;
+    }
+    mysql->connector_fd = (unsigned char *)ssl_fd;
+
+    /* Connect to the server */
+    DBUG_PRINT("info", ("IO layer change in progress..."));
+    MYSQL_TRACE(SSL_CONNECT, mysql, ());
+    if (sslconnect(ssl_fd, net->vio, (long)(mysql->options.connect_timeout),
+                   &ssl_error, nullptr)) {
+      char buf[512];
+      ERR_error_string_n(ssl_error, buf, 512);
+      buf[511] = 0;
+      set_mysql_extended_error(mysql, CR_SSL_CONNECTION_ERROR, unknown_sqlstate,
+                               ER_CLIENT(CR_SSL_CONNECTION_ERROR), buf);
+      goto error;
+    }
+    DBUG_PRINT("info", ("IO layer change done!"));
+
+    /* Verify server cert */
+    if (verify_identity &&
+        ssl_verify_server_cert(net->vio, mysql->host, &cert_error)) {
+      set_mysql_extended_error(mysql, CR_SSL_CONNECTION_ERROR, unknown_sqlstate,
+                               ER_CLIENT(CR_SSL_CONNECTION_ERROR), cert_error);
+      goto error;
+    }
+
+    MYSQL_TRACE(SSL_CONNECTED, mysql, ());
+    MYSQL_TRACE_STAGE(mysql, AUTHENTICATE);
+  }
+
+  return 0;
+
+error:
+  return 1;
+}
+
+/**
+  This function will establish asynchronous ssl connection by completing 4
+  different ssl connection states. Initial state is set to SSL_NONE during
+  which this functions does priliminary checks like if server supports ssl
+  or not, if CA certificate is required etc. Once preliminary checks are
+  done state is changed to SSL_REQUEST. In this state ssl request packet
+  is sent by client. If this network IO is complete, state is changed to
+  SSL_CONNECT. During SSL_CONNECT sslconnect() is called which can return
+  immediately or complete SSL handshake. If it returns immediately client
+  will save all SSL context in struct mysql_async_auth, so that next call
+  to this function will ensure that SSL_new() is not called twice. Once
+  ssl connection is established state is changed to SSL_COMPLETE.
+
+  @param[in]    mysql           Client connection handle.
+  @param[out]   res             set to false incase of success and true for
+  error.
+
+  @retval     NET_ASYNC_NOT_READY  ssl connection not yet established
+  @retval     NET_ASYNC_COMPLETE   ssl connection established
+*/
+static net_async_status cli_establish_ssl_nonblocking(MYSQL *mysql, int *res) {
+  DBUG_TRACE;
+  NET *net = &mysql->net;
+  NET_ASYNC *net_async = NET_ASYNC_DATA(net);
+  mysql_async_connect *ctx = ASYNC_DATA(mysql)->connect_context;
+
+  if (ctx->ssl_state == SSL_NONE) {
+    /* Don't fallback on unencrypted connection if SSL required. */
+    if (mysql->options.extension &&
+        mysql->options.extension->ssl_mode >= SSL_MODE_REQUIRED &&
+        !(mysql->server_capabilities & CLIENT_SSL)) {
+      set_mysql_extended_error(mysql, CR_SSL_CONNECTION_ERROR, unknown_sqlstate,
+                               ER_CLIENT(CR_SSL_CONNECTION_ERROR),
+                               "SSL is required but the server doesn't "
+                               "support it");
+      goto error;
+    }
+
+    /*
+      If the ssl_mode is VERIFY_CA or VERIFY_IDENTITY, make sure
+      that the connection doesn't succeed without providing the
+      CA certificate.
+    */
+    if (mysql->options.extension &&
+        mysql->options.extension->ssl_mode > SSL_MODE_REQUIRED &&
+        !(mysql->options.ssl_ca || mysql->options.ssl_capath)) {
+      set_mysql_extended_error(mysql, CR_SSL_CONNECTION_ERROR, unknown_sqlstate,
+                               ER_CLIENT(CR_SSL_CONNECTION_ERROR),
+                               "CA certificate is required if ssl-mode "
+                               "is VERIFY_CA or VERIFY_IDENTITY");
+      goto error;
+    }
+
+    /*
+      Attempt SSL connection if ssl_mode != SSL_MODE_DISABLED and
+      the server supports SSL. Fallback on unencrypted
+      connection otherwise.
+    */
+    if (!mysql->options.extension ||
+        mysql->options.extension->ssl_mode == SSL_MODE_DISABLED ||
+        !(mysql->server_capabilities & CLIENT_SSL)) {
+      goto done;
+    }
+    ctx->ssl_state = SSL_REQUEST;
+  }
+
+  if (ctx->ssl_state == SSL_REQUEST) {
+    char buff[33], *end;
+
+    end = mysql_fill_packet_header(mysql, buff, sizeof(buff));
+
+    /*
+      Send mysql->client_flag, max_packet_size - unencrypted
+      otherwise the server does not know we want to do SSL
+    */
+    MYSQL_TRACE(SEND_SSL_REQUEST, mysql,
+                ((size_t)(end - buff), (const unsigned char *)buff));
+    bool ret;
+    if (my_net_write_nonblocking(net, (uchar *)buff, (size_t)(end - buff),
+                                 &ret) == NET_ASYNC_NOT_READY) {
+      return NET_ASYNC_NOT_READY;
+    }
+
+    if (ret) {
+      set_mysql_extended_error(mysql, CR_SERVER_LOST, unknown_sqlstate,
+                               ER_CLIENT(CR_SERVER_LOST_EXTENDED),
+                               "sending connection information to server",
+                               errno);
+      goto error;
+    }
+
+    ctx->ssl_state = SSL_CONNECT;
+  }
+
+  if (ctx->ssl_state == SSL_CONNECT) {
+    /* Do the SSL layering. */
+    struct st_mysql_options *options = &mysql->options;
+    struct st_VioSSLFd *ssl_fd;
+    enum enum_ssl_init_error ssl_init_error;
+    const char *cert_error;
+    unsigned long ssl_error;
+    size_t ret;
+    const bool verify_identity =
+        mysql->client_flag & CLIENT_SSL_VERIFY_SERVER_CERT;
+
+    MYSQL_TRACE_STAGE(mysql, SSL_NEGOTIATION);
+
+    if (!mysql->connector_fd) {
+      /* Create the VioSSLConnectorFd - init SSL and load certs */
+      if (!(ssl_fd = new_VioSSLConnectorFd(
+                options->ssl_key, options->ssl_cert, options->ssl_ca,
+                options->ssl_capath, options->ssl_cipher,
+                options->extension ? options->extension->tls_ciphersuites
+                                   : nullptr,
+                &ssl_init_error,
+                options->extension ? options->extension->ssl_crl : nullptr,
+                options->extension ? options->extension->ssl_crlpath : nullptr,
+                options->extension ? options->extension->ssl_ctx_flags : 0,
+                verify_identity ? mysql->host : nullptr))) {
+        set_mysql_extended_error(mysql, CR_SSL_CONNECTION_ERROR,
+                                 unknown_sqlstate,
+                                 ER_CLIENT(CR_SSL_CONNECTION_ERROR),
+                                 sslGetErrString(ssl_init_error));
+        goto error;
+      }
+      mysql->connector_fd = (unsigned char *)ssl_fd;
+    } else {
+      ssl_fd = (struct st_VioSSLFd *)mysql->connector_fd;
+    }
+
+    /* Connect to the server */
+    DBUG_PRINT("info", ("IO layer change in progress..."));
+    MYSQL_TRACE(SSL_CONNECT, mysql, ());
+    if ((ret = sslconnect(ssl_fd, net->vio,
+                          (long)(mysql->options.connect_timeout), &ssl_error,
+                          &ctx->ssl))) {
+      switch (ret) {
+        case VIO_SOCKET_WANT_READ:
+          net_async->async_blocking_state = NET_NONBLOCKING_READ;
+          return NET_ASYNC_NOT_READY;
+        case VIO_SOCKET_WANT_WRITE:
+          net_async->async_blocking_state = NET_NONBLOCKING_WRITE;
+          return NET_ASYNC_NOT_READY;
+        default:
+          break;
+          /* continue for error handling */
+      }
+
+      char buf[512];
+      ERR_error_string_n(ssl_error, buf, 512);
+      buf[511] = 0;
+      set_mysql_extended_error(mysql, CR_SSL_CONNECTION_ERROR, unknown_sqlstate,
+                               ER_CLIENT(CR_SSL_CONNECTION_ERROR), buf);
+      goto error;
+    }
+    DBUG_PRINT("info", ("IO layer change done!"));
+
+    /* sslconnect creates a new vio, so update it. */
+    vio_set_blocking_flag(net->vio, !ctx->non_blocking);
+
+    /* Verify server cert */
+    if (verify_identity &&
+        ssl_verify_server_cert(net->vio, mysql->host, &cert_error)) {
+      set_mysql_extended_error(mysql, CR_SSL_CONNECTION_ERROR, unknown_sqlstate,
+                               ER_CLIENT(CR_SSL_CONNECTION_ERROR), cert_error);
+      goto error;
+    }
+
+    MYSQL_TRACE(SSL_CONNECTED, mysql, ());
+    MYSQL_TRACE_STAGE(mysql, AUTHENTICATE);
+  }
+
+done:
+  *res = 0;
+  ctx->ssl_state = SSL_COMPLETE;
+  return NET_ASYNC_COMPLETE;
+
+error:
+  *res = 1;
+  ctx->ssl_state = SSL_COMPLETE;
+  return NET_ASYNC_COMPLETE;
+}
+
+/**
+  Asynchronous authentication phase is divided into several smaller chunks
+  of subtasks like:
+  1. Determine the default/initial plugin to use
+  2. Call authentication plugin API
+  3. Handle response from authentication plugin API
+  4. Check if server asked to use a different authentication plugin
+  5. In case server asked to use a different authentication plugin
+     use that plugin to start the authentication process again.
+  6. Complete authentication.
+
+  All above tasks are implemented in below authsm_* functions where
+  authsm stads for authentication state machine.
+*/
+static mysql_state_machine_status authsm_begin_plugin_auth(
+    mysql_async_auth *ctx);
+static mysql_state_machine_status authsm_run_first_authenticate_user(
+    mysql_async_auth *ctx);
+static mysql_state_machine_status authsm_handle_first_authenticate_user(
+    mysql_async_auth *ctx);
+static mysql_state_machine_status authsm_read_change_user_result(
+    mysql_async_auth *ctx);
+static mysql_state_machine_status authsm_handle_change_user_result(
+    mysql_async_auth *ctx);
+static mysql_state_machine_status authsm_run_second_authenticate_user(
+    mysql_async_auth *ctx);
+static mysql_state_machine_status authsm_handle_second_authenticate_user(
+    mysql_async_auth *ctx);
+static mysql_state_machine_status authsm_finish_auth(mysql_async_auth *ctx);
+
+/**
+  Asynchronous connection phase is divided into several smaller modules
+  where wach module does following:
+  1. Begin the connection to the server, including any DNS resolution
+     necessary, socket configuration, etc
+  2. Complete the connection itself
+  3. Connection established, read the first packet
+  4. Parse the handshake from the server
+  5. Establish SSL connection if needed
+  6. Invoke the plugin to send the authentication data to the server
+  7. Authenticated, set intial database if specified
+  8. Send COM_INIT_DB.
+  9. Prepare to send a sequence of init commands.
+  10.Send an init command.
+
+  Below are the modules which does all above tasks.
+*/
+static mysql_state_machine_status csm_begin_connect(mysql_async_connect *ctx);
+static mysql_state_machine_status csm_complete_connect(
+    mysql_async_connect *ctx);
+static mysql_state_machine_status csm_wait_connect(mysql_async_connect *ctx);
+static mysql_state_machine_status csm_read_greeting(mysql_async_connect *ctx);
+static mysql_state_machine_status csm_parse_handshake(mysql_async_connect *ctx);
+static mysql_state_machine_status csm_establish_ssl(mysql_async_connect *ctx);
+static mysql_state_machine_status csm_authenticate(mysql_async_connect *ctx);
+static mysql_state_machine_status csm_prep_select_database(
+    mysql_async_connect *ctx);
+#ifndef MYSQL_SERVER
+static mysql_state_machine_status csm_prep_init_commands(
+    mysql_async_connect *ctx);
+static mysql_state_machine_status csm_send_one_init_command(
+    mysql_async_connect *ctx);
+#endif
+
+#define MAX_CONNECTION_ATTR_STORAGE_LENGTH 65536
+
+int mysql_get_socket_descriptor(MYSQL *mysql) {
+  if (mysql && mysql->net.vio) {
+    return vio_fd(mysql->net.vio);
+  }
+  return -1;
+}
+
+/* clang-format off */
+/**
+  @page page_protocol_connection_phase_packets_protocol_handshake_response Protocol::HandshakeResponse:
+
+  Depending on the servers support for the ::CLIENT_PROTOCOL_41 capability and
+  the clients understanding of that flag the client has to send either
+  a @ref sect_protocol_connection_phase_packets_protocol_handshake_response320 or
+  @ref sect_protocol_connection_phase_packets_protocol_handshake_response41.
+
+  @sa send_client_reply_packet
+
+  @section sect_protocol_connection_phase_packets_protocol_handshake_response320 Protocol::HandshakeResponse320
+
+  Old Handshake Response Packet used by old clients or if the server doesn't
+  support ::CLIENT_PROTOCOL_41 @ref group_cs_capabilities_flags flag.
+
+  <table>
+  <caption>Payload</caption>
+  <tr><th>Type</th><th>Name</th><th>Description</th></tr>
+  <tr><td>@ref a_protocol_type_int2 "int&lt;2&gt;"</td>
+    <td>client_flag</td>
+    <td>\ref group_cs_capabilities_flags, only the lower 16 bits. ::CLIENT_PROTOCOL_41 should never be set</td></tr>
+  <tr><td>@ref a_protocol_type_int3 "int&lt;3&gt;"</td>
+    <td>max_packet_size</td>
+    <td>maximum packet size, 0xFFFFFF max</td></tr>
+  <tr><td>@ref sect_protocol_basic_dt_string_null "string&lt;NUL&gt;"</td>
+      <td>username</td>
+      <td>login user name</td></tr>
+  <tr><td colspan="3">if capabilities @& ::CLIENT_CONNECT_WITH_DB {</td></tr>
+  <tr><td>@ref sect_protocol_basic_dt_string_null "string&lt;NUL&gt;"</td>
+      <td>auth-response</td>
+      <td>Opaque authentication response data generated by
+          Authentication Method indicated by the plugin name field.</td></tr>
+  <tr><td>@ref sect_protocol_basic_dt_string_null "string&lt;NUL&gt;"</td>
+      <td>database</td>
+      <td>initail database for the connection.
+      This string should be interpreted using the character set indicated by
+      character set field.</td></tr>
+  <tr><td colspan="3">} else {</td></tr>
+  <tr><td>@ref sect_protocol_basic_dt_string_eof "string&lt;EOF&gt;"</td>
+      <td>auth-response</td>
+      <td>Opaque authentication response data generated by
+          Authentication Method indicated by the plugin name field.</td></tr>
+  <tr><td colspan="3">}</td></tr>
+  </table>
+
+  Example
+  ========
+
+  ~~~~~~~~~~~~~~~~~~~~~
+  11 00 00 01 85 24 00 00    00 6f 6c 64 00 47 44 53    .....$...old.GDS
+  43 51 59 52 5f                                        CQYR_
+  ~~~~~~~~~~~~~~~~~~~~~
+
+  @note If auth-response is followed by a database field it must be
+  NULL terminated.
+
+  @section sect_protocol_connection_phase_packets_protocol_handshake_response41 Protocol::HandshakeResponse41
+
+  Handshake Response Packet sent by 4.1+ clients supporting
+  ::CLIENT_PROTOCOL_41 @ref group_cs_capabilities_flags flag,
+  if the server announced it in its
+  @ref page_protocol_connection_phase_packets_protocol_handshake.
+  Otherwise (talking to an old server) the
+  @ref sect_protocol_connection_phase_packets_protocol_handshake_response320
+  packet must be used.
+
+
+  <table>
+  <caption>Payload</caption>
+  <tr><th>Type</th><th>Name</th><th>Description</th></tr>
+  <tr><td>@ref a_protocol_type_int4 "int&lt;4&gt;"</td>
+    <td>client_flag</td>
+    <td>\ref group_cs_capabilities_flags, ::CLIENT_PROTOCOL_41 always set.</td></tr>
+  <tr><td>@ref a_protocol_type_int4 "int&lt;4&gt;"</td>
+    <td>max_packet_size</td>
+    <td>maximum packet size</td></tr>
+  <tr><td>@ref a_protocol_type_int1 "int&lt;1&gt;"</td>
+    <td>character_set</td>
+    <td>client charset \ref a_protocol_character_set, only the lower 8-bits</td></tr>
+  <tr><td>@ref sect_protocol_basic_dt_string_fix "string[23]"</td>
+    <td>filler</td>
+    <td>filler to the size of the handhshake response packet. All 0s.</td></tr>
+  <tr><td>@ref sect_protocol_basic_dt_string_null "string&lt;NUL&gt;"</td>
+      <td>username</td>
+      <td>login user name</td></tr>
+  <tr><td colspan="3">if capabilities @& ::CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA {</td></tr>
+  <tr><td>@ref sect_protocol_basic_dt_string_le "string&lt;length&gt;"</td>
+      <td>auth_response</td>
+      <td>opaque authentication response data generated by
+      Authentication Method indicated by the plugin name field. </td></tr>
+  <tr><td colspan="3">} else {</td></tr>
+  <tr><td>@ref a_protocol_type_int1 "int&lt;1&gt;"</td>
+    <td>auth_response_length</td>
+    <td>length of auth_response</td></tr>
+  <tr><td>@ref sect_protocol_basic_dt_string_le "string&lt;length&gt;"</td>
+      <td>auth_response</td>
+      <td>opaque authentication response data generated by
+      Authentication Method indicated by the plugin name field. </td></tr>
+  <tr><td colspan="3">}</td></tr>
+  <tr><td colspan="3">if capabilities @& ::CLIENT_CONNECT_WITH_DB {</td></tr>
+  <tr><td>@ref sect_protocol_basic_dt_string_null "string&lt;NUL&gt;"</td>
+      <td>database</td>
+      <td>initail database for the connection.
+      This string should be interpreted using the character set indicated by
+      character set field.</td></tr>
+  <tr><td colspan="3">}</td></tr>
+  <tr><td colspan="3">if capabilities @& ::CLIENT_PLUGIN_AUTH {</td></tr>
+  <tr><td>@ref sect_protocol_basic_dt_string_null "string&lt;NUL&gt;"</td>
+      <td>client_plugin_name</td>
+      <td>the Authentication Method used by the client to generate
+      auth-response value in this packet. This is an UTF-8 string. </td></tr>
+  <tr><td colspan="3">}</td></tr>
+  <tr><td colspan="3">if capabilities @& ::CLIENT_CONNECT_ATTRS {</td></tr>
+  <tr><td>@ref sect_protocol_basic_dt_int_le "int&lt;lenenc&gt;"</td>
+      <td>length of all key-values</td>
+      <td>affected rows</td></tr>
+  <tr><td>@ref sect_protocol_basic_dt_string_le "string&lt;lenenc&gt;"</td>
+      <td>key1</td>
+      <td>Name of the 1st client attribute</td></tr>
+  <tr><td>@ref sect_protocol_basic_dt_string_le "string&lt;lenenc&gt;"</td>
+      <td>value1</td>
+      <td>Value of the 1st client attribute</td></tr>
+  <tr><td colspan="3">.. (if more data in length of all key-values, more keys and values parts)</td></tr>
+  <tr><td colspan="3">}</td></tr>
+  <tr><td>@ref a_protocol_type_int1 "int&lt;1&gt;"</td>
+    <td>zstd_compression_level</td>
+    <td>compression level for zstd compression algorithm</td></tr>
+  </table>
+
+  Example
+  ========
+
+  On MySQL 5.5.8 with ::CLIENT_PROTOCOL_41 ::CLIENT_PLUGIN_AUTH, CLIENT_SECURE_CONNECTION (removed in 8.0),
+  and ::CLIENT_CONNECT_WITH_DB set, it may look like:
+
+  ~~~~~~~~~~~~~~~~~~~~~
+  54 00 00 01 8d a6 0f 00    00 00 00 01 08 00 00 00    T...............
+  00 00 00 00 00 00 00 00    00 00 00 00 00 00 00 00    ................
+  00 00 00 00 70 61 6d 00    14 ab 09 ee f6 bc b1 32    ....pam........2
+  3e 61 14 38 65 c0 99 1d    95 7d 75 d4 47 74 65 73    >a.8e....}u.Gtes
+
+
+// Source: client.cc
+// Lines 3944-4662
+
+
+[ANSWER]
+MUST-NOT

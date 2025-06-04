@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'obj' at line 3\n2. Pointer '_obj' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid git_cached_obj_decref(void *_obj)\n{\n\tgit_cached_obj *obj = _obj;\n\n\tif (git_atomic32_dec(&obj->refcount) == 0) {\n\t\tswitch (obj->flags) {\n\t\tcase GIT_CACHE_STORE_RAW:\n\t\t\tgit_odb_object__free(_obj);\n\t\t\tbreak;\n\n\t\tcase GIT_CACHE_STORE_PARSED:\n\t\t\tgit_object__free(_obj);\n\t\t\tbreak;\n\n\t\tdefault:\n\t\t\tgit__free(_obj);\n\t\t\tbreak;\n\t\t}\n\t}\n}\n\n\n// Source: cache.c\n// Lines 234-253\n",
+  "ANSWER": "MUST"
+}

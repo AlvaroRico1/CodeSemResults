@@ -1,0 +1,79 @@
+options_array_set(struct options_entry *o, u_int idx, const char *value,
+    int append, char **cause)
+{
+	struct options_array_item	*a;
+	char				*new;
+	struct cmd_parse_result		*pr;
+	long long		 	 number;
+
+	if (!OPTIONS_IS_ARRAY(o)) {
+		if (cause != NULL)
+			*cause = xstrdup("not an array");
+		return (-1);
+	}
+
+	if (value == NULL) {
+		a = options_array_item(o, idx);
+		if (a != NULL)
+			options_array_free(o, a);
+		return (0);
+	}
+
+	if (OPTIONS_IS_COMMAND(o)) {
+		pr = cmd_parse_from_string(value, NULL);
+		switch (pr->status) {
+		case CMD_PARSE_ERROR:
+			if (cause != NULL)
+				*cause = pr->error;
+			else
+				free(pr->error);
+			return (-1);
+		case CMD_PARSE_SUCCESS:
+			break;
+		}
+
+		a = options_array_item(o, idx);
+		if (a == NULL)
+			a = options_array_new(o, idx);
+		else
+			options_value_free(o, &a->value);
+		a->value.cmdlist = pr->cmdlist;
+		return (0);
+	}
+
+	if (OPTIONS_IS_STRING(o)) {
+		a = options_array_item(o, idx);
+		if (a != NULL && append)
+			xasprintf(&new, "%s%s", a->value.string, value);
+		else
+			new = xstrdup(value);
+		if (a == NULL)
+			a = options_array_new(o, idx);
+		else
+			options_value_free(o, &a->value);
+		a->value.string = new;
+		return (0);
+	}
+
+	if (o->tableentry->type == OPTIONS_TABLE_COLOUR) {
+		if ((number = colour_fromstring(value)) == -1) {
+			xasprintf(cause, "bad colour: %s", value);
+			return (-1);
+		}
+		a = options_array_item(o, idx);
+		if (a == NULL)
+			a = options_array_new(o, idx);
+		else
+			options_value_free(o, &a->value);
+		a->value.number = number;
+		return (0);
+	}
+
+	if (cause != NULL)
+		*cause = xstrdup("wrong array type");
+	return (-1);
+}
+
+
+// Source: options.c
+// Lines 422-496

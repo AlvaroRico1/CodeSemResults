@@ -1,0 +1,1 @@
+at_exit_cmd,libgit2/tests/clar/main.c,7,at_exit,libgit2/tests/clar/main.c,37,0

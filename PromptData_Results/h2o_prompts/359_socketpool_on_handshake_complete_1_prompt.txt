@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'req' at line 3
+2. Pointer 'sock' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void on_handshake_complete(h2o_socket_t *sock, const char *err)
+{
+    h2o_socketpool_connect_request_t *req = sock->data;
+
+    assert(req->sock == sock);
+
+    if (err == h2o_socket_error_ssl_cert_name_mismatch && (SSL_CTX_get_verify_mode(req->pool->_ssl_ctx) & SSL_VERIFY_PEER) == 0) {
+        /* ignore CN mismatch if we are not verifying peer */
+    } else if (err != NULL) {
+        h2o_socket_close(sock);
+        req->sock = NULL;
+    }
+
+    call_connect_cb(req, err);
+}
+
+
+// Source: socketpool.c
+// Lines 347-361
+
+
+[ANSWER]
+MUST

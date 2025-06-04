@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'priv' at line 4\n2. Pointer 'inode' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int smaps_rollup_open(struct inode *inode, struct file *file)\n{\n\tint ret;\n\tstruct proc_maps_private *priv;\n\n\tpriv = kzalloc(sizeof(*priv), GFP_KERNEL_ACCOUNT);\n\tif (!priv)\n\t\treturn -ENOMEM;\n\n\tret = single_open(file, show_smaps_rollup, priv);\n\tif (ret)\n\t\tgoto out_free;\n\n\tpriv->inode = inode;\n\tpriv->mm = proc_mem_open(inode, PTRACE_MODE_READ);\n\tif (IS_ERR(priv->mm)) {\n\t\tret = PTR_ERR(priv->mm);\n\n\t\tsingle_release(inode, file);\n\t\tgoto out_free;\n\t}\n\n\treturn 0;\n\nout_free:\n\tkfree(priv);\n\treturn ret;\n}\n\n\n// Source: task_mmu.c\n// Lines 911-938\n",
+  "ANSWER": "MUST"
+}

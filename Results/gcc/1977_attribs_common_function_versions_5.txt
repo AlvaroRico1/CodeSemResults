@@ -1,0 +1,1 @@
+target2,gcc/gcc/attribs.c,4,target1,gcc/gcc/attribs.c,4,0

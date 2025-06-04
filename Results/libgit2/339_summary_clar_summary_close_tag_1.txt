@@ -1,0 +1,1 @@
+indent,libgit2/tests/clar/clar/summary.h,2,indt,libgit2/tests/clar/clar/summary.h,4,0

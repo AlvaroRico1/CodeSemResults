@@ -1,0 +1,1 @@
+b,libgit2/tests/libgit2/core/hashsig.c,3,crlf_spaced2,libgit2/tests/libgit2/core/hashsig.c,33,0

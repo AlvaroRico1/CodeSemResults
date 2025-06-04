@@ -1,0 +1,36 @@
+static void format_note(struct notes_tree *t, const struct object_id *object_oid,
+			struct strbuf *sb, const char *output_encoding, int raw)
+{
+	static const char utf8[] = "utf-8";
+	const struct object_id *oid;
+	char *msg, *msg_p;
+	unsigned long linelen, msglen;
+	enum object_type type;
+
+	if (!t)
+		t = &default_notes_tree;
+	if (!t->initialized)
+		init_notes(t, NULL, NULL, 0);
+
+	oid = get_note(t, object_oid);
+	if (!oid)
+		return;
+
+	if (!(msg = read_object_file(oid, &type, &msglen)) || type != OBJ_BLOB) {
+		free(msg);
+		return;
+	}
+
+	if (output_encoding && *output_encoding &&
+	    !is_encoding_utf8(output_encoding)) {
+		char *reencoded = reencode_string(msg, output_encoding, utf8);
+		if (reencoded) {
+			free(msg);
+			msg = reencoded;
+			msglen = strlen(msg);
+		}
+	}
+
+
+// Source: notes.c
+// Lines 1247-1278

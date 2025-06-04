@@ -1,0 +1,38 @@
+size_t quicly_send_version_negotiation(quicly_context_t *ctx, ptls_iovec_t dest_cid, ptls_iovec_t src_cid, const uint32_t *versions,
+                                       void *payload)
+{
+    uint8_t *dst = payload;
+
+    /* type_flags */
+    ctx->tls->random_bytes(dst, 1);
+    *dst |= QUICLY_LONG_HEADER_BIT;
+    ++dst;
+    /* version */
+    dst = quicly_encode32(dst, 0);
+    /* connection-id */
+    *dst++ = dest_cid.len;
+    if (dest_cid.len != 0) {
+        memcpy(dst, dest_cid.base, dest_cid.len);
+        dst += dest_cid.len;
+    }
+    *dst++ = src_cid.len;
+    if (src_cid.len != 0) {
+        memcpy(dst, src_cid.base, src_cid.len);
+        dst += src_cid.len;
+    }
+    /* supported_versions */
+    for (const uint32_t *v = versions; *v != 0; ++v)
+        dst = quicly_encode32(dst, *v);
+    /* add a greasing version. This also covers the case where an empty list is specified by the caller to indicate rejection. */
+    uint32_t grease_version = 0;
+    if (src_cid.len >= sizeof(grease_version))
+        memcpy(&grease_version, src_cid.base, sizeof(grease_version));
+    grease_version = (grease_version & 0xf0f0f0f0) | 0x0a0a0a0a;
+    dst = quicly_encode32(dst, grease_version);
+
+    return dst - (uint8_t *)payload;
+}
+
+
+// Source: quicly.c
+// Lines 3947-3980

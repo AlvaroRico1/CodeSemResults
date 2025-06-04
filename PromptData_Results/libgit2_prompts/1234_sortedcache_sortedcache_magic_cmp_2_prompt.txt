@@ -1,0 +1,25 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'magic' at line 3
+2. Pointer 'key' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int sortedcache_magic_cmp(const void *key, const void *value)
+{
+	const struct sortedcache_magic_key *magic = key;
+	const char *value_key = ((const char *)value) + magic->offset;
+	return strcmp(magic->key, value_key);
+}
+
+
+// Source: sortedcache.c
+// Lines 337-342
+
+
+[ANSWER]
+MUST

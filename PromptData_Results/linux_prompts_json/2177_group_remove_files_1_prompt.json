@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'bin_attr' at line 5\n2. Pointer 'attr' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void remove_files(struct kernfs_node *parent,\n\t\t\t const struct attribute_group *grp)\n{\n\tstruct attribute *const *attr;\n\tstruct bin_attribute *const *bin_attr;\n\n\tif (grp->attrs)\n\t\tfor (attr = grp->attrs; *attr; attr++)\n\t\t\tkernfs_remove_by_name(parent, (*attr)->name);\n\tif (grp->bin_attrs)\n\t\tfor (bin_attr = grp->bin_attrs; *bin_attr; bin_attr++)\n\t\t\tkernfs_remove_by_name(parent, (*bin_attr)->attr.name);\n}\n\n\n// Source: group.c\n// Lines 19-31\n",
+  "ANSWER": "MAY"
+}

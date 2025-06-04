@@ -1,0 +1,41 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ssc' at line 3
+2. Pointer '_ssc' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static h2o_iovec_t ssl_status_final(void *_ssc, h2o_globalconf_t *globalconf, h2o_req_t *req)
+{
+    struct st_ssl_status_ctx_t *ssc = _ssc;
+    h2o_iovec_t buf;
+
+#define BUFSIZE (1024)
+    buf.base = h2o_mem_alloc_pool(&req->pool, char, BUFSIZE);
+    buf.len = snprintf(buf.base, BUFSIZE,
+                       ",\n"
+                       " \"ssl.alpn.h1\": %" PRIu64 ",\n"
+                       " \"ssl.alpn.h2\": %" PRIu64 ",\n"
+                       " \"ssl.handshake.full\": %" PRIu64 ",\n"
+                       " \"ssl.handshake.resume\": %" PRIu64 ",\n"
+                       " \"ssl.handshake.accumulated-time.full\": %" PRIu64 ",\n"
+                       " \"ssl.handshake.accumulated-time.resume\": %" PRIu64 "\n",
+                       ssc->alpn_h1, ssc->alpn_h2, ssc->handshake_full, ssc->handshake_resume, ssc->handshake_accum_time_full,
+                       ssc->handshake_accum_time_resume);
+    pthread_mutex_destroy(&ssc->mutex);
+    free(ssc);
+    return buf;
+#undef BUFSIZE
+}
+
+
+// Source: ssl.c
+// Lines 60-81
+
+
+[ANSWER]
+MUST

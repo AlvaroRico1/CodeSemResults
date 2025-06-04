@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'load_refs' at line 3
+2. Pointer 'cb' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int notes_display_config(const char *k, const char *v, void *cb)
+{
+	int *load_refs = cb;
+
+	if (*load_refs && !strcmp(k, "notes.displayref")) {
+		if (!v)
+			return config_error_nonbool(k);
+		string_list_add_refs_by_glob(&display_notes_refs, v);
+	}
+
+	return 0;
+}
+
+
+// Source: notes.c
+// Lines 970-981
+
+
+[ANSWER]
+MUST

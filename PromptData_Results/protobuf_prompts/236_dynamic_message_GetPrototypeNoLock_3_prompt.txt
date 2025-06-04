@@ -1,0 +1,181 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'target' at line 8
+2. Pointer 'base' at line 135
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+const Message* DynamicMessageFactory::GetPrototypeNoLock(
+    const Descriptor* type) {
+  if (delegate_to_generated_factory_ &&
+      type->file()->pool() == DescriptorPool::generated_pool()) {
+    return MessageFactory::generated_factory()->GetPrototype(type);
+  }
+
+  const TypeInfo** target = &prototypes_[type];
+  if (*target != nullptr) {
+    // Already exists.
+    return (*target)->prototype;
+  }
+
+  TypeInfo* type_info = new TypeInfo;
+  *target = type_info;
+
+  type_info->type = type;
+  type_info->pool = (pool_ == nullptr) ? type->file()->pool() : pool_;
+  type_info->factory = this;
+
+  // We need to construct all the structures passed to Reflection's constructor.
+  // This includes:
+  // - A block of memory that contains space for all the message's fields.
+  // - An array of integers indicating the byte offset of each field within
+  //   this block.
+  // - A big bitfield containing a bit for each field indicating whether
+  //   or not that field is set.
+  int real_oneof_count = 0;
+  for (int i = 0; i < type->oneof_decl_count(); i++) {
+    if (!type->oneof_decl(i)->is_synthetic()) {
+      real_oneof_count++;
+    }
+  }
+
+  // Compute size and offsets.
+  uint32_t* offsets = new uint32_t[type->field_count() + real_oneof_count];
+  type_info->offsets.reset(offsets);
+
+  // Decide all field offsets by packing in order.
+  // We place the DynamicMessage object itself at the beginning of the allocated
+  // space.
+  int size = sizeof(DynamicMessage);
+  size = AlignOffset(size);
+
+  // Next the has_bits, which is an array of uint32s.
+  type_info->has_bits_offset = -1;
+  int max_hasbit = 0;
+  for (int i = 0; i < type->field_count(); i++) {
+    if (HasHasbit(type->field(i))) {
+      if (type_info->has_bits_offset == -1) {
+        // At least one field in the message requires a hasbit, so allocate
+        // hasbits.
+        type_info->has_bits_offset = size;
+        uint32_t* has_bits_indices = new uint32_t[type->field_count()];
+        for (int j = 0; j < type->field_count(); j++) {
+          // Initialize to -1, fields that need a hasbit will overwrite.
+          has_bits_indices[j] = static_cast<uint32_t>(-1);
+        }
+        type_info->has_bits_indices.reset(has_bits_indices);
+      }
+      type_info->has_bits_indices[i] = max_hasbit++;
+    }
+  }
+
+  if (max_hasbit > 0) {
+    int has_bits_array_size = DivideRoundingUp(max_hasbit, bitsizeof(uint32_t));
+    size += has_bits_array_size * sizeof(uint32_t);
+    size = AlignOffset(size);
+  }
+
+  // The oneof_case, if any. It is an array of uint32s.
+  if (real_oneof_count > 0) {
+    type_info->oneof_case_offset = size;
+    size += real_oneof_count * sizeof(uint32_t);
+    size = AlignOffset(size);
+  }
+
+  // The ExtensionSet, if any.
+  if (type->extension_range_count() > 0) {
+    type_info->extensions_offset = size;
+    size += sizeof(ExtensionSet);
+    size = AlignOffset(size);
+  } else {
+    // No extensions.
+    type_info->extensions_offset = -1;
+  }
+
+  // All the fields.
+  //
+  // TODO(b/31226269):  Optimize the order of fields to minimize padding.
+  for (int i = 0; i < type->field_count(); i++) {
+    // Make sure field is aligned to avoid bus errors.
+    // Oneof fields do not use any space.
+    if (!InRealOneof(type->field(i))) {
+      int field_size = FieldSpaceUsed(type->field(i));
+      size = AlignTo(size, std::min(kSafeAlignment, field_size));
+      offsets[i] = size;
+      size += field_size;
+    }
+  }
+
+  // The oneofs.
+  for (int i = 0; i < type->oneof_decl_count(); i++) {
+    if (!type->oneof_decl(i)->is_synthetic()) {
+      size = AlignTo(size, kSafeAlignment);
+      offsets[type->field_count() + i] = size;
+      size += kMaxOneofUnionSize;
+    }
+  }
+
+  type_info->weak_field_map_offset = -1;
+
+  // Align the final size to make sure no clever allocators think that
+  // alignment is not necessary.
+  type_info->size = size;
+
+  // Construct the reflection object.
+
+  // Compute the size of default oneof instance and offsets of default
+  // oneof fields.
+  for (int i = 0; i < type->oneof_decl_count(); i++) {
+    if (type->oneof_decl(i)->is_synthetic()) continue;
+    for (int j = 0; j < type->oneof_decl(i)->field_count(); j++) {
+      const FieldDescriptor* field = type->oneof_decl(i)->field(j);
+      // oneof fields are not accessed through offsets, but we still have the
+      // entry from a legacy implementation. This should be removed at some
+      // point.
+      // Mark the field to prevent unintentional access through reflection.
+      // Don't use the top bit because that is for unused fields.
+      offsets[field->index()] = internal::kInvalidFieldOffsetTag;
+    }
+  }
+
+  // Allocate the prototype fields.
+  void* base = operator new(size);
+  memset(base, 0, size);
+
+  // We have already locked the factory so we should not lock in the constructor
+  // of dynamic message to avoid dead lock.
+  DynamicMessage* prototype = new (base) DynamicMessage(type_info, false);
+
+  internal::ReflectionSchema schema = {
+      type_info->prototype,
+      type_info->offsets.get(),
+      type_info->has_bits_indices.get(),
+      type_info->has_bits_offset,
+      PROTOBUF_FIELD_OFFSET(DynamicMessage, _internal_metadata_),
+      type_info->extensions_offset,
+      type_info->oneof_case_offset,
+      type_info->size,
+      type_info->weak_field_map_offset,
+      nullptr /* inlined_string_indices_ */,
+      0 /* inlined_string_donated_offset_ */};
+
+  type_info->reflection.reset(
+      new Reflection(type_info->type, schema, type_info->pool, this));
+
+  // Cross link prototypes.
+  prototype->CrossLinkPrototypes();
+
+  return prototype;
+}
+
+
+// Source: dynamic_message.cc
+// Lines 660-821
+
+
+[ANSWER]
+MAY

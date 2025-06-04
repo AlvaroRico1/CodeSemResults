@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'buf' at line 1\n2. Pointer 'path' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic char *sandbox_path(git_str *buf, const char *suffix)\n{\n\tchar *path = p_realpath(clar_sandbox_path(), NULL);\n\tcl_assert(path);\n\tcl_git_pass(git_str_attach(buf, path, 0));\n\tcl_git_pass(git_str_joinpath(buf, buf->ptr, suffix));\n\treturn buf->ptr;\n}\n\n\n// Source: conditionals.c\n// Lines 53-60\n",
+  "ANSWER": "MUST-NOT"
+}

@@ -1,0 +1,87 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ii' at line 41
+2. Pointer 'out_len' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int lzogeneric1x_1_compress(const unsigned char *in, size_t in_len,
+		     unsigned char *out, size_t *out_len,
+		     void *wrkmem, const unsigned char bitstream_version)
+{
+	const unsigned char *ip = in;
+	unsigned char *op = out;
+	unsigned char *data_start;
+	size_t l = in_len;
+	size_t t = 0;
+	signed char state_offset = -2;
+	unsigned int m4_max_offset;
+
+	// LZO v0 will never write 17 as first byte (except for zero-length
+	// input), so this is used to version the bitstream
+	if (bitstream_version > 0) {
+		*op++ = 17;
+		*op++ = bitstream_version;
+		m4_max_offset = M4_MAX_OFFSET_V1;
+	} else {
+		m4_max_offset = M4_MAX_OFFSET_V0;
+	}
+
+	data_start = op;
+
+	while (l > 20) {
+		size_t ll = l <= (m4_max_offset + 1) ? l : (m4_max_offset + 1);
+		uintptr_t ll_end = (uintptr_t) ip + ll;
+		if ((ll_end + ((t + ll) >> 5)) <= ll_end)
+			break;
+		BUILD_BUG_ON(D_SIZE * sizeof(lzo_dict_t) > LZO1X_1_MEM_COMPRESS);
+		memset(wrkmem, 0, D_SIZE * sizeof(lzo_dict_t));
+		t = lzo1x_1_do_compress(ip, ll, op, out_len, t, wrkmem,
+					&state_offset, bitstream_version);
+		ip += ll;
+		op += *out_len;
+		l  -= ll;
+	}
+	t += l;
+
+	if (t > 0) {
+		const unsigned char *ii = in + in_len - t;
+
+		if (op == data_start && t <= 238) {
+			*op++ = (17 + t);
+		} else if (t <= 3) {
+			op[state_offset] |= t;
+		} else if (t <= 18) {
+			*op++ = (t - 3);
+		} else {
+			size_t tt = t - 18;
+			*op++ = 0;
+			while (tt > 255) {
+				tt -= 255;
+				*op++ = 0;
+			}
+			*op++ = tt;
+		}
+		if (t >= 16) do {
+			COPY8(op, ii);
+			COPY8(op + 8, ii + 8);
+			op += 16;
+			ii += 16;
+			t -= 16;
+		} while (t >= 16);
+		if (t > 0) do {
+			*op++ = *ii++;
+		} while (--t > 0);
+	}
+
+
+// Source: lzo1x_compress.c
+// Lines 291-358
+
+
+[ANSWER]
+MAY

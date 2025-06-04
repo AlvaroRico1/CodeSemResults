@@ -1,0 +1,109 @@
+static int ext4_ext_split(handle_t *handle, struct inode *inode,
+			  unsigned int flags,
+			  struct ext4_ext_path *path,
+			  struct ext4_extent *newext, int at)
+{
+	struct buffer_head *bh = NULL;
+	int depth = ext_depth(inode);
+	struct ext4_extent_header *neh;
+	struct ext4_extent_idx *fidx;
+	int i = at, k, m, a;
+	ext4_fsblk_t newblock, oldblock;
+	__le32 border;
+	ext4_fsblk_t *ablocks = NULL; /* array of allocated blocks */
+	int err = 0;
+	size_t ext_size = 0;
+
+	/* make decision: where to split? */
+	/* FIXME: now decision is simplest: at current extent */
+
+	/* if current leaf will be split, then we should use
+	 * border from split point */
+	if (unlikely(path[depth].p_ext > EXT_MAX_EXTENT(path[depth].p_hdr))) {
+		EXT4_ERROR_INODE(inode, "p_ext > EXT_MAX_EXTENT!");
+		return -EFSCORRUPTED;
+	}
+	if (path[depth].p_ext != EXT_MAX_EXTENT(path[depth].p_hdr)) {
+		border = path[depth].p_ext[1].ee_block;
+		ext_debug("leaf will be split."
+				" next leaf starts at %d\n",
+				  le32_to_cpu(border));
+	} else {
+		border = newext->ee_block;
+		ext_debug("leaf will be added."
+				" next leaf starts at %d\n",
+				le32_to_cpu(border));
+	}
+
+	/*
+	 * If error occurs, then we break processing
+	 * and mark filesystem read-only. index won't
+	 * be inserted and tree will be in consistent
+	 * state. Next mount will repair buffers too.
+	 */
+
+	/*
+	 * Get array to track all allocated blocks.
+	 * We need this to handle errors and free blocks
+	 * upon them.
+	 */
+	ablocks = kcalloc(depth, sizeof(ext4_fsblk_t), GFP_NOFS);
+	if (!ablocks)
+		return -ENOMEM;
+
+	/* allocate all needed blocks */
+	ext_debug("allocate %d blocks for indexes/leaf\n", depth - at);
+	for (a = 0; a < depth - at; a++) {
+		newblock = ext4_ext_new_meta_block(handle, inode, path,
+						   newext, &err, flags);
+		if (newblock == 0)
+			goto cleanup;
+		ablocks[a] = newblock;
+	}
+
+	/* initialize new leaf */
+	newblock = ablocks[--a];
+	if (unlikely(newblock == 0)) {
+		EXT4_ERROR_INODE(inode, "newblock == 0!");
+		err = -EFSCORRUPTED;
+		goto cleanup;
+	}
+	bh = sb_getblk_gfp(inode->i_sb, newblock, __GFP_MOVABLE | GFP_NOFS);
+	if (unlikely(!bh)) {
+		err = -ENOMEM;
+		goto cleanup;
+	}
+	lock_buffer(bh);
+
+	err = ext4_journal_get_create_access(handle, bh);
+	if (err)
+		goto cleanup;
+
+	neh = ext_block_hdr(bh);
+	neh->eh_entries = 0;
+	neh->eh_max = cpu_to_le16(ext4_ext_space_block(inode, 0));
+	neh->eh_magic = EXT4_EXT_MAGIC;
+	neh->eh_depth = 0;
+
+	/* move remainder of path[depth] to the new leaf */
+	if (unlikely(path[depth].p_hdr->eh_entries !=
+		     path[depth].p_hdr->eh_max)) {
+		EXT4_ERROR_INODE(inode, "eh_entries %d != eh_max %d!",
+				 path[depth].p_hdr->eh_entries,
+				 path[depth].p_hdr->eh_max);
+		err = -EFSCORRUPTED;
+		goto cleanup;
+	}
+	/* start copy from next extent */
+	m = EXT_MAX_EXTENT(path[depth].p_hdr) - path[depth].p_ext++;
+	ext4_ext_show_move(inode, path, newblock, depth);
+	if (m) {
+		struct ext4_extent *ex;
+		ex = EXT_FIRST_EXTENT(neh);
+		memmove(ex, path[depth].p_ext, sizeof(struct ext4_extent) * m);
+		le16_add_cpu(&neh->eh_entries, m);
+	}
+
+
+// Source: extents.c
+// Lines 1028-1132

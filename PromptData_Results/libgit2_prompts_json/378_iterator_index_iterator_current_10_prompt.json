@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'out' at line 2\n2. Pointer 'iter' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int index_iterator_current(\n\tconst git_index_entry **out, git_iterator *i)\n{\n\tindex_iterator *iter = (index_iterator *)i;\n\n\tif (!iterator__has_been_accessed(i))\n\t\treturn iter->base.cb->advance(out, i);\n\n\tif (iter->entry == NULL) {\n\t\t*out = NULL;\n\t\treturn GIT_ITEROVER;\n\t}\n\n\t*out = iter->entry;\n\treturn 0;\n}\n\n\n// Source: iterator.c\n// Lines 2041-2056\n",
+  "ANSWER": "MUST"
+}

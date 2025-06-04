@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'data' at line 6
+2. Pointer 'state' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static CURLcode tftp_connect_for_tx(struct tftp_state_data *state,
+                                    tftp_event_t event)
+{
+  CURLcode result;
+#ifndef CURL_DISABLE_VERBOSE_STRINGS
+  struct Curl_easy *data = state->data;
+
+  infof(data, "%s", "Connected for transmit");
+#endif
+  state->state = TFTP_STATE_TX;
+  result = tftp_set_timeouts(state);
+  if(result)
+    return result;
+  return tftp_tx(state, event);
+}
+
+
+// Source: tftp.c
+// Lines 393-407
+
+
+[ANSWER]
+MUST

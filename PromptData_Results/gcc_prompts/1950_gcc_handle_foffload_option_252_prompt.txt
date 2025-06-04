@@ -1,0 +1,111 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'next' at line 3
+2. Pointer 'n' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+handle_foffload_option (const char *arg)
+{
+  const char *c, *cur, *n, *next, *end;
+  char *target;
+
+  /* If option argument starts with '-' then no target is specified and we
+     do not need to parse it.  */
+  if (arg[0] == '-')
+    return;
+
+  end = strchr (arg, '=');
+  if (end == NULL)
+    end = strchr (arg, '\0');
+  cur = arg;
+
+  while (cur < end)
+    {
+      next = strchr (cur, ',');
+      if (next == NULL)
+	next = end;
+      next = (next > end) ? end : next;
+
+      target = XNEWVEC (char, next - cur + 1);
+      memcpy (target, cur, next - cur);
+      target[next - cur] = '\0';
+
+      /* If 'disable' is passed to the option, stop parsing the option and clean
+         the list of offload targets.  */
+      if (strcmp (target, "disable") == 0)
+	{
+	  free (offload_targets);
+	  offload_targets = xstrdup ("");
+	  break;
+	}
+
+      /* Check that GCC is configured to support the offload target.  */
+      c = OFFLOAD_TARGETS;
+      while (c)
+	{
+	  n = strchr (c, ',');
+	  if (n == NULL)
+	    n = strchr (c, '\0');
+
+	  if (next - cur == n - c && strncmp (target, c, n - c) == 0)
+	    break;
+
+	  c = *n ? n + 1 : NULL;
+	}
+
+      if (!c)
+	fatal_error (input_location,
+		     "GCC is not configured to support %s as offload target",
+		     target);
+
+      if (!offload_targets)
+	{
+	  offload_targets = target;
+	  target = NULL;
+	}
+      else
+	{
+	  /* Check that the target hasn't already presented in the list.  */
+	  c = offload_targets;
+	  do
+	    {
+	      n = strchr (c, ':');
+	      if (n == NULL)
+		n = strchr (c, '\0');
+
+	      if (next - cur == n - c && strncmp (c, target, n - c) == 0)
+		break;
+
+	      c = n + 1;
+	    }
+	  while (*n);
+
+	  /* If duplicate is not found, append the target to the list.  */
+	  if (c > n)
+	    {
+	      size_t offload_targets_len = strlen (offload_targets);
+	      offload_targets
+		= XRESIZEVEC (char, offload_targets,
+			      offload_targets_len + 1 + next - cur + 1);
+	      offload_targets[offload_targets_len++] = ':';
+	      memcpy (offload_targets + offload_targets_len, target, next - cur + 1);
+	    }
+	}
+
+      cur = next + 1;
+      XDELETEVEC (target);
+    }
+}
+
+
+// Source: gcc.c
+// Lines 3785-3876
+
+
+[ANSWER]
+MUST-NOT

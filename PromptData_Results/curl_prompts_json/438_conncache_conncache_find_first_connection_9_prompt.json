@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'bundle' at line 5\n2. Pointer 'he' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nconncache_find_first_connection(struct conncache *connc)\n{\n  struct Curl_hash_iterator iter;\n  struct Curl_hash_element *he;\n  struct connectbundle *bundle;\n\n  Curl_hash_start_iterate(&connc->hash, &iter);\n\n  he = Curl_hash_next_element(&iter);\n  while(he) {\n    struct Curl_llist_element *curr;\n    bundle = he->ptr;\n\n    curr = bundle->conn_list.head;\n    if(curr) {\n      return curr->ptr;\n    }\n\n    he = Curl_hash_next_element(&iter);\n  }\n\n  return NULL;\n}\n\n\n// Source: conncache.c\n// Lines 371-393\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,82 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'field' at line 5
+2. Pointer 'pos' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int read_one_row_complete(MYSQL *mysql, ulong pkt_len,
+                                 bool is_data_packet, uint fields,
+                                 MYSQL_ROW row, ulong *lengths) {
+  DBUG_TRACE;
+  uint field;
+  ulong len;
+  uchar *pos, *prev_pos, *end_pos;
+  NET *net = &mysql->net;
+
+  if (net->read_pos[0] != 0x00 && !is_data_packet) {
+    if (pkt_len > 1) /* MySQL 4.1 protocol */
+    {
+      if (mysql->server_capabilities & CLIENT_DEPRECATE_EOF)
+        read_ok_ex(mysql, pkt_len);
+      else {
+        mysql->warning_count = uint2korr(net->read_pos + 1);
+        mysql->server_status = uint2korr(net->read_pos + 3);
+      }
+    }
+#if defined(CLIENT_PROTOCOL_TRACING)
+    if (mysql->server_status & SERVER_MORE_RESULTS_EXISTS)
+      MYSQL_TRACE_STAGE(mysql, WAIT_FOR_RESULT);
+    else
+      MYSQL_TRACE_STAGE(mysql, READY_FOR_COMMAND);
+#endif
+    return 1; /* End of data */
+  }
+  prev_pos = nullptr; /* allowed to write at packet[-1] */
+  pos = net->read_pos;
+  end_pos = pos + pkt_len;
+  for (field = 0; field < fields; field++) {
+    if (pos >= end_pos) {
+      set_mysql_error(mysql, CR_MALFORMED_PACKET, unknown_sqlstate);
+      return -1;
+    }
+    len = (ulong)net_field_length_checked(&pos, (ulong)(end_pos - pos));
+
+    DBUG_EXECUTE_IF("simulate_bad_field_length_1", { len = 1000000L; });
+    DBUG_EXECUTE_IF("simulate_bad_field_length_2", { len = pkt_len - 1; });
+    if (pos > end_pos) {
+      set_mysql_error(mysql, CR_UNKNOWN_ERROR, unknown_sqlstate);
+      return -1;
+    }
+
+    if (len == NULL_LENGTH) {
+      row[field] = nullptr;
+      *lengths++ = 0;
+    } else {
+      row[field] = (char *)pos;
+      pos += len;
+      *lengths++ = len;
+    }
+    /*
+     It's safe to write to prev_pos here because we already check
+     for a valid pos in the beginning of this loop.
+    */
+    if (prev_pos) *prev_pos = 0; /* Terminate prev field */
+    prev_pos = pos;
+  }
+  row[field] = (char *)prev_pos + 1;     /* End of last field */
+  if (prev_pos < end_pos) *prev_pos = 0; /* Terminate last field */
+  return 0;
+}
+
+
+// Source: client.cc
+// Lines 3030-3092
+
+
+[ANSWER]
+MUST-NOT

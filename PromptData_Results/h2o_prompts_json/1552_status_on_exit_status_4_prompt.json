@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'c' at line 3\n2. Pointer '_conf' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint on_exit_status(h2o_configurator_t *_conf, h2o_configurator_context_t *ctx, yoml_t *node)\n{\n    struct st_status_configurator *c = (void *)_conf;\n    c->stack--;\n    if (!c->stack && c->duration_stats) {\n        h2o_duration_stats_register(ctx->globalconf);\n    }\n    return 0;\n}\n\n\n// Source: status.c\n// Lines 65-73\n",
+  "ANSWER": "MUST"
+}

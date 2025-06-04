@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'cp' at line 3\n2. Pointer 'copy' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nsession_check_name(const char *name)\n{\n\tchar\t*copy, *cp, *new_name;\n\n\tif (*name == '\\0')\n\t\treturn (NULL);\n\tcopy = xstrdup(name);\n\tfor (cp = copy; *cp != '\\0'; cp++) {\n\t\tif (*cp == ':' || *cp == '.')\n\t\t\t*cp = '_';\n\t}\n\tutf8_stravis(&new_name, copy, VIS_OCTAL|VIS_CSTYLE|VIS_TAB|VIS_NL);\n\tfree(copy);\n\treturn (new_name);\n}\n\n\n// Source: session.c\n// Lines 237-251\n",
+  "ANSWER": "MUST"
+}

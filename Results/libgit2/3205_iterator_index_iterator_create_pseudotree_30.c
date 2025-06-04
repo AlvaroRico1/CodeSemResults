@@ -1,0 +1,30 @@
+static bool index_iterator_create_pseudotree(
+	const git_index_entry **out,
+	index_iterator *iter,
+	const char *path)
+{
+	const char *prev_path, *relative_path, *dirsep;
+	size_t common_len;
+
+	prev_path = iter->entry ? iter->entry->path : "";
+
+	/* determine if the new path is in a different directory from the old */
+	common_len = git_fs_path_common_dirlen(prev_path, path);
+	relative_path = path + common_len;
+
+	if ((dirsep = strchr(relative_path, '/')) == NULL)
+		return false;
+
+	git_str_clear(&iter->tree_buf);
+	git_str_put(&iter->tree_buf, path, (dirsep - path) + 1);
+
+	iter->tree_entry.mode = GIT_FILEMODE_TREE;
+	iter->tree_entry.path = iter->tree_buf.ptr;
+
+	*out = &iter->tree_entry;
+	return true;
+}
+
+
+// Source: iterator.c
+// Lines 2058-2083

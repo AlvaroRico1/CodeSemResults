@@ -1,0 +1,42 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'result' at line 2
+2. Pointer 'stmt' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+MYSQL_RES *STDCALL mysql_stmt_result_metadata(MYSQL_STMT *stmt) {
+  MYSQL_RES *result;
+  DBUG_TRACE;
+
+  /*
+    stmt->fields is only defined if stmt->field_count is not null;
+    stmt->field_count is initialized in prepare.
+  */
+  if (!stmt->field_count) return nullptr;
+
+  if (!(result = (MYSQL_RES *)my_malloc(PSI_NOT_INSTRUMENTED, sizeof(*result),
+                                        MYF(MY_WME | MY_ZEROFILL)))) {
+    set_stmt_error(stmt, CR_OUT_OF_MEMORY, unknown_sqlstate, nullptr);
+    return nullptr;
+  }
+
+  result->methods = stmt->mysql->methods;
+  result->eof = true; /* Marker for buffered */
+  result->fields = stmt->fields;
+  result->field_count = stmt->field_count;
+  /* The rest of members of 'result' was zeroed inside malloc */
+  return result;
+}
+
+
+// Source: libmysql.cc
+// Lines 1658-1680
+
+
+[ANSWER]
+MUST-NOT

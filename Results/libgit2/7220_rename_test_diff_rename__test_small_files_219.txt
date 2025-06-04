@@ -1,0 +1,1 @@
+commit_tree,libgit2/tests/libgit2/diff/rename.c,7,delta,libgit2/tests/libgit2/diff/rename.c,11,0

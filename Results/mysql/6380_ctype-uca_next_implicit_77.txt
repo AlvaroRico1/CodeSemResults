@@ -1,0 +1,1 @@
+jamo_cnt,mysql/strings/ctype-uca.cc,4,page,mysql/strings/ctype-uca.cc,18,2

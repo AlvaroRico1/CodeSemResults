@@ -1,0 +1,1 @@
+ours,libgit2/src/libgit2/checkout.c,8,ancestor,libgit2/src/libgit2/checkout.c,8,1

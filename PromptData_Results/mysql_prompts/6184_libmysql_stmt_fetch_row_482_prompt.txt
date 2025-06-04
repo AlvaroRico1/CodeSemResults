@@ -1,0 +1,70 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'truncation_count' at line 5
+2. Pointer 'stmt' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int stmt_fetch_row(MYSQL_STMT *stmt, uchar *row) {
+  MYSQL_BIND *my_bind, *end;
+  MYSQL_FIELD *field;
+  uchar *null_ptr, bit;
+  int truncation_count = 0;
+  /*
+    Precondition: if stmt->field_count is zero or row is NULL, read_row_*
+    function must return no data.
+  */
+  assert(stmt->field_count);
+  assert(row);
+
+  if (!stmt->bind_result_done) {
+    /* If output parameters were not bound we should just return success */
+    return 0;
+  }
+
+  null_ptr = row;
+  row += (stmt->field_count + 9) / 8; /* skip null bits */
+  bit = 4;                            /* first 2 bits are reserved */
+
+  /* Copy complete row to application buffers */
+  for (my_bind = stmt->bind, end = my_bind + stmt->field_count,
+      field = stmt->fields;
+       my_bind < end; my_bind++, field++) {
+    *my_bind->error = false;
+    if (*null_ptr & bit) {
+      /*
+        We should set both row_ptr and is_null to be able to see
+        nulls in mysql_stmt_fetch_column. This is because is_null may point
+        to user data which can be overwritten between mysql_stmt_fetch and
+        mysql_stmt_fetch_column, and in this case nullness of column will be
+        lost. See mysql_stmt_fetch_column for details.
+      */
+      my_bind->row_ptr = nullptr;
+      *my_bind->is_null = true;
+    } else {
+      *my_bind->is_null = false;
+      my_bind->row_ptr = row;
+      (*my_bind->fetch_result)(my_bind, field, &row);
+      truncation_count += *my_bind->error;
+    }
+    if (!((bit <<= 1) & 255)) {
+      bit = 1; /* To next uchar */
+      null_ptr++;
+    }
+  }
+  if (truncation_count && (stmt->bind_result_done & REPORT_DATA_TRUNCATION))
+    return MYSQL_DATA_TRUNCATED;
+  return 0;
+}
+
+
+// Source: libmysql.cc
+// Lines 3658-3708
+
+
+[ANSWER]
+MUST-NOT

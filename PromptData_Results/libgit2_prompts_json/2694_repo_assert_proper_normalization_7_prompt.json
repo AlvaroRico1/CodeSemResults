@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'filename' at line 1\n2. Pointer 'index_pos' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void assert_proper_normalization(git_index *index, const char *filename, const char *expected_sha)\n{\n\tsize_t index_pos;\n\tconst git_index_entry *entry;\n\n\tadd_to_workdir(filename, CONTENT);\n\tcl_git_pass(git_index_add_bypath(index, filename));\n\n\tcl_assert(!git_index_find(&index_pos, index, filename));\n\n\tentry = git_index_get_byindex(index, index_pos);\n\tcl_assert_equal_i(0, git_oid_streq(&entry->id, expected_sha));\n}\n\n\n// Source: repo.c\n// Lines 241-253\n",
+  "ANSWER": "MUST-NOT"
+}

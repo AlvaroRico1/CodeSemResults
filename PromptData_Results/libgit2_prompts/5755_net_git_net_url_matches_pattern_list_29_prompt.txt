@@ -1,0 +1,37 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'pattern' at line 5
+2. Pointer 'pattern_list' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool git_net_url_matches_pattern_list(
+	git_net_url *url,
+	const char *pattern_list)
+{
+	const char *pattern, *pattern_end, *sep;
+
+	for (pattern = pattern_list;
+	     pattern && *pattern;
+	     pattern = sep ? sep + 1 : NULL) {
+		sep = strchr(pattern, ',');
+		pattern_end = sep ? sep : strchr(pattern, '\0');
+
+		if (matches_pattern(url, pattern, (pattern_end - pattern)))
+			return true;
+	}
+
+	return false;
+}
+
+
+// Source: net.c
+// Lines 715-732
+
+
+[ANSWER]
+MUST

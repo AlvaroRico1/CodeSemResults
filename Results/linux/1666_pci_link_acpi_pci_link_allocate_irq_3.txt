@@ -1,0 +1,1 @@
+polarity,linux/drivers/acpi/pci_link.c,2,device,linux/drivers/acpi/pci_link.c,5,2

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'p' at line 3\n2. Pointer 'i' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid mysql_client_plugin_deinit() {\n  int i;\n  struct st_client_plugin_int *p;\n\n  if (!initialized) return;\n\n  for (i = 0; i < MYSQL_CLIENT_MAX_PLUGINS; i++)\n    for (p = plugin_list[i]; p; p = p->next) {\n      if (p->plugin->deinit) p->plugin->deinit();\n      if (p->dlhandle) dlclose(p->dlhandle);\n    }\n\n  memset(&plugin_list, 0, sizeof(plugin_list));\n  initialized = false;\n  free_root(&mem_root, MYF(0));\n  mysql_mutex_destroy(&LOCK_load_client_plugin);\n}\n\n\n// Source: client_plugin.cc\n// Lines 359-375\n",
+  "ANSWER": "MUST-NOT"
+}

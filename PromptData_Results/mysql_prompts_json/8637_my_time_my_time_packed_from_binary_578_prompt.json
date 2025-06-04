@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'intpart' at line 7\n2. Pointer 'ptr' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nlonglong my_time_packed_from_binary(const uchar *ptr, uint dec) {\n  assert(dec <= DATETIME_MAX_DECIMALS);\n\n  switch (dec) {\n    case 0:\n    default: {\n      longlong intpart = mi_uint3korr(ptr) - TIMEF_INT_OFS;\n      return my_packed_time_make_int(intpart);\n    }\n\n\n// Source: my_time.cc\n// Lines 1784-1792\n",
+  "ANSWER": "MUST-NOT"
+}

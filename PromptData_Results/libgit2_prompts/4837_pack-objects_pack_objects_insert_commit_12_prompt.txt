@@ -1,0 +1,44 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'commit' at line 4
+2. Pointer 'tree' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int pack_objects_insert_commit(git_packbuilder *pb, struct walk_object *obj)
+{
+	int error;
+	git_commit *commit = NULL;
+	git_tree *tree = NULL;
+
+	obj->seen = 1;
+
+	if ((error = git_packbuilder_insert(pb, &obj->id, NULL)) < 0)
+		return error;
+
+	if ((error = git_commit_lookup(&commit, pb->repo, &obj->id)) < 0)
+		return error;
+
+	if ((error = git_tree_lookup(&tree, pb->repo, git_commit_tree_id(commit))) < 0)
+		goto cleanup;
+
+	if ((error = pack_objects_insert_tree(pb, tree)) < 0)
+		goto cleanup;
+
+cleanup:
+	git_commit_free(commit);
+	git_tree_free(tree);
+	return error;
+}
+
+
+// Source: pack-objects.c
+// Lines 1716-1740
+
+
+[ANSWER]
+MAY

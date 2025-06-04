@@ -1,0 +1,32 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'opendata' at line 4
+2. Pointer 'state' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static struct nfs4_opendata *nfs4_open_recoverdata_alloc(struct nfs_open_context *ctx,
+		struct nfs4_state *state, enum open_claim_type4 claim)
+{
+	struct nfs4_opendata *opendata;
+
+	opendata = nfs4_opendata_alloc(ctx->dentry, state->owner, 0, 0,
+			NULL, claim, GFP_NOFS);
+	if (opendata == NULL)
+		return ERR_PTR(-ENOMEM);
+	opendata->state = state;
+	refcount_inc(&state->count);
+	return opendata;
+}
+
+
+// Source: nfs4proc.c
+// Lines 2043-2055
+
+
+[ANSWER]
+MUST

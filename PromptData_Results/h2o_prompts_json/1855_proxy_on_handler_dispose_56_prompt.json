@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'self' at line 3\n2. Pointer '_self' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void on_handler_dispose(h2o_handler_t *_self)\n{\n    struct rp_handler_t *self = (void *)_self;\n\n    h2o_socketpool_dispose(self->sockpool);\n    free(self->sockpool);\n}\n\n\n// Source: proxy.c\n// Lines 180-186\n",
+  "ANSWER": "MUST"
+}

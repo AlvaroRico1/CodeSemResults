@@ -1,0 +1,1 @@
+decoded_options_count,gcc/gcc/gcc.c,20,argbuf_copy,gcc/gcc/gcc.c,17,0

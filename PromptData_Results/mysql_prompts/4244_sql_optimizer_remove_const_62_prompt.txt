@@ -1,0 +1,143 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'prev_ptr' at line 31
+2. Pointer 'first_order' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+ORDER *JOIN::remove_const(ORDER *first_order, Item *cond, bool change,
+                          bool *simple_order, bool group_by) {
+  DBUG_TRACE;
+
+  ASSERT_BEST_REF_IN_JOIN_ORDER(this);
+
+  if (plan_is_const())
+    return change ? nullptr : first_order;  // No need to sort
+
+  Opt_trace_context *const trace = &thd->opt_trace;
+  Opt_trace_disable_I_S trace_disabled(trace, first_order == nullptr);
+  Opt_trace_object trace_simpl(
+      trace, group_by ? "simplifying_group_by" : "simplifying_order_by");
+  if (trace->is_started()) {
+    String str;
+    Query_block::print_order(
+        thd, &str, first_order,
+        enum_query_type(QT_TO_SYSTEM_CHARSET | QT_SHOW_SELECT_NUMBER |
+                        QT_NO_DEFAULT_DB));
+    trace_simpl.add_utf8("original_clause", str.ptr(), str.length());
+  }
+  Opt_trace_array trace_each_item(trace, "items");
+
+  JOIN_TAB *const first_tab = best_ref[const_tables];
+  table_map first_table = first_tab->table_ref->map();
+  table_map not_const_tables = ~const_table_map;
+  table_map ref;
+  // Caches to avoid repeating eq_ref_table() calls, @see eq_ref_table()
+  table_map eq_ref_tables = 0, cached_eq_ref_tables = 0;
+
+  ORDER **prev_ptr = &first_order;
+  *simple_order = !first_tab->join_cond();
+
+  // De-optimization in conjunction with window functions
+  if (group_by && m_windows.elements > 0) *simple_order = false;
+
+  update_depend_map(first_order);
+
+  for (ORDER *order = first_order; order; order = order->next) {
+    Opt_trace_object trace_one_item(trace);
+    trace_one_item.add("item", order->item[0]);
+    table_map order_tables = order->item[0]->used_tables();
+
+    if (order->item[0]->has_aggregation() || order->item[0]->has_wf() ||
+        /*
+          If the outer table of an outer join is const (either by itself or
+          after applying WHERE condition), grouping on a field from such a
+          table will be optimized away and filesort without temporary table
+          will be used unless we prevent that now. Filesort is not fit to
+          handle joins and the join condition is not applied. We can't detect
+          the case without an expensive test, however, so we force temporary
+          table for all queries containing more than one table, ROLLUP, and an
+          outer join.
+         */
+        (primary_tables > 1 && rollup_state == RollupState::INITED &&
+         query_block->outer_join)) {
+      *simple_order = false;  // Must use a temporary table to sort
+    } else if ((order_tables & not_const_tables) == 0 &&
+               evaluate_during_optimization(order->item[0], query_block)) {
+      if (order->item[0]->has_subquery()) {
+        if (!thd->lex->is_explain()) {
+          Opt_trace_array trace_subselect(trace, "subselect_evaluation");
+          String str;
+          order->item[0]->val_str(&str);
+        }
+        order->item[0]->mark_subqueries_optimized_away();
+      }
+      trace_one_item.add("uses_only_constant_tables", true);
+      continue;  // skip const item
+    } else if (duplicate_order(first_order, order)) {
+      /*
+        If 'order' is a duplicate of an expression earlier in the
+        ORDER/GROUP BY sequence, it can be removed from the ORDER BY
+        or GROUP BY clause.
+      */
+      trace_one_item.add("duplicate_item", true);
+      continue;
+    } else if (order->in_field_list && order->item[0]->has_subquery()) {
+      /*
+        If the order item is a subquery that is also in the field
+        list, a temp table should be used to avoid evaluating the
+        subquery for each row both when a) creating a sort index and
+        b) getting the value.
+          Example: "SELECT (SELECT ... ) as a ... GROUP BY a;"
+       */
+      *simple_order = false;
+    } else if (order_tables & (RAND_TABLE_BIT | OUTER_REF_TABLE_BIT)) {
+      *simple_order = false;
+    } else {
+      if (cond != nullptr && check_field_is_const(cond, order->item[0])) {
+        trace_one_item.add("equals_constant_in_where", true);
+        continue;
+      }
+      if ((ref = order_tables & (not_const_tables ^ first_table))) {
+        if (!(order_tables & first_table) &&
+            only_eq_ref_tables(this, first_order, ref, &cached_eq_ref_tables,
+                               &eq_ref_tables)) {
+          trace_one_item.add("eq_ref_to_preceding_items", true);
+          continue;
+        }
+        *simple_order = false;  // Must do a temp table to sort
+      }
+    }
+    if (change) *prev_ptr = order;  // use this entry
+    prev_ptr = &order->next;
+  }
+  if (change) *prev_ptr = nullptr;
+  if (prev_ptr == &first_order)  // Nothing to sort/group
+    *simple_order = true;
+  DBUG_PRINT("exit", ("simple_order: %d", (int)*simple_order));
+
+  trace_each_item.end();
+  trace_simpl.add("resulting_clause_is_simple", *simple_order);
+  if (trace->is_started() && change) {
+    String str;
+    Query_block::print_order(
+        thd, &str, first_order,
+        enum_query_type(QT_TO_SYSTEM_CHARSET | QT_SHOW_SELECT_NUMBER |
+                        QT_NO_DEFAULT_DB));
+    trace_simpl.add_utf8("resulting_clause", str.ptr(), str.length());
+  }
+
+  return first_order;
+}
+
+
+// Source: sql_optimizer.cc
+// Lines 9722-9845
+
+
+[ANSWER]
+MUST

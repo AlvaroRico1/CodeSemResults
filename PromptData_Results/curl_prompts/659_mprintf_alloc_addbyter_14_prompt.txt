@@ -1,0 +1,30 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'infop' at line 3
+2. Pointer 'data' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int alloc_addbyter(int output, FILE *data)
+{
+  struct asprintf *infop = (struct asprintf *)data;
+  unsigned char outc = (unsigned char)output;
+
+  if(Curl_dyn_addn(infop->b, &outc, 1)) {
+    infop->fail = 1;
+    return -1; /* fail */
+  }
+  return outc; /* fputc() returns like this on success */
+}
+
+
+// Source: mprintf.c
+// Lines 1042-1052
+
+
+[ANSWER]
+MUST

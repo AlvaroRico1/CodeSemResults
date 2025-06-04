@@ -1,0 +1,65 @@
+static int rebase_next_merge(
+	git_rebase_operation **out,
+	git_rebase *rebase)
+{
+	git_str path = GIT_STR_INIT;
+	git_commit *current_commit = NULL, *parent_commit = NULL;
+	git_tree *current_tree = NULL, *head_tree = NULL, *parent_tree = NULL;
+	git_index *index = NULL;
+	git_indexwriter indexwriter = GIT_INDEXWRITER_INIT;
+	git_rebase_operation *operation;
+	git_checkout_options checkout_opts;
+	char current_idstr[GIT_OID_HEXSZ];
+	unsigned int parent_count;
+	int error;
+
+	*out = NULL;
+
+	operation = git_array_get(rebase->operations, rebase->current);
+
+	if ((error = git_commit_lookup(&current_commit, rebase->repo, &operation->id)) < 0 ||
+		(error = git_commit_tree(&current_tree, current_commit)) < 0 ||
+		(error = git_repository_head_tree(&head_tree, rebase->repo)) < 0)
+		goto done;
+
+	if ((parent_count = git_commit_parentcount(current_commit)) > 1) {
+		git_error_set(GIT_ERROR_REBASE, "cannot rebase a merge commit");
+		error = -1;
+		goto done;
+	} else if (parent_count) {
+		if ((error = git_commit_parent(&parent_commit, current_commit, 0)) < 0 ||
+			(error = git_commit_tree(&parent_tree, parent_commit)) < 0)
+			goto done;
+	}
+
+	git_oid_fmt(current_idstr, &operation->id);
+
+	normalize_checkout_options_for_apply(&checkout_opts, rebase, current_commit);
+
+	if ((error = git_indexwriter_init_for_operation(&indexwriter, rebase->repo, &checkout_opts.checkout_strategy)) < 0 ||
+		(error = rebase_setupfile(rebase, MSGNUM_FILE, 0, "%" PRIuZ "\n", rebase->current+1)) < 0 ||
+		(error = rebase_setupfile(rebase, CURRENT_FILE, 0, "%.*s\n", GIT_OID_HEXSZ, current_idstr)) < 0 ||
+		(error = git_merge_trees(&index, rebase->repo, parent_tree, head_tree, current_tree, &rebase->options.merge_options)) < 0 ||
+		(error = git_merge__check_result(rebase->repo, index)) < 0 ||
+		(error = git_checkout_index(rebase->repo, index, &checkout_opts)) < 0 ||
+		(error = git_indexwriter_commit(&indexwriter)) < 0)
+		goto done;
+
+	*out = operation;
+
+done:
+	git_indexwriter_cleanup(&indexwriter);
+	git_index_free(index);
+	git_tree_free(current_tree);
+	git_tree_free(head_tree);
+	git_tree_free(parent_tree);
+	git_commit_free(parent_commit);
+	git_commit_free(current_commit);
+	git_str_dispose(&path);
+
+	return error;
+}
+
+
+// Source: rebase.c
+// Lines 795-855

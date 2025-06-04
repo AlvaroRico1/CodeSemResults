@@ -1,0 +1,1 @@
+isdir,libgit2/tests/libgit2/checkout/tree.c,1,obj,libgit2/tests/libgit2/checkout/tree.c,4,0

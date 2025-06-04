@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'pentry' at line 16\n2. Pointer 'value' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid git_indexer_free(git_indexer *idx)\n{\n\tconst git_oid *key;\n\tgit_oid *value;\n\tsize_t iter;\n\n\tif (idx == NULL)\n\t\treturn;\n\n\tif (idx->have_stream)\n\t\tgit_packfile_stream_dispose(&idx->stream);\n\n\tgit_vector_free_deep(&idx->objects);\n\n\tif (idx->pack->idx_cache) {\n\t\tstruct git_pack_entry *pentry;\n\t\tgit_oidmap_foreach_value(idx->pack->idx_cache, pentry, {\n\t\t\tgit__free(pentry);\n\t\t});\n\n\t\tgit_oidmap_free(idx->pack->idx_cache);\n\t}\n\n\n// Source: indexer.c\n// Lines 1377-1398\n",
+  "ANSWER": "MAY"
+}

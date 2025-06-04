@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'delta' at line 2\n2. Pointer 'diff_data' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int binary_cb(\n\tconst git_diff_delta *delta,\n\tconst git_diff_binary *binary,\n\tvoid *payload)\n{\n\tstruct diff_data *diff_data = payload;\n\n\tGIT_UNUSED(delta);\n\n\tgit_str_encode_base85(&diff_data->old_binary_base85,\n\t\tbinary->old_file.data, binary->old_file.datalen);\n\tdiff_data->old_binary_inflatedlen = binary->old_file.inflatedlen;\n\tdiff_data->old_binary_type = binary->old_file.type;\n\n\tgit_str_encode_base85(&diff_data->new_binary_base85,\n\t\tbinary->new_file.data, binary->new_file.datalen);\n\tdiff_data->new_binary_inflatedlen = binary->new_file.inflatedlen;\n\tdiff_data->new_binary_type = binary->new_file.type;\n\n\treturn 0;\n}\n\n\n// Source: binary.c\n// Lines 445-465\n",
+  "ANSWER": "MUST-NOT"
+}

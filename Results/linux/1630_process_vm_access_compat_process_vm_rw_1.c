@@ -1,0 +1,41 @@
+compat_process_vm_rw(compat_pid_t pid,
+		     const struct compat_iovec __user *lvec,
+		     unsigned long liovcnt,
+		     const struct compat_iovec __user *rvec,
+		     unsigned long riovcnt,
+		     unsigned long flags, int vm_write)
+{
+	struct iovec iovstack_l[UIO_FASTIOV];
+	struct iovec iovstack_r[UIO_FASTIOV];
+	struct iovec *iov_l = iovstack_l;
+	struct iovec *iov_r = iovstack_r;
+	struct iov_iter iter;
+	ssize_t rc = -EFAULT;
+	int dir = vm_write ? WRITE : READ;
+
+	if (flags != 0)
+		return -EINVAL;
+
+	rc = compat_import_iovec(dir, lvec, liovcnt, UIO_FASTIOV, &iov_l, &iter);
+	if (rc < 0)
+		return rc;
+	if (!iov_iter_count(&iter))
+		goto free_iovecs;
+	rc = compat_rw_copy_check_uvector(CHECK_IOVEC_ONLY, rvec, riovcnt,
+					  UIO_FASTIOV, iovstack_r,
+					  &iov_r);
+	if (rc <= 0)
+		goto free_iovecs;
+
+	rc = process_vm_rw_core(pid, &iter, iov_r, riovcnt, flags, vm_write);
+
+free_iovecs:
+	if (iov_r != iovstack_r)
+		kfree(iov_r);
+	kfree(iov_l);
+	return rc;
+}
+
+
+// Source: process_vm_access.c
+// Lines 312-348

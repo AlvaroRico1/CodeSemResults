@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'cs' at line 4\n2. Pointer 'c' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ncontrol_notify_window_unlinked(__unused struct session *s, struct window *w)\n{\n\tstruct client\t*c;\n\tstruct session\t*cs;\n\n\tTAILQ_FOREACH(c, &clients, entry) {\n\t\tif (!CONTROL_SHOULD_NOTIFY_CLIENT(c) || c->session == NULL)\n\t\t\tcontinue;\n\t\tcs = c->session;\n\n\t\tif (winlink_find_by_window_id(&cs->windows, w->id) != NULL)\n\t\t\tcontrol_write(c, \"%%window-close @%u\", w->id);\n\t\telse\n\t\t\tcontrol_write(c, \"%%unlinked-window-close @%u\", w->id);\n\t}\n}\n\n\n// Source: control-notify.c\n// Lines 94-109\n",
+  "ANSWER": "MUST"
+}

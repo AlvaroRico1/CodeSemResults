@@ -1,0 +1,1 @@
+keep,libgit2/src/libgit2/delta.c,63,entry,libgit2/src/libgit2/delta.c,7,1

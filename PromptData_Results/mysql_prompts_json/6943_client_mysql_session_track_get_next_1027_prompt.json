@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ret' at line 5\n2. Pointer 'data' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint STDCALL mysql_session_track_get_next(MYSQL *mysql,\n                                         enum enum_session_state_type type,\n                                         const char **data, size_t *length) {\n  STATE_INFO *info = STATE_DATA(mysql);\n  int ret;\n\n  if (!info || !IS_SESSION_STATE_TYPE(type) ||\n      !(info->info_list[type].current_node))\n    return get_data_and_length(nullptr, data, length);\n\n  ret = get_data_and_length(info->info_list[type].current_node, data, length);\n\n  info->info_list[type].current_node =\n      list_rest(info->info_list[type].current_node);\n\n  return ret;\n}\n\n\n// Source: client.cc\n// Lines 8538-8554\n",
+  "ANSWER": "MUST-NOT"
+}

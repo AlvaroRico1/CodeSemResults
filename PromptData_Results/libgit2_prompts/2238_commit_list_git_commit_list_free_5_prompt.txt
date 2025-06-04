@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'list' at line 3
+2. Pointer 'list_p' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void git_commit_list_free(git_commit_list **list_p)
+{
+	git_commit_list *list = *list_p;
+
+	if (list == NULL)
+		return;
+
+	while (list) {
+		git_commit_list *temp = list;
+		list = temp->next;
+		git__free(temp);
+	}
+
+	*list_p = NULL;
+}
+
+
+// Source: commit_list.c
+// Lines 92-106
+
+
+[ANSWER]
+MUST

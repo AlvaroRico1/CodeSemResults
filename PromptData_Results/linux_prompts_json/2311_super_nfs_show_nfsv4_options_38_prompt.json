@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'clp' at line 4\n2. Pointer 'nfss' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void nfs_show_nfsv4_options(struct seq_file *m, struct nfs_server *nfss,\n\t\t\t\t    int showdefaults)\n{\n\tstruct nfs_client *clp = nfss->nfs_client;\n\n\tseq_printf(m, \",clientaddr=%s\", clp->cl_ipaddr);\n}\n\n\n// Source: super.c\n// Lines 602-608\n",
+  "ANSWER": "MUST"
+}

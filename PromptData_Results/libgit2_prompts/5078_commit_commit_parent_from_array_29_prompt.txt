@@ -1,0 +1,30 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'data' at line 3
+2. Pointer 'payload' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static const git_oid *commit_parent_from_array(size_t curr, void *payload)
+{
+	commit_parent_data *data = payload;
+	const git_commit *commit;
+	if (curr >= data->total)
+		return NULL;
+	commit = data->parents[curr];
+	if (git_commit_owner(commit) != data->repo)
+		return NULL;
+	return git_commit_id(commit);
+}
+
+
+// Source: commit.c
+// Lines 285-295
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,1 @@
+good_for_rle,h2o/deps/brotli/c/enc/entropy_encode.c,2,counts,h2o/deps/brotli/c/enc/entropy_encode.c,1,2

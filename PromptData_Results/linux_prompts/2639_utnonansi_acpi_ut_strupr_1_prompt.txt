@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'string' at line 3
+2. Pointer 'src_string' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void acpi_ut_strupr(char *src_string)
+{
+	char *string;
+
+	ACPI_FUNCTION_ENTRY();
+
+	if (!src_string) {
+		return;
+	}
+
+	/* Walk entire string, uppercasing the letters */
+
+	for (string = src_string; *string; string++) {
+		*string = (char)toupper((int)*string);
+	}
+}
+
+
+// Source: utnonansi.c
+// Lines 58-73
+
+
+[ANSWER]
+MAY

@@ -1,0 +1,1 @@
+master,redis/src/sentinel.c,1,newaddr,redis/src/sentinel.c,2,1

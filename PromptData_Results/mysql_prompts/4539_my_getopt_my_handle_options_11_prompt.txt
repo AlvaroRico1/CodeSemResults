@@ -1,0 +1,438 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'pos' at line 6
+2. Pointer 'optp' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int my_handle_options(int *argc, char ***argv, const struct my_option *longopts,
+                      my_get_one_option get_one_option,
+                      const char **command_list, bool ignore_unknown_option) {
+  uint argvpos = 0, length;
+  bool end_of_options = false, must_be_var, set_maximum_value, option_is_loose;
+  char **pos, **pos_end, *optend, *opt_str, key_name[FN_REFLEN];
+  char **arg_sep = nullptr, **persist_arg_sep = nullptr;
+  const struct my_option *optp;
+  void *value;
+  bool is_cmdline_arg = true, is_persist_arg = true;
+  int opt_found;
+
+  /* handle_options() assumes arg0 (program name) always exists */
+  assert(argc && *argc >= 1);
+  assert(argv && *argv);
+  (*argc)--; /* Skip the program name */
+  (*argv)++; /*      --- || ----      */
+  init_variables(longopts, init_one_value);
+
+  /*
+    Search for args_separator, if found, then the first part of the
+    arguments are loaded from configs
+  */
+  for (pos = *argv, pos_end = pos + *argc; pos != pos_end; pos++) {
+    if (my_getopt_is_args_separator(*pos)) {
+      arg_sep = pos;
+      is_cmdline_arg = false;
+      break;
+    }
+  }
+  /* search for persist_args_separator */
+  if (arg_sep) {
+    for (pos = arg_sep, pos_end = (*argv + *argc); pos != pos_end; pos++) {
+      if (my_getopt_is_ro_persist_args_separator(*pos)) {
+        persist_arg_sep = pos;
+        is_persist_arg = false;
+        break;
+      }
+    }
+  }
+  if (arg_sep) {
+    /*
+      All options which are between arg_sep and persist_arg_sep are
+      command line options, thus update the variables_hash with these
+      options. If persist_arg_sep is NULL then it means there are no
+      read only persist options, what follows is only command line options.
+    */
+    pos = arg_sep + 1;
+    while (*pos && pos != persist_arg_sep) {
+      update_variable_source((const char *)*pos, nullptr);
+      ++pos;
+    }
+  }
+  if (persist_arg_sep) {
+    /*
+      All options which are between after persist_arg_sep are
+      read from persistent file, thus update the variables_hash with
+      these options with path set to "$datadir/mysqld-auto.cnf".
+    */
+    pos = persist_arg_sep + 1;
+    char persist_dir[FN_REFLEN] = {0};
+    fn_format(persist_dir, MYSQL_PERSIST_CONFIG_NAME, datadir_buffer, ".cnf",
+              MY_UNPACK_FILENAME | MY_SAFE_PATH | MY_RELATIVE_PATH);
+    while (pos && *pos) {
+      update_variable_source((const char *)*pos, persist_dir);
+      ++pos;
+    }
+  }
+  for (pos = *argv, pos_end = pos + *argc; pos != pos_end; pos++) {
+    char **first = pos;
+    char *cur_arg = *pos;
+    opt_found = false;
+    if (!is_cmdline_arg && (my_getopt_is_args_separator(cur_arg))) {
+      is_cmdline_arg = true;
+
+      /* save the separator too if skip unkown options  */
+      if (my_getopt_skip_unknown)
+        (*argv)[argvpos++] = cur_arg;
+      else
+        (*argc)--;
+      continue;
+    }
+    /* skip persist args separator */
+    if (!is_persist_arg && my_getopt_is_ro_persist_args_separator(cur_arg)) {
+      is_persist_arg = true;
+      if (my_getopt_skip_unknown)
+        (*argv)[argvpos++] = cur_arg;
+      else
+        (*argc)--;
+      continue;
+    }
+    if (cur_arg[0] == '-' && cur_arg[1] && !end_of_options) /* must be opt */
+    {
+      char *argument = nullptr;
+      must_be_var = false;
+      set_maximum_value = false;
+      option_is_loose = false;
+
+      cur_arg++;           /* skip '-' */
+      if (*cur_arg == '-') /* check for long option, */
+      {
+        if (!*++cur_arg) /* skip the double dash */
+        {
+          /* '--' means end of options, look no further */
+          end_of_options = true;
+          (*argc)--;
+          continue;
+        }
+        opt_str = check_struct_option(cur_arg, key_name);
+        optend = const_cast<char *>(strcend(opt_str, '='));
+        length = (uint)(optend - opt_str);
+        if (*optend == '=')
+          optend++;
+        else
+          optend = nullptr;
+
+        /*
+         * For component system variables key_name is the component name and
+         * opt_str is the variable_name. For structured system variables
+         * opt_str will have key_cache_**** and key_name is the variable
+         * instance name And for all other variable key_name will be 0.
+         */
+        if (*key_name) {
+          std::string tmp_name(opt_str, 0, length);
+
+          if (!is_key_cache_variable_suffix(tmp_name.c_str())) {
+            opt_str = cur_arg;
+            length = (uint)((optend - opt_str) - 1);
+          }
+        }
+        /*
+          Find first the right option. Return error in case of an ambiguous,
+          or unknown option
+        */
+        optp = longopts;
+        if (!(opt_found = findopt(opt_str, length, &optp))) {
+          /*
+            Didn't find any matching option. Let's see if someone called
+            option with a special option prefix
+          */
+          if (!must_be_var) {
+            if (optend)
+              must_be_var = true; /* option is followed by an argument */
+            for (int i = 0; special_opt_prefix[i]; i++) {
+              if (!getopt_compare_strings(special_opt_prefix[i], opt_str,
+                                          special_opt_prefix_lengths[i]) &&
+                  (opt_str[special_opt_prefix_lengths[i]] == '-' ||
+                   opt_str[special_opt_prefix_lengths[i]] == '_')) {
+                /*
+                  We were called with a special prefix, we can reuse opt_found
+                */
+                opt_str += special_opt_prefix_lengths[i] + 1;
+                length -= special_opt_prefix_lengths[i] + 1;
+                if (i == OPT_LOOSE) option_is_loose = true;
+                if ((opt_found = findopt(opt_str, length, &optp))) {
+                  switch (i) {
+                    case OPT_SKIP:
+                    case OPT_DISABLE: /* fall through */
+                      /*
+                        double negation is actually enable again,
+                        for example: --skip-option=0 -> option = true
+                      */
+                      optend = (optend && *optend == '0' && !(*(optend + 1)))
+                                   ? enabled_my_option
+                                   : disabled_my_option;
+                      break;
+                    case OPT_ENABLE:
+                      optend = (optend && *optend == '0' && !(*(optend + 1)))
+                                   ? disabled_my_option
+                                   : enabled_my_option;
+                      break;
+                    case OPT_MAXIMUM:
+                      set_maximum_value = true;
+                      must_be_var = true;
+                      break;
+                  }
+                  break; /* break from the inner loop, main loop continues */
+                }
+                i = -1; /* restart the loop */
+              }
+            }
+          }
+          if (!opt_found) {
+            if (my_getopt_skip_unknown) {
+              /* Preserve all the components of this unknown option. */
+              do {
+                (*argv)[argvpos++] = *first++;
+              } while (first <= pos);
+              continue;
+            }
+            if (must_be_var) {
+              if (my_getopt_print_errors)
+                my_getopt_error_reporter(
+                    option_is_loose ? WARNING_LEVEL : ERROR_LEVEL,
+                    EE_UNKNOWN_VARIABLE, cur_arg);
+              if (!option_is_loose) return EXIT_UNKNOWN_VARIABLE;
+            } else {
+              if (my_getopt_print_errors)
+                my_getopt_error_reporter(
+                    option_is_loose ? WARNING_LEVEL : ERROR_LEVEL,
+                    EE_UNKNOWN_OPTION, cur_arg);
+              if (!(option_is_loose || ignore_unknown_option))
+                return EXIT_UNKNOWN_OPTION;
+            }
+            if (option_is_loose || ignore_unknown_option) {
+              (*argc)--;
+              continue;
+            }
+          }
+        }
+        if ((optp->var_type & GET_TYPE_MASK) == GET_DISABLED) {
+          if (my_getopt_print_errors)
+            my_message_local(option_is_loose ? WARNING_LEVEL : ERROR_LEVEL,
+                             EE_USING_DISABLED_OPTION, my_progname, opt_str);
+          if (option_is_loose) {
+            (*argc)--;
+            continue;
+          }
+          return EXIT_OPTION_DISABLED;
+        }
+        {
+          int error = 0;
+          value =
+              optp->var_type & GET_ASK_ADDR
+                  ? (*getopt_get_addr)(key_name, strlen(key_name), optp, &error)
+                  : optp->value;
+          if (error) return error;
+        }
+        if (optp->arg_type == NO_ARG) {
+          /*
+            Due to historical reasons GET_BOOL var_types still accepts arguments
+            despite the NO_ARG arg_type attribute. This can seems a bit
+            unintuitive and care should be taken when refactoring this code.
+          */
+          if (optend && (optp->var_type & GET_TYPE_MASK) != GET_BOOL) {
+            if (my_getopt_print_errors)
+              my_getopt_error_reporter(ERROR_LEVEL, EE_OPTION_WITHOUT_ARGUMENT,
+                                       my_progname, optp->name);
+            return EXIT_NO_ARGUMENT_ALLOWED;
+          }
+          if ((optp->var_type & GET_TYPE_MASK) == GET_BOOL) {
+            /*
+              Set bool to true if no argument or if the user has used
+              --enable-'option-name'.
+              *optend was set to '0' if one used --disable-option
+            */
+            (*argc)--;
+            if (!optend)
+              *((bool *)value) = true;
+            else {
+              bool ret = false;
+              bool error = false;
+              ret = get_bool_argument(optend, &error);
+              if (error) {
+                my_getopt_error_reporter(WARNING_LEVEL,
+                                         EE_OPTION_IGNORED_DUE_TO_INVALID_VALUE,
+                                         my_progname, optp->name, optend);
+                continue;
+              } else
+                *((bool *)value) = ret;
+            }
+            if (get_one_option &&
+                get_one_option(
+                    optp->id, optp,
+                    *((bool *)value) ? enabled_my_option : disabled_my_option))
+              return EXIT_ARGUMENT_INVALID;
+            /* set variables source */
+            setval_source(optp, (void *)optp->arg_source);
+            continue;
+          }
+          argument = optend;
+        } else if (optp->arg_type == REQUIRED_ARG && !optend) {
+          /*
+             Check if there are more arguments after this one,
+             Note: options loaded from config file that requires value
+             should always be in the form '--option=value'.
+           */
+          if (!is_cmdline_arg || !*++pos) {
+            if (my_getopt_print_errors)
+              my_getopt_error_reporter(ERROR_LEVEL, EE_OPTION_REQUIRES_ARGUMENT,
+                                       my_progname, optp->name);
+            return EXIT_ARGUMENT_REQUIRED;
+          }
+          argument = *pos;
+          (*argc)--;
+        } else
+          argument = optend;
+
+        if (optp->var_type == GET_PASSWORD && is_cmdline_arg && argument)
+          print_cmdline_password_warning();
+      } else /* must be short option */
+      {
+        for (optend = cur_arg; *optend; optend++) {
+          opt_found = false;
+          for (optp = longopts; optp->name; optp++) {
+            if (optp->id && optp->id == (int)(uchar)*optend) {
+              /* Option recognized. Find next what to do with it */
+              opt_found = true;
+              if ((optp->var_type & GET_TYPE_MASK) == GET_DISABLED) {
+                if (my_getopt_print_errors)
+                  my_message_local(ERROR_LEVEL, EE_USING_DISABLED_SHORT_OPTION,
+                                   my_progname, optp->id);
+                return EXIT_OPTION_DISABLED;
+              }
+              if ((optp->var_type & GET_TYPE_MASK) == GET_BOOL &&
+                  optp->arg_type == NO_ARG) {
+                *((bool *)optp->value) = true;
+                if (get_one_option && get_one_option(optp->id, optp, argument))
+                  return EXIT_UNSPECIFIED_ERROR;
+                continue;
+              } else if (optp->arg_type == REQUIRED_ARG ||
+                         optp->arg_type == OPT_ARG) {
+                if (*(optend + 1)) {
+                  /* The rest of the option is option argument */
+                  argument = optend + 1;
+                  /* This is in effect a jump out of the outer loop */
+                  optend = space_char;
+                  if (optp->var_type == GET_PASSWORD && is_cmdline_arg)
+                    print_cmdline_password_warning();
+                } else {
+                  if (optp->arg_type == OPT_ARG) {
+                    if (optp->var_type == GET_BOOL)
+                      *((bool *)optp->value) = true;
+                    if (get_one_option &&
+                        get_one_option(optp->id, optp, argument))
+                      return EXIT_UNSPECIFIED_ERROR;
+                    continue;
+                  }
+                  /* Check if there are more arguments after this one */
+                  if (!pos[1]) {
+                    if (my_getopt_print_errors)
+                      my_getopt_error_reporter(
+                          ERROR_LEVEL, EE_SHORT_OPTION_REQUIRES_ARGUMENT,
+                          my_progname, optp->id);
+                    return EXIT_ARGUMENT_REQUIRED;
+                  }
+                  argument = *++pos;
+                  (*argc)--;
+                  /* the other loop will break, because *optend + 1 == 0 */
+                }
+              }
+              int error;
+              if ((error =
+                       setval(optp, optp->value, argument, set_maximum_value)))
+                return error;
+              if (get_one_option && get_one_option(optp->id, optp, argument))
+                return EXIT_UNSPECIFIED_ERROR;
+              break;
+            }
+          }
+          if (!opt_found) {
+            if (my_getopt_skip_unknown) {
+              /*
+                We are currently parsing a single argv[] argument
+                of the form "-XYZ".
+                One or the argument found (say Y) is not an option.
+                Hack the string "-XYZ" to make a "-YZ" substring in it,
+                and push that to the output as an unrecognized parameter.
+              */
+              assert(optend > *pos);
+              assert(optend >= cur_arg);
+              assert(optend <= *pos + strlen(*pos));
+              assert(*optend);
+              optend--;
+              optend[0] = '-'; /* replace 'X' or '-' by '-' */
+              (*argv)[argvpos++] = optend;
+              /*
+                Do not continue to parse at the current "-XYZ" argument,
+                skip to the next argv[] argument instead.
+              */
+              optend = space_char;
+            } else {
+              if (my_getopt_print_errors)
+                my_getopt_error_reporter(ERROR_LEVEL, EE_UNKNOWN_SHORT_OPTION,
+                                         my_progname, *optend);
+              return EXIT_UNKNOWN_OPTION;
+            }
+          }
+        }
+        if (opt_found)
+          (*argc)--; /* option handled (short), decrease argument count */
+        continue;
+      }
+      int error;
+      if ((error = setval(optp, value, argument, set_maximum_value)))
+        return error;
+      if (get_one_option && get_one_option(optp->id, optp, argument))
+        return EXIT_UNSPECIFIED_ERROR;
+
+      (*argc)--; /* option handled (long), decrease argument count */
+    } else       /* non-option found */
+    {
+      if (command_list) {
+        while (*command_list) {
+          if (!strcmp(*command_list, cur_arg)) {
+            /* Match found. */
+            (*argv)[argvpos++] = cur_arg;
+
+            /* Copy rest of the un-parsed elements & return. */
+            while ((++pos) != pos_end) (*argv)[argvpos++] = *pos;
+            goto done;
+          }
+          command_list++;
+        }
+      }
+      (*argv)[argvpos++] = cur_arg;
+    }
+  }
+
+done:
+  /*
+    Destroy the first, already handled option, so that programs that look
+    for arguments in 'argv', without checking 'argc', know when to stop.
+    Items in argv, before the destroyed one, are all non-option -arguments
+    to the program, yet to be (possibly) handled.
+  */
+  (*argv)[argvpos] = nullptr;
+  return 0;
+}
+
+
+// Source: my_getopt.cc
+// Lines 241-659
+
+
+[ANSWER]
+MAY

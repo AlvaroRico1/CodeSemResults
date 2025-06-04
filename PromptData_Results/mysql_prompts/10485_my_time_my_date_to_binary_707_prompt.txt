@@ -1,0 +1,23 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tmp' at line 2
+2. Pointer 'ptr' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void my_date_to_binary(const MYSQL_TIME *ltime, uchar *ptr) {
+  long tmp = ltime->day + ltime->month * 32 + ltime->year * 16 * 32;
+  int3store(ptr, tmp);
+}
+
+
+// Source: my_time.cc
+// Lines 2086-2089
+
+
+[ANSWER]
+MUST-NOT

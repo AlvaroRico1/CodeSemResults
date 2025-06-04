@@ -1,0 +1,102 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'reuse_out' at line 4
+2. Pointer 'reuse' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int reuse_partial_packfile_from_bitmap(struct bitmap_index *bitmap_git,
+				       struct packed_git **packfile_out,
+				       uint32_t *entries,
+				       struct bitmap **reuse_out)
+{
+	struct packed_git *pack;
+	struct bitmap *result = bitmap_git->result;
+	struct bitmap *reuse;
+	struct pack_window *w_curs = NULL;
+	size_t i = 0;
+	uint32_t offset;
+	uint32_t objects_nr;
+
+	assert(result);
+
+	load_reverse_index(bitmap_git);
+
+	if (bitmap_is_midx(bitmap_git))
+		pack = bitmap_git->midx->packs[midx_preferred_pack(bitmap_git)];
+	else
+		pack = bitmap_git->pack;
+	objects_nr = pack->num_objects;
+
+	while (i < result->word_alloc && result->words[i] == (eword_t)~0)
+		i++;
+
+	/*
+	 * Don't mark objects not in the packfile or preferred pack. This bitmap
+	 * marks objects eligible for reuse, but the pack-reuse code only
+	 * understands how to reuse a single pack. Since the preferred pack is
+	 * guaranteed to have all bases for its deltas (in a multi-pack bitmap),
+	 * we use it instead of another pack. In single-pack bitmaps, the choice
+	 * is made for us.
+	 */
+	if (i > objects_nr / BITS_IN_EWORD)
+		i = objects_nr / BITS_IN_EWORD;
+
+	reuse = bitmap_word_alloc(i);
+	memset(reuse->words, 0xFF, i * sizeof(eword_t));
+
+	for (; i < result->word_alloc; ++i) {
+		eword_t word = result->words[i];
+		size_t pos = (i * BITS_IN_EWORD);
+
+		for (offset = 0; offset < BITS_IN_EWORD; ++offset) {
+			if ((word >> offset) == 0)
+				break;
+
+			offset += ewah_bit_ctz64(word >> offset);
+			if (try_partial_reuse(pack, pos + offset,
+					      reuse, &w_curs) < 0) {
+				/*
+				 * try_partial_reuse indicated we couldn't reuse
+				 * any bits, so there is no point in trying more
+				 * bits in the current word, or any other words
+				 * in result.
+				 *
+				 * Jump out of both loops to avoid future
+				 * unnecessary calls to try_partial_reuse.
+				 */
+				goto done;
+			}
+		}
+	}
+
+done:
+	unuse_pack(&w_curs);
+
+	*entries = bitmap_popcount(reuse);
+	if (!*entries) {
+		bitmap_free(reuse);
+		return -1;
+	}
+
+	/*
+	 * Drop any reused objects from the result, since they will not
+	 * need to be handled separately.
+	 */
+	bitmap_and_not(result, reuse);
+	*packfile_out = pack;
+	*reuse_out = reuse;
+	return 0;
+}
+
+
+// Source: pack-bitmap.c
+// Lines 1429-1511
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'entry' at line 3\n2. Pointer 'value' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ntty_acs_cmp(const void *key, const void *value)\n{\n\tconst struct tty_acs_entry\t*entry = value;\n\tint\t\t\t\t test = *(u_char *)key;\n\n\treturn (test - entry->key);\n}\n\n\n// Source: tty-acs.c\n// Lines 186-192\n",
+  "ANSWER": "MUST"
+}

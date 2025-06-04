@@ -1,0 +1,27 @@
+static uint32 store_tuple_to_record(Field **pfield, uint32 *store_length_array,
+                                    uchar *value, uchar *value_end) {
+  /* This function is inspired by store_key_image_rec. */
+  uint32 nparts = 0;
+  uchar *loc_value;
+  while (value < value_end) {
+    loc_value = value;
+    if ((*pfield)->is_nullable()) {
+      if (*loc_value)
+        (*pfield)->set_null();
+      else
+        (*pfield)->set_notnull();
+      loc_value++;
+    }
+    uint len = (*pfield)->pack_length();
+    (*pfield)->set_key_image(loc_value, len);
+    value += *store_length_array;
+    store_length_array++;
+    nparts++;
+    pfield++;
+  }
+  return nparts;
+}
+
+
+// Source: sql_partition.cc
+// Lines 5443-5465

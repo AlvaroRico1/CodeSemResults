@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'out' at line 2
+2. Pointer 'iter' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int index_iterator_current(
+	const git_index_entry **out, git_iterator *i)
+{
+	index_iterator *iter = (index_iterator *)i;
+
+	if (!iterator__has_been_accessed(i))
+		return iter->base.cb->advance(out, i);
+
+	if (iter->entry == NULL) {
+		*out = NULL;
+		return GIT_ITEROVER;
+	}
+
+	*out = iter->entry;
+	return 0;
+}
+
+
+// Source: iterator.c
+// Lines 2041-2056
+
+
+[ANSWER]
+MUST

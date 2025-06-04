@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'pattern' at line 1\n2. Pointer 'how_many' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint count_config_entries_match(git_repository *repo, const char *pattern)\n{\n\tgit_config *config;\n\tint how_many = 0;\n\n\tcl_git_pass(git_repository_config(&config, repo));\n\n\tcl_assert_equal_i(0, git_config_foreach_match(\n\t\tconfig,\tpattern, count_config_entries_cb, &how_many));\n\n\tgit_config_free(config);\n\n\treturn how_many;\n}\n\n\n// Source: config_helpers.c\n// Lines 54-67\n",
+  "ANSWER": "MUST-NOT"
+}

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'prefix' at line 1\n2. Pointer 'preftmp' at line 7\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ncreate_tmp_var_name (const char *prefix)\n{\n  char *tmp_name;\n\n  if (prefix)\n    {\n      char *preftmp = ASTRDUP (prefix);\n\n      remove_suffix (preftmp, strlen (preftmp));\n      clean_symbol_name (preftmp);\n\n      prefix = preftmp;\n    }\n\n\n// Source: gimple-expr.c\n// Lines 418-430\n",
+  "ANSWER": "MUST"
+}

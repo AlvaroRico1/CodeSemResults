@@ -1,0 +1,1 @@
+d,linux/arch/x86/kernel/quirks.c,3,val,linux/arch/x86/kernel/quirks.c,3,0

@@ -1,0 +1,47 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 's' at line 6
+2. Pointer 'target' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+cmd_send_keys_inject_key(struct cmdq_item *item, struct cmdq_item *after,
+    key_code key)
+{
+	struct cmd_find_state		*target = cmdq_get_target(item);
+	struct client			*tc = cmdq_get_target_client(item);
+	struct session			*s = target->s;
+	struct winlink			*wl = target->wl;
+	struct window_pane		*wp = target->wp;
+	struct window_mode_entry	*wme;
+	struct key_table		*table;
+	struct key_binding		*bd;
+
+	wme = TAILQ_FIRST(&wp->modes);
+	if (wme == NULL || wme->mode->key_table == NULL) {
+		if (window_pane_key(wp, tc, s, wl, key, NULL) != 0)
+			return (NULL);
+		return (item);
+	}
+	table = key_bindings_get_table(wme->mode->key_table(wme), 1);
+
+	bd = key_bindings_get(table, key & ~KEYC_MASK_FLAGS);
+	if (bd != NULL) {
+		table->references++;
+		after = key_bindings_dispatch(bd, after, tc, NULL, target);
+		key_bindings_unref_table(table);
+	}
+	return (after);
+}
+
+
+// Source: cmd-send-keys.c
+// Lines 60-87
+
+
+[ANSWER]
+MUST

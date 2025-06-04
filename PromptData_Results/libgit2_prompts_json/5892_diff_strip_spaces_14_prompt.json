@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'dst' at line 3\n2. Pointer 'buf' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void strip_spaces(git_str *buf)\n{\n\tchar *src = buf->ptr, *dst = buf->ptr;\n\tchar c;\n\tsize_t len = 0;\n\n\twhile ((c = *src++) != '\\0') {\n\t\tif (!git__isspace(c)) {\n\t\t\t*dst++ = c;\n\t\t\tlen++;\n\t\t}\n\t}\n\n\tgit_str_truncate(buf, len);\n}\n\n\n// Source: diff.c\n// Lines 302-316\n",
+  "ANSWER": "MUST"
+}

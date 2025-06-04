@@ -1,0 +1,32 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'midx' at line 4
+2. Pointer 'midx' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int open_midx_bitmap(struct repository *r,
+			    struct bitmap_index *bitmap_git)
+{
+	struct multi_pack_index *midx;
+
+	assert(!bitmap_git->map);
+
+	for (midx = get_multi_pack_index(r); midx; midx = midx->next) {
+		if (!open_midx_bitmap_1(bitmap_git, midx))
+			return 0;
+	}
+	return -1;
+}
+
+
+// Source: pack-bitmap.c
+// Lines 485-497
+
+
+[ANSWER]
+MUST

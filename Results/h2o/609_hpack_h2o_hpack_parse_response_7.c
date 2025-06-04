@@ -1,0 +1,75 @@
+int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb decode_cb, void *decode_ctx, int *status,
+                             h2o_headers_t *headers, h2o_iovec_t *datagram_flow_id, const uint8_t *src, size_t len,
+                             const char **err_desc)
+{
+    *status = 0;
+
+    const uint8_t *src_end = src + len;
+
+    /* the response MUST contain a :status header as the first element */
+    if (src == src_end)
+        return H2O_HTTP2_ERROR_PROTOCOL;
+
+    do {
+        h2o_iovec_t *name, value;
+        const char *decode_err = NULL;
+        int ret = decode_cb(pool, decode_ctx, &name, &value, &src, src_end, &decode_err);
+        if (ret != 0) {
+            if (ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
+                /* this is a soft error, we continue parsing, but register only the first error */
+                if (*err_desc == NULL) {
+                    *err_desc = decode_err;
+                }
+            } else {
+                *err_desc = decode_err;
+                return ret;
+            }
+        }
+        if (name->base[0] == ':') {
+            if (name != &H2O_TOKEN_STATUS->buf)
+                return H2O_HTTP2_ERROR_PROTOCOL;
+            if (*status != 0)
+                return H2O_HTTP2_ERROR_PROTOCOL;
+            /* parse status */
+            if (value.len != 3)
+                return H2O_HTTP2_ERROR_PROTOCOL;
+            char *c = value.base;
+#define PARSE_DIGIT(mul, min_digit)                                                                                                \
+    do {                                                                                                                           \
+        if (*c < '0' + (min_digit) || '9' < *c)                                                                                    \
+            return H2O_HTTP2_ERROR_PROTOCOL;                                                                                       \
+        *status += (*c - '0') * mul;                                                                                               \
+        ++c;                                                                                                                       \
+    } while (0)
+            PARSE_DIGIT(100, 1);
+            PARSE_DIGIT(10, 0);
+            PARSE_DIGIT(1, 0);
+#undef PARSE_DIGIT
+        } else {
+            if (*status == 0)
+                return H2O_HTTP2_ERROR_PROTOCOL;
+            if (h2o_iovec_is_token(name)) {
+                h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name);
+                /* reject headers as defined in draft-16 8.1.2.2 */
+                if (token->flags.is_hpack_special) {
+                    if (token == H2O_TOKEN_CONTENT_LENGTH || token == H2O_TOKEN_CACHE_DIGEST) {
+                        /* pass them through when found in response headers (TODO reconsider?) */
+                    } else if (token == H2O_TOKEN_DATAGRAM_FLOW_ID) {
+                        if (datagram_flow_id != NULL)
+                            *datagram_flow_id = value;
+                        goto Next;
+                    } else {
+                        return H2O_HTTP2_ERROR_PROTOCOL;
+                    }
+                }
+                h2o_add_header(pool, headers, token, NULL, value.base, value.len);
+            } else {
+                h2o_add_header_by_str(pool, headers, name->base, name->len, 0, NULL, value.base, value.len);
+            }
+        }
+    Next:;
+    } while (src != src_end);
+
+
+// Source: hpack.c
+// Lines 582-652

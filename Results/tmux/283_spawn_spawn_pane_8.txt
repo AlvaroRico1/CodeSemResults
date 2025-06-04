@@ -1,0 +1,1 @@
+cmd,tmux/spawn.c,12,idx,tmux/spawn.c,14,2

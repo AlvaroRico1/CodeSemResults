@@ -1,0 +1,1 @@
+adr,linux/drivers/acpi/pci_root.c,4,phandle,linux/drivers/acpi/pci_root.c,6,2

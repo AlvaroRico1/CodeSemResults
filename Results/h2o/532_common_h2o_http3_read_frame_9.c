@@ -1,0 +1,80 @@
+int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t stream_type, const uint8_t **_src,
+                         const uint8_t *src_end, const char **err_desc)
+{
+    const uint8_t *src = *_src;
+
+    if ((frame->type = quicly_decodev(&src, src_end)) == UINT64_MAX)
+        return H2O_HTTP3_ERROR_INCOMPLETE;
+    if ((frame->length = quicly_decodev(&src, src_end)) == UINT64_MAX)
+        return H2O_HTTP3_ERROR_INCOMPLETE;
+    frame->_header_size = (uint8_t)(src - *_src);
+
+    /* read the content of the frame (unless it's a DATA frame) */
+    frame->payload = NULL;
+    if (frame->type != H2O_HTTP3_FRAME_TYPE_DATA) {
+        if (frame->length > H2O_HTTP3_MAX_FRAME_PAYLOAD_SIZE) {
+            H2O_PROBE(H3_FRAME_RECEIVE, frame->type, NULL, frame->length);
+            *err_desc = "H3 frame too large";
+            return H2O_HTTP3_ERROR_GENERAL_PROTOCOL; /* FIXME is this the correct code? */
+        }
+        if (src_end - src < frame->length)
+            return H2O_HTTP3_ERROR_INCOMPLETE;
+        frame->payload = src;
+        src += frame->length;
+    }
+
+    H2O_PROBE(H3_FRAME_RECEIVE, frame->type, frame->payload, frame->length);
+
+    /* validate frame type */
+    switch (frame->type) {
+#define FRAME(id, req_clnt, req_srvr, ctl_clnt, ctl_srvr)                                                                          \
+    case H2O_HTTP3_FRAME_TYPE_##id:                                                                                                \
+        switch (stream_type) {                                                                                                     \
+        case H2O_HTTP3_STREAM_TYPE_REQUEST:                                                                                        \
+            if (req_clnt && !is_client)                                                                                            \
+                goto Validation_Success;                                                                                           \
+            if (req_srvr && is_client)                                                                                             \
+                goto Validation_Success;                                                                                           \
+            break;                                                                                                                 \
+        case H2O_HTTP3_STREAM_TYPE_CONTROL:                                                                                        \
+            if (ctl_clnt && !is_client)                                                                                            \
+                goto Validation_Success;                                                                                           \
+            if (ctl_srvr && is_client)                                                                                             \
+                goto Validation_Success;                                                                                           \
+            break;                                                                                                                 \
+        default:                                                                                                                   \
+            h2o_fatal("unexpected stream type");                                                                                   \
+            break;                                                                                                                 \
+        }                                                                                                                          \
+        break
+        /* clang-format off */
+        /*   +-----------------+-------------+-------------+
+         *   |                 | req-stream  | ctrl-stream |
+         *   |      frame      +------+------+------+------+
+         *   |                 |client|server|client|server|
+         *   +-----------------+------+------+------+------+ */
+        FRAME( DATA            ,    1 ,    1 ,    0 ,    0 );
+        FRAME( HEADERS         ,    1 ,    1 ,    0 ,    0 );
+        FRAME( CANCEL_PUSH     ,    0 ,    0 ,    1 ,    1 );
+        FRAME( SETTINGS        ,    0 ,    0 ,    1 ,    1 );
+        FRAME( PUSH_PROMISE    ,    0 ,    1 ,    0 ,    0 );
+        FRAME( GOAWAY          ,    0 ,    0 ,    1 ,    1 );
+        FRAME( MAX_PUSH_ID     ,    0 ,    0 ,    1 ,    0 );
+        FRAME( PRIORITY_UPDATE ,    0 ,    0 ,    1 ,    0 );
+        /*   +-----------------+------+------+------+------+ */
+        /* clang-format on */
+#undef FRAME
+    default:
+        /* ignore extension frames that we do not handle */
+        goto Validation_Success;
+    }
+    return H2O_HTTP3_ERROR_FRAME_UNEXPECTED;
+Validation_Success:;
+
+    *_src = src;
+    return 0;
+}
+
+
+// Source: common.c
+// Lines 908-983

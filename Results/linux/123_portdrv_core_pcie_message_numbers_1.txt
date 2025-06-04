@@ -1,0 +1,1 @@
+reg32,linux/drivers/pci/pcie/portdrv_core.c,23,reg16,linux/drivers/pci/pcie/portdrv_core.c,5,2

@@ -1,0 +1,48 @@
+static bool deny_updates_if_read_only_option(THD *thd, TABLE_LIST *all_tables) {
+  DBUG_TRACE;
+
+  if (!check_readonly(thd, false)) return false;
+
+  LEX *lex = thd->lex;
+  if (!(sql_command_flags[lex->sql_command] & CF_CHANGES_DATA)) return false;
+
+  /* Multi update is an exception and is dealt with later. */
+  if (lex->sql_command == SQLCOM_UPDATE_MULTI) return false;
+
+  const bool create_temp_tables =
+      (lex->sql_command == SQLCOM_CREATE_TABLE) &&
+      (lex->create_info->options & HA_LEX_CREATE_TMP_TABLE);
+
+  const bool create_real_tables =
+      (lex->sql_command == SQLCOM_CREATE_TABLE) &&
+      !(lex->create_info->options & HA_LEX_CREATE_TMP_TABLE);
+
+  const bool drop_temp_tables =
+      (lex->sql_command == SQLCOM_DROP_TABLE) && lex->drop_temporary;
+
+  /* RENAME TABLES ignores shadowing temporary tables. */
+  const bool rename_tables = (lex->sql_command == SQLCOM_RENAME_TABLE);
+
+  const bool update_real_tables =
+      ((create_real_tables || rename_tables ||
+        some_non_temp_table_to_be_updated(thd, all_tables)) &&
+       !(create_temp_tables || drop_temp_tables));
+
+  const bool create_or_drop_databases =
+      (lex->sql_command == SQLCOM_CREATE_DB) ||
+      (lex->sql_command == SQLCOM_DROP_DB);
+
+  if (update_real_tables || create_or_drop_databases) {
+    /*
+      An attempt was made to modify one or more non-temporary tables.
+    */
+    return true;
+  }
+
+  /* Assuming that only temporary tables are modified. */
+  return false;
+}
+
+
+// Source: sql_parse.cc
+// Lines 1344-1387

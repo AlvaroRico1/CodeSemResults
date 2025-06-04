@@ -1,0 +1,1 @@
+event_type,mysql/sql-common/client.cc,24,rpl,mysql/sql-common/client.cc,1,0

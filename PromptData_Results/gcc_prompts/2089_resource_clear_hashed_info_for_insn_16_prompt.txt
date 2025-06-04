@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tinfo' at line 3
+2. Pointer 'tinfo' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+clear_hashed_info_for_insn (rtx_insn *insn)
+{
+  struct target_info *tinfo;
+
+  if (target_hash_table != NULL)
+    {
+      for (tinfo = target_hash_table[INSN_UID (insn) % TARGET_HASH_PRIME];
+	   tinfo; tinfo = tinfo->next)
+	if (tinfo->uid == INSN_UID (insn))
+	  break;
+
+      if (tinfo)
+	tinfo->block = -1;
+    }
+}
+
+
+// Source: resource.c
+// Lines 1270-1284
+
+
+[ANSWER]
+MUST

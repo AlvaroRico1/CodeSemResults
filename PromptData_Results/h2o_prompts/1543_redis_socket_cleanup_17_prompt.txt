@@ -1,0 +1,26 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'p' at line 3
+2. Pointer 'privdata' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void socket_cleanup(void *privdata)
+{
+    struct st_redis_socket_data_t *p = (struct st_redis_socket_data_t *)privdata;
+    h2o_socket_close(p->socket);
+    p->context->c.fd = -1; /* prevent hiredis from closing fd twice */
+    free(p);
+}
+
+
+// Source: redis.c
+// Lines 382-388
+
+
+[ANSWER]
+MUST

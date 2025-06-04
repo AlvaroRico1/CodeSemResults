@@ -1,0 +1,1 @@
+len,mysql/sql-common/bind_params.cc,60,send_named_params,mysql/sql-common/bind_params.cc,6,0

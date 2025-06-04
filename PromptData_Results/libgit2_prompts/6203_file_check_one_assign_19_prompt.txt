@@ -1,0 +1,38 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'expected_str' at line 8
+2. Pointer 'assign' at line 11
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void check_one_assign(
+	git_attr_file *file,
+	int rule_idx,
+	int assign_idx,
+	const char *pattern,
+	const char *name,
+	enum attr_expect_t expected,
+	const char *expected_str)
+{
+	git_attr_rule *rule = get_rule(rule_idx);
+	git_attr_assignment *assign = get_assign(rule, assign_idx);
+
+	cl_assert_equal_s(pattern, rule->match.pattern);
+	cl_assert(rule->assigns.length == 1);
+	cl_assert_equal_s(name, assign->name);
+	cl_assert(assign->name_hash == git_attr_file__name_hash(assign->name));
+
+	attr_check_expected(expected, expected_str, assign->name, assign->value);
+}
+
+
+// Source: file.c
+// Lines 98-116
+
+
+[ANSWER]
+MUST-NOT

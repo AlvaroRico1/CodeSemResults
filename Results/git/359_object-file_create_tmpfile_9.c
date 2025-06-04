@@ -1,0 +1,105 @@
+static int create_tmpfile(struct strbuf *tmp, const char *filename)
+{
+	int fd, dirlen = directory_size(filename);
+
+	strbuf_reset(tmp);
+	strbuf_add(tmp, filename, dirlen);
+	strbuf_addstr(tmp, "tmp_obj_XXXXXX");
+	fd = git_mkstemp_mode(tmp->buf, 0444);
+	if (fd < 0 && dirlen && errno == ENOENT) {
+		/*
+		 * Make sure the directory exists; note that the contents
+		 * of the buffer are undefined after mkstemp returns an
+		 * error, so we have to rewrite the whole buffer from
+		 * scratch.
+		 */
+		strbuf_reset(tmp);
+		strbuf_add(tmp, filename, dirlen - 1);
+		if (mkdir(tmp->buf, 0777) && errno != EEXIST)
+			return -1;
+		if (adjust_shared_perm(tmp->buf))
+			return -1;
+
+		/* Try again */
+		strbuf_addstr(tmp, "/tmp_obj_XXXXXX");
+		fd = git_mkstemp_mode(tmp->buf, 0444);
+	}
+	return fd;
+}
+
+static int write_loose_object(const struct object_id *oid, char *hdr,
+			      int hdrlen, const void *buf, unsigned long len,
+			      time_t mtime)
+{
+	int fd, ret;
+	unsigned char compressed[4096];
+	git_zstream stream;
+	git_hash_ctx c;
+	struct object_id parano_oid;
+	static struct strbuf tmp_file = STRBUF_INIT;
+	static struct strbuf filename = STRBUF_INIT;
+
+	loose_object_path(the_repository, &filename, oid);
+
+	fd = create_tmpfile(&tmp_file, filename.buf);
+	if (fd < 0) {
+		if (errno == EACCES)
+			return error(_("insufficient permission for adding an object to repository database %s"), get_object_directory());
+		else
+			return error_errno(_("unable to create temporary file"));
+	}
+
+	/* Set it up */
+	git_deflate_init(&stream, zlib_compression_level);
+	stream.next_out = compressed;
+	stream.avail_out = sizeof(compressed);
+	the_hash_algo->init_fn(&c);
+
+	/* First header.. */
+	stream.next_in = (unsigned char *)hdr;
+	stream.avail_in = hdrlen;
+	while (git_deflate(&stream, 0) == Z_OK)
+		; /* nothing */
+	the_hash_algo->update_fn(&c, hdr, hdrlen);
+
+	/* Then the data itself.. */
+	stream.next_in = (void *)buf;
+	stream.avail_in = len;
+	do {
+		unsigned char *in0 = stream.next_in;
+		ret = git_deflate(&stream, Z_FINISH);
+		the_hash_algo->update_fn(&c, in0, stream.next_in - in0);
+		if (write_buffer(fd, compressed, stream.next_out - compressed) < 0)
+			die(_("unable to write loose object file"));
+		stream.next_out = compressed;
+		stream.avail_out = sizeof(compressed);
+	} while (ret == Z_OK);
+
+	if (ret != Z_STREAM_END)
+		die(_("unable to deflate new object %s (%d)"), oid_to_hex(oid),
+		    ret);
+	ret = git_deflate_end_gently(&stream);
+	if (ret != Z_OK)
+		die(_("deflateEnd on object %s failed (%d)"), oid_to_hex(oid),
+		    ret);
+	the_hash_algo->final_oid_fn(&parano_oid, &c);
+	if (!oideq(oid, &parano_oid))
+		die(_("confused by unstable object source data for %s"),
+		    oid_to_hex(oid));
+
+	close_loose_object(fd);
+
+	if (mtime) {
+		struct utimbuf utb;
+		utb.actime = mtime;
+		utb.modtime = mtime;
+		if (utime(tmp_file.buf, &utb) < 0)
+			warning_errno(_("failed utime() on %s"), tmp_file.buf);
+	}
+
+	return finalize_object_file(tmp_file.buf, filename.buf);
+}
+
+
+// Source: object-file.c
+// Lines 1845-1945

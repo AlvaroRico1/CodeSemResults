@@ -1,0 +1,1 @@
+well_formed_error,mysql/sql-common/client_plugin.cc,11,name,mysql/sql-common/client_plugin.cc,2,0

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'c' at line 6\n2. Pointer 'c' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nomp_max_simt_vf (void)\n{\n  if (!optimize)\n    return 0;\n  if (ENABLE_OFFLOADING)\n    for (const char *c = getenv (\"OFFLOAD_TARGET_NAMES\"); c;)\n      {\n\tif (!strncmp (c, \"nvptx\", strlen (\"nvptx\")))\n\t  return 32;\n\telse if ((c = strchr (c, ':')))\n\t  c++;\n      }\n  return 0;\n}\n\n\n// Source: omp-general.c\n// Lines 598-611\n",
+  "ANSWER": "MUST"
+}

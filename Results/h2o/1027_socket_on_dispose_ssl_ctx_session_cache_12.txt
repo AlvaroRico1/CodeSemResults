@@ -1,0 +1,1 @@
+ssl_session_cache,h2o/lib/common/socket.c,3,ptr,h2o/lib/common/socket.c,1,1

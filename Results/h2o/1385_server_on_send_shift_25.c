@@ -1,0 +1,52 @@
+static void on_send_shift(quicly_stream_t *qs, size_t delta)
+{
+    struct st_h2o_http3_server_stream_t *stream = qs->data;
+    size_t i;
+
+    assert(stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS || stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
+    assert(delta != 0);
+    assert(stream->sendbuf.vecs.size != 0);
+
+    size_t bytes_avail_in_first_vec = stream->sendbuf.vecs.entries[0].vec.len - stream->sendbuf.off_within_first_vec;
+    if (delta < bytes_avail_in_first_vec) {
+        stream->sendbuf.off_within_first_vec += delta;
+        return;
+    }
+    delta -= bytes_avail_in_first_vec;
+    stream->sendbuf.off_within_first_vec = 0;
+    if (stream->sendbuf.vecs.entries[0].vec.callbacks->update_refcnt != NULL)
+        stream->sendbuf.vecs.entries[0].vec.callbacks->update_refcnt(&stream->sendbuf.vecs.entries[0].vec, &stream->req, 0);
+
+    for (i = 1; delta != 0; ++i) {
+        assert(i < stream->sendbuf.vecs.size);
+        if (delta < stream->sendbuf.vecs.entries[i].vec.len) {
+            stream->sendbuf.off_within_first_vec = delta;
+            break;
+        }
+        delta -= stream->sendbuf.vecs.entries[i].vec.len;
+        if (stream->sendbuf.vecs.entries[i].vec.callbacks->update_refcnt != NULL)
+            stream->sendbuf.vecs.entries[i].vec.callbacks->update_refcnt(&stream->sendbuf.vecs.entries[i].vec, &stream->req, 0);
+    }
+    memmove(stream->sendbuf.vecs.entries, stream->sendbuf.vecs.entries + i,
+            (stream->sendbuf.vecs.size - i) * sizeof(stream->sendbuf.vecs.entries[0]));
+    stream->sendbuf.vecs.size -= i;
+    if (stream->sendbuf.min_index_to_addref <= i) {
+        stream->sendbuf.min_index_to_addref = 0;
+    } else {
+        stream->sendbuf.min_index_to_addref -= i;
+    }
+
+    if (stream->sendbuf.vecs.size == 0) {
+        if (quicly_sendstate_is_open(&stream->quic->sendstate)) {
+            assert(stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS || stream->proceed_requested);
+        } else {
+            if (quicly_stream_has_receive_side(0, stream->quic->stream_id))
+                quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_EARLY_RESPONSE);
+            set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT, 0);
+        }
+    }
+}
+
+
+// Source: server.c
+// Lines 710-757

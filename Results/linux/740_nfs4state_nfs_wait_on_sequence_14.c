@@ -1,0 +1,25 @@
+int nfs_wait_on_sequence(struct nfs_seqid *seqid, struct rpc_task *task)
+{
+	struct nfs_seqid_counter *sequence;
+	int status = 0;
+
+	if (seqid == NULL)
+		goto out;
+	sequence = seqid->sequence;
+	spin_lock(&sequence->lock);
+	seqid->task = task;
+	if (list_empty(&seqid->list))
+		list_add_tail(&seqid->list, &sequence->list);
+	if (list_first_entry(&sequence->list, struct nfs_seqid, list) == seqid)
+		goto unlock;
+	rpc_sleep_on(&sequence->wait, task, NULL);
+	status = -EAGAIN;
+unlock:
+	spin_unlock(&sequence->lock);
+out:
+	return status;
+}
+
+
+// Source: nfs4state.c
+// Lines 1186-1206

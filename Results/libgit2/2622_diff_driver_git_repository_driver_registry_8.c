@@ -1,0 +1,25 @@
+static git_diff_driver_registry *git_repository_driver_registry(
+	git_repository *repo)
+{
+	git_diff_driver_registry *reg = git_atomic_load(repo->diff_drivers), *newreg;
+	if (reg)
+		return reg;
+
+	newreg = git_diff_driver_registry_new();
+	if (!newreg) {
+		git_error_set(GIT_ERROR_REPOSITORY, "unable to create diff driver registry");
+		return newreg;
+	}
+	reg = git_atomic_compare_and_swap(&repo->diff_drivers, NULL, newreg);
+	if (!reg) {
+		reg = newreg;
+	} else {
+		/* if we race, free losing allocation */
+		git_diff_driver_registry_free(newreg);
+	}
+	return reg;
+}
+
+
+// Source: diff_driver.c
+// Lines 139-159

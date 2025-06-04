@@ -1,0 +1,60 @@
+bool init_ref_part(THD *thd, unsigned part_no, Item *val, bool *cond_guard,
+                   bool null_rejecting, table_map const_tables,
+                   table_map used_tables, bool nullable,
+                   const KEY_PART_INFO *key_part_info, uchar *key_buff,
+                   TABLE_REF *ref) {
+  ref->items[part_no] = val;  // Save for cond removal
+  ref->cond_guards[part_no] = cond_guard;
+  // Set ref as "null rejecting" only if either side is really nullable:
+  if (null_rejecting && (nullable || val->is_nullable()))
+    ref->null_rejecting |= (key_part_map)1 << part_no;
+
+  store_key *s_key = get_store_key(thd, val, used_tables, const_tables,
+                                   key_part_info, key_buff, nullable);
+  if (unlikely(!s_key || thd->is_error())) return true;
+
+  if (used_tables & ~INNER_TABLE_BIT) {
+    /* Comparing against a non-constant. */
+    ref->key_copy[part_no] = s_key;
+  } else {
+    /*
+      The outer reference is to a const table, so we copy the value
+      straight from that table now (during optimization), instead of from
+      the temporary table created during execution.
+
+      TODO: Synchronize with the temporary table creation code, so that
+      there is no need to create a column for this value.
+    */
+    bool dummy_value = false;
+    val->walk(&Item::repoint_const_outer_ref, enum_walk::PREFIX,
+              pointer_cast<uchar *>(&dummy_value));
+    /*
+      key is const, copy value now and possibly skip it while ::exec().
+
+      Note:
+        Result check of store_key::copy() is unnecessary,
+        it could be an error returned by store_key::copy() method
+        but stored value is not null and default value could be used
+        in this case. Methods which used for storing the value
+        should be responsible for proper null value setting
+        in case of an error. Thus it's enough to check s_key->null_key
+        value only.
+    */
+    (void)s_key->copy();
+    /*
+      It should be reevaluated in ::exec() if
+      constant evaluated to NULL value which we might need to
+      handle as a special case during JOIN::exec()
+      (As in : 'Full scan on NULL key')
+    */
+    if (s_key->null_key)
+      ref->key_copy[part_no] = s_key;  // Reevaluate in JOIN::exec()
+    else
+      ref->key_copy[part_no] = nullptr;
+  }
+  return false;
+}
+
+
+// Source: sql_select.cc
+// Lines 2130-2185

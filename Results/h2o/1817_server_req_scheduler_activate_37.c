@@ -1,0 +1,25 @@
+static void req_scheduler_activate(struct st_h2o_http3_req_scheduler_t *sched, struct st_h2o_http3_req_scheduler_node_t *node,
+                                   h2o_http3_req_scheduler_compare_cb comp)
+{
+    /* unlink if necessary */
+    if (h2o_linklist_is_linked(&node->link))
+        h2o_linklist_unlink(&node->link);
+
+    if (!node->priority.incremental || node->call_cnt == 0) {
+        /* non-incremental streams and the first emission of incremental streams go in strict order */
+        h2o_linklist_t *anchor = &sched->active.urgencies[node->priority.urgency].high, *pos;
+        for (pos = anchor->prev; pos != anchor; pos = pos->prev) {
+            struct st_h2o_http3_req_scheduler_node_t *node_at_pos =
+                H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_req_scheduler_node_t, link, pos);
+            if (comp(sched, node_at_pos, node) < 0)
+                break;
+        }
+        h2o_linklist_insert(pos->next, &node->link);
+    } else {
+        /* once sent, incremental streams go into a lower list */
+        h2o_linklist_insert(&sched->active.urgencies[node->priority.urgency].low, &node->link);
+    }
+
+
+// Source: server.c
+// Lines 263-283

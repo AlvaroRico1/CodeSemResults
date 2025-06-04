@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'session' at line 3\n2. Pointer 'value' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid h2o_socket_ssl_destroy_session_cache_entry(h2o_iovec_t value)\n{\n    SSL_SESSION *session = (SSL_SESSION *)value.base;\n    SSL_SESSION_free(session);\n}\n\n\n// Source: socket.c\n// Lines 1666-1670\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,25 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'nonconst_base' at line 3
+2. Pointer 'nonconst_this' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+UnicodeReplacer* FunctionReplacer::toReplacer() const {
+  FunctionReplacer  *nonconst_this = const_cast<FunctionReplacer *>(this);
+  UnicodeReplacer *nonconst_base = static_cast<UnicodeReplacer *>(nonconst_this);
+  
+  return nonconst_base;
+}
+
+
+// Source: funcrepl.cpp
+// Lines 70-75
+
+
+[ANSWER]
+MUST

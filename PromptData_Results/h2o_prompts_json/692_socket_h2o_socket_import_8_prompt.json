@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'sock' at line 3\n2. Pointer 'info' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nh2o_socket_t *h2o_socket_import(h2o_loop_t *loop, h2o_socket_export_t *info)\n{\n    h2o_socket_t *sock;\n\n    assert(info->fd != -1);\n\n    sock = do_import(loop, info);\n    info->fd = -1; /* just in case */\n    if ((sock->ssl = info->ssl) != NULL) {\n        setup_bio(sock);\n        h2o_buffer_set_prototype(&sock->ssl->input.encrypted, &h2o_socket_buffer_prototype);\n    }\n    sock->input = info->input;\n    h2o_buffer_set_prototype(&sock->input, &h2o_socket_buffer_prototype);\n    return sock;\n}\n\n\n// Source: socket.c\n// Lines 525-540\n",
+  "ANSWER": "MUST"
+}

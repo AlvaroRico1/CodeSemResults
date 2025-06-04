@@ -1,0 +1,89 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 's_res' at line 5
+2. Pointer 's_res0' at line 57
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+ALWAYS_INLINE void uca_scanner_900<Mb_wc, LEVELS_FOR_COMPARE>::for_each_weight(
+    T func, U preaccept_data) {
+  if (cs->tailoring || cs->mbminlen != 1 || cs->coll_param) {
+    // Slower, generic path.
+    int s_res;
+    while ((s_res = next()) >= 0) {
+      if (!func(s_res, s_res == 0)) return;
+    }
+    return;
+  }
+
+  /*
+    Fast path. TODO: See if we can accept some character sets
+    with tailorings.
+  */
+  const uint16 *ascii_wpage =
+      UCA900_WEIGHT_ADDR(uca->weights[0], /*level=*/weight_lv, /*subcode=*/0);
+
+  /*
+    Precalculate the limit for the fast path below, taking care not to form
+    pointers that are before sbeg, as those cannot be legally compared.
+    (In particular, this catches the case of sbeg == send == nullptr.)
+  */
+  const uchar *send_local = (send - sbeg > 3) ? (send - 3) : sbeg;
+
+  for (;;) {
+    /*
+      We could have more weights left from the previous call to next()
+      (if any) that we need to deal with.
+    */
+    int s_res;
+    while ((s_res = more_weight()) >= 0) {
+      if (!func(s_res, s_res == 0)) return;
+    }
+
+    /*
+      Loop in a simple fast path as long as we only have non-ignorable
+      ASCII characters. These characters always have exactly a single weight
+      and consist of only a single byte, so we can skip a lot of the checks
+      we'd otherwise have to do.
+    */
+    const uchar *sbeg_local = sbeg;
+    while (sbeg_local < send_local && preaccept_data(sizeof(uint32))) {
+      /*
+        Check if all four bytes are in the range 0x20..0x7e, inclusive.
+        These have exactly one weight. Note that this unfortunately does not
+        include tab and newline, which would otherwise be legal candidates.
+
+        See the FastOutOfRange unit test for verification that the bitfiddling
+        trick used here is correct.
+      */
+      uint32 four_bytes;
+      memcpy(&four_bytes, sbeg_local, sizeof(four_bytes));
+      if (((four_bytes + 0x01010101u) & 0x80808080) ||
+          ((four_bytes - 0x20202020u) & 0x80808080))
+        break;
+      const int s_res0 = ascii_wpage[sbeg_local[0]];
+      const int s_res1 = ascii_wpage[sbeg_local[1]];
+      const int s_res2 = ascii_wpage[sbeg_local[2]];
+      const int s_res3 = ascii_wpage[sbeg_local[3]];
+      assert(s_res0 != 0);
+      assert(s_res1 != 0);
+      assert(s_res2 != 0);
+      assert(s_res3 != 0);
+      func(s_res0, /*is_level_separator=*/false);
+      func(s_res1, /*is_level_separator=*/false);
+      func(s_res2, /*is_level_separator=*/false);
+      func(s_res3, /*is_level_separator=*/false);
+      sbeg_local += sizeof(uint32);
+    }
+
+
+// Source: ctype-uca.cc
+// Lines 1562-1631
+
+
+[ANSWER]
+MAY

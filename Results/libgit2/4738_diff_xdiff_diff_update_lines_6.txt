@@ -1,0 +1,1 @@
+scan_end,libgit2/src/libgit2/diff_xdiff.c,7,content,libgit2/src/libgit2/diff_xdiff.c,4,1

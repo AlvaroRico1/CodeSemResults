@@ -1,0 +1,24 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'i' at line 2
+2. Pointer 'str' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void add_word(HashTable *ht, const char *str) {
+  int i;
+  const char *pos = str;
+  for (i = 1; *pos; i++, pos++) completion_hash_update(ht, str, i, str);
+}
+
+
+// Source: completion_hash.cc
+// Lines 204-208
+
+
+[ANSWER]
+MUST-NOT

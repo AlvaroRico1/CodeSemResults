@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'f' at line 4\n2. Pointer 'param' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int conn_is_conn(struct Curl_easy *data,\n                        struct connectdata *conn, void *param)\n{\n  struct connfind *f = (struct connfind *)param;\n  (void)data;\n  if(conn->connection_id == f->id_tofind) {\n    f->found = conn;\n    return 1;\n  }\n  return 0;\n}\n\n\n// Source: connect.c\n// Lines 1432-1442\n",
+  "ANSWER": "MUST"
+}

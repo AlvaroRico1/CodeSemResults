@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'field' at line 2\n2. Pointer 'ptr' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void restore_part_field_pointers(Field **ptr, uchar **restore_ptr) {\n  Field *field;\n  while ((field = *(ptr++))) {\n    field->set_field_ptr(*restore_ptr);\n    restore_ptr++;\n  }\n  return;\n}\n\n\n// Source: sql_partition.cc\n// Lines 2708-2715\n",
+  "ANSWER": "MUST"
+}

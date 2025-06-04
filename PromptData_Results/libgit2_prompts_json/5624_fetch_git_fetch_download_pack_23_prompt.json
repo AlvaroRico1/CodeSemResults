@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 't' at line 3\n2. Pointer 'remote' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint git_fetch_download_pack(git_remote *remote)\n{\n\tgit_transport *t = remote->transport;\n\n\tif (!remote->need_pack)\n\t\treturn 0;\n\n\treturn t->download_pack(t, remote->repo, &remote->stats);\n}\n\n\n// Source: fetch.c\n// Lines 192-200\n",
+  "ANSWER": "MUST"
+}

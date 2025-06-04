@@ -1,0 +1,24 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'action' at line 3
+2. Pointer '_action' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void on_deferred_action_dispose(void *_action)
+{
+    struct st_deferred_request_action_t *action = _action;
+    h2o_timer_unlink(&action->timeout);
+}
+
+
+// Source: request.c
+// Lines 59-63
+
+
+[ANSWER]
+MUST

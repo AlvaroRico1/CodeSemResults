@@ -1,0 +1,50 @@
+void __init setup_bios_corruption_check(void)
+{
+	phys_addr_t start, end;
+	u64 i;
+
+	if (memory_corruption_check == -1) {
+		memory_corruption_check =
+#ifdef CONFIG_X86_BOOTPARAM_MEMORY_CORRUPTION_CHECK
+			1
+#else
+			0
+#endif
+			;
+	}
+
+	if (corruption_check_size == 0)
+		memory_corruption_check = 0;
+
+	if (!memory_corruption_check)
+		return;
+
+	corruption_check_size = round_up(corruption_check_size, PAGE_SIZE);
+
+	for_each_free_mem_range(i, NUMA_NO_NODE, MEMBLOCK_NONE, &start, &end,
+				NULL) {
+		start = clamp_t(phys_addr_t, round_up(start, PAGE_SIZE),
+				PAGE_SIZE, corruption_check_size);
+		end = clamp_t(phys_addr_t, round_down(end, PAGE_SIZE),
+			      PAGE_SIZE, corruption_check_size);
+		if (start >= end)
+			continue;
+
+		memblock_reserve(start, end - start);
+		scan_areas[num_scan_areas].addr = start;
+		scan_areas[num_scan_areas].size = end - start;
+
+		/* Assume we've already mapped this early memory */
+		memset(__va(start), 0, end - start);
+
+		if (++num_scan_areas >= MAX_SCAN_AREAS)
+			break;
+	}
+
+	if (num_scan_areas)
+		pr_info("Scanning %d areas for low memory corruption\n", num_scan_areas);
+}
+
+
+// Source: check.c
+// Lines 92-137

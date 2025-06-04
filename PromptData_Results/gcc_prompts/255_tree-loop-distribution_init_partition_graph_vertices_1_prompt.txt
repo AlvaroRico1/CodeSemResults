@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'data' at line 6
+2. Pointer 'partition' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+init_partition_graph_vertices (struct graph *pg,
+			       vec<struct partition *> *partitions)
+{
+  int i;
+  partition *partition;
+  struct pg_vdata *data;
+
+  for (i = 0; partitions->iterate (i, &partition); ++i)
+    {
+      data = new pg_vdata;
+      pg->vertices[i].data = data;
+      data->id = i;
+      data->partition = partition;
+    }
+}
+
+
+// Source: tree-loop-distribution.c
+// Lines 2159-2173
+
+
+[ANSWER]
+MUST

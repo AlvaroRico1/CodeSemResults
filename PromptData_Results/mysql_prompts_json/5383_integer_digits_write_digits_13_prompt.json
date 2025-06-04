@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'pos' at line 6\n2. Pointer 'digits' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ninline char *write_digits(T number, int digits, char *to) {\n  assert(digits >= count_digits(number));\n\n  // The string is built from the end, starting with the least significant\n  // digits.\n  char *pos = to + digits;\n\n  // The digits are written in groups of two in order to reduce the number of\n  // the relatively expensive modulo and division by 10 operations. If it has an\n  // odd number of digits, write the leftover digit separately.\n  if (digits % 2 != 0) {\n    *--pos = '0' + number % 10;\n    number /= 10;\n  }\n\n  while (pos > to) {\n    pos -= 2;\n    write_two_digits(number % 100, pos);\n    number /= 100;\n  }\n\n  return to + digits;\n}\n\n\n// Source: integer_digits.h\n// Lines 141-163\n",
+  "ANSWER": "MUST-NOT"
+}

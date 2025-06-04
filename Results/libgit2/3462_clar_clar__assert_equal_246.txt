@@ -1,0 +1,1 @@
+function,libgit2/tests/clar/clar.c,3,offset,libgit2/tests/clar/clar.c,25,0

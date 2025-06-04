@@ -1,0 +1,33 @@
+static int update_1rtt_key(quicly_conn_t *conn, ptls_cipher_suite_t *cipher, int is_enc, ptls_aead_context_t **aead,
+                           uint8_t *secret)
+{
+    uint8_t new_secret[PTLS_MAX_DIGEST_SIZE];
+    ptls_aead_context_t *new_aead = NULL;
+    int ret;
+
+    /* generate next AEAD key */
+    if ((ret = ptls_hkdf_expand_label(cipher->hash, new_secret, cipher->hash->digest_size,
+                                      ptls_iovec_init(secret, cipher->hash->digest_size), "quic ku", ptls_iovec_init(NULL, 0),
+                                      NULL)) != 0)
+        goto Exit;
+    if ((ret = setup_cipher(conn, QUICLY_EPOCH_1RTT, is_enc, NULL, &new_aead, cipher->aead, cipher->hash, new_secret)) != 0)
+        goto Exit;
+
+    /* success! update AEAD and secret */
+    if (*aead != NULL)
+        ptls_aead_free(*aead);
+    *aead = new_aead;
+    new_aead = NULL;
+    memcpy(secret, new_secret, cipher->hash->digest_size);
+
+    ret = 0;
+Exit:
+    if (new_aead != NULL)
+        ptls_aead_free(new_aead);
+    ptls_clear_memory(new_secret, cipher->hash->digest_size);
+    return ret;
+}
+
+
+// Source: quicly.c
+// Lines 1494-1522

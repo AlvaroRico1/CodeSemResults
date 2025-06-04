@@ -1,0 +1,79 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'data' at line 6
+2. Pointer 'index' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_index_read_tree(git_index *index, const git_tree *tree)
+{
+	int error = 0;
+	git_vector entries = GIT_VECTOR_INIT;
+	git_idxmap *entries_map;
+	read_tree_data data;
+	size_t i;
+	git_index_entry *e;
+
+	if (git_idxmap_new(&entries_map) < 0)
+		return -1;
+
+	git_vector_set_cmp(&entries, index->entries._cmp); /* match sort */
+
+	data.index = index;
+	data.old_entries = &index->entries;
+	data.new_entries = &entries;
+	data.entry_cmp   = index->entries_search;
+
+	index->tree = NULL;
+	git_pool_clear(&index->tree_pool);
+
+	git_vector_sort(&index->entries);
+
+	if ((error = git_tree_walk(tree, GIT_TREEWALK_POST, read_tree_cb, &data)) < 0)
+		goto cleanup;
+
+	if ((error = index_map_resize(entries_map, entries.length, index->ignore_case)) < 0)
+		goto cleanup;
+
+	git_vector_foreach(&entries, i, e) {
+		if ((error = index_map_set(entries_map, e, index->ignore_case)) < 0) {
+			git_error_set(GIT_ERROR_INDEX, "failed to insert entry into map");
+			return error;
+		}
+	}
+
+	error = 0;
+
+	git_vector_sort(&entries);
+
+	if ((error = git_index_clear(index)) < 0) {
+		/* well, this isn't good */;
+	} else {
+		git_vector_swap(&entries, &index->entries);
+		entries_map = git_atomic_swap(index->entries_map, entries_map);
+	}
+
+	index->dirty = 1;
+
+cleanup:
+	git_vector_free(&entries);
+	git_idxmap_free(entries_map);
+	if (error < 0)
+		return error;
+
+	error = git_tree_cache_read_tree(&index->tree, tree, &index->tree_pool);
+
+	return error;
+}
+
+
+// Source: index.c
+// Lines 3154-3213
+
+
+[ANSWER]
+MUST

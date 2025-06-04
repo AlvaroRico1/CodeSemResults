@@ -1,0 +1,45 @@
+static void ati_force_enable_hpet(struct pci_dev *dev)
+{
+	u32 d, val;
+	u8  b;
+
+	if (hpet_address || force_hpet_address)
+		return;
+
+	if (!hpet_force_user) {
+		hpet_print_force_info();
+		return;
+	}
+
+	d = ati_ixp4x0_rev(dev);
+	if (d  < 0x82)
+		return;
+
+	/* base address */
+	pci_write_config_dword(dev, 0x14, 0xfed00000);
+	pci_read_config_dword(dev, 0x14, &val);
+
+	/* enable interrupt */
+	outb(0x72, 0xcd6); b = inb(0xcd7);
+	b |= 0x1;
+	outb(0x72, 0xcd6); outb(b, 0xcd7);
+	outb(0x72, 0xcd6); b = inb(0xcd7);
+	if (!(b & 0x1))
+		return;
+	pci_read_config_dword(dev, 0x64, &d);
+	d |= (1<<10);
+	pci_write_config_dword(dev, 0x64, d);
+	pci_read_config_dword(dev, 0x64, &d);
+	if (!(d & (1<<10)))
+		return;
+
+	force_hpet_address = val;
+	force_hpet_resume_type = ATI_FORCE_HPET_RESUME;
+	dev_printk(KERN_DEBUG, &dev->dev, "Force enabled HPET at 0x%lx\n",
+		   force_hpet_address);
+	cached_dev = dev;
+}
+
+
+// Source: quirks.c
+// Lines 379-419

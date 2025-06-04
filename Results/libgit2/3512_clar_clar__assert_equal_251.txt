@@ -1,0 +1,1 @@
+should_abort,libgit2/tests/clar/clar.c,6,is_equal,libgit2/tests/clar/clar.c,12,0

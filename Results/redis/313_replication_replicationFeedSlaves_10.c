@@ -1,0 +1,52 @@
+void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
+    listNode *ln;
+    listIter li;
+    int j, len;
+    char llstr[LONG_STR_SIZE];
+
+    /* If the instance is not a top level master, return ASAP: we'll just proxy
+     * the stream of data we receive from our master instead, in order to
+     * propagate *identical* replication stream. In this way this slave can
+     * advertise the same replication ID as the master (since it shares the
+     * master replication history and has the same backlog and offsets). */
+    if (server.masterhost != NULL) return;
+
+    /* If there aren't slaves, and there is no backlog buffer to populate,
+     * we can return ASAP. */
+    if (server.repl_backlog == NULL && listLength(slaves) == 0) return;
+
+    /* We can't have slaves attached and no backlog. */
+    serverAssert(!(listLength(slaves) != 0 && server.repl_backlog == NULL));
+
+    /* Send SELECT command to every slave if needed. */
+    if (server.slaveseldb != dictid) {
+        robj *selectcmd;
+
+        /* For a few DBs we have pre-computed SELECT command. */
+        if (dictid >= 0 && dictid < PROTO_SHARED_SELECT_CMDS) {
+            selectcmd = shared.select[dictid];
+        } else {
+            int dictid_len;
+
+            dictid_len = ll2string(llstr,sizeof(llstr),dictid);
+            selectcmd = createObject(OBJ_STRING,
+                sdscatprintf(sdsempty(),
+                "*2\r\n$6\r\nSELECT\r\n$%d\r\n%s\r\n",
+                dictid_len, llstr));
+        }
+
+        /* Add the SELECT command into the backlog. */
+        if (server.repl_backlog) feedReplicationBacklogWithObject(selectcmd);
+
+        /* Send it to slaves. */
+        listRewind(slaves,&li);
+        while((ln = listNext(&li))) {
+            client *slave = ln->value;
+
+            if (!canFeedReplicaReplBuffer(slave)) continue;
+            addReply(slave,selectcmd);
+        }
+
+
+// Source: replication.c
+// Lines 216-263

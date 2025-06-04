@@ -1,0 +1,88 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'index' at line 4
+2. Pointer 'ptr' at line 15
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_diff_rename__rejected_match_can_match_others(void)
+{
+	git_reference *head, *selfsimilar;
+	git_index *index;
+	git_tree *tree;
+	git_checkout_options opts = GIT_CHECKOUT_OPTIONS_INIT;
+	git_diff *diff;
+	git_diff_options diffopts = GIT_DIFF_OPTIONS_INIT;
+	git_diff_find_options findopts = GIT_DIFF_FIND_OPTIONS_INIT;
+	git_str one = GIT_STR_INIT, two = GIT_STR_INIT;
+	unsigned int status[] = { GIT_DELTA_RENAMED, GIT_DELTA_RENAMED };
+	const char *sources[] = { "Class1.cs", "Class2.cs" };
+	const char *targets[] = { "ClassA.cs", "ClassB.cs" };
+	struct rename_expected expect = { 2, status, sources, targets };
+	char *ptr;
+
+	opts.checkout_strategy = GIT_CHECKOUT_FORCE;
+	findopts.flags = GIT_DIFF_FIND_RENAMES;
+
+	cl_git_pass(git_reference_lookup(&head, g_repo, "HEAD"));
+	cl_git_pass(git_reference_symbolic_set_target(
+		&selfsimilar, head, "refs/heads/renames_similar", NULL));
+	cl_git_pass(git_checkout_head(g_repo, &opts));
+	cl_git_pass(git_repository_index(&index, g_repo));
+
+	cl_git_pass(git_futils_readbuffer(&one, "renames/Class1.cs"));
+	cl_git_pass(git_futils_readbuffer(&two, "renames/Class2.cs"));
+
+	cl_git_pass(p_unlink("renames/Class1.cs"));
+	cl_git_pass(p_unlink("renames/Class2.cs"));
+
+	cl_git_pass(git_index_remove_bypath(index, "Class1.cs"));
+	cl_git_pass(git_index_remove_bypath(index, "Class2.cs"));
+
+	cl_assert(ptr = strstr(one.ptr, "Class1"));
+	ptr[5] = 'A';
+
+	cl_assert(ptr = strstr(two.ptr, "Class2"));
+	ptr[5] = 'B';
+
+	cl_git_pass(
+		git_futils_writebuffer(&one, "renames/ClassA.cs", O_RDWR|O_CREAT, 0777));
+	cl_git_pass(
+		git_futils_writebuffer(&two, "renames/ClassB.cs", O_RDWR|O_CREAT, 0777));
+
+	cl_git_pass(git_index_add_bypath(index, "ClassA.cs"));
+	cl_git_pass(git_index_add_bypath(index, "ClassB.cs"));
+
+	cl_git_pass(git_index_write(index));
+
+	cl_git_pass(
+		git_revparse_single((git_object **)&tree, g_repo, "HEAD^{tree}"));
+
+	cl_git_pass(
+		git_diff_tree_to_index(&diff, g_repo, tree, index, &diffopts));
+
+	cl_git_pass(git_diff_find_similar(diff, &findopts));
+
+	cl_git_pass(git_diff_foreach(
+		diff, test_names_expected, NULL, NULL, NULL, &expect));
+
+	git_diff_free(diff);
+	git_tree_free(tree);
+	git_index_free(index);
+	git_reference_free(head);
+	git_reference_free(selfsimilar);
+	git_str_dispose(&one);
+	git_str_dispose(&two);
+}
+
+
+// Source: rename.c
+// Lines 961-1029
+
+
+[ANSWER]
+MUST-NOT

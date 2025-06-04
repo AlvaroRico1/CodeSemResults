@@ -1,0 +1,1 @@
+var_value,mysql/sql/sql_prepare.cc,10,str,mysql/sql/sql_prepare.cc,7,1

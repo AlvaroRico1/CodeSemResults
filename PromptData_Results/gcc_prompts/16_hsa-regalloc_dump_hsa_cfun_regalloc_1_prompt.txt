@@ -1,0 +1,32 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'hbb' at line 9
+2. Pointer 'bb' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+dump_hsa_cfun_regalloc (FILE *f)
+{
+  basic_block bb;
+
+  fprintf (f, "\nHSAIL IL for %s\n", hsa_cfun->m_name);
+
+  FOR_ALL_BB_FN (bb, cfun)
+  {
+    hsa_bb *hbb = (class hsa_bb *) bb->aux;
+    bitmap_print (dump_file, hbb->m_livein, "m_livein  ", "\n");
+    dump_hsa_bb (f, hbb);
+    bitmap_print (dump_file, hbb->m_liveout, "m_liveout ", "\n");
+  }
+
+
+// Source: hsa-regalloc.c
+// Lines 252-264
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,1 @@
+truncate,mysql/mysys/my_time.cc,2,warnings,mysql/mysys/my_time.cc,2,0

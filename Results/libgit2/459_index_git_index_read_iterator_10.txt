@@ -1,0 +1,1 @@
+new_entries_map,libgit2/src/libgit2/index.c,8,add_entry,libgit2/src/libgit2/index.c,41,2

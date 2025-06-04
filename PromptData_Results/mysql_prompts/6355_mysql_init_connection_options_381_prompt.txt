@@ -1,0 +1,29 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'handle_expired' at line 2
+2. Pointer 'timeout' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static bool init_connection_options(MYSQL *mysql) {
+  bool handle_expired = (opt_connect_expired_password || !status.batch);
+
+  if (opt_init_command)
+    mysql_options(mysql, MYSQL_INIT_COMMAND, opt_init_command);
+
+  if (opt_connect_timeout) {
+    uint timeout = opt_connect_timeout;
+    mysql_options(mysql, MYSQL_OPT_CONNECT_TIMEOUT, (char *)&timeout);
+  }
+
+
+// Source: mysql.cc
+// Lines 4622-4631
+
+
+[ANSWER]
+MAY

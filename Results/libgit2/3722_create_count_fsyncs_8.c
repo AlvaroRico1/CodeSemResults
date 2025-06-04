@@ -1,0 +1,26 @@
+static void count_fsyncs(size_t *create_count, size_t *compress_count)
+{
+	git_reference *ref = NULL;
+	git_refdb *refdb;
+	git_oid id;
+
+	p_fsync__cnt = 0;
+
+	git_oid_fromstr(&id, current_master_tip);
+	cl_git_pass(git_reference_create(&ref, g_repo, "refs/heads/fsync_test", &id, 0, "log message"));
+	git_reference_free(ref);
+
+	*create_count = p_fsync__cnt;
+	p_fsync__cnt = 0;
+
+	cl_git_pass(git_repository_refdb(&refdb, g_repo));
+	cl_git_pass(git_refdb_compress(refdb));
+	git_refdb_free(refdb);
+
+	*compress_count = p_fsync__cnt;
+	p_fsync__cnt = 0;
+}
+
+
+// Source: create.c
+// Lines 309-330

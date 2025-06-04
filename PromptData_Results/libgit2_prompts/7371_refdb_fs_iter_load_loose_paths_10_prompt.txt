@@ -1,0 +1,95 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'fsit' at line 5
+2. Pointer 'entry' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int iter_load_loose_paths(refdb_fs_backend *backend, refdb_fs_iter *iter)
+{
+	int error = 0;
+	git_str path = GIT_STR_INIT;
+	git_iterator *fsit = NULL;
+	git_iterator_options fsit_opts = GIT_ITERATOR_OPTIONS_INIT;
+	const git_index_entry *entry = NULL;
+	const char *ref_prefix = GIT_REFS_DIR;
+	size_t ref_prefix_len = strlen(ref_prefix);
+
+	if (!backend->commonpath) /* do nothing if no commonpath for loose refs */
+		return 0;
+
+	fsit_opts.flags = backend->iterator_flags;
+
+	if (iter->glob) {
+		const char *last_sep = NULL;
+		const char *pos;
+		for (pos = iter->glob; *pos; ++pos) {
+			switch (*pos) {
+			case '?':
+			case '*':
+			case '[':
+			case '\\':
+				break;
+			case '/':
+				last_sep = pos;
+				/* FALLTHROUGH */
+			default:
+				continue;
+			}
+			break;
+		}
+		if (last_sep) {
+			ref_prefix = iter->glob;
+			ref_prefix_len = (last_sep - ref_prefix) + 1;
+		}
+	}
+
+	if ((error = git_str_puts(&path, backend->commonpath)) < 0 ||
+		(error = git_str_put(&path, ref_prefix, ref_prefix_len)) < 0) {
+		git_str_dispose(&path);
+		return error;
+	}
+
+	if ((error = git_iterator_for_filesystem(&fsit, path.ptr, &fsit_opts)) < 0) {
+		git_str_dispose(&path);
+		return (iter->glob && error == GIT_ENOTFOUND)? 0 : error;
+	}
+
+	error = git_str_sets(&path, ref_prefix);
+
+	while (!error && !git_iterator_advance(&entry, fsit)) {
+		const char *ref_name;
+		char *ref_dup;
+
+		git_str_truncate(&path, ref_prefix_len);
+		git_str_puts(&path, entry->path);
+		ref_name = git_str_cstr(&path);
+
+		if (git__suffixcmp(ref_name, ".lock") == 0 ||
+			(iter->glob && wildmatch(iter->glob, ref_name, 0) != 0))
+			continue;
+
+		ref_dup = git_pool_strdup(&iter->pool, ref_name);
+		if (!ref_dup)
+			error = -1;
+		else
+			error = git_vector_insert(&iter->loose, ref_dup);
+	}
+
+	git_iterator_free(fsit);
+	git_str_dispose(&path);
+
+	return error;
+}
+
+
+// Source: refdb_fs.c
+// Lines 795-870
+
+
+[ANSWER]
+MAY

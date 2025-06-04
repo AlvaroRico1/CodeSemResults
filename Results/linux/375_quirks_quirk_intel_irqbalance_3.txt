@@ -1,0 +1,1 @@
+word,linux/arch/x86/kernel/quirks.c,4,config,linux/arch/x86/kernel/quirks.c,3,2

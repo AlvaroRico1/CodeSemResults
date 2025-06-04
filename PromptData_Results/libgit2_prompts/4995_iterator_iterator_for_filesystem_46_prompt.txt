@@ -1,0 +1,96 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'iter' at line 10
+2. Pointer 'index' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int iterator_for_filesystem(
+	git_iterator **out,
+	git_repository *repo,
+	const char *root,
+	git_index *index,
+	git_tree *tree,
+	git_iterator_t type,
+	git_iterator_options *options)
+{
+	filesystem_iterator *iter;
+	size_t root_len;
+	int error;
+
+	static git_iterator_callbacks callbacks = {
+		filesystem_iterator_current,
+		filesystem_iterator_advance,
+		filesystem_iterator_advance_into,
+		filesystem_iterator_advance_over,
+		filesystem_iterator_reset,
+		filesystem_iterator_free
+	};
+
+	*out = NULL;
+
+	if (root == NULL)
+		return git_iterator_for_nothing(out, options);
+
+	iter = git__calloc(1, sizeof(filesystem_iterator));
+	GIT_ERROR_CHECK_ALLOC(iter);
+
+	iter->base.type = type;
+	iter->base.cb = &callbacks;
+
+	root_len = strlen(root);
+
+	iter->root = git__malloc(root_len+2);
+	GIT_ERROR_CHECK_ALLOC(iter->root);
+
+	memcpy(iter->root, root, root_len);
+
+	if (root_len == 0 || root[root_len-1] != '/') {
+		iter->root[root_len] = '/';
+		root_len++;
+	}
+	iter->root[root_len] = '\0';
+	iter->root_len = root_len;
+
+	if ((error = git_str_puts(&iter->current_path, iter->root)) < 0)
+		goto on_error;
+
+	if ((error = iterator_init_common(&iter->base, repo, index, options)) < 0)
+		goto on_error;
+
+	if (tree && (error = git_tree_dup(&iter->tree, tree)) < 0)
+		goto on_error;
+
+	if (index &&
+		(error = git_index_snapshot_new(&iter->index_snapshot, index)) < 0)
+		goto on_error;
+
+	iter->index = index;
+	iter->dirload_flags =
+		(iterator__ignore_case(&iter->base) ?
+			GIT_FS_PATH_DIR_IGNORE_CASE : 0) |
+		(iterator__flag(&iter->base, PRECOMPOSE_UNICODE) ?
+			GIT_FS_PATH_DIR_PRECOMPOSE_UNICODE : 0);
+
+	if ((error = filesystem_iterator_init(iter)) < 0)
+		goto on_error;
+
+	*out = &iter->base;
+	return 0;
+
+on_error:
+	git_iterator_free(&iter->base);
+	return error;
+}
+
+
+// Source: iterator.c
+// Lines 1909-1985
+
+
+[ANSWER]
+MUST

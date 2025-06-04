@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'end_arg' at line 10\n2. Pointer 'help_arg' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int com_server_help(String *buffer MY_ATTRIBUTE((unused)),\n                           char *line MY_ATTRIBUTE((unused)), char *help_arg) {\n  MYSQL_ROW cur;\n  const char *server_cmd;\n  char cmd_buf[100 + 1];\n  MYSQL_RES *result;\n  int error;\n\n  if (help_arg[0] != '\\'') {\n    char *end_arg = strend(help_arg);\n    if (--end_arg) {\n      while (my_isspace(charset_info, *end_arg)) end_arg--;\n      *++end_arg = '\\0';\n    }\n    (void)strxnmov(cmd_buf, sizeof(cmd_buf), \"help '\", help_arg, \"'\", NullS);\n  } else\n\n\n// Source: mysql.cc\n// Lines 3118-3133\n",
+  "ANSWER": "MUST-NOT"
+}

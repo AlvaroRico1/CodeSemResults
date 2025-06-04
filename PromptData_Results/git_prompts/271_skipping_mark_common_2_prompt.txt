@@ -1,0 +1,36 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'p' at line 3
+2. Pointer 'c' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void mark_common(struct data *data, struct commit *c)
+{
+	struct commit_list *p;
+
+	if (c->object.flags & COMMON)
+		return;
+	c->object.flags |= COMMON;
+	if (!(c->object.flags & POPPED))
+		data->non_common_revs--;
+
+	if (!c->object.parsed)
+		return;
+	for (p = c->parents; p; p = p->next) {
+		if (p->item->object.flags & SEEN)
+			mark_common(data, p->item);
+	}
+}
+
+
+// Source: skipping.c
+// Lines 88-104
+
+
+[ANSWER]
+MUST

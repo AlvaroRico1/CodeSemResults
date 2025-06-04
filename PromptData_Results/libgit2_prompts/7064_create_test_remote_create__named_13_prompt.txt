@@ -1,0 +1,46 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'cfg' at line 4
+2. Pointer 'cfg_val' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_remote_create__named(void)
+{
+	git_remote *remote;
+	git_config *cfg;
+	const char *cfg_val;
+
+	size_t section_count = count_config_entries_match(_repo, "remote\\.");
+
+	cl_git_pass(git_remote_create(&remote, _repo, "valid-name", TEST_URL));
+
+	cl_assert_equal_s(git_remote_name(remote), "valid-name");
+	cl_assert_equal_s(git_remote_url(remote), TEST_URL);
+	cl_assert_equal_p(git_remote_owner(remote), _repo);
+
+	cl_git_pass(git_repository_config_snapshot(&cfg, _repo));
+
+	cl_git_pass(git_config_get_string(&cfg_val, cfg, "remote.valid-name.fetch"));
+	cl_assert_equal_s(cfg_val, "+refs/heads/*:refs/remotes/valid-name/*");
+
+	cl_git_pass(git_config_get_string(&cfg_val, cfg, "remote.valid-name.url"));
+	cl_assert_equal_s(cfg_val, TEST_URL);
+
+	cl_assert_equal_i(section_count + 2, count_config_entries_match(_repo, "remote\\."));
+
+	git_config_free(cfg);
+	git_remote_free(remote);
+}
+
+
+// Source: create.c
+// Lines 40-66
+
+
+[ANSWER]
+MAY

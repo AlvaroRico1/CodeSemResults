@@ -1,0 +1,76 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tree' at line 5
+2. Pointer 'max_i' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void assert_workdir_matches_tree(
+	git_repository *repo, const git_oid *id, const char *root, bool recurse)
+{
+	git_object *obj;
+	git_tree *tree;
+	size_t i, max_i;
+	git_str path = GIT_STR_INIT;
+
+	if (!root)
+		root = git_repository_workdir(repo);
+	cl_assert(root);
+
+	cl_git_pass(git_object_lookup(&obj, repo, id, GIT_OBJECT_ANY));
+	cl_git_pass(git_object_peel((git_object **)&tree, obj, GIT_OBJECT_TREE));
+	git_object_free(obj);
+
+	max_i = git_tree_entrycount(tree);
+
+	for (i = 0; i < max_i; ++i) {
+		const git_tree_entry *te = git_tree_entry_byindex(tree, i);
+		cl_assert(te);
+
+		cl_git_pass(git_str_joinpath(&path, root, git_tree_entry_name(te)));
+
+		switch (git_tree_entry_type(te)) {
+		case GIT_OBJECT_COMMIT:
+			assert_dir_exists(path.ptr);
+			break;
+		case GIT_OBJECT_TREE:
+			assert_dir_exists(path.ptr);
+			if (recurse)
+				assert_workdir_matches_tree(
+					repo, git_tree_entry_id(te), path.ptr, true);
+			break;
+		case GIT_OBJECT_BLOB:
+			switch (git_tree_entry_filemode(te)) {
+			case GIT_FILEMODE_BLOB:
+			case GIT_FILEMODE_BLOB_EXECUTABLE:
+				assert_file_exists(path.ptr);
+				/* because of cross-platform, don't confirm exec bit yet */
+				break;
+			case GIT_FILEMODE_LINK:
+				cl_assert_(git_fs_path_exists(path.ptr), path.ptr);
+				/* because of cross-platform, don't confirm link yet */
+				break;
+			default:
+				cl_assert(false); /* really?! */
+			}
+			break;
+		default:
+			cl_assert(false); /* really?!! */
+		}
+	}
+
+	git_tree_free(tree);
+	git_str_dispose(&path);
+}
+
+
+// Source: typechange.c
+// Lines 87-143
+
+
+[ANSWER]
+MUST-NOT

@@ -1,0 +1,79 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'pages' at line 17
+2. Pointer 'offs' at line 19
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+struct bio *bio_map_user_iov(struct request_queue *q,
+			     struct iov_iter *iter,
+			     gfp_t gfp_mask)
+{
+	int j;
+	struct bio *bio;
+	int ret;
+
+	if (!iov_iter_count(iter))
+		return ERR_PTR(-EINVAL);
+
+	bio = bio_kmalloc(gfp_mask, iov_iter_npages(iter, BIO_MAX_PAGES));
+	if (!bio)
+		return ERR_PTR(-ENOMEM);
+
+	while (iov_iter_count(iter)) {
+		struct page **pages;
+		ssize_t bytes;
+		size_t offs, added = 0;
+		int npages;
+
+		bytes = iov_iter_get_pages_alloc(iter, &pages, LONG_MAX, &offs);
+		if (unlikely(bytes <= 0)) {
+			ret = bytes ? bytes : -EFAULT;
+			goto out_unmap;
+		}
+
+		npages = DIV_ROUND_UP(offs + bytes, PAGE_SIZE);
+
+		if (unlikely(offs & queue_dma_alignment(q))) {
+			ret = -EINVAL;
+			j = 0;
+		} else {
+			for (j = 0; j < npages; j++) {
+				struct page *page = pages[j];
+				unsigned int n = PAGE_SIZE - offs;
+
+				if (n > bytes)
+					n = bytes;
+
+				if (!__bio_add_pc_page(q, bio, page, n, offs,
+							true))
+					break;
+
+				added += n;
+				bytes -= n;
+				offs = 0;
+			}
+			iov_iter_advance(iter, added);
+		}
+		/*
+		 * release the pages we didn't map into the bio, if any
+		 */
+		while (j < npages)
+			put_page(pages[j++]);
+		kvfree(pages);
+		/* couldn't stuff something into bio? */
+		if (bytes)
+			break;
+	}
+
+
+// Source: bio.c
+// Lines 1351-1410
+
+
+[ANSWER]
+MAY

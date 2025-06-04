@@ -1,0 +1,90 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'theirs' at line 4
+2. Pointer 'full_base' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int format_tracking_info(struct branch *branch, struct strbuf *sb,
+			 enum ahead_behind_flags abf)
+{
+	int ours, theirs, sti;
+	const char *full_base;
+	char *base;
+	int upstream_is_gone = 0;
+
+	sti = stat_tracking_info(branch, &ours, &theirs, &full_base, 0, abf);
+	if (sti < 0) {
+		if (!full_base)
+			return 0;
+		upstream_is_gone = 1;
+	}
+
+	base = shorten_unambiguous_ref(full_base, 0);
+	if (upstream_is_gone) {
+		strbuf_addf(sb,
+			_("Your branch is based on '%s', but the upstream is gone.\n"),
+			base);
+		if (advice_enabled(ADVICE_STATUS_HINTS))
+			strbuf_addstr(sb,
+				_("  (use \"git branch --unset-upstream\" to fixup)\n"));
+	} else if (!sti) {
+		strbuf_addf(sb,
+			_("Your branch is up to date with '%s'.\n"),
+			base);
+	} else if (abf == AHEAD_BEHIND_QUICK) {
+		strbuf_addf(sb,
+			    _("Your branch and '%s' refer to different commits.\n"),
+			    base);
+		if (advice_enabled(ADVICE_STATUS_HINTS))
+			strbuf_addf(sb, _("  (use \"%s\" for details)\n"),
+				    "git status --ahead-behind");
+	} else if (!theirs) {
+		strbuf_addf(sb,
+			Q_("Your branch is ahead of '%s' by %d commit.\n",
+			   "Your branch is ahead of '%s' by %d commits.\n",
+			   ours),
+			base, ours);
+		if (advice_enabled(ADVICE_STATUS_HINTS))
+			strbuf_addstr(sb,
+				_("  (use \"git push\" to publish your local commits)\n"));
+	} else if (!ours) {
+		strbuf_addf(sb,
+			Q_("Your branch is behind '%s' by %d commit, "
+			       "and can be fast-forwarded.\n",
+			   "Your branch is behind '%s' by %d commits, "
+			       "and can be fast-forwarded.\n",
+			   theirs),
+			base, theirs);
+		if (advice_enabled(ADVICE_STATUS_HINTS))
+			strbuf_addstr(sb,
+				_("  (use \"git pull\" to update your local branch)\n"));
+	} else {
+		strbuf_addf(sb,
+			Q_("Your branch and '%s' have diverged,\n"
+			       "and have %d and %d different commit each, "
+			       "respectively.\n",
+			   "Your branch and '%s' have diverged,\n"
+			       "and have %d and %d different commits each, "
+			       "respectively.\n",
+			   ours + theirs),
+			base, ours, theirs);
+		if (advice_enabled(ADVICE_STATUS_HINTS))
+			strbuf_addstr(sb,
+				_("  (use \"git pull\" to merge the remote branch into yours)\n"));
+	}
+	free(base);
+	return 1;
+}
+
+
+// Source: remote.c
+// Lines 2101-2171
+
+
+[ANSWER]
+MAY

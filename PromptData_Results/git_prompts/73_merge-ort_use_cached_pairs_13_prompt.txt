@@ -1,0 +1,57 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'new_name' at line 15
+2. Pointer 'old_name' at line 14
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void use_cached_pairs(struct merge_options *opt,
+			     struct strmap *cached_pairs,
+			     struct diff_queue_struct *pairs)
+{
+	struct hashmap_iter iter;
+	struct strmap_entry *entry;
+
+	/*
+	 * Add to side_pairs all entries from renames->cached_pairs[side_index].
+	 * (Info in cached_irrelevant[side_index] is not relevant here.)
+	 */
+	strmap_for_each_entry(cached_pairs, &iter, entry) {
+		struct diff_filespec *one, *two;
+		const char *old_name = entry->key;
+		const char *new_name = entry->value;
+		if (!new_name)
+			new_name = old_name;
+
+		/*
+		 * cached_pairs has *copies* of old_name and new_name,
+		 * because it has to persist across merges.  Since
+		 * pool_alloc_filespec() will just re-use the existing
+		 * filenames, which will also get re-used by
+		 * opt->priv->paths if they become renames, and then
+		 * get freed at the end of the merge, that would leave
+		 * the copy in cached_pairs dangling.  Avoid this by
+		 * making a copy here.
+		 */
+		old_name = mem_pool_strdup(&opt->priv->pool, old_name);
+		new_name = mem_pool_strdup(&opt->priv->pool, new_name);
+
+		/* We don't care about oid/mode, only filenames and status */
+		one = pool_alloc_filespec(&opt->priv->pool, old_name);
+		two = pool_alloc_filespec(&opt->priv->pool, new_name);
+		pool_diff_queue(&opt->priv->pool, pairs, one, two);
+		pairs->queue[pairs->nr-1]->status = entry->value ? 'R' : 'D';
+	}
+}
+
+
+// Source: merge-ort.c
+// Lines 2812-2849
+
+
+[ANSWER]
+MUST

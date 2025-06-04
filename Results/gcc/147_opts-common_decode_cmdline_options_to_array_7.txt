@@ -1,0 +1,1 @@
+decoded_options_count,gcc/gcc/opts-common.c,4,opt,gcc/gcc/opts-common.c,27,2

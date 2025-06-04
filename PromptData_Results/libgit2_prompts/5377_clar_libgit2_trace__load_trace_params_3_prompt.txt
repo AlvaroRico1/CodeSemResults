@@ -1,0 +1,45 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'sz_level' at line 3
+2. Pointer 'sz_method' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void _load_trace_params(void)
+{
+	char *sz_level;
+	char *sz_method;
+	char *sz_tests;
+
+	s_trace_loaded = 1;
+
+	sz_level = cl_getenv("CLAR_TRACE_LEVEL");
+	if (!sz_level || !*sz_level) {
+		s_trace_level = GIT_TRACE_NONE;
+		s_trace_method = NULL;
+		return;
+	}
+
+	/* TODO Parse sz_level and set s_trace_level. */
+	s_trace_level = GIT_TRACE_TRACE;
+
+	sz_method = cl_getenv("CLAR_TRACE_METHOD");
+	if (set_method(sz_method) < 0)
+		set_method(NULL);
+
+	sz_tests = cl_getenv("CLAR_TRACE_TESTS");
+	if (sz_tests != NULL)
+		s_trace_tests = 1;
+}
+
+
+// Source: clar_libgit2_trace.c
+// Lines 114-139
+
+
+[ANSWER]
+MUST-NOT

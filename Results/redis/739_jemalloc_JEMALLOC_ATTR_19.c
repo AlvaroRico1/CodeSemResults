@@ -1,0 +1,34 @@
+JEMALLOC_ATTR(malloc)
+je_memalign(size_t alignment, size_t size) {
+	void *ret;
+	static_opts_t sopts;
+	dynamic_opts_t dopts;
+
+	LOG("core.memalign.entry", "alignment: %zu, size: %zu\n", alignment,
+	    size);
+
+	static_opts_init(&sopts);
+	dynamic_opts_init(&dopts);
+
+	sopts.bump_empty_alloc = true;
+	sopts.min_alignment = 1;
+	sopts.oom_string =
+	    "<jemalloc>: Error allocating aligned memory: out of memory\n";
+	sopts.invalid_alignment_string =
+	    "<jemalloc>: Error allocating aligned memory: invalid alignment\n";
+	sopts.null_out_result_on_error = true;
+
+	dopts.result = &ret;
+	dopts.num_items = 1;
+	dopts.item_size = size;
+	dopts.alignment = alignment;
+
+	imalloc(&sopts, &dopts);
+
+	LOG("core.memalign.exit", "result: %p", ret);
+	return ret;
+}
+
+
+// Source: jemalloc.c
+// Lines 2418-2447

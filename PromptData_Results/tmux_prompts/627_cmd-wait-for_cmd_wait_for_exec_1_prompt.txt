@@ -1,0 +1,36 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'find' at line 5
+2. Pointer 'name' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+cmd_wait_for_exec(struct cmd *self, struct cmdq_item *item)
+{
+	struct args     	*args = cmd_get_args(self);
+	const char		*name = args_string(args, 0);
+	struct wait_channel	*wc, find;
+
+	find.name = name;
+	wc = RB_FIND(wait_channels, &wait_channels, &find);
+
+	if (args_has(args, 'S'))
+		return (cmd_wait_for_signal(item, name, wc));
+	if (args_has(args, 'L'))
+		return (cmd_wait_for_lock(item, name, wc));
+	if (args_has(args, 'U'))
+		return (cmd_wait_for_unlock(item, name, wc));
+	return (cmd_wait_for_wait(item, name, wc));
+}
+
+
+// Source: cmd-wait-for.c
+// Lines 121-137
+
+
+[ANSWER]
+MUST

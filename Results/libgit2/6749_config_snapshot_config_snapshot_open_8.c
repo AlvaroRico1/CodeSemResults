@@ -1,0 +1,38 @@
+static int config_snapshot_open(git_config_backend *cfg, git_config_level_t level, const git_repository *repo)
+{
+	config_snapshot_backend *b = GIT_CONTAINER_OF(cfg, config_snapshot_backend, parent);
+	git_config_entries *entries = NULL;
+	git_config_iterator *it = NULL;
+	git_config_entry *entry;
+	int error;
+
+	/* We're just copying data, don't care about the level or repo*/
+	GIT_UNUSED(level);
+	GIT_UNUSED(repo);
+
+	if ((error = git_config_entries_new(&entries)) < 0 ||
+	    (error = b->source->iterator(&it, b->source)) < 0)
+		goto out;
+
+	while ((error = git_config_next(&entry, it)) == 0)
+		if ((error = git_config_entries_dup_entry(entries, entry)) < 0)
+			goto out;
+
+	if (error < 0) {
+		if (error != GIT_ITEROVER)
+			goto out;
+		error = 0;
+	}
+
+	b->entries = entries;
+
+out:
+	git_config_iterator_free(it);
+	if (error)
+		git_config_entries_free(entries);
+	return error;
+}
+
+
+// Source: config_snapshot.c
+// Lines 143-176

@@ -1,0 +1,27 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'backend' at line 3
+2. Pointer 'internal' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void backend_internal_free(backend_internal *internal)
+{
+	git_config_backend *backend;
+
+	backend = internal->backend;
+	backend->free(backend);
+	git__free(internal);
+}
+
+
+// Source: config.c
+// Lines 40-47
+
+
+[ANSWER]
+MUST

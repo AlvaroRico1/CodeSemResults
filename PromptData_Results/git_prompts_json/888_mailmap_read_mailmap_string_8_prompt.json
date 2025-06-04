@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'buf' at line 1\n2. Pointer 'end' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void read_mailmap_string(struct string_list *map, char *buf)\n{\n\twhile (*buf) {\n\t\tchar *end = strchrnul(buf, '\\n');\n\n\t\tif (*end)\n\t\t\t*end++ = '\\0';\n\n\t\tread_mailmap_line(map, buf);\n\t\tbuf = end;\n\t}\n\n\n// Source: mailmap.c\n// Lines 194-204\n",
+  "ANSWER": "MUST"
+}

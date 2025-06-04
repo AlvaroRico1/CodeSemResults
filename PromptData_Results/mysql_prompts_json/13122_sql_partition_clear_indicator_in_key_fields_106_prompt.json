@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'key_part' at line 2\n2. Pointer 'key_info' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void clear_indicator_in_key_fields(KEY *key_info) {\n  KEY_PART_INFO *key_part;\n  uint key_parts = key_info->user_defined_key_parts, i;\n  for (i = 0, key_part = key_info->key_part; i < key_parts; i++, key_part++)\n    key_part->field->clear_flag(GET_FIXED_FIELDS_FLAG);\n}\n\n\n// Source: sql_partition.cc\n// Lines 634-639\n",
+  "ANSWER": "MUST"
+}

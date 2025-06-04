@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'cmds' at line 3\n2. Pointer '_cmds' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void dispose_h2o_headers_command(void *_cmds)\n{\n    h2o_headers_command_t *cmds = _cmds;\n    size_t i;\n    for (i = 0; cmds[i].cmd != H2O_HEADERS_CMD_NULL; ++i)\n        free(cmds[i].args);\n}\n\n\n// Source: headers_util.c\n// Lines 117-123\n",
+  "ANSWER": "MUST"
+}

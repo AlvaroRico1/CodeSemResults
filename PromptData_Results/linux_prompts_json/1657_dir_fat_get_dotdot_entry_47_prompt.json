@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'de' at line 2\n2. Pointer 'offset' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint fat_get_dotdot_entry(struct inode *dir, struct buffer_head **bh,\n\t\t\t struct msdos_dir_entry **de)\n{\n\tloff_t offset = 0;\n\n\t*de = NULL;\n\twhile (fat_get_short_entry(dir, &offset, bh, de) >= 0) {\n\t\tif (!strncmp((*de)->name, MSDOS_DOTDOT, MSDOS_NAME))\n\t\t\treturn 0;\n\t}\n\treturn -ENOENT;\n}\n\n\n// Source: dir.c\n// Lines 896-907\n",
+  "ANSWER": "MAY"
+}

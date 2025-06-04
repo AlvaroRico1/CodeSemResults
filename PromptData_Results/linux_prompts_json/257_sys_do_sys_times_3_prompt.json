@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'tgstime' at line 3\n2. Pointer 'tgutime' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void do_sys_times(struct tms *tms)\n{\n\tu64 tgutime, tgstime, cutime, cstime;\n\n\tthread_group_cputime_adjusted(current, &tgutime, &tgstime);\n\tcutime = current->signal->cutime;\n\tcstime = current->signal->cstime;\n\ttms->tms_utime = nsec_to_clock_t(tgutime);\n\ttms->tms_stime = nsec_to_clock_t(tgstime);\n\ttms->tms_cutime = nsec_to_clock_t(cutime);\n\ttms->tms_cstime = nsec_to_clock_t(cstime);\n}\n\n\n// Source: sys.c\n// Lines 943-954\n",
+  "ANSWER": "MAY"
+}

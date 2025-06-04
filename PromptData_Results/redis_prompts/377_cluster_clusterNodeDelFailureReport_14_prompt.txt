@@ -1,0 +1,38 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'l' at line 2
+2. Pointer 'node' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int clusterNodeDelFailureReport(clusterNode *node, clusterNode *sender) {
+    list *l = node->fail_reports;
+    listNode *ln;
+    listIter li;
+    clusterNodeFailReport *fr;
+
+    /* Search for a failure report from this sender. */
+    listRewind(l,&li);
+    while ((ln = listNext(&li)) != NULL) {
+        fr = ln->value;
+        if (fr->node == sender) break;
+    }
+    if (!ln) return 0; /* No failure report from this sender. */
+
+    /* Remove the failure report. */
+    listDelNode(l,ln);
+    clusterNodeCleanupFailureReports(node);
+    return 1;
+}
+
+
+// Source: cluster.c
+// Lines 881-899
+
+
+[ANSWER]
+MUST

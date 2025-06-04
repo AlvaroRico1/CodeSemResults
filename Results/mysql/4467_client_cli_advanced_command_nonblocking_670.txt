@@ -1,0 +1,1 @@
+stmt,mysql/sql-common/client.cc,4,err,mysql/sql-common/client.cc,58,0

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'scan' at line 3\n2. Pointer 'str' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nsize_t git__unescape(char *str)\n{\n\tchar *scan, *pos = str;\n\n\tif (!str)\n\t\treturn 0;\n\n\tfor (scan = str; *scan; pos++, scan++) {\n\t\tif (*scan == '\\\\' && *(scan + 1) != '\\0')\n\t\t\tscan++; /* skip '\\' but include next char */\n\t\tif (pos != scan)\n\t\t\t*pos = *scan;\n\t}\n\n\tif (pos != scan) {\n\t\t*pos = '\\0';\n\t}\n\n\treturn (pos - str);\n}\n\n\n// Source: util.c\n// Lines 655-674\n",
+  "ANSWER": "MUST"
+}

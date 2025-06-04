@@ -1,0 +1,226 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'el' at line 1
+2. Pointer 'rv' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+el_wset(EditLine *el, int op, ...)
+{
+	va_list ap;
+	int rv = 0;
+
+	if (el == NULL)
+		return -1;
+	va_start(ap, op);
+
+	switch (op) {
+	case EL_PROMPT:
+	case EL_RPROMPT: {
+		el_pfunc_t p = va_arg(ap, el_pfunc_t);
+
+		rv = prompt_set(el, p, 0, op, 1);
+		break;
+	}
+
+	case EL_RESIZE: {
+		el_zfunc_t p = va_arg(ap, el_zfunc_t);
+		void *arg = va_arg(ap, void *);
+		rv = ch_resizefun(el, p, arg);
+		break;
+	}
+
+	case EL_ALIAS_TEXT: {
+		el_afunc_t p = va_arg(ap, el_afunc_t);
+		void *arg = va_arg(ap, void *);
+		rv = ch_aliasfun(el, p, arg);
+		break;
+	}
+
+	case EL_PROMPT_ESC:
+	case EL_RPROMPT_ESC: {
+		el_pfunc_t p = va_arg(ap, el_pfunc_t);
+		int c = va_arg(ap, int);
+
+		rv = prompt_set(el, p, (wchar_t)c, op, 1);
+		break;
+	}
+
+	case EL_TERMINAL:
+		rv = terminal_set(el, va_arg(ap, char *));
+		break;
+
+	case EL_EDITOR:
+		rv = map_set_editor(el, va_arg(ap, wchar_t *));
+		break;
+
+	case EL_SIGNAL:
+		if (va_arg(ap, int))
+			el->el_flags |= HANDLE_SIGNALS;
+		else
+			el->el_flags &= ~HANDLE_SIGNALS;
+		break;
+
+	case EL_BIND:
+	case EL_TELLTC:
+	case EL_SETTC:
+	case EL_ECHOTC:
+	case EL_SETTY:
+	{
+		const wchar_t *argv[20];
+		int i;
+
+		for (i = 1; i < (int)__arraycount(argv); i++)
+			if ((argv[i] = va_arg(ap, wchar_t *)) == NULL)
+				break;
+
+		switch (op) {
+		case EL_BIND:
+			argv[0] = L"bind";
+			rv = map_bind(el, i, argv);
+			break;
+
+		case EL_TELLTC:
+			argv[0] = L"telltc";
+			rv = terminal_telltc(el, i, argv);
+			break;
+
+		case EL_SETTC:
+			argv[0] = L"settc";
+			rv = terminal_settc(el, i, argv);
+			break;
+
+		case EL_ECHOTC:
+			argv[0] = L"echotc";
+			rv = terminal_echotc(el, i, argv);
+			break;
+
+		case EL_SETTY:
+			argv[0] = L"setty";
+			rv = tty_stty(el, i, argv);
+			break;
+
+		default:
+			rv = -1;
+			EL_ABORT((el->el_errfile, "Bad op %d\n", op));
+			break;
+		}
+		break;
+	}
+
+	case EL_ADDFN:
+	{
+		wchar_t *name = va_arg(ap, wchar_t *);
+		wchar_t *help = va_arg(ap, wchar_t *);
+		el_func_t func = va_arg(ap, el_func_t);
+
+		rv = map_addfunc(el, name, help, func);
+		break;
+	}
+
+	case EL_HIST:
+	{
+		hist_fun_t func = va_arg(ap, hist_fun_t);
+		void *ptr = va_arg(ap, void *);
+
+		rv = hist_set(el, func, ptr);
+		if (MB_CUR_MAX == 1)
+			el->el_flags &= ~NARROW_HISTORY;
+		break;
+	}
+
+	case EL_EDITMODE:
+		if (va_arg(ap, int))
+			el->el_flags &= ~EDIT_DISABLED;
+		else
+			el->el_flags |= EDIT_DISABLED;
+		rv = 0;
+		break;
+
+	case EL_GETCFN:
+	{
+		el_rfunc_t rc = va_arg(ap, el_rfunc_t);
+		rv = el_read_setfn(el->el_read, rc);
+		break;
+	}
+
+	case EL_CLIENTDATA:
+		el->el_data = va_arg(ap, void *);
+		break;
+
+	case EL_UNBUFFERED:
+		rv = va_arg(ap, int);
+		if (rv && !(el->el_flags & UNBUFFERED)) {
+			el->el_flags |= UNBUFFERED;
+			read_prepare(el);
+		} else if (!rv && (el->el_flags & UNBUFFERED)) {
+			el->el_flags &= ~UNBUFFERED;
+			read_finish(el);
+		}
+		rv = 0;
+		break;
+
+	case EL_PREP_TERM:
+		rv = va_arg(ap, int);
+		if (rv)
+			(void) tty_rawmode(el);
+		else
+			(void) tty_cookedmode(el);
+		rv = 0;
+		break;
+
+	case EL_SETFP:
+	{
+		FILE *fp;
+		int what;
+
+		what = va_arg(ap, int);
+		fp = va_arg(ap, FILE *);
+
+		rv = 0;
+		switch (what) {
+		case 0:
+			el->el_infile = fp;
+			el->el_infd = fileno(fp);
+			break;
+		case 1:
+			el->el_outfile = fp;
+			el->el_outfd = fileno(fp);
+			break;
+		case 2:
+			el->el_errfile = fp;
+			el->el_errfd = fileno(fp);
+			break;
+		default:
+			rv = -1;
+			break;
+		}
+		break;
+	}
+
+	case EL_REFRESH:
+		re_clear_display(el);
+		re_refresh(el);
+		terminal__flush(el);
+		break;
+
+	default:
+		rv = -1;
+		break;
+	}
+
+	va_end(ap);
+	return rv;
+}
+
+
+// Source: el.c
+// Lines 218-424
+
+
+[ANSWER]
+MAY

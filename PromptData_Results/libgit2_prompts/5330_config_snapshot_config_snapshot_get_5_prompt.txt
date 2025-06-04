@@ -1,0 +1,46 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'entries' at line 4
+2. Pointer 'b' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int config_snapshot_get(git_config_backend *cfg, const char *key, git_config_entry **out)
+{
+	config_snapshot_backend *b = GIT_CONTAINER_OF(cfg, config_snapshot_backend, parent);
+	git_config_entries *entries = NULL;
+	git_config_entry *entry;
+	int error = 0;
+
+	if (git_mutex_lock(&b->values_mutex) < 0) {
+	    git_error_set(GIT_ERROR_OS, "failed to lock config backend");
+	    return -1;
+	}
+
+	entries = b->entries;
+	git_config_entries_incref(entries);
+	git_mutex_unlock(&b->values_mutex);
+
+	if ((error = (git_config_entries_get(&entry, entries, key))) < 0) {
+		git_config_entries_free(entries);
+		return error;
+	}
+
+	entry->free = config_snapshot_entry_free;
+	entry->payload = entries;
+	*out = entry;
+
+	return 0;
+}
+
+
+// Source: config_snapshot.c
+// Lines 51-77
+
+
+[ANSWER]
+MUST

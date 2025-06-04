@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ref' at line 3\n2. Pointer 'refdb' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void count_fsyncs(size_t *create_count, size_t *compress_count)\n{\n\tgit_reference *ref = NULL;\n\tgit_refdb *refdb;\n\tgit_oid id;\n\n\tp_fsync__cnt = 0;\n\n\tgit_oid_fromstr(&id, current_master_tip);\n\tcl_git_pass(git_reference_create(&ref, g_repo, \"refs/heads/fsync_test\", &id, 0, \"log message\"));\n\tgit_reference_free(ref);\n\n\t*create_count = p_fsync__cnt;\n\tp_fsync__cnt = 0;\n\n\tcl_git_pass(git_repository_refdb(&refdb, g_repo));\n\tcl_git_pass(git_refdb_compress(refdb));\n\tgit_refdb_free(refdb);\n\n\t*compress_count = p_fsync__cnt;\n\tp_fsync__cnt = 0;\n}\n\n\n// Source: create.c\n// Lines 309-330\n",
+  "ANSWER": "MAY"
+}

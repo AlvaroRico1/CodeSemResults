@@ -1,0 +1,159 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'right' at line 6
+2. Pointer 'left' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+format_replace_expression(struct format_modifier *mexp,
+    struct format_expand_state *es, const char *copy)
+{
+	int			 argc = mexp->argc;
+	const char		*errstr;
+	char			*endch, *value, *left = NULL, *right = NULL;
+	int			 use_fp = 0;
+	u_int			 prec = 0;
+	double			 mleft, mright, result;
+	enum { ADD,
+	       SUBTRACT,
+	       MULTIPLY,
+	       DIVIDE,
+	       MODULUS,
+	       EQUAL,
+	       NOT_EQUAL,
+	       GREATER_THAN,
+	       GREATER_THAN_EQUAL,
+	       LESS_THAN,
+	       LESS_THAN_EQUAL } operator;
+
+	if (strcmp(mexp->argv[0], "+") == 0)
+		operator = ADD;
+	else if (strcmp(mexp->argv[0], "-") == 0)
+		operator = SUBTRACT;
+	else if (strcmp(mexp->argv[0], "*") == 0)
+		operator = MULTIPLY;
+	else if (strcmp(mexp->argv[0], "/") == 0)
+		operator = DIVIDE;
+	else if (strcmp(mexp->argv[0], "%") == 0 ||
+	    strcmp(mexp->argv[0], "m") == 0)
+		operator = MODULUS;
+	else if (strcmp(mexp->argv[0], "==") == 0)
+		operator = EQUAL;
+	else if (strcmp(mexp->argv[0], "!=") == 0)
+		operator = NOT_EQUAL;
+	else if (strcmp(mexp->argv[0], ">") == 0)
+		operator = GREATER_THAN;
+	else if (strcmp(mexp->argv[0], "<") == 0)
+		operator = LESS_THAN;
+	else if (strcmp(mexp->argv[0], ">=") == 0)
+		operator = GREATER_THAN_EQUAL;
+	else if (strcmp(mexp->argv[0], "<=") == 0)
+		operator = LESS_THAN_EQUAL;
+	else {
+		format_log(es, "expression has no valid operator: '%s'",
+		    mexp->argv[0]);
+		goto fail;
+	}
+
+	/* The second argument may be flags. */
+	if (argc >= 2 && strchr(mexp->argv[1], 'f') != NULL) {
+		use_fp = 1;
+		prec = 2;
+	}
+
+	/* The third argument may be precision. */
+	if (argc >= 3) {
+		prec = strtonum(mexp->argv[2], INT_MIN, INT_MAX, &errstr);
+		if (errstr != NULL) {
+			format_log(es, "expression precision %s: %s", errstr,
+			    mexp->argv[2]);
+			goto fail;
+		}
+	}
+
+	if (format_choose(es, copy, &left, &right, 1) != 0) {
+		format_log(es, "expression syntax error");
+		goto fail;
+	}
+
+	mleft = strtod(left, &endch);
+	if (*endch != '\0') {
+		format_log(es, "expression left side is invalid: %s", left);
+		goto fail;
+	}
+
+	mright = strtod(right, &endch);
+	if (*endch != '\0') {
+		format_log(es, "expression right side is invalid: %s", right);
+		goto fail;
+	}
+
+	if (!use_fp) {
+		mleft = (long long)mleft;
+		mright = (long long)mright;
+	}
+	format_log(es, "expression left side is: %.*f", prec, mleft);
+	format_log(es, "expression right side is: %.*f", prec, mright);
+
+	switch (operator) {
+	case ADD:
+		result = mleft + mright;
+		break;
+	case SUBTRACT:
+		result = mleft - mright;
+		break;
+	case MULTIPLY:
+		result = mleft * mright;
+		break;
+	case DIVIDE:
+		result = mleft / mright;
+		break;
+	case MODULUS:
+		result = fmod(mleft, mright);
+		break;
+	case EQUAL:
+		result = fabs(mleft - mright) < 1e-9;
+		break;
+	case NOT_EQUAL:
+		result = fabs(mleft - mright) > 1e-9;
+		break;
+	case GREATER_THAN:
+		result = (mleft > mright);
+		break;
+	case GREATER_THAN_EQUAL:
+		result = (mleft >= mright);
+		break;
+	case LESS_THAN:
+		result = (mleft < mright);
+		break;
+	case LESS_THAN_EQUAL:
+		result = (mleft <= mright);
+		break;
+	}
+	if (use_fp)
+		xasprintf(&value, "%.*f", prec, result);
+	else
+		xasprintf(&value, "%.*f", prec, (double)(long long)result);
+	format_log(es, "expression result is %s", value);
+
+	free(right);
+	free(left);
+	return (value);
+
+fail:
+	free(right);
+	free(left);
+	return (NULL);
+}
+
+
+// Source: format.c
+// Lines 3904-4043
+
+
+[ANSWER]
+MAY

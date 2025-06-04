@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'text' at line 3\n2. Pointer 'ap' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ngraphviz_out::print (const char *fmt, ...)\n{\n  text_info text;\n  va_list ap;\n\n  va_start (ap, fmt);\n  text.err_no = errno;\n  text.args_ptr = &ap;\n  text.format_spec = fmt;\n  pp_format (m_pp, &text);\n  pp_output_formatted_text (m_pp);\n  va_end (ap);\n}\n\n\n// Source: graphviz.cc\n// Lines 37-49\n",
+  "ANSWER": "MUST"
+}

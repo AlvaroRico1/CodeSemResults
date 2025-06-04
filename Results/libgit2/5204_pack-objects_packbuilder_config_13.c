@@ -1,0 +1,43 @@
+static int packbuilder_config(git_packbuilder *pb)
+{
+	git_config *config;
+	int ret = 0;
+	int64_t val;
+
+	if ((ret = git_repository_config_snapshot(&config, pb->repo)) < 0)
+		return ret;
+
+#define config_get(KEY,DST,DFLT) do { \
+	ret = git_config_get_int64(&val, config, KEY); \
+	if (!ret) { \
+		if (!git__is_sizet(val)) { \
+			git_error_set(GIT_ERROR_CONFIG, \
+				"configuration value '%s' is too large", KEY); \
+			ret = -1; \
+			goto out; \
+		} \
+		(DST) = (size_t)val; \
+	} else if (ret == GIT_ENOTFOUND) { \
+	    (DST) = (DFLT); \
+	    ret = 0; \
+	} else if (ret < 0) goto out; } while (0)
+
+	config_get("pack.deltaCacheSize", pb->max_delta_cache_size,
+		   GIT_PACK_DELTA_CACHE_SIZE);
+	config_get("pack.deltaCacheLimit", pb->cache_max_small_delta_size,
+		   GIT_PACK_DELTA_CACHE_LIMIT);
+	config_get("pack.deltaCacheSize", pb->big_file_threshold,
+		   GIT_PACK_BIG_FILE_THRESHOLD);
+	config_get("pack.windowMemory", pb->window_memory_limit, 0);
+
+#undef config_get
+
+out:
+	git_config_free(config);
+
+	return ret;
+}
+
+
+// Source: pack-objects.c
+// Lines 88-126

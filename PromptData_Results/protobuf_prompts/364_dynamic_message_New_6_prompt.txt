@@ -1,0 +1,29 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'new_base' at line 3
+2. Pointer 'new_base' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+Message* DynamicMessage::New(Arena* arena) const {
+  if (arena != nullptr) {
+    void* new_base = Arena::CreateArray<char>(arena, type_info_->size);
+    memset(new_base, 0, type_info_->size);
+    return new (new_base) DynamicMessage(type_info_, arena);
+  } else {
+    void* new_base = operator new(type_info_->size);
+    memset(new_base, 0, type_info_->size);
+    return new (new_base) DynamicMessage(type_info_);
+  }
+
+
+// Source: dynamic_message.cc
+// Lines 614-623
+
+
+[ANSWER]
+MAY

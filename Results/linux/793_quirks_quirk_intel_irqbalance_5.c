@@ -1,0 +1,40 @@
+static void quirk_intel_irqbalance(struct pci_dev *dev)
+{
+	u8 config;
+	u16 word;
+
+	/* BIOS may enable hardware IRQ balancing for
+	 * E7520/E7320/E7525(revision ID 0x9 and below)
+	 * based platforms.
+	 * Disable SW irqbalance/affinity on those platforms.
+	 */
+	if (dev->revision > 0x9)
+		return;
+
+	/* enable access to config space*/
+	pci_read_config_byte(dev, 0xf4, &config);
+	pci_write_config_byte(dev, 0xf4, config|0x2);
+
+	/*
+	 * read xTPR register.  We may not have a pci_dev for device 8
+	 * because it might be hidden until the above write.
+	 */
+	pci_bus_read_config_word(dev->bus, PCI_DEVFN(8, 0), 0x4c, &word);
+
+	if (!(word & (1 << 13))) {
+		dev_info(&dev->dev, "Intel E7520/7320/7525 detected; "
+			"disabling irq balancing and affinity\n");
+		noirqdebug_setup("");
+#ifdef CONFIG_PROC_FS
+		no_irq_affinity = 1;
+#endif
+	}
+
+	/* put back the original value for config space*/
+	if (!(config & 0x2))
+		pci_write_config_byte(dev, 0xf4, config);
+}
+
+
+// Source: quirks.c
+// Lines 14-49

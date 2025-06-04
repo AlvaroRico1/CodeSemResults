@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'part' at line 4\n2. Pointer 'mime' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int mime_subparts_seek(void *instream, curl_off_t offset, int whence)\n{\n  curl_mime *mime = (curl_mime *) instream;\n  curl_mimepart *part;\n  int result = CURL_SEEKFUNC_OK;\n\n  if(whence != SEEK_SET || offset)\n    return CURL_SEEKFUNC_CANTSEEK;    /* Only support full rewind. */\n\n  if(mime->state.state == MIMESTATE_BEGIN)\n   return CURL_SEEKFUNC_OK;           /* Already rewound. */\n\n  for(part = mime->firstpart; part; part = part->nextpart) {\n    int res = mime_part_rewind(part);\n    if(res != CURL_SEEKFUNC_OK)\n      result = res;\n  }\n\n  if(result == CURL_SEEKFUNC_OK)\n    mimesetstate(&mime->state, MIMESTATE_BEGIN, NULL);\n\n  return result;\n}\n\n\n// Source: mime.c\n// Lines 1130-1152\n",
+  "ANSWER": "MUST"
+}

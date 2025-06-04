@@ -1,0 +1,1 @@
+link,redis/src/sentinel.c,None,ri,redis/src/sentinel.c,None,1

@@ -1,0 +1,1 @@
+info,protobuf/src/google/protobuf/extension_set.cc,5,extendee,protobuf/src/google/protobuf/extension_set.cc,1,1

@@ -1,0 +1,36 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'inode' at line 3
+2. Pointer 'data' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int nfs_symlink_filler(void *data, struct page *page)
+{
+	struct inode *inode = data;
+	int error;
+
+	error = NFS_PROTO(inode)->readlink(inode, page, 0, PAGE_SIZE);
+	if (error < 0)
+		goto error;
+	SetPageUptodate(page);
+	unlock_page(page);
+	return 0;
+
+error:
+	SetPageError(page);
+	unlock_page(page);
+	return -EIO;
+}
+
+
+// Source: symlink.c
+// Lines 29-45
+
+
+[ANSWER]
+MUST

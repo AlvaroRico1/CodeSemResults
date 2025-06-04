@@ -1,0 +1,1 @@
+index,libgit2/tests/libgit2/win32/forbidden.c,3,tree,libgit2/tests/libgit2/win32/forbidden.c,6,2

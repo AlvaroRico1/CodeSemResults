@@ -1,0 +1,38 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'hunk' at line 3
+2. Pointer 'e' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int diff_hunk_cb(
+	const git_diff_delta *delta,
+	const git_diff_hunk *hunk,
+	void *payload)
+{
+	diff_expects *e = payload;
+	const char *scan = hunk->header, *scan_end = scan + hunk->header_len;
+
+	GIT_UNUSED(delta);
+
+	/* confirm no NUL bytes in header text */
+	while (scan < scan_end)
+		cl_assert('\0' != *scan++);
+
+	e->hunks++;
+	e->hunk_old_lines += hunk->old_lines;
+	e->hunk_new_lines += hunk->new_lines;
+	return 0;
+}
+
+
+// Source: diff_helpers.c
+// Lines 106-124
+
+
+[ANSWER]
+MUST-NOT

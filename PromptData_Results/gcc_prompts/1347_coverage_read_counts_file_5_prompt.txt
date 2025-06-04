@@ -1,0 +1,113 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'slot' at line 62
+2. Pointer 'entry' at line 62
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+read_counts_file (void)
+{
+  gcov_unsigned_t fn_ident = 0;
+  gcov_unsigned_t tag;
+  int is_error = 0;
+  unsigned lineno_checksum = 0;
+  unsigned cfg_checksum = 0;
+
+  if (!gcov_open (da_file_name, 1))
+    return;
+
+  if (!gcov_magic (gcov_read_unsigned (), GCOV_DATA_MAGIC))
+    {
+      warning (0, "%qs is not a gcov data file", da_file_name);
+      gcov_close ();
+      return;
+    }
+  else if ((tag = gcov_read_unsigned ()) != GCOV_VERSION)
+    {
+      char v[4], e[4];
+
+      GCOV_UNSIGNED2STRING (v, tag);
+      GCOV_UNSIGNED2STRING (e, GCOV_VERSION);
+
+      warning (0, "%qs is version %q.*s, expected version %q.*s",
+ 	       da_file_name, 4, v, 4, e);
+      gcov_close ();
+      return;
+    }
+
+  /* Read the stamp, used for creating a generation count.  */
+  tag = gcov_read_unsigned ();
+  bbg_file_stamp = crc32_unsigned (bbg_file_stamp, tag);
+
+  counts_hash = new hash_table<counts_entry> (10);
+  while ((tag = gcov_read_unsigned ()))
+    {
+      gcov_unsigned_t length;
+      gcov_position_t offset;
+
+      length = gcov_read_unsigned ();
+      offset = gcov_position ();
+      if (tag == GCOV_TAG_FUNCTION)
+	{
+	  if (length)
+	    {
+	      fn_ident = gcov_read_unsigned ();
+	      lineno_checksum = gcov_read_unsigned ();
+	      cfg_checksum = gcov_read_unsigned ();
+	    }
+	  else
+	    fn_ident = lineno_checksum = cfg_checksum = 0;
+	}
+      else if (tag == GCOV_TAG_OBJECT_SUMMARY)
+	{
+	  profile_info = XCNEW (gcov_summary);
+	  profile_info->runs = gcov_read_unsigned ();
+	  profile_info->sum_max = gcov_read_unsigned ();
+	}
+      else if (GCOV_TAG_IS_COUNTER (tag) && fn_ident)
+	{
+	  counts_entry **slot, *entry, elt;
+	  unsigned n_counts = GCOV_TAG_COUNTER_NUM (length);
+	  unsigned ix;
+
+	  elt.ident = fn_ident;
+	  elt.ctr = GCOV_COUNTER_FOR_TAG (tag);
+
+	  slot = counts_hash->find_slot (&elt, INSERT);
+	  entry = *slot;
+	  if (!entry)
+	    {
+	      *slot = entry = XCNEW (counts_entry);
+	      entry->ident = fn_ident;
+	      entry->ctr = elt.ctr;
+	      entry->lineno_checksum = lineno_checksum;
+	      entry->cfg_checksum = cfg_checksum;
+	      entry->counts = XCNEWVEC (gcov_type, n_counts);
+	      entry->n_counts = n_counts;
+	    }
+	  else if (entry->lineno_checksum != lineno_checksum
+		   || entry->cfg_checksum != cfg_checksum)
+	    {
+	      error ("profile data for function %u is corrupted", fn_ident);
+	      error ("checksum is (%x,%x) instead of (%x,%x)",
+		     entry->lineno_checksum, entry->cfg_checksum,
+		     lineno_checksum, cfg_checksum);
+	      delete counts_hash;
+	      counts_hash = NULL;
+	      break;
+	    }
+	  for (ix = 0; ix != n_counts; ix++)
+	    entry->counts[ix] += gcov_read_counter ();
+	}
+
+
+// Source: coverage.c
+// Lines 186-279
+
+
+[ANSWER]
+MUST

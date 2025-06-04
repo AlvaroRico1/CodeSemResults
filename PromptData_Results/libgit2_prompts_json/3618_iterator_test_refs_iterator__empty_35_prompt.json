@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'odb' at line 4\n2. Pointer 'iter' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid test_refs_iterator__empty(void)\n{\n\tgit_reference_iterator *iter;\n\tgit_odb *odb;\n\tgit_reference *ref;\n\tgit_repository *empty;\n\n\tcl_git_pass(git_odb_new(&odb));\n\tcl_git_pass(git_repository_wrap_odb(&empty, odb));\n\n\tcl_git_pass(git_reference_iterator_new(&iter, empty));\n\tcl_assert_equal_i(GIT_ITEROVER, git_reference_next(&ref, iter));\n\n\tgit_reference_iterator_free(iter);\n\tgit_odb_free(odb);\n\tgit_repository_free(empty);\n}\n\n\n// Source: iterator.c\n// Lines 122-138\n",
+  "ANSWER": "MAY"
+}

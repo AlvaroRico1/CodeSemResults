@@ -1,0 +1,44 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'iter' at line 6
+2. Pointer 'ref' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_reference_foreach(
+	git_repository *repo,
+	git_reference_foreach_cb callback,
+	void *payload)
+{
+	git_reference_iterator *iter;
+	git_reference *ref;
+	int error;
+
+	if ((error = git_reference_iterator_new(&iter, repo)) < 0)
+		return error;
+
+	while (!(error = git_reference_next(&ref, iter))) {
+		if ((error = callback(ref, payload)) != 0) {
+			git_error_set_after_callback(error);
+			break;
+		}
+	}
+
+	if (error == GIT_ITEROVER)
+		error = 0;
+
+	git_reference_iterator_free(iter);
+	return error;
+}
+
+
+// Source: refs.c
+// Lines 660-684
+
+
+[ANSWER]
+MAY

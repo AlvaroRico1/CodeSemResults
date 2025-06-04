@@ -1,0 +1,96 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'new_value_reg' at line 59
+2. Pointer 'shifted_value_reg' at line 68
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+gen_hsa_insns_for_store (tree lhs, hsa_op_base *src, hsa_bb *hbb)
+{
+  HOST_WIDE_INT bitsize = 0, bitpos = 0;
+  BrigAlignment8_t req_align;
+  BrigType16_t mtype;
+  mtype = mem_type_for_type (hsa_type_for_scalar_tree_type (TREE_TYPE (lhs),
+							    false));
+  hsa_op_address *addr;
+  addr = gen_hsa_addr (lhs, hbb, &bitsize, &bitpos);
+
+  /* Handle store to a bit field.  */
+  if (bitsize > 64)
+    {
+      HSA_SORRY_AT (EXPR_LOCATION (lhs),
+		    "support for HSA does not implement store to a bit field "
+		    "bigger than 64 bits");
+      return;
+    }
+
+  unsigned type_bitsize = get_bitfield_size (bitpos, bitsize);
+
+  /* HSAIL does not support MOV insn with 16-bits integers.  */
+  if (type_bitsize < 32)
+    type_bitsize = 32;
+
+  if (bitpos || (bitsize && type_bitsize != bitsize))
+    {
+      unsigned HOST_WIDE_INT mask = 0;
+      BrigType16_t mem_type
+	= get_integer_type_by_bytes (type_bitsize / BITS_PER_UNIT,
+				     !TYPE_UNSIGNED (TREE_TYPE (lhs)));
+
+      for (unsigned i = 0; i < type_bitsize; i++)
+	if (i < bitpos || i >= bitpos + bitsize)
+	  mask |= ((unsigned HOST_WIDE_INT)1 << i);
+
+      hsa_op_reg *value_reg = new hsa_op_reg (mem_type);
+
+      req_align = hsa_bitmemref_alignment (lhs);
+      /* Load value from memory.  */
+      hsa_insn_mem *mem = new hsa_insn_mem (BRIG_OPCODE_LD, mem_type,
+					    value_reg, addr);
+      mem->set_align (req_align);
+      hbb->append_insn (mem);
+
+      /* AND the loaded value with prepared mask.  */
+      hsa_op_reg *cleared_reg = new hsa_op_reg (mem_type);
+
+      BrigType16_t t
+	= get_integer_type_by_bytes (type_bitsize / BITS_PER_UNIT, false);
+      hsa_op_immed *c = new hsa_op_immed (mask, t);
+
+      hsa_insn_basic *clearing
+	= new hsa_insn_basic (3, BRIG_OPCODE_AND, mem_type, cleared_reg,
+			      value_reg, c);
+      hbb->append_insn (clearing);
+
+      /* Shift to left a value that is going to be stored.  */
+      hsa_op_reg *new_value_reg = new hsa_op_reg (mem_type);
+
+      hsa_insn_basic *basic = new hsa_insn_basic (2, BRIG_OPCODE_MOV, mem_type,
+						  new_value_reg, src);
+      hsa_fixup_mov_insn_type (basic);
+      hbb->append_insn (basic);
+
+      if (bitpos)
+	{
+	  hsa_op_reg *shifted_value_reg = new hsa_op_reg (mem_type);
+	  c = new hsa_op_immed (bitpos, BRIG_TYPE_U32);
+
+	  hsa_insn_basic *basic
+	    = new hsa_insn_basic (3, BRIG_OPCODE_SHL, mem_type,
+				  shifted_value_reg, new_value_reg, c);
+	  hbb->append_insn (basic);
+
+	  new_value_reg = shifted_value_reg;
+	}
+
+
+// Source: hsa-gen.c
+// Lines 2593-2669
+
+
+[ANSWER]
+MUST

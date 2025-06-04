@@ -1,0 +1,44 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'item' at line 12
+2. Pointer 'group' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool Query_block::setup_group(THD *thd) {
+  DBUG_TRACE;
+  assert(group_list.elements);
+
+  thd->where = "group statement";
+
+  for (ORDER *group = group_list.first; group; group = group->next) {
+    if (find_order_in_list(thd, base_ref_items, get_table_list(), group,
+                           &fields, true, false))
+      return true;
+
+    Item *item = *group->item;
+    if (item->has_aggregation() || item->has_wf()) {
+      my_error(ER_WRONG_GROUP_FIELD, MYF(0), (*group->item)->full_name());
+      return true;
+    }
+
+    else if (item->has_grouping_func()) {
+      my_error(ER_WRONG_GROUP_FIELD, MYF(0), "GROUPING function");
+      return true;
+    }
+    if (item->data_type() == MYSQL_TYPE_INVALID &&
+        item->propagate_type(thd, MYSQL_TYPE_VARCHAR))
+      return true;
+  }
+
+
+// Source: sql_resolver.cc
+// Lines 4576-4600
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,318 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 's_info' at line 179
+2. Pointer 'ptr' at line 10
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+record_store (rtx body, bb_info_t bb_info)
+{
+  rtx mem, rhs, const_rhs, mem_addr;
+  poly_int64 offset = 0;
+  poly_int64 width = 0;
+  insn_info_t insn_info = bb_info->last_insn;
+  store_info *store_info = NULL;
+  int group_id;
+  cselib_val *base = NULL;
+  insn_info_t ptr, last, redundant_reason;
+  bool store_is_unused;
+
+  if (GET_CODE (body) != SET && GET_CODE (body) != CLOBBER)
+    return 0;
+
+  mem = SET_DEST (body);
+
+  /* If this is not used, then this cannot be used to keep the insn
+     from being deleted.  On the other hand, it does provide something
+     that can be used to prove that another store is dead.  */
+  store_is_unused
+    = (find_reg_note (insn_info->insn, REG_UNUSED, mem) != NULL);
+
+  /* Check whether that value is a suitable memory location.  */
+  if (!MEM_P (mem))
+    {
+      /* If the set or clobber is unused, then it does not effect our
+	 ability to get rid of the entire insn.  */
+      if (!store_is_unused)
+	insn_info->cannot_delete = true;
+      return 0;
+    }
+
+  /* At this point we know mem is a mem. */
+  if (GET_MODE (mem) == BLKmode)
+    {
+      HOST_WIDE_INT const_size;
+      if (GET_CODE (XEXP (mem, 0)) == SCRATCH)
+	{
+	  if (dump_file && (dump_flags & TDF_DETAILS))
+	    fprintf (dump_file, " adding wild read for (clobber (mem:BLK (scratch))\n");
+	  add_wild_read (bb_info);
+	  insn_info->cannot_delete = true;
+	  return 0;
+	}
+      /* Handle (set (mem:BLK (addr) [... S36 ...]) (const_int 0))
+	 as memset (addr, 0, 36);  */
+      else if (!MEM_SIZE_KNOWN_P (mem)
+	       || maybe_le (MEM_SIZE (mem), 0)
+	       /* This is a limit on the bitmap size, which is only relevant
+		  for constant-sized MEMs.  */
+	       || (MEM_SIZE (mem).is_constant (&const_size)
+		   && const_size > MAX_OFFSET)
+	       || GET_CODE (body) != SET
+	       || !CONST_INT_P (SET_SRC (body)))
+	{
+	  if (!store_is_unused)
+	    {
+	      /* If the set or clobber is unused, then it does not effect our
+		 ability to get rid of the entire insn.  */
+	      insn_info->cannot_delete = true;
+	      clear_rhs_from_active_local_stores ();
+	    }
+	  return 0;
+	}
+    }
+
+  /* We can still process a volatile mem, we just cannot delete it.  */
+  if (MEM_VOLATILE_P (mem))
+    insn_info->cannot_delete = true;
+
+  if (!canon_address (mem, &group_id, &offset, &base))
+    {
+      clear_rhs_from_active_local_stores ();
+      return 0;
+    }
+
+  if (GET_MODE (mem) == BLKmode)
+    width = MEM_SIZE (mem);
+  else
+    width = GET_MODE_SIZE (GET_MODE (mem));
+
+  if (!endpoint_representable_p (offset, width))
+    {
+      clear_rhs_from_active_local_stores ();
+      return 0;
+    }
+
+  if (known_eq (width, 0))
+    return 0;
+
+  if (group_id >= 0)
+    {
+      /* In the restrictive case where the base is a constant or the
+	 frame pointer we can do global analysis.  */
+
+      group_info *group
+	= rtx_group_vec[group_id];
+      tree expr = MEM_EXPR (mem);
+
+      store_info = rtx_store_info_pool.allocate ();
+      set_usage_bits (group, offset, width, expr);
+
+      if (dump_file && (dump_flags & TDF_DETAILS))
+	{
+	  fprintf (dump_file, " processing const base store gid=%d",
+		   group_id);
+	  print_range (dump_file, offset, width);
+	  fprintf (dump_file, "\n");
+	}
+    }
+  else
+    {
+      if (may_be_sp_based_p (XEXP (mem, 0)))
+	insn_info->stack_pointer_based = true;
+      insn_info->contains_cselib_groups = true;
+
+      store_info = cse_store_info_pool.allocate ();
+      group_id = -1;
+
+      if (dump_file && (dump_flags & TDF_DETAILS))
+	{
+	  fprintf (dump_file, " processing cselib store ");
+	  print_range (dump_file, offset, width);
+	  fprintf (dump_file, "\n");
+	}
+    }
+
+  const_rhs = rhs = NULL_RTX;
+  if (GET_CODE (body) == SET
+      /* No place to keep the value after ra.  */
+      && !reload_completed
+      && (REG_P (SET_SRC (body))
+	  || GET_CODE (SET_SRC (body)) == SUBREG
+	  || CONSTANT_P (SET_SRC (body)))
+      && !MEM_VOLATILE_P (mem)
+      /* Sometimes the store and reload is used for truncation and
+	 rounding.  */
+      && !(FLOAT_MODE_P (GET_MODE (mem)) && (flag_float_store)))
+    {
+      rhs = SET_SRC (body);
+      if (CONSTANT_P (rhs))
+	const_rhs = rhs;
+      else if (body == PATTERN (insn_info->insn))
+	{
+	  rtx tem = find_reg_note (insn_info->insn, REG_EQUAL, NULL_RTX);
+	  if (tem && CONSTANT_P (XEXP (tem, 0)))
+	    const_rhs = XEXP (tem, 0);
+	}
+      if (const_rhs == NULL_RTX && REG_P (rhs))
+	{
+	  rtx tem = cselib_expand_value_rtx (rhs, scratch, 5);
+
+	  if (tem && CONSTANT_P (tem))
+	    const_rhs = tem;
+	}
+    }
+
+  /* Check to see if this stores causes some other stores to be
+     dead.  */
+  ptr = active_local_stores;
+  last = NULL;
+  redundant_reason = NULL;
+  mem = canon_rtx (mem);
+
+  if (group_id < 0)
+    mem_addr = base->val_rtx;
+  else
+    {
+      group_info *group = rtx_group_vec[group_id];
+      mem_addr = group->canon_base_addr;
+    }
+  if (maybe_ne (offset, 0))
+    mem_addr = plus_constant (get_address_mode (mem), mem_addr, offset);
+
+  while (ptr)
+    {
+      insn_info_t next = ptr->next_local_store;
+      class store_info *s_info = ptr->store_rec;
+      bool del = true;
+
+      /* Skip the clobbers. We delete the active insn if this insn
+	 shadows the set.  To have been put on the active list, it
+	 has exactly on set. */
+      while (!s_info->is_set)
+	s_info = s_info->next;
+
+      if (s_info->group_id == group_id && s_info->cse_base == base)
+	{
+	  HOST_WIDE_INT i;
+	  if (dump_file && (dump_flags & TDF_DETAILS))
+	    {
+	      fprintf (dump_file, "    trying store in insn=%d gid=%d",
+		       INSN_UID (ptr->insn), s_info->group_id);
+	      print_range (dump_file, s_info->offset, s_info->width);
+	      fprintf (dump_file, "\n");
+	    }
+
+	  /* Even if PTR won't be eliminated as unneeded, if both
+	     PTR and this insn store the same constant value, we might
+	     eliminate this insn instead.  */
+	  if (s_info->const_rhs
+	      && const_rhs
+	      && known_subrange_p (offset, width,
+				   s_info->offset, s_info->width)
+	      && all_positions_needed_p (s_info, offset - s_info->offset,
+					 width)
+	      /* We can only remove the later store if the earlier aliases
+		 at least all accesses the later one.  */
+	      && ((MEM_ALIAS_SET (mem) == MEM_ALIAS_SET (s_info->mem)
+		   || alias_set_subset_of (MEM_ALIAS_SET (mem),
+					   MEM_ALIAS_SET (s_info->mem)))
+		  && (!MEM_EXPR (s_info->mem)
+		      || refs_same_for_tbaa_p (MEM_EXPR (s_info->mem),
+					       MEM_EXPR (mem)))))
+	    {
+	      if (GET_MODE (mem) == BLKmode)
+		{
+		  if (GET_MODE (s_info->mem) == BLKmode
+		      && s_info->const_rhs == const_rhs)
+		    redundant_reason = ptr;
+		}
+	      else if (s_info->const_rhs == const0_rtx
+		       && const_rhs == const0_rtx)
+		redundant_reason = ptr;
+	      else
+		{
+		  rtx val;
+		  start_sequence ();
+		  val = get_stored_val (s_info, GET_MODE (mem), offset, width,
+					BLOCK_FOR_INSN (insn_info->insn),
+					true);
+		  if (get_insns () != NULL)
+		    val = NULL_RTX;
+		  end_sequence ();
+		  if (val && rtx_equal_p (val, const_rhs))
+		    redundant_reason = ptr;
+		}
+	    }
+
+	  HOST_WIDE_INT begin_unneeded, const_s_width, const_width;
+	  if (known_subrange_p (s_info->offset, s_info->width, offset, width))
+	    /* The new store touches every byte that S_INFO does.  */
+	    set_all_positions_unneeded (s_info);
+	  else if ((offset - s_info->offset).is_constant (&begin_unneeded)
+		   && s_info->width.is_constant (&const_s_width)
+		   && width.is_constant (&const_width))
+	    {
+	      HOST_WIDE_INT end_unneeded = begin_unneeded + const_width;
+	      begin_unneeded = MAX (begin_unneeded, 0);
+	      end_unneeded = MIN (end_unneeded, const_s_width);
+	      for (i = begin_unneeded; i < end_unneeded; ++i)
+		set_position_unneeded (s_info, i);
+	    }
+	  else
+	    {
+	      /* We don't know which parts of S_INFO are needed and
+		 which aren't, so invalidate the RHS.  */
+	      s_info->rhs = NULL;
+	      s_info->const_rhs = NULL;
+	    }
+	}
+      else if (s_info->rhs)
+	/* Need to see if it is possible for this store to overwrite
+	   the value of store_info.  If it is, set the rhs to NULL to
+	   keep it from being used to remove a load.  */
+	{
+	  if (canon_output_dependence (s_info->mem, true,
+				       mem, GET_MODE (mem),
+				       mem_addr))
+	    {
+	      s_info->rhs = NULL;
+	      s_info->const_rhs = NULL;
+	    }
+	}
+
+      /* An insn can be deleted if every position of every one of
+	 its s_infos is zero.  */
+      if (any_positions_needed_p (s_info))
+	del = false;
+
+      if (del)
+	{
+	  insn_info_t insn_to_delete = ptr;
+
+	  active_local_stores_len--;
+	  if (last)
+	    last->next_local_store = ptr->next_local_store;
+	  else
+	    active_local_stores = ptr->next_local_store;
+
+	  if (!insn_to_delete->cannot_delete)
+	    delete_dead_store_insn (insn_to_delete);
+	}
+      else
+	last = ptr;
+
+      ptr = next;
+    }
+
+
+// Source: dse.c
+// Lines 1356-1654
+
+
+[ANSWER]
+MUST

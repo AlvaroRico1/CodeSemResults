@@ -1,0 +1,29 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'buffered_stream' at line 3
+2. Pointer 's' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void buffered_stream_free(git_writestream *s)
+{
+	struct buffered_stream *buffered_stream = (struct buffered_stream *)s;
+
+	if (buffered_stream) {
+		git_str_dispose(&buffered_stream->input);
+		git_str_dispose(&buffered_stream->temp_buf);
+		git__free(buffered_stream);
+	}
+}
+
+
+// Source: filter.c
+// Lines 932-941
+
+
+[ANSWER]
+MUST

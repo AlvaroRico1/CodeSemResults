@@ -1,0 +1,1 @@
+buf,tmux/window-copy.c,6,size,tmux/window-copy.c,5,2

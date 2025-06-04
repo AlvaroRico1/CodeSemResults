@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'longest_p' at line 2\n2. Pointer 'desc' at line 9\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void print_cmd_by_category(const struct category_description *catdesc,\n\t\t\t\t  int *longest_p)\n{\n\tstruct cmdname_help *cmds;\n\tint longest = 0;\n\tint i, nr = 0;\n\tuint32_t mask = 0;\n\n\tfor (i = 0; catdesc[i].desc; i++)\n\t\tmask |= catdesc[i].category;\n\n\textract_cmds(&cmds, mask);\n\n\tfor (i = 0; cmds[i].name; i++, nr++) {\n\t\tif (longest < strlen(cmds[i].name))\n\t\t\tlongest = strlen(cmds[i].name);\n\t}\n\tQSORT(cmds, nr, cmd_name_cmp);\n\n\tfor (i = 0; catdesc[i].desc; i++) {\n\t\tuint32_t mask = catdesc[i].category;\n\t\tconst char *desc = catdesc[i].desc;\n\n\t\tprintf(\"\\n%s\\n\", _(desc));\n\t\tprint_command_list(cmds, mask, longest);\n\t}\n\n\n// Source: help.c\n// Lines 104-129\n",
+  "ANSWER": "MAY"
+}

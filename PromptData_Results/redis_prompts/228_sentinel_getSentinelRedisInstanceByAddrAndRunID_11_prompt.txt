@@ -1,0 +1,44 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'instance' at line 4
+2. Pointer 'ri' at line 15
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+sentinelRedisInstance *getSentinelRedisInstanceByAddrAndRunID(dict *instances, char *addr, int port, char *runid) {
+    dictIterator *di;
+    dictEntry *de;
+    sentinelRedisInstance *instance = NULL;
+    sentinelAddr *ri_addr = NULL;
+
+    serverAssert(addr || runid);   /* User must pass at least one search param. */
+    if (addr != NULL) {
+        /* Resolve addr, we use the IP as a key even if a hostname is used */
+        ri_addr = createSentinelAddr(addr, port);
+        if (!ri_addr) return NULL;
+    }
+    di = dictGetIterator(instances);
+    while((de = dictNext(di)) != NULL) {
+        sentinelRedisInstance *ri = dictGetVal(de);
+
+        if (runid && !ri->runid) continue;
+        if ((runid == NULL || strcmp(ri->runid, runid) == 0) &&
+            (addr == NULL || (strcmp(ri->addr->ip, ri_addr->ip) == 0 &&
+                            ri->addr->port == port)))
+        {
+            instance = ri;
+            break;
+        }
+    }
+
+
+// Source: sentinel.c
+// Lines 1482-1506
+
+
+[ANSWER]
+MUST

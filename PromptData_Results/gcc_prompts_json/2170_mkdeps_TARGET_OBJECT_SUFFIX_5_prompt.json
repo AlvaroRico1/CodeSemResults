@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'suffix' at line 6\n2. Pointer 'start' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\n# define TARGET_OBJECT_SUFFIX \".o\"\n#endif\n      const char *start = lbasename (tgt);\n      char *o = (char *) alloca (strlen (start)\n                                 + strlen (TARGET_OBJECT_SUFFIX) + 1);\n      char *suffix;\n\n      strcpy (o, start);\n\n      suffix = strrchr (o, '.');\n      if (!suffix)\n        suffix = o + strlen (o);\n      strcpy (suffix, TARGET_OBJECT_SUFFIX);\n\n      deps_add_target (d, o, 1);\n    }\n\n\n// Source: mkdeps.c\n// Lines 274-289\n",
+  "ANSWER": "MAY"
+}

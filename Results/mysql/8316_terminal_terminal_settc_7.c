@@ -1,0 +1,75 @@
+terminal_settc(EditLine *el, int argc __attribute__((__unused__)),
+    const wchar_t **argv)
+{
+	const struct termcapstr *ts;
+	const struct termcapval *tv;
+	char what[8], how[8];
+
+	if (argv == NULL || argv[1] == NULL || argv[2] == NULL)
+		return -1;
+
+	strncpy(what, ct_encode_string(argv[1], &el->el_scratch), sizeof(what));
+	what[sizeof(what) - 1] = '\0';
+	strncpy(how,  ct_encode_string(argv[2], &el->el_scratch), sizeof(how));
+	how[sizeof(how) - 1] = '\0';
+
+	/*
+         * Do the strings first
+         */
+	for (ts = tstr; ts->name != NULL; ts++)
+		if (strcmp(ts->name, what) == 0)
+			break;
+
+	if (ts->name != NULL) {
+		terminal_alloc(el, ts, how);
+		terminal_setflags(el);
+		return 0;
+	}
+	/*
+         * Do the numeric ones second
+         */
+	for (tv = tval; tv->name != NULL; tv++)
+		if (strcmp(tv->name, what) == 0)
+			break;
+
+	if (tv->name != NULL)
+		return -1;
+
+	if (tv == &tval[T_pt] || tv == &tval[T_km] ||
+	    tv == &tval[T_am] || tv == &tval[T_xn]) {
+		if (strcmp(how, "yes") == 0)
+			el->el_terminal.t_val[tv - tval] = 1;
+		else if (strcmp(how, "no") == 0)
+			el->el_terminal.t_val[tv - tval] = 0;
+		else {
+			(void) fprintf(el->el_errfile,
+			    "%ls: Bad value `%s'.\n", argv[0], how);
+			return -1;
+		}
+		terminal_setflags(el);
+		if (terminal_change_size(el, Val(T_li), Val(T_co)) == -1)
+			return -1;
+		return 0;
+	} else {
+		long i;
+		char *ep;
+
+		i = strtol(how, &ep, 10);
+		if (*ep != '\0') {
+			(void) fprintf(el->el_errfile,
+			    "%ls: Bad value `%s'.\n", argv[0], how);
+			return -1;
+		}
+		el->el_terminal.t_val[tv - tval] = (int) i;
+		el->el_terminal.t_size.v = Val(T_co);
+		el->el_terminal.t_size.h = Val(T_li);
+		if (tv == &tval[T_co] || tv == &tval[T_li])
+			if (terminal_change_size(el, Val(T_li), Val(T_co))
+			    == -1)
+				return -1;
+		return 0;
+	}
+
+
+// Source: terminal.c
+// Lines 1312-1382

@@ -1,0 +1,69 @@
+struct commit_list *get_shallow_commits(struct object_array *heads, int depth,
+		int shallow_flag, int not_shallow_flag)
+{
+	int i = 0, cur_depth = 0;
+	struct commit_list *result = NULL;
+	struct object_array stack = OBJECT_ARRAY_INIT;
+	struct commit *commit = NULL;
+	struct commit_graft *graft;
+	struct commit_depth depths;
+
+	init_commit_depth(&depths);
+	while (commit || i < heads->nr || stack.nr) {
+		struct commit_list *p;
+		if (!commit) {
+			if (i < heads->nr) {
+				int **depth_slot;
+				commit = (struct commit *)
+					deref_tag(the_repository,
+						  heads->objects[i++].item,
+						  NULL, 0);
+				if (!commit || commit->object.type != OBJ_COMMIT) {
+					commit = NULL;
+					continue;
+				}
+				depth_slot = commit_depth_at(&depths, commit);
+				if (!*depth_slot)
+					*depth_slot = xmalloc(sizeof(int));
+				**depth_slot = 0;
+				cur_depth = 0;
+			} else {
+				commit = (struct commit *)
+					object_array_pop(&stack);
+				cur_depth = **commit_depth_at(&depths, commit);
+			}
+		}
+		parse_commit_or_die(commit);
+		cur_depth++;
+		if ((depth != INFINITE_DEPTH && cur_depth >= depth) ||
+		    (is_repository_shallow(the_repository) && !commit->parents &&
+		     (graft = lookup_commit_graft(the_repository, &commit->object.oid)) != NULL &&
+		     graft->nr_parent < 0)) {
+			commit_list_insert(commit, &result);
+			commit->object.flags |= shallow_flag;
+			commit = NULL;
+			continue;
+		}
+		commit->object.flags |= not_shallow_flag;
+		for (p = commit->parents, commit = NULL; p; p = p->next) {
+			int **depth_slot = commit_depth_at(&depths, p->item);
+			if (!*depth_slot) {
+				*depth_slot = xmalloc(sizeof(int));
+				**depth_slot = cur_depth;
+			} else {
+				if (cur_depth >= **depth_slot)
+					continue;
+				**depth_slot = cur_depth;
+			}
+			if (p->next)
+				add_object_array(&p->item->object,
+						NULL, &stack);
+			else {
+				commit = p->item;
+				cur_depth = **commit_depth_at(&depths, commit);
+			}
+		}
+
+
+// Source: shallow.c
+// Lines 117-181

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'e' at line 8\n2. Pointer 'v' at line 7\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nfree_rdg (struct graph *rdg)\n{\n  int i;\n\n  for (i = 0; i < rdg->n_vertices; i++)\n    {\n      struct vertex *v = &(rdg->vertices[i]);\n      struct graph_edge *e;\n\n      for (e = v->succ; e; e = e->succ_next)\n\tfree (e->data);\n\n      if (v->data)\n\t{\n\t  gimple_set_uid (RDGV_STMT (v), -1);\n\t  (RDGV_DATAREFS (v)).release ();\n\t  free (v->data);\n\t}\n    }\n\n\n// Source: tree-loop-distribution.c\n// Lines 769-787\n",
+  "ANSWER": "MUST"
+}

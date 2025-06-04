@@ -1,0 +1,1 @@
+self,h2o/lib/handler/redirect.c,3,_self,h2o/lib/handler/redirect.c,1,1

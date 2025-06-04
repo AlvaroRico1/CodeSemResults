@@ -1,0 +1,73 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tree' at line 7
+2. Pointer 'author1' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_commit_write__from_memory(void)
+{
+   git_oid tree_id, parent_id, commit_id;
+   git_signature *author, *committer;
+   const git_signature *author1, *committer1;
+   git_commit *parent;
+   git_tree *tree;
+
+   git_oid_fromstr(&tree_id, tree_id_str);
+   cl_git_pass(git_tree_lookup(&tree, g_repo, &tree_id));
+
+   git_oid_fromstr(&parent_id, parent_id_str);
+   cl_git_pass(git_commit_lookup(&parent, g_repo, &parent_id));
+
+   /* create signatures */
+   cl_git_pass(git_signature_new(&committer, committer_name, committer_email, 123456789, 60));
+   cl_git_pass(git_signature_new(&author, committer_name, committer_email, 987654321, 90));
+
+   cl_git_pass(git_commit_create_v(
+      &commit_id, /* out id */
+      g_repo,
+      NULL, /* do not update the HEAD */
+      author,
+      committer,
+      NULL,
+      commit_message,
+      tree,
+      1, parent));
+
+   git_object_free((git_object *)parent);
+   git_object_free((git_object *)tree);
+
+   git_signature_free(committer);
+   git_signature_free(author);
+
+   cl_git_pass(git_commit_lookup(&commit, g_repo, &commit_id));
+
+   /* Check attributes were set correctly */
+   author1 = git_commit_author(commit);
+   cl_assert(author1 != NULL);
+   cl_assert_equal_s(committer_name, author1->name);
+   cl_assert_equal_s(committer_email, author1->email);
+   cl_assert(author1->when.time == 987654321);
+   cl_assert(author1->when.offset == 90);
+
+   committer1 = git_commit_committer(commit);
+   cl_assert(committer1 != NULL);
+   cl_assert_equal_s(committer_name, committer1->name);
+   cl_assert_equal_s(committer_email, committer1->email);
+   cl_assert(committer1->when.time == 123456789);
+   cl_assert(committer1->when.offset == 60);
+
+   cl_assert_equal_s(commit_message, git_commit_message(commit));
+}
+
+
+// Source: write.c
+// Lines 46-99
+
+
+[ANSWER]
+MUST-NOT

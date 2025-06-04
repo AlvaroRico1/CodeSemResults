@@ -1,0 +1,73 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'offcodeMaxValue' at line 31
+2. Pointer 'matchlengthLog' at line 44
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+ZSTD_loadDEntropy(ZSTD_entropyDTables_t* entropy,
+                  const void* const dict, size_t const dictSize)
+{
+    const BYTE* dictPtr = (const BYTE*)dict;
+    const BYTE* const dictEnd = dictPtr + dictSize;
+
+    RETURN_ERROR_IF(dictSize <= 8, dictionary_corrupted);
+    assert(MEM_readLE32(dict) == ZSTD_MAGIC_DICTIONARY);   /* dict must be valid */
+    dictPtr += 8;   /* skip header = magic + dictID */
+
+    ZSTD_STATIC_ASSERT(offsetof(ZSTD_entropyDTables_t, OFTable) == offsetof(ZSTD_entropyDTables_t, LLTable) + sizeof(entropy->LLTable));
+    ZSTD_STATIC_ASSERT(offsetof(ZSTD_entropyDTables_t, MLTable) == offsetof(ZSTD_entropyDTables_t, OFTable) + sizeof(entropy->OFTable));
+    ZSTD_STATIC_ASSERT(sizeof(entropy->LLTable) + sizeof(entropy->OFTable) + sizeof(entropy->MLTable) >= HUF_DECOMPRESS_WORKSPACE_SIZE);
+    {   void* const workspace = &entropy->LLTable;   /* use fse tables as temporary workspace; implies fse tables are grouped together */
+        size_t const workspaceSize = sizeof(entropy->LLTable) + sizeof(entropy->OFTable) + sizeof(entropy->MLTable);
+#ifdef HUF_FORCE_DECOMPRESS_X1
+        /* in minimal huffman, we always use X1 variants */
+        size_t const hSize = HUF_readDTableX1_wksp(entropy->hufTable,
+                                                dictPtr, dictEnd - dictPtr,
+                                                workspace, workspaceSize);
+#else
+        size_t const hSize = HUF_readDTableX2_wksp(entropy->hufTable,
+                                                dictPtr, dictEnd - dictPtr,
+                                                workspace, workspaceSize);
+#endif
+        RETURN_ERROR_IF(HUF_isError(hSize), dictionary_corrupted);
+        dictPtr += hSize;
+    }
+
+    {   short offcodeNCount[MaxOff+1];
+        unsigned offcodeMaxValue = MaxOff, offcodeLog;
+        size_t const offcodeHeaderSize = FSE_readNCount(offcodeNCount, &offcodeMaxValue, &offcodeLog, dictPtr, dictEnd-dictPtr);
+        RETURN_ERROR_IF(FSE_isError(offcodeHeaderSize), dictionary_corrupted);
+        RETURN_ERROR_IF(offcodeMaxValue > MaxOff, dictionary_corrupted);
+        RETURN_ERROR_IF(offcodeLog > OffFSELog, dictionary_corrupted);
+        ZSTD_buildFSETable( entropy->OFTable,
+                            offcodeNCount, offcodeMaxValue,
+                            OF_base, OF_bits,
+                            offcodeLog);
+        dictPtr += offcodeHeaderSize;
+    }
+
+    {   short matchlengthNCount[MaxML+1];
+        unsigned matchlengthMaxValue = MaxML, matchlengthLog;
+        size_t const matchlengthHeaderSize = FSE_readNCount(matchlengthNCount, &matchlengthMaxValue, &matchlengthLog, dictPtr, dictEnd-dictPtr);
+        RETURN_ERROR_IF(FSE_isError(matchlengthHeaderSize), dictionary_corrupted);
+        RETURN_ERROR_IF(matchlengthMaxValue > MaxML, dictionary_corrupted);
+        RETURN_ERROR_IF(matchlengthLog > MLFSELog, dictionary_corrupted);
+        ZSTD_buildFSETable( entropy->MLTable,
+                            matchlengthNCount, matchlengthMaxValue,
+                            ML_base, ML_bits,
+                            matchlengthLog);
+        dictPtr += matchlengthHeaderSize;
+    }
+
+
+// Source: zstd_decompress.c
+// Lines 1028-1081
+
+
+[ANSWER]
+MAY

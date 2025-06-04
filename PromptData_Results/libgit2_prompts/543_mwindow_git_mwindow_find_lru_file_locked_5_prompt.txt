@@ -1,0 +1,37 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'lru_window' at line 5
+2. Pointer 'mru_window' at line 9
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int git_mwindow_find_lru_file_locked(git_mwindow_file **out)
+{
+	git_mwindow_ctl *ctl = &git_mwindow__mem_ctl;
+	git_mwindow_file *lru_file = NULL, *current_file = NULL;
+	git_mwindow *lru_window = NULL;
+	size_t i;
+
+	git_vector_foreach(&ctl->windowfiles, i, current_file) {
+		git_mwindow *mru_window = NULL;
+		if (!git_mwindow_scan_recently_used(
+				current_file, &mru_window, NULL, true, GIT_MWINDOW__MRU)) {
+			continue;
+		}
+		if (!lru_window || lru_window->last_used > mru_window->last_used) {
+			lru_window = mru_window;
+			lru_file = current_file;
+		}
+	}
+
+
+// Source: mwindow.c
+// Lines 302-319
+
+
+[ANSWER]
+MUST

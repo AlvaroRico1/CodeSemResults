@@ -1,0 +1,46 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'last' at line 11
+2. Pointer 'pattern_count' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+size_t Pattern_matcher::add_patterns(const std::string &patterns,
+                                     char delimiter) {
+  DBUG_TRACE;
+  size_t length = patterns.length();
+  size_t pattern_count = 0;
+
+  // we don't parse empty patterns
+  if (length == 0) return pattern_count;
+
+  size_t first = 0;
+  size_t last = 0;
+  do {
+    // find end of the token
+    if ((last = patterns.find(delimiter, first)) == std::string::npos)
+      last = length;
+
+    // we store only tokens that are not empty
+    if (last - first > 0) {
+      m_patterns.emplace(patterns, first, last - first);
+      ++pattern_count;
+    }
+
+    first = last + 1;
+  } while (last != length);
+
+  return pattern_count;
+}
+
+
+// Source: pattern_matcher.cc
+// Lines 38-64
+
+
+[ANSWER]
+MUST-NOT

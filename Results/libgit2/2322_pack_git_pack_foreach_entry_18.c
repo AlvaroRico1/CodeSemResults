@@ -1,0 +1,97 @@
+int git_pack_foreach_entry(
+	struct git_pack_file *p,
+	git_odb_foreach_cb cb,
+	void *data)
+{
+	const unsigned char *index, *current;
+	uint32_t i;
+	int error = 0;
+	git_array_oid_t oids = GIT_ARRAY_INIT;
+	git_oid *oid;
+
+	if (git_mutex_lock(&p->lock) < 0)
+		return packfile_error("failed to get lock for git_pack_foreach_entry");
+
+	if ((error = pack_index_open_locked(p)) < 0) {
+		git_mutex_unlock(&p->lock);
+		return error;
+	}
+
+	if (!p->index_map.data) {
+		git_error_set(GIT_ERROR_INTERNAL, "internal error: p->index_map.data == NULL");
+		git_mutex_unlock(&p->lock);
+		return -1;
+	}
+
+	index = p->index_map.data;
+
+	if (p->index_version > 1)
+		index += 8;
+
+	index += 4 * 256;
+
+	if (p->oids == NULL) {
+		git_vector offsets, oids;
+
+		if ((error = git_vector_init(&oids, p->num_objects, NULL))) {
+			git_mutex_unlock(&p->lock);
+			return error;
+		}
+
+		if ((error = git_vector_init(&offsets, p->num_objects, git__memcmp4))) {
+			git_mutex_unlock(&p->lock);
+			return error;
+		}
+
+		if (p->index_version > 1) {
+			const unsigned char *off = index + 24 * p->num_objects;
+			for (i = 0; i < p->num_objects; i++)
+				git_vector_insert(&offsets, (void*)&off[4 * i]);
+			git_vector_sort(&offsets);
+			git_vector_foreach(&offsets, i, current)
+				git_vector_insert(&oids, (void*)&index[5 * (current - off)]);
+		} else {
+			for (i = 0; i < p->num_objects; i++)
+				git_vector_insert(&offsets, (void*)&index[24 * i]);
+			git_vector_sort(&offsets);
+			git_vector_foreach(&offsets, i, current)
+				git_vector_insert(&oids, (void*)&current[4]);
+		}
+
+		git_vector_free(&offsets);
+		p->oids = (git_oid **)git_vector_detach(NULL, NULL, &oids);
+	}
+
+	/* We need to copy the OIDs to another array before we relinquish the lock to avoid races. */
+	git_array_init_to_size(oids, p->num_objects);
+	if (!oids.ptr) {
+		git_mutex_unlock(&p->lock);
+		git_array_clear(oids);
+		GIT_ERROR_CHECK_ARRAY(oids);
+	}
+	for (i = 0; i < p->num_objects; i++) {
+		oid = git_array_alloc(oids);
+		if (!oid) {
+			git_mutex_unlock(&p->lock);
+			git_array_clear(oids);
+			GIT_ERROR_CHECK_ALLOC(oid);
+		}
+		git_oid_cpy(oid, p->oids[i]);
+	}
+
+	git_mutex_unlock(&p->lock);
+
+	git_array_foreach(oids, i, oid) {
+		if ((error = cb(oid, data)) != 0) {
+			git_error_set_after_callback(error);
+			break;
+		}
+	}
+
+	git_array_clear(oids);
+	return error;
+}
+
+
+// Source: pack.c
+// Lines 1282-1374

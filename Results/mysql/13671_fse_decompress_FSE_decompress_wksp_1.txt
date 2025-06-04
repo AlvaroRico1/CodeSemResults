@@ -1,0 +1,1 @@
+maxSymbolValue,mysql/extra/zstd/lib/common/fse_decompress.c,7,tableLog,mysql/extra/zstd/lib/common/fse_decompress.c,6,2

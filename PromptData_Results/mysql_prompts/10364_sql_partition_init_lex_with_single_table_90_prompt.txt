@@ -1,0 +1,46 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'query_block' at line 2
+2. Pointer 'lex' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static bool init_lex_with_single_table(THD *thd, TABLE *table, LEX *lex) {
+  Query_block *query_block = lex->query_block;
+  Name_resolution_context *context = &query_block->context;
+  /*
+    We will call the parser to create a part_info struct based on the
+    partition string stored in the frm file.
+    We will use a local lex object for this purpose. However we also
+    need to set the Name_resolution_object for this lex object. We
+    do this by using add_table_to_list where we add the table that
+    we're working with to the Name_resolution_context.
+  */
+  thd->lex = lex;
+  auto table_ident = new (thd->mem_root) Table_ident(
+      thd->get_protocol(), table->s->db, table->s->table_name, true);
+  if (table_ident == nullptr) return true;
+
+  TABLE_LIST *table_list =
+      query_block->add_table_to_list(thd, table_ident, nullptr, 0);
+  if (table_list == nullptr) return true;
+
+  context->resolve_in_table_list_only(table_list);
+  lex->use_only_table_context = true;
+  table->get_fields_in_item_tree = true;
+  table_list->table = table;
+  table_list->cacheable_table = false;
+  return false;
+}
+
+
+// Source: sql_partition.cc
+// Lines 832-858
+
+
+[ANSWER]
+MUST

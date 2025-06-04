@@ -1,0 +1,1 @@
+line,libgit2/tests/clar/clar.c,4,error,libgit2/tests/clar/clar.c,9,0

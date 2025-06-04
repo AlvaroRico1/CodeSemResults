@@ -1,0 +1,62 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'buff' at line 2
+2. Pointer 'pkt_length' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool net_realloc(NET *net, size_t length) {
+  uchar *buff;
+  size_t pkt_length;
+  DBUG_TRACE;
+  DBUG_PRINT("enter", ("length: %lu", (ulong)length));
+
+  if (length >= net->max_packet_size) {
+    DBUG_PRINT("error",
+               ("Packet too large. Max size: %lu", net->max_packet_size));
+    /* Error, but no need to stop using the socket. */
+    net->error = NET_ERROR_SOCKET_RECOVERABLE;
+    net->last_errno = ER_NET_PACKET_TOO_LARGE;
+#ifdef MYSQL_SERVER
+    my_error(ER_NET_PACKET_TOO_LARGE, MYF(0));
+#endif
+    return true;
+  }
+  pkt_length = (length + IO_SIZE - 1) & ~(IO_SIZE - 1);
+  /*
+    We must allocate some extra bytes for the end 0 and to be able to
+    read big compressed blocks in
+    net_read_packet() may actually read 4 bytes depending on build flags and
+    platform.
+  */
+  if (!(buff = (uchar *)my_realloc(
+            key_memory_NET_buff, (char *)net->buff,
+            pkt_length + NET_HEADER_SIZE + COMP_HEADER_SIZE, MYF(MY_WME)))) {
+    /* Error, but no need to stop using the socket. */
+    net->error = NET_ERROR_SOCKET_RECOVERABLE;
+    net->last_errno = ER_OUT_OF_RESOURCES;
+    /* In the server the error is reported by MY_WME flag. */
+    return true;
+  }
+#ifdef MYSQL_SERVER
+  net->buff = net->write_pos = buff;
+#else
+  size_t cur_pos_offset = NET_ASYNC_DATA(net)->cur_pos - net->buff;
+  net->buff = net->write_pos = buff;
+  NET_ASYNC_DATA(net)->cur_pos = net->buff + cur_pos_offset;
+#endif
+  net->buff_end = buff + (net->max_packet = (ulong)pkt_length);
+  return false;
+}
+
+
+// Source: net_serv.cc
+// Lines 206-248
+
+
+[ANSWER]
+MUST-NOT

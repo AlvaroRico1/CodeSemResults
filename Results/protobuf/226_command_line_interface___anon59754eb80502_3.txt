@@ -1,0 +1,1 @@
+directive,protobuf/src/google/protobuf/compiler/command_line_interface.cc,None,generator_info,protobuf/src/google/protobuf/compiler/command_line_interface.cc,272,1

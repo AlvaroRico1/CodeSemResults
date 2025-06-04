@@ -1,0 +1,37 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'current' at line 6
+2. Pointer 'orig' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+quicklist *quicklistDup(quicklist *orig) {
+    quicklist *copy;
+
+    copy = quicklistNew(orig->fill, orig->compress);
+
+    for (quicklistNode *current = orig->head; current;
+         current = current->next) {
+        quicklistNode *node = quicklistCreateNode();
+
+        if (current->encoding == QUICKLIST_NODE_ENCODING_LZF) {
+            quicklistLZF *lzf = (quicklistLZF *)current->zl;
+            size_t lzf_sz = sizeof(*lzf) + lzf->sz;
+            node->zl = zmalloc(lzf_sz);
+            memcpy(node->zl, current->zl, lzf_sz);
+        } else if (current->encoding == QUICKLIST_NODE_ENCODING_RAW) {
+            node->zl = zmalloc(current->sz);
+            memcpy(node->zl, current->zl, current->sz);
+        }
+
+
+// Source: quicklist.c
+// Lines 1210-1227
+
+
+[ANSWER]
+MUST

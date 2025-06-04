@@ -1,0 +1,1 @@
+oldscratch,curl/lib/smtp.c,14,scratch,curl/lib/smtp.c,12,1

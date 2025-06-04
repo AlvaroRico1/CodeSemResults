@@ -1,0 +1,31 @@
+static int attr_cache_lookup(
+	git_attr_file **out_file,
+	git_attr_file_entry **out_entry,
+	git_repository *repo,
+	git_attr_session *attr_session,
+	git_attr_file_source *source)
+{
+	int error = 0;
+	git_str path = GIT_STR_INIT;
+	const char *wd = git_repository_workdir(repo);
+	const char *filename;
+	git_attr_cache *cache = git_repository_attr_cache(repo);
+	git_attr_file_entry *entry = NULL;
+	git_attr_file *file = NULL;
+
+	/* join base and path as needed */
+	if (source->base != NULL && git_fs_path_root(source->filename) < 0) {
+		git_str *p = attr_session ? &attr_session->tmp : &path;
+
+		if (git_str_joinpath(p, source->base, source->filename) < 0 ||
+		    git_path_validate_str_length(repo, p) < 0)
+			return -1;
+
+		filename = p->ptr;
+	} else {
+		filename = source->filename;
+	}
+
+
+// Source: attrcache.c
+// Lines 161-187

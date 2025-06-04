@@ -1,0 +1,66 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ne' at line 4
+2. Pointer 'w' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+notify_add(const char *name, struct cmd_find_state *fs, struct client *c,
+    struct session *s, struct window *w, struct window_pane *wp)
+{
+	struct notify_entry	*ne;
+	struct cmdq_item	*item;
+
+	item = cmdq_running(NULL);
+	if (item != NULL && (cmdq_get_flags(item) & CMDQ_STATE_NOHOOKS))
+		return;
+
+	ne = xcalloc(1, sizeof *ne);
+	ne->name = xstrdup(name);
+
+	ne->client = c;
+	ne->session = s;
+	ne->window = w;
+	ne->pane = (wp != NULL ? wp->id : -1);
+
+	ne->formats = format_create(NULL, NULL, 0, FORMAT_NOJOBS);
+	format_add(ne->formats, "hook", "%s", name);
+	if (c != NULL)
+		format_add(ne->formats, "hook_client", "%s", c->name);
+	if (s != NULL) {
+		format_add(ne->formats, "hook_session", "$%u", s->id);
+		format_add(ne->formats, "hook_session_name", "%s", s->name);
+	}
+	if (w != NULL) {
+		format_add(ne->formats, "hook_window", "@%u", w->id);
+		format_add(ne->formats, "hook_window_name", "%s", w->name);
+	}
+	if (wp != NULL)
+		format_add(ne->formats, "hook_pane", "%%%d", wp->id);
+	format_log_debug(ne->formats, __func__);
+
+	if (c != NULL)
+		c->references++;
+	if (s != NULL)
+		session_add_ref(s, __func__);
+	if (w != NULL)
+		window_add_ref(w, __func__);
+
+	cmd_find_copy_state(&ne->fs, fs);
+	if (ne->fs.s != NULL) /* cmd_find_valid_state needs session */
+		session_add_ref(ne->fs.s, __func__);
+
+	cmdq_append(NULL, cmdq_get_callback(notify_callback, ne));
+}
+
+
+// Source: notify.c
+// Lines 140-186
+
+
+[ANSWER]
+MUST

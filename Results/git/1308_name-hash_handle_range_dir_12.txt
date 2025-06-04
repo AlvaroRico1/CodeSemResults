@@ -1,0 +1,1 @@
+dir_new_out,git/name-hash.c,8,dir_new,git/name-hash.c,12,1

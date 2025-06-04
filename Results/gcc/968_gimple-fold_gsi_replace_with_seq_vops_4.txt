@@ -1,0 +1,1 @@
+laststore,gcc/gcc/gimple-fold.c,10,new_stmt,gcc/gcc/gimple-fold.c,14,1

@@ -1,0 +1,186 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'gd' at line 4
+2. Pointer 's' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+screen_write_cell(struct screen_write_ctx *ctx, const struct grid_cell *gc)
+{
+	struct screen		*s = ctx->s;
+	struct grid		*gd = s->grid;
+	const struct utf8_data	*ud = &gc->data;
+	const struct utf8_data	 zwj = { "\342\200\215", 0, 3, 0 };
+	struct grid_line	*gl;
+	struct grid_cell_entry	*gce;
+	struct grid_cell 	 tmp_gc, now_gc;
+	struct tty_ctx		 ttyctx;
+	u_int			 sx = screen_size_x(s), sy = screen_size_y(s);
+	u_int		 	 width = gc->data.width, xx, last, cx, cy;
+	int			 selected, skip = 1;
+
+	/* Ignore padding cells. */
+	if (gc->flags & GRID_FLAG_PADDING)
+		return;
+
+	/*
+	 * If this is a zero width joiner, set the flag so the next character
+	 * will be treated as zero width and appended. Note that we assume a
+	 * ZWJ will not change the width - the width of the first character is
+	 * used.
+	 */
+	if (ud->size == 3 && memcmp(ud->data, "\342\200\215", 3) == 0) {
+		log_debug("zero width joiner at %u,%u", s->cx, s->cy);
+		ctx->flags |= SCREEN_WRITE_ZWJ;
+		return;
+	}
+
+	/*
+	 * If the width is zero, combine onto the previous character. We always
+	 * combine with the cell to the left of the cursor position. In theory,
+	 * the application could have moved the cursor somewhere else, but if
+	 * they are silly enough to do that, who cares?
+	 */
+	if (ctx->flags & SCREEN_WRITE_ZWJ) {
+		screen_write_collect_flush(ctx, 0, __func__);
+		screen_write_combine(ctx, &zwj, &xx);
+	}
+	if (width == 0 || (ctx->flags & SCREEN_WRITE_ZWJ)) {
+		ctx->flags &= ~SCREEN_WRITE_ZWJ;
+		screen_write_collect_flush(ctx, 0, __func__);
+		if ((gc = screen_write_combine(ctx, ud, &xx)) != NULL) {
+			cx = s->cx; cy = s->cy;
+			screen_write_set_cursor(ctx, xx, s->cy);
+			screen_write_initctx(ctx, &ttyctx, 0);
+			ttyctx.cell = gc;
+			tty_write(tty_cmd_cell, &ttyctx);
+			s->cx = cx; s->cy = cy;
+		}
+		return;
+	}
+
+	/* Flush any existing scrolling. */
+	screen_write_collect_flush(ctx, 1, __func__);
+
+	/* If this character doesn't fit, ignore it. */
+	if ((~s->mode & MODE_WRAP) &&
+	    width > 1 &&
+	    (width > sx || (s->cx != sx && s->cx > sx - width)))
+		return;
+
+	/* If in insert mode, make space for the cells. */
+	if (s->mode & MODE_INSERT) {
+		grid_view_insert_cells(s->grid, s->cx, s->cy, width, 8);
+		skip = 0;
+	}
+
+	/* Check this will fit on the current line and wrap if not. */
+	if ((s->mode & MODE_WRAP) && s->cx > sx - width) {
+		log_debug("%s: wrapped at %u,%u", __func__, s->cx, s->cy);
+		screen_write_linefeed(ctx, 1, 8);
+		screen_write_set_cursor(ctx, 0, -1);
+		screen_write_collect_flush(ctx, 1, __func__);
+	}
+
+	/* Sanity check cursor position. */
+	if (s->cx > sx - width || s->cy > sy - 1)
+		return;
+	screen_write_initctx(ctx, &ttyctx, 0);
+
+	/* Handle overwriting of UTF-8 characters. */
+	gl = grid_get_line(s->grid, s->grid->hsize + s->cy);
+	if (gl->flags & GRID_LINE_EXTENDED) {
+		grid_view_get_cell(gd, s->cx, s->cy, &now_gc);
+		if (screen_write_overwrite(ctx, &now_gc, width))
+			skip = 0;
+	}
+
+	/*
+	 * If the new character is UTF-8 wide, fill in padding cells. Have
+	 * already ensured there is enough room.
+	 */
+	for (xx = s->cx + 1; xx < s->cx + width; xx++) {
+		log_debug("%s: new padding at %u,%u", __func__, xx, s->cy);
+		grid_view_set_padding(gd, xx, s->cy);
+		skip = 0;
+	}
+
+	/* If no change, do not draw. */
+	if (skip) {
+		if (s->cx >= gl->cellsize)
+			skip = grid_cells_equal(gc, &grid_default_cell);
+		else {
+			gce = &gl->celldata[s->cx];
+			if (gce->flags & GRID_FLAG_EXTENDED)
+				skip = 0;
+			else if (gc->flags != gce->flags)
+				skip = 0;
+			else if (gc->attr != gce->data.attr)
+				skip = 0;
+			else if (gc->fg != gce->data.fg)
+				skip = 0;
+			else if (gc->bg != gce->data.bg)
+				skip = 0;
+			else if (gc->data.width != 1)
+				skip = 0;
+			else if (gc->data.size != 1)
+				skip = 0;
+			else if (gce->data.data != gc->data.data[0])
+				skip = 0;
+		}
+	}
+
+	/* Update the selected flag and set the cell. */
+	selected = screen_check_selection(s, s->cx, s->cy);
+	if (selected && (~gc->flags & GRID_FLAG_SELECTED)) {
+		memcpy(&tmp_gc, gc, sizeof tmp_gc);
+		tmp_gc.flags |= GRID_FLAG_SELECTED;
+		grid_view_set_cell(gd, s->cx, s->cy, &tmp_gc);
+	} else if (!selected && (gc->flags & GRID_FLAG_SELECTED)) {
+		memcpy(&tmp_gc, gc, sizeof tmp_gc);
+		tmp_gc.flags &= ~GRID_FLAG_SELECTED;
+		grid_view_set_cell(gd, s->cx, s->cy, &tmp_gc);
+	} else if (!skip)
+		grid_view_set_cell(gd, s->cx, s->cy, gc);
+	if (selected)
+		skip = 0;
+
+	/*
+	 * Move the cursor. If not wrapping, stick at the last character and
+	 * replace it.
+	 */
+	last = !(s->mode & MODE_WRAP);
+	if (s->cx <= sx - last - width)
+		screen_write_set_cursor(ctx, s->cx + width, -1);
+	else
+		screen_write_set_cursor(ctx,  sx - last, -1);
+
+	/* Create space for character in insert mode. */
+	if (s->mode & MODE_INSERT) {
+		screen_write_collect_flush(ctx, 0, __func__);
+		ttyctx.num = width;
+		tty_write(tty_cmd_insertcharacter, &ttyctx);
+	}
+
+	/* Write to the screen. */
+	if (!skip) {
+		if (selected) {
+			screen_select_cell(s, &tmp_gc, gc);
+			ttyctx.cell = &tmp_gc;
+		} else
+			ttyctx.cell = gc;
+		tty_write(tty_cmd_cell, &ttyctx);
+	}
+}
+
+
+// Source: screen-write.c
+// Lines 1801-1967
+
+
+[ANSWER]
+MUST

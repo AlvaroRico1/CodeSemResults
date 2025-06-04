@@ -1,0 +1,65 @@
+tty_window_offset1(struct tty *tty, u_int *ox, u_int *oy, u_int *sx, u_int *sy)
+{
+	struct client		*c = tty->client;
+	struct window		*w = c->session->curw->window;
+	struct window_pane	*wp = server_client_get_pane(c);
+	u_int			 cx, cy, lines;
+
+	lines = status_line_size(c);
+
+	if (tty->sx >= w->sx && tty->sy - lines >= w->sy) {
+		*ox = 0;
+		*oy = 0;
+		*sx = w->sx;
+		*sy = w->sy;
+
+		c->pan_window = NULL;
+		return (0);
+	}
+
+	*sx = tty->sx;
+	*sy = tty->sy - lines;
+
+	if (c->pan_window == w) {
+		if (*sx >= w->sx)
+			c->pan_ox = 0;
+		else if (c->pan_ox + *sx > w->sx)
+			c->pan_ox = w->sx - *sx;
+		*ox = c->pan_ox;
+		if (*sy >= w->sy)
+			c->pan_oy = 0;
+		else if (c->pan_oy + *sy > w->sy)
+			c->pan_oy = w->sy - *sy;
+		*oy = c->pan_oy;
+		return (1);
+	}
+
+	if (~wp->screen->mode & MODE_CURSOR) {
+		*ox = 0;
+		*oy = 0;
+	} else {
+		cx = wp->xoff + wp->screen->cx;
+		cy = wp->yoff + wp->screen->cy;
+
+		if (cx < *sx)
+			*ox = 0;
+		else if (cx > w->sx - *sx)
+			*ox = w->sx - *sx;
+		else
+			*ox = cx - *sx / 2;
+
+		if (cy < *sy)
+			*oy = 0;
+		else if (cy > w->sy - *sy)
+			*oy = w->sy - *sy;
+		else
+			*oy = cy - *sy / 2;
+	}
+
+	c->pan_window = NULL;
+	return (1);
+}
+
+
+// Source: tty.c
+// Lines 840-900

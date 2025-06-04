@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'args' at line 4\n2. Pointer 'overrides' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid h2o_reprocess_request_deferred(h2o_req_t *req, h2o_iovec_t method, const h2o_url_scheme_t *scheme, h2o_iovec_t authority,\n                                    h2o_iovec_t path, h2o_req_overrides_t *overrides, int is_delegated)\n{\n    struct st_reprocess_request_deferred_t *args =\n        (struct st_reprocess_request_deferred_t *)create_deferred_action(req, sizeof(*args), on_reprocess_request_cb);\n    args->method = method;\n    args->scheme = scheme;\n    args->authority = authority;\n    args->path = path;\n    args->overrides = overrides;\n    args->is_delegated = is_delegated;\n}\n\n\n// Source: request.c\n// Lines 463-474\n",
+  "ANSWER": "MUST"
+}

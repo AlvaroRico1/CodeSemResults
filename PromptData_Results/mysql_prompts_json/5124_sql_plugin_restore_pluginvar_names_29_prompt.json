@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'var' at line 2\n2. Pointer 'var' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void restore_pluginvar_names(sys_var *first) {\n  for (sys_var *var = first; var; var = var->next) {\n    sys_var_pluginvar *pv = var->cast_pluginvar();\n    pv->plugin_var->name = pv->orig_pluginvar_name;\n  }\n}\n\n\n// Source: sql_plugin.cc\n// Lines 2917-2922\n",
+  "ANSWER": "MUST"
+}

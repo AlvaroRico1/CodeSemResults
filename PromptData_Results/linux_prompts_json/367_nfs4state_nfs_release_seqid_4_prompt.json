@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'sequence' at line 3\n2. Pointer 'seqid' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid nfs_release_seqid(struct nfs_seqid *seqid)\n{\n\tstruct nfs_seqid_counter *sequence;\n\n\tif (seqid == NULL || list_empty(&seqid->list))\n\t\treturn;\n\tsequence = seqid->sequence;\n\tspin_lock(&sequence->lock);\n\tlist_del_init(&seqid->list);\n\tif (!list_empty(&sequence->list)) {\n\t\tstruct nfs_seqid *next;\n\n\t\tnext = list_first_entry(&sequence->list,\n\t\t\t\tstruct nfs_seqid, list);\n\t\trpc_wake_up_queued_task(&sequence->wait, next->task);\n\t}\n\tspin_unlock(&sequence->lock);\n}\n\n\n// Source: nfs4state.c\n// Lines 1102-1119\n",
+  "ANSWER": "MUST"
+}

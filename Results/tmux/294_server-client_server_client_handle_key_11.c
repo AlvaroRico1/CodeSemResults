@@ -1,0 +1,48 @@
+server_client_handle_key(struct client *c, struct key_event *event)
+{
+	struct session		*s = c->session;
+	struct cmdq_item	*item;
+
+	/* Check the client is good to accept input. */
+	if (s == NULL || (c->flags & CLIENT_UNATTACHEDFLAGS))
+		return (0);
+
+	/*
+	 * Key presses in overlay mode and the command prompt are a special
+	 * case. The queue might be blocked so they need to be processed
+	 * immediately rather than queued.
+	 */
+	if (~c->flags & CLIENT_READONLY) {
+		if (c->message_string != NULL) {
+			if (c->message_ignore_keys)
+				return (0);
+			status_message_clear(c);
+		}
+		if (c->overlay_key != NULL) {
+			switch (c->overlay_key(c, c->overlay_data, event)) {
+			case 0:
+				return (0);
+			case 1:
+				server_client_clear_overlay(c);
+				return (0);
+			}
+		}
+		server_client_clear_overlay(c);
+		if (c->prompt_string != NULL) {
+			if (status_prompt_key(c, event->key) == 0)
+				return (0);
+		}
+	}
+
+	/*
+	 * Add the key to the queue so it happens after any commands queued by
+	 * previous keys.
+	 */
+	item = cmdq_get_callback(server_client_key_callback, event);
+	cmdq_append(c, item);
+	return (1);
+}
+
+
+// Source: server-client.c
+// Lines 1416-1459

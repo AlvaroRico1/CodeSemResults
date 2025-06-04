@@ -1,0 +1,32 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'prefix' at line 1
+2. Pointer 'preftmp' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+create_tmp_var_name (const char *prefix)
+{
+  char *tmp_name;
+
+  if (prefix)
+    {
+      char *preftmp = ASTRDUP (prefix);
+
+      remove_suffix (preftmp, strlen (preftmp));
+      clean_symbol_name (preftmp);
+
+      prefix = preftmp;
+    }
+
+
+// Source: gimple-expr.c
+// Lines 418-430
+
+
+[ANSWER]
+MUST

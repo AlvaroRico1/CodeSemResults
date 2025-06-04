@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'lexstate' at line 2\n2. Pointer 'buff' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nProto *luaY_parser (lua_State *L, ZIO *z, Mbuffer *buff, const char *name) {\n  struct LexState lexstate;\n  struct FuncState funcstate;\n  lexstate.buff = buff;\n  luaX_setinput(L, &lexstate, z, luaS_new(L, name));\n  open_func(&lexstate, &funcstate);\n  funcstate.f->is_vararg = VARARG_ISVARARG;  /* main func. is always vararg */\n  luaX_next(&lexstate);  /* read first token */\n  chunk(&lexstate);\n  check(&lexstate, TK_EOS);\n  close_func(&lexstate);\n  lua_assert(funcstate.prev == NULL);\n  lua_assert(funcstate.f->nups == 0);\n  lua_assert(lexstate.fs == NULL);\n  return funcstate.f;\n}\n\n\n// Source: lparser.c\n// Lines 383-398\n",
+  "ANSWER": "MUST"
+}

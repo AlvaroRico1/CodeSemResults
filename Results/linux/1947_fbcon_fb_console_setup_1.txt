@@ -1,0 +1,1 @@
+options,linux/drivers/video/fbdev/core/fbcon.c,3,this_opt,linux/drivers/video/fbdev/core/fbcon.c,1,2

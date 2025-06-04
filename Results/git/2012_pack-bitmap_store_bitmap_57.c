@@ -1,0 +1,33 @@
+static struct stored_bitmap *store_bitmap(struct bitmap_index *index,
+					  struct ewah_bitmap *root,
+					  const struct object_id *oid,
+					  struct stored_bitmap *xor_with,
+					  int flags)
+{
+	struct stored_bitmap *stored;
+	khiter_t hash_pos;
+	int ret;
+
+	stored = xmalloc(sizeof(struct stored_bitmap));
+	stored->root = root;
+	stored->xor = xor_with;
+	stored->flags = flags;
+	oidcpy(&stored->oid, oid);
+
+	hash_pos = kh_put_oid_map(index->bitmaps, stored->oid, &ret);
+
+	/* a 0 return code means the insertion succeeded with no changes,
+	 * because the SHA1 already existed on the map. this is bad, there
+	 * shouldn't be duplicated commits in the index */
+	if (ret == 0) {
+		error("Duplicate entry in bitmap index: %s", oid_to_hex(oid));
+		return NULL;
+	}
+
+	kh_value(index->bitmaps, hash_pos) = stored;
+	return stored;
+}
+
+
+// Source: pack-bitmap.c
+// Lines 196-224

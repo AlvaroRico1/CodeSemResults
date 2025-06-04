@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'l' at line None\n2. Pointer 'p' at line None\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nsds sdsfromlonglong(long long value) {\n    char buf[SDS_LLSTR_SIZE];\n    int len = sdsll2str(buf,value);\n\n    return sdsnewlen(buf,len);\n}\n\n\n// Source: sds.c\n// Lines 549-554\n",
+  "ANSWER": "MUST"
+}

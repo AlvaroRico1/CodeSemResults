@@ -1,0 +1,32 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'pi' at line 7
+2. Pointer 'data' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int diff_print_patch_line(
+	const git_diff_delta *delta,
+	const git_diff_hunk *hunk,
+	const git_diff_line *line,
+	void *data)
+{
+	diff_print_info *pi = data;
+
+	if (S_ISDIR(delta->new_file.mode))
+		return 0;
+
+	return pi->print_cb(delta, hunk, line, pi->payload);
+}
+
+
+// Source: diff_print.c
+// Lines 641-653
+
+
+[ANSWER]
+MUST

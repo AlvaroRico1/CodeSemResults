@@ -1,0 +1,1 @@
+index,libgit2/tests/libgit2/stress/diff.c,3,new_tree,libgit2/tests/libgit2/stress/diff.c,4,2

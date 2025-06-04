@@ -1,0 +1,54 @@
+int serveClientBlockedOnList(client *receiver, robj *key, robj *dstkey, redisDb *db, robj *value, int wherefrom, int whereto)
+{
+    robj *argv[5];
+
+    if (dstkey == NULL) {
+        /* Propagate the [LR]POP operation. */
+        argv[0] = (wherefrom == LIST_HEAD) ? shared.lpop :
+                                             shared.rpop;
+        argv[1] = key;
+        propagate((wherefrom == LIST_HEAD) ?
+            server.lpopCommand : server.rpopCommand,
+            db->id,argv,2,PROPAGATE_AOF|PROPAGATE_REPL);
+
+        /* BRPOP/BLPOP */
+        addReplyArrayLen(receiver,2);
+        addReplyBulk(receiver,key);
+        addReplyBulk(receiver,value);
+
+        /* Notify event. */
+        char *event = (wherefrom == LIST_HEAD) ? "lpop" : "rpop";
+        notifyKeyspaceEvent(NOTIFY_LIST,event,key,receiver->db->id);
+    } else {
+        /* BLMOVE */
+        robj *dstobj =
+            lookupKeyWrite(receiver->db,dstkey);
+        if (!(dstobj &&
+             checkType(receiver,dstobj,OBJ_LIST)))
+        {
+            lmoveHandlePush(receiver,dstkey,dstobj,value,whereto);
+            /* Propagate the LMOVE/RPOPLPUSH operation. */
+            int isbrpoplpush = (receiver->lastcmd->proc == brpoplpushCommand);
+            argv[0] = isbrpoplpush ? shared.rpoplpush : shared.lmove;
+            argv[1] = key;
+            argv[2] = dstkey;
+            argv[3] = getStringObjectFromListPosition(wherefrom);
+            argv[4] = getStringObjectFromListPosition(whereto);
+            propagate(isbrpoplpush ? server.rpoplpushCommand : server.lmoveCommand,
+                db->id,argv,(isbrpoplpush ? 3 : 5),
+                PROPAGATE_AOF|
+                PROPAGATE_REPL);
+
+            /* Notify event ("lpush" or "rpush" was notified by lmoveHandlePush). */
+            notifyKeyspaceEvent(NOTIFY_LIST,wherefrom == LIST_TAIL ? "rpop" : "lpop",
+                                key,receiver->db->id);
+        } else {
+            /* BLMOVE failed because of wrong
+             * destination type. */
+            return C_ERR;
+        }
+    }
+
+
+// Source: t_list.c
+// Lines 880-929

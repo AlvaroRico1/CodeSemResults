@@ -1,0 +1,1 @@
+w,tmux/cmd-resize-window.c,6,wl,tmux/cmd-resize-window.c,5,1

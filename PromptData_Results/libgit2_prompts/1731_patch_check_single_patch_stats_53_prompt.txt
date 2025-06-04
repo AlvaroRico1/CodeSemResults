@@ -1,0 +1,99 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'dels' at line 3
+2. Pointer 'i' at line 49
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void check_single_patch_stats(
+	git_repository *repo, size_t hunks,
+	size_t adds, size_t dels, size_t ctxt, size_t *sizes,
+	const char *expected)
+{
+	git_diff *diff;
+	git_patch *patch;
+	const git_diff_delta *delta;
+	size_t actual_ctxt, actual_adds, actual_dels;
+
+	cl_git_pass(git_diff_index_to_workdir(&diff, repo, NULL, NULL));
+
+	cl_assert_equal_i(1, (int)git_diff_num_deltas(diff));
+
+	cl_git_pass(git_patch_from_diff(&patch, diff, 0));
+	cl_assert((delta = git_patch_get_delta(patch)) != NULL);
+	cl_assert_equal_i(GIT_DELTA_MODIFIED, (int)delta->status);
+
+	cl_assert_equal_i((int)hunks, (int)git_patch_num_hunks(patch));
+
+	cl_git_pass( git_patch_line_stats(
+		&actual_ctxt, &actual_adds, &actual_dels, patch) );
+
+	cl_assert_equal_sz(ctxt, actual_ctxt);
+	cl_assert_equal_sz(adds, actual_adds);
+	cl_assert_equal_sz(dels, actual_dels);
+
+	if (expected != NULL) {
+		git_buf buf = GIT_BUF_INIT;
+		cl_git_pass(git_patch_to_buf(&buf, patch));
+		cl_assert_equal_s(expected, buf.ptr);
+		git_buf_dispose(&buf);
+
+		cl_assert_equal_sz(
+			strlen(expected), git_patch_size(patch, 1, 1, 1));
+	}
+
+	if (sizes) {
+		if (sizes[0])
+			cl_assert_equal_sz(sizes[0], git_patch_size(patch, 0, 0, 0));
+		if (sizes[1])
+			cl_assert_equal_sz(sizes[1], git_patch_size(patch, 1, 0, 0));
+		if (sizes[2])
+			cl_assert_equal_sz(sizes[2], git_patch_size(patch, 1, 1, 0));
+	}
+
+	/* walk lines in hunk with basic sanity checks */
+	for (; hunks > 0; --hunks) {
+		size_t i, max_i;
+		const git_diff_line *line;
+		int last_new_lineno = -1, last_old_lineno = -1;
+
+		max_i = git_patch_num_lines_in_hunk(patch, hunks - 1);
+
+		for (i = 0; i < max_i; ++i) {
+			int expected = 1;
+
+			cl_git_pass(
+				git_patch_get_line_in_hunk(&line, patch, hunks - 1, i));
+
+			if (line->origin == GIT_DIFF_LINE_ADD_EOFNL ||
+				line->origin == GIT_DIFF_LINE_DEL_EOFNL ||
+				line->origin == GIT_DIFF_LINE_CONTEXT_EOFNL)
+				expected = 0;
+
+			if (line->old_lineno >= 0) {
+				if (last_old_lineno >= 0)
+					cl_assert_equal_i(
+						expected, line->old_lineno - last_old_lineno);
+				last_old_lineno = line->old_lineno;
+			}
+
+			if (line->new_lineno >= 0) {
+				if (last_new_lineno >= 0)
+					cl_assert_equal_i(
+						expected, line->new_lineno - last_new_lineno);
+				last_new_lineno = line->new_lineno;
+			}
+		}
+	}
+
+
+// Source: patch.c
+// Lines 447-526
+
+
+[ANSWER]
+MUST-NOT

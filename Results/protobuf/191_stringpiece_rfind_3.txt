@@ -1,0 +1,1 @@
+last,protobuf/src/google/protobuf/stubs/stringpiece.cc,6,ptr_,protobuf/src/google/protobuf/stubs/stringpiece.cc,6,1

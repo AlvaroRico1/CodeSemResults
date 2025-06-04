@@ -1,0 +1,1 @@
+nr_m_spare,linux/arch/x86/kernel/mpparse.c,9,mpt,linux/arch/x86/kernel/mpparse.c,10,0

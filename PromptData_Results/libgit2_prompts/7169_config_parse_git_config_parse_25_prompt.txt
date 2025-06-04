@@ -1,0 +1,102 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'var_name' at line 10
+2. Pointer 'line_len' at line 19
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_config_parse(
+	git_config_parser *parser,
+	git_config_parser_section_cb on_section,
+	git_config_parser_variable_cb on_variable,
+	git_config_parser_comment_cb on_comment,
+	git_config_parser_eof_cb on_eof,
+	void *payload)
+{
+	git_parse_ctx *ctx;
+	char *current_section = NULL, *var_name = NULL, *var_value = NULL;
+	int result = 0;
+
+	ctx = &parser->ctx;
+
+	skip_bom(ctx);
+
+	for (; ctx->remain_len > 0; git_parse_advance_line(ctx)) {
+		const char *line_start;
+		size_t line_len;
+		char c;
+
+	restart:
+		line_start = ctx->line;
+		line_len = ctx->line_len;
+
+		/*
+		 * Get either first non-whitespace character or, if that does
+		 * not exist, the first whitespace character. This is required
+		 * to preserve whitespaces when writing back the file.
+		 */
+		if (git_parse_peek(&c, ctx, GIT_PARSE_PEEK_SKIP_WHITESPACE) < 0 &&
+		    git_parse_peek(&c, ctx, 0) < 0)
+			continue;
+
+		switch (c) {
+		case '[': /* section header, new section begins */
+			git__free(current_section);
+			current_section = NULL;
+
+			result = parse_section_header(parser, &current_section);
+			if (result < 0)
+				break;
+
+			git_parse_advance_chars(ctx, result);
+
+			if (on_section)
+				result = on_section(parser, current_section, line_start, line_len, payload);
+			/*
+			 * After we've parsed the section header we may not be
+			 * done with the line. If there's still data in there,
+			 * run the next loop with the rest of the current line
+			 * instead of moving forward.
+			 */
+
+			if (!git_parse_peek(&c, ctx, GIT_PARSE_PEEK_SKIP_WHITESPACE))
+				goto restart;
+
+			break;
+
+		case '\n': /* comment or whitespace-only */
+		case '\r':
+		case ' ':
+		case '\t':
+		case ';':
+		case '#':
+			if (on_comment) {
+				result = on_comment(parser, line_start, line_len, payload);
+			}
+			break;
+
+		default: /* assume variable declaration */
+			if ((result = parse_variable(parser, &var_name, &var_value, &line_len)) == 0 && on_variable) {
+				result = on_variable(parser, current_section, var_name, var_value, line_start, line_len, payload);
+				git__free(var_name);
+				git__free(var_value);
+			}
+
+			break;
+		}
+
+		if (result < 0)
+			goto out;
+	}
+
+
+// Source: config_parse.c
+// Lines 490-572
+
+
+[ANSWER]
+MAY

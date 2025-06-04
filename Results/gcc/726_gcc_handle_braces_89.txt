@@ -1,0 +1,1 @@
+d_atom,gcc/gcc/gcc.c,4,ep,gcc/gcc/gcc.c,76,2

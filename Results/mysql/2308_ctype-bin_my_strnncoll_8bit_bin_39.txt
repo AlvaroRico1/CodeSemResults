@@ -1,0 +1,1 @@
+cmp,mysql/strings/ctype-bin.cc,5,len,mysql/strings/ctype-bin.cc,4,0

@@ -1,0 +1,1 @@
+new_len,libgit2/tests/libgit2/apply/fromfile.c,5,mode,libgit2/tests/libgit2/apply/fromfile.c,14,0

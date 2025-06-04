@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ptr' at line 3
+2. Pointer 'pos' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void *saved_tgids_next(struct seq_file *m, void *v, loff_t *pos)
+{
+	int *ptr = v;
+
+	if (*pos || m->count)
+		ptr++;
+
+	(*pos)++;
+
+	for (; ptr <= &tgid_map[PID_MAX_DEFAULT]; ptr++) {
+		if (trace_find_tgid(*ptr))
+			return ptr;
+	}
+
+	return NULL;
+}
+
+
+// Source: trace.c
+// Lines 4985-5000
+
+
+[ANSWER]
+MAY

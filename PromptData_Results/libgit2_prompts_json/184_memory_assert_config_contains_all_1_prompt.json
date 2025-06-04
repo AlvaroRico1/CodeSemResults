@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'entries' at line 2\n2. Pointer 'i' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void assert_config_contains_all(git_config_backend *backend,\n\tstruct expected_entry *entries)\n{\n\tint i;\n\n\tcl_git_pass(git_config_backend_foreach(backend, contains_all_cb, entries));\n\n\tfor (i = 0; entries[i].name; i++)\n\t\tcl_assert(entries[i].seen);\n}\n\n\n// Source: memory.c\n// Lines 51-60\n",
+  "ANSWER": "MUST-NOT"
+}

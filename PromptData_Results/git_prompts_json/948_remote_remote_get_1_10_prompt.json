@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'name' at line 1\n2. Pointer 'name_given' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic struct remote *remote_get_1(const char *name,\n\t\t\t\t   const char *(*get_default)(struct branch *, int *))\n{\n\tstruct remote *ret;\n\tint name_given = 0;\n\n\tread_config();\n\n\tif (name)\n\t\tname_given = 1;\n\telse\n\t\tname = get_default(current_branch, &name_given);\n\n\tret = make_remote(name, 0);\n\tif (valid_remote_nick(name) && have_git_dir()) {\n\t\tif (!valid_remote(ret))\n\t\t\tread_remotes_file(ret);\n\t\tif (!valid_remote(ret))\n\t\t\tread_branches_file(ret);\n\t}\n\tif (name_given && !valid_remote(ret))\n\t\tadd_url_alias(ret, name);\n\tif (!valid_remote(ret))\n\t\treturn NULL;\n\treturn ret;\n}\n\n\n// Source: remote.c\n// Lines 526-551\n",
+  "ANSWER": "MAY"
+}

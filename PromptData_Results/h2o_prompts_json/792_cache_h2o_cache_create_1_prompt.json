@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'cache' at line 3\n2. Pointer 'destroy_cb' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nh2o_cache_t *h2o_cache_create(int flags, size_t capacity, uint64_t duration, void (*destroy_cb)(h2o_iovec_t value))\n{\n    h2o_cache_t *cache = h2o_mem_alloc(sizeof(*cache));\n\n    cache->flags = flags;\n    cache->table = kh_init(cache);\n    cache->size = 0;\n    cache->capacity = capacity;\n    h2o_linklist_init_anchor(&cache->lru);\n    h2o_linklist_init_anchor(&cache->age);\n    cache->duration = duration;\n    cache->destroy_cb = destroy_cb;\n    if ((cache->flags & H2O_CACHE_FLAG_MULTITHREADED) != 0)\n        pthread_mutex_init(&cache->mutex, NULL);\n\n    return cache;\n}\n\n\n// Source: cache.c\n// Lines 113-129\n",
+  "ANSWER": "MUST"
+}

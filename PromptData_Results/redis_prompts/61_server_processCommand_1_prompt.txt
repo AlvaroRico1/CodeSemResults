@@ -1,0 +1,176 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'op' at line None
+2. Pointer 'oa' at line None
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int processCommand(client *c) {
+    if (!server.lua_timedout) {
+        /* Both EXEC and EVAL call call() directly so there should be
+         * no way in_exec or in_eval or propagate_in_transaction is 1.
+         * That is unless lua_timedout, in which case client may run
+         * some commands. */
+        serverAssert(!server.propagate_in_transaction);
+        serverAssert(!server.in_exec);
+        serverAssert(!server.in_eval);
+    }
+
+    moduleCallCommandFilters(c);
+
+    /* The QUIT command is handled separately. Normal command procs will
+     * go through checking for replication and QUIT will cause trouble
+     * when FORCE_REPLICATION is enabled and would be implemented in
+     * a regular command proc. */
+    if (!strcasecmp(c->argv[0]->ptr,"quit")) {
+        addReply(c,shared.ok);
+        c->flags |= CLIENT_CLOSE_AFTER_REPLY;
+        return C_ERR;
+    }
+
+    /* Now lookup the command and check ASAP about trivial error conditions
+     * such as wrong arity, bad command name and so forth. */
+    c->cmd = c->lastcmd = lookupCommand(c->argv[0]->ptr);
+    if (!c->cmd) {
+        sds args = sdsempty();
+        int i;
+        for (i=1; i < c->argc && sdslen(args) < 128; i++)
+            args = sdscatprintf(args, "`%.*s`, ", 128-(int)sdslen(args), (char*)c->argv[i]->ptr);
+        rejectCommandFormat(c,"unknown command `%s`, with args beginning with: %s",
+            (char*)c->argv[0]->ptr, args);
+        sdsfree(args);
+        return C_OK;
+    } else if ((c->cmd->arity > 0 && c->cmd->arity != c->argc) ||
+               (c->argc < -c->cmd->arity)) {
+        rejectCommandFormat(c,"wrong number of arguments for '%s' command",
+            c->cmd->name);
+        return C_OK;
+    }
+
+    int is_read_command = (c->cmd->flags & CMD_READONLY) ||
+                           (c->cmd->proc == execCommand && (c->mstate.cmd_flags & CMD_READONLY));
+    int is_write_command = (c->cmd->flags & CMD_WRITE) ||
+                           (c->cmd->proc == execCommand && (c->mstate.cmd_flags & CMD_WRITE));
+    int is_denyoom_command = (c->cmd->flags & CMD_DENYOOM) ||
+                             (c->cmd->proc == execCommand && (c->mstate.cmd_flags & CMD_DENYOOM));
+    int is_denystale_command = !(c->cmd->flags & CMD_STALE) ||
+                               (c->cmd->proc == execCommand && (c->mstate.cmd_inv_flags & CMD_STALE));
+    int is_denyloading_command = !(c->cmd->flags & CMD_LOADING) ||
+                                 (c->cmd->proc == execCommand && (c->mstate.cmd_inv_flags & CMD_LOADING));
+    int is_may_replicate_command = (c->cmd->flags & (CMD_WRITE | CMD_MAY_REPLICATE)) ||
+                                   (c->cmd->proc == execCommand && (c->mstate.cmd_flags & (CMD_WRITE | CMD_MAY_REPLICATE)));
+
+    if (authRequired(c)) {
+        /* AUTH and HELLO and no auth commands are valid even in
+         * non-authenticated state. */
+        if (!(c->cmd->flags & CMD_NO_AUTH)) {
+            rejectCommand(c,shared.noautherr);
+            return C_OK;
+        }
+    }
+
+    /* Check if the user can run this command according to the current
+     * ACLs. */
+    int acl_errpos;
+    int acl_retval = ACLCheckAllPerm(c,&acl_errpos);
+    if (acl_retval != ACL_OK) {
+        addACLLogEntry(c,acl_retval,acl_errpos,NULL);
+        switch (acl_retval) {
+        case ACL_DENIED_CMD:
+            rejectCommandFormat(c,
+                "-NOPERM this user has no permissions to run "
+                "the '%s' command or its subcommand", c->cmd->name);
+            break;
+        case ACL_DENIED_KEY:
+            rejectCommandFormat(c,
+                "-NOPERM this user has no permissions to access "
+                "one of the keys used as arguments");
+            break;
+        case ACL_DENIED_CHANNEL:
+            rejectCommandFormat(c,
+                "-NOPERM this user has no permissions to access "
+                "one of the channels used as arguments");
+            break;
+        default:
+            rejectCommandFormat(c, "no permission");
+            break;
+        }
+        return C_OK;
+    }
+
+    /* If cluster is enabled perform the cluster redirection here.
+     * However we don't perform the redirection if:
+     * 1) The sender of this command is our master.
+     * 2) The command has no key arguments. */
+    if (server.cluster_enabled &&
+        !(c->flags & CLIENT_MASTER) &&
+        !(c->flags & CLIENT_LUA &&
+          server.lua_caller->flags & CLIENT_MASTER) &&
+        !(!cmdHasMovableKeys(c->cmd) && c->cmd->firstkey == 0 &&
+          c->cmd->proc != execCommand))
+    {
+        int hashslot;
+        int error_code;
+        clusterNode *n = getNodeByQuery(c,c->cmd,c->argv,c->argc,
+                                        &hashslot,&error_code);
+        if (n == NULL || n != server.cluster->myself) {
+            if (c->cmd->proc == execCommand) {
+                discardTransaction(c);
+            } else {
+                flagTransaction(c);
+            }
+            clusterRedirectClient(c,n,hashslot,error_code);
+            c->cmd->rejected_calls++;
+            return C_OK;
+        }
+    }
+
+    /* Handle the maxmemory directive.
+     *
+     * Note that we do not want to reclaim memory if we are here re-entering
+     * the event loop since there is a busy Lua script running in timeout
+     * condition, to avoid mixing the propagation of scripts with the
+     * propagation of DELs due to eviction. */
+    if (server.maxmemory && !server.lua_timedout) {
+        int out_of_memory = (performEvictions() == EVICT_FAIL);
+        /* performEvictions may flush slave output buffers. This may result
+         * in a slave, that may be the active client, to be freed. */
+        if (server.current_client == NULL) return C_ERR;
+
+        int reject_cmd_on_oom = is_denyoom_command;
+        /* If client is in MULTI/EXEC context, queuing may consume an unlimited
+         * amount of memory, so we want to stop that.
+         * However, we never want to reject DISCARD, or even EXEC (unless it
+         * contains denied commands, in which case is_denyoom_command is already
+         * set. */
+        if (c->flags & CLIENT_MULTI &&
+            c->cmd->proc != execCommand &&
+            c->cmd->proc != discardCommand &&
+            c->cmd->proc != resetCommand) {
+            reject_cmd_on_oom = 1;
+        }
+
+        if (out_of_memory && reject_cmd_on_oom) {
+            rejectCommand(c, shared.oomerr);
+            return C_OK;
+        }
+
+        /* Save out_of_memory result at script start, otherwise if we check OOM
+         * until first write within script, memory used by lua stack and
+         * arguments might interfere. */
+        if (c->cmd->proc == evalCommand || c->cmd->proc == evalShaCommand) {
+            server.lua_oom = out_of_memory;
+        }
+    }
+
+
+// Source: server.c
+// Lines 3953-4109
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'vp' at line 5\n2. Pointer 'buf' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nproc_send(struct tmuxpeer *peer, enum msgtype type, int fd, const void *buf,\n    size_t len)\n{\n\tstruct imsgbuf\t*ibuf = &peer->ibuf;\n\tvoid\t\t*vp = (void *)buf;\n\tint\t\t retval;\n\n\tif (peer->flags & PEER_BAD)\n\t\treturn (-1);\n\tlog_debug(\"sending message %d to peer %p (%zu bytes)\", type, peer, len);\n\n\tretval = imsg_compose(ibuf, type, PROTOCOL_VERSION, -1, fd, vp, len);\n\tif (retval != 1)\n\t\treturn (-1);\n\tproc_update_event(peer);\n\treturn (0);\n}\n\n\n// Source: proc.c\n// Lines 162-178\n",
+  "ANSWER": "MUST"
+}

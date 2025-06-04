@@ -1,0 +1,1 @@
+save_where,mysql/sql/sql_resolver.cc,40,thd,mysql/sql/sql_resolver.cc,1,1

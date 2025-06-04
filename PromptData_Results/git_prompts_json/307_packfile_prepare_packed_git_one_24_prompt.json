@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'data' at line 3\n2. Pointer 'data' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void prepare_packed_git_one(struct repository *r, char *objdir, int local)\n{\n\tstruct prepare_pack_data data;\n\tstruct string_list garbage = STRING_LIST_INIT_DUP;\n\n\tdata.m = r->objects->multi_pack_index;\n\n\t/* look for the multi-pack-index for this object directory */\n\twhile (data.m && strcmp(data.m->object_dir, objdir))\n\t\tdata.m = data.m->next;\n\n\tdata.r = r;\n\tdata.garbage = &garbage;\n\tdata.local = local;\n\n\tfor_each_file_in_pack_dir(objdir, prepare_pack, &data);\n\n\treport_pack_garbage(data.garbage);\n\tstring_list_clear(data.garbage, 0);\n}\n\n\n// Source: packfile.c\n// Lines 877-896\n",
+  "ANSWER": "MUST"
+}

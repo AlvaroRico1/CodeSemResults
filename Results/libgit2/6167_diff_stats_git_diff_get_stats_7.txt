@@ -1,0 +1,1 @@
+patch,libgit2/src/libgit2/diff_stats.c,28,add,libgit2/src/libgit2/diff_stats.c,29,2

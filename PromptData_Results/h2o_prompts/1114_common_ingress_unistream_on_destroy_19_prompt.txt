@@ -1,0 +1,25 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'stream' at line 3
+2. Pointer 'qs' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void ingress_unistream_on_destroy(quicly_stream_t *qs, int err)
+{
+    struct st_h2o_http3_ingress_unistream_t *stream = qs->data;
+    h2o_buffer_dispose(&stream->recvbuf);
+    free(stream);
+}
+
+
+// Source: common.c
+// Lines 203-208
+
+
+[ANSWER]
+MUST

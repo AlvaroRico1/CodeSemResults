@@ -1,0 +1,108 @@
+parse_plugin_arg_opt (const char *arg)
+{
+  size_t len = 0, name_len = 0, key_len = 0, value_len = 0;
+  const char *ptr, *name_start = arg, *key_start = NULL, *value_start = NULL;
+  char *name, *key, *value;
+  void **slot;
+  bool name_parsed = false, key_parsed = false;
+
+  /* Iterate over the ARG string and identify the starting character position
+     of 'name', 'key', and 'value' and their lengths.  */
+  for (ptr = arg; *ptr; ++ptr)
+    {
+      /* Only the first '-' encountered is considered a separator between
+         'name' and 'key'. All the subsequent '-'s are considered part of
+         'key'. For example, given -fplugin-arg-foo-bar-primary-key=value,
+         the plugin name is 'foo' and the key is 'bar-primary-key'.  */
+      if (*ptr == '-' && !name_parsed)
+        {
+          name_len = len;
+          len = 0;
+          key_start = ptr + 1;
+          name_parsed = true;
+          continue;
+        }
+      else if (*ptr == '=')
+        {
+	  if (!key_parsed) 
+	    {
+	      key_len = len;
+	      len = 0;
+	      value_start = ptr + 1;
+	      key_parsed = true;
+	    }
+          continue;
+        }
+      else
+        ++len;
+    }
+
+  if (!key_start)
+    {
+      error ("malformed option %<-fplugin-arg-%s%>: "
+	     "missing %<-<key>[=<value>]%>",
+             arg);
+      return;
+    }
+
+  /* If the option doesn't contain the 'value' part, LEN is the KEY_LEN.
+     Otherwise, it is the VALUE_LEN.  */
+  if (!value_start)
+    key_len = len;
+  else
+    value_len = len;
+
+  name = XNEWVEC (char, name_len + 1);
+  strncpy (name, name_start, name_len);
+  name[name_len] = '\0';
+
+  /* Check if the named plugin has already been specified earlier in the
+     command-line.  */
+  if (plugin_name_args_tab
+      && ((slot = htab_find_slot_with_hash (plugin_name_args_tab, name,
+					    htab_hash_string (name), NO_INSERT))
+          != NULL))
+    {
+      struct plugin_name_args *plugin = (struct plugin_name_args *) *slot;
+
+      key = XNEWVEC (char, key_len + 1);
+      strncpy (key, key_start, key_len);
+      key[key_len] = '\0';
+      if (value_start)
+        {
+          value = XNEWVEC (char, value_len + 1);
+          strncpy (value, value_start, value_len);
+          value[value_len] = '\0';
+        }
+      else
+        value = NULL;
+
+      /* Create a plugin_argument object for the parsed key-value pair.
+         If there are already arguments for this plugin, we will need to
+         adjust the argument array size by creating a new array and deleting
+         the old one. If the performance ever becomes an issue, we can
+         change the code by pre-allocating a larger array first.  */
+      if (plugin->argc > 0)
+        {
+          struct plugin_argument *args = XNEWVEC (struct plugin_argument,
+                                                  plugin->argc + 1);
+          memcpy (args, plugin->argv,
+                  sizeof (struct plugin_argument) * plugin->argc);
+          XDELETEVEC (plugin->argv);
+          plugin->argv = args;
+          ++plugin->argc;
+        }
+      else
+        {
+          gcc_assert (plugin->argv == NULL);
+          plugin->argv = XNEWVEC (struct plugin_argument, 1);
+          plugin->argc = 1;
+        }
+
+      plugin->argv[plugin->argc - 1].key = key;
+      plugin->argv[plugin->argc - 1].value = value;
+    }
+
+
+// Source: plugin.c
+// Lines 252-355

@@ -1,0 +1,65 @@
+const char *refs_resolve_ref_unsafe(struct ref_store *refs,
+				    const char *refname,
+				    int resolve_flags,
+				    struct object_id *oid, int *flags)
+{
+	static struct strbuf sb_refname = STRBUF_INIT;
+	struct object_id unused_oid;
+	int unused_flags;
+	int symref_count;
+
+	if (!oid)
+		oid = &unused_oid;
+	if (!flags)
+		flags = &unused_flags;
+
+	*flags = 0;
+
+	if (check_refname_format(refname, REFNAME_ALLOW_ONELEVEL)) {
+		if (!(resolve_flags & RESOLVE_REF_ALLOW_BAD_NAME) ||
+		    !refname_is_safe(refname)) {
+			errno = EINVAL;
+			return NULL;
+		}
+
+		/*
+		 * dwim_ref() uses REF_ISBROKEN to distinguish between
+		 * missing refs and refs that were present but invalid,
+		 * to complain about the latter to stderr.
+		 *
+		 * We don't know whether the ref exists, so don't set
+		 * REF_ISBROKEN yet.
+		 */
+		*flags |= REF_BAD_NAME;
+	}
+
+	for (symref_count = 0; symref_count < SYMREF_MAXDEPTH; symref_count++) {
+		unsigned int read_flags = 0;
+
+		if (refs_read_raw_ref(refs, refname,
+				      oid, &sb_refname, &read_flags)) {
+			*flags |= read_flags;
+
+			/* In reading mode, refs must eventually resolve */
+			if (resolve_flags & RESOLVE_REF_READING)
+				return NULL;
+
+			/*
+			 * Otherwise a missing ref is OK. But the files backend
+			 * may show errors besides ENOENT if there are
+			 * similarly-named refs.
+			 */
+			if (errno != ENOENT &&
+			    errno != EISDIR &&
+			    errno != ENOTDIR)
+				return NULL;
+
+			oidclr(oid);
+			if (*flags & REF_BAD_NAME)
+				*flags |= REF_ISBROKEN;
+			return refname;
+		}
+
+
+// Source: refs.c
+// Lines 1683-1743

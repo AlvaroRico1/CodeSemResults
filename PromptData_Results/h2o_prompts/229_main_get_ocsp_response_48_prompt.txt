@@ -1,0 +1,52 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'child_status' at line 4
+2. Pointer 'resp' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int get_ocsp_response(const char *cmd, h2o_iovec_t cert_chain_pem, h2o_buffer_t **resp)
+{
+    char *cmd_fullpath = h2o_configurator_get_cmd_path(cmd), *argv[] = {cmd_fullpath, NULL};
+    int child_status, ret;
+
+    if (h2o_read_command(cmd_fullpath, argv, cert_chain_pem, resp, &child_status) != 0) {
+        fprintf(stderr, "[OCSP Stapling] failed to execute %s:%s\n", cmd, strerror(errno));
+        switch (errno) {
+        case EACCES:
+        case ENOENT:
+        case ENOEXEC:
+            /* permanent errors */
+            ret = EX_CONFIG;
+            goto Exit;
+        default:
+            ret = EX_TEMPFAIL;
+            goto Exit;
+        }
+    }
+
+    if (!(WIFEXITED(child_status) && WEXITSTATUS(child_status) == 0))
+        h2o_buffer_dispose(resp);
+    if (!WIFEXITED(child_status)) {
+        fprintf(stderr, "[OCSP Stapling] command %s was killed by signal %d\n", cmd_fullpath, WTERMSIG(child_status));
+        ret = EX_TEMPFAIL;
+        goto Exit;
+    }
+    ret = WEXITSTATUS(child_status);
+
+Exit:
+    free(cmd_fullpath);
+    return ret;
+}
+
+
+// Source: main.c
+// Lines 576-608
+
+
+[ANSWER]
+MAY

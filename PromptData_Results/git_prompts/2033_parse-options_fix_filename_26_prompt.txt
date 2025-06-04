@@ -1,0 +1,26 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'arg' at line None
+2. Pointer 'p' at line None
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void fix_filename(const char *prefix, const char **file)
+{
+	if (!file || !*file || !prefix || is_absolute_path(*file)
+	    || !strcmp("-", *file))
+		return;
+	*file = prefix_filename(prefix, *file);
+}
+
+
+// Source: parse-options.c
+// Lines 42-48
+
+
+[ANSWER]
+MUST

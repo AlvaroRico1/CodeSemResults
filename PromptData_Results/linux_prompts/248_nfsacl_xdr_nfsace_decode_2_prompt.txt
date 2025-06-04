@@ -1,0 +1,68 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'p' at line 5
+2. Pointer 'elem' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+xdr_nfsace_decode(struct xdr_array2_desc *desc, void *elem)
+{
+	struct nfsacl_decode_desc *nfsacl_desc =
+		(struct nfsacl_decode_desc *) desc;
+	__be32 *p = elem;
+	struct posix_acl_entry *entry;
+	unsigned int id;
+
+	if (!nfsacl_desc->acl) {
+		if (desc->array_len > NFS_ACL_MAX_ENTRIES)
+			return -EINVAL;
+		nfsacl_desc->acl = posix_acl_alloc(desc->array_len, GFP_KERNEL);
+		if (!nfsacl_desc->acl)
+			return -ENOMEM;
+		nfsacl_desc->count = 0;
+	}
+
+	entry = &nfsacl_desc->acl->a_entries[nfsacl_desc->count++];
+	entry->e_tag = ntohl(*p++) & ~NFS_ACL_DEFAULT;
+	id = ntohl(*p++);
+	entry->e_perm = ntohl(*p++);
+
+	switch(entry->e_tag) {
+		case ACL_USER:
+			entry->e_uid = make_kuid(&init_user_ns, id);
+			if (!uid_valid(entry->e_uid))
+				return -EINVAL;
+			break;
+		case ACL_GROUP:
+			entry->e_gid = make_kgid(&init_user_ns, id);
+			if (!gid_valid(entry->e_gid))
+				return -EINVAL;
+			break;
+		case ACL_USER_OBJ:
+		case ACL_GROUP_OBJ:
+		case ACL_OTHER:
+			if (entry->e_perm & ~S_IRWXO)
+				return -EINVAL;
+			break;
+		case ACL_MASK:
+			/* Solaris sometimes sets additional bits in the mask */
+			entry->e_perm &= S_IRWXO;
+			break;
+		default:
+			return -EINVAL;
+	}
+
+	return 0;
+}
+
+
+// Source: nfsacl.c
+// Lines 146-194
+
+
+[ANSWER]
+MUST

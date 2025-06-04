@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'parser' at line 4\n2. Pointer 'data' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nyaml_string_read_handler(void *data, unsigned char *buffer, size_t size,\n        size_t *size_read)\n{\n    yaml_parser_t *parser = (yaml_parser_t *)data;\n\n    if (parser->input.string.current == parser->input.string.end) {\n        *size_read = 0;\n        return 1;\n    }\n\n    if (size > (size_t)(parser->input.string.end\n                - parser->input.string.current)) {\n        size = parser->input.string.end - parser->input.string.current;\n    }\n\n    memcpy(buffer, parser->input.string.current, size);\n    parser->input.string.current += size;\n    *size_read = size;\n    return 1;\n}\n\n\n// Source: api.c\n// Lines 249-268\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,54 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'leap_day' at line 5
+2. Pointer 'year' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void get_date_from_daynr(int64_t daynr, uint *ret_year, uint *ret_month,
+                         uint *ret_day) {
+  uint year;
+  uint temp;
+  uint leap_day;
+  uint day_of_year;
+  uint days_in_year;
+  const uchar *month_pos;
+
+  if (daynr <= 365L || daynr >= 3652500) { /* Fix if wrong daynr */
+    *ret_year = *ret_month = *ret_day = 0;
+  } else {
+    year = static_cast<uint>(daynr * 100 / 36525L);
+    temp = (((year - 1) / 100 + 1) * 3) / 4;
+    day_of_year = static_cast<uint>(daynr - static_cast<long>(year) * 365L) -
+                  (year - 1) / 4 + temp;
+    while (day_of_year > (days_in_year = calc_days_in_year(year))) {
+      day_of_year -= days_in_year;
+      (year)++;
+    }
+    leap_day = 0;
+    if (days_in_year == 366) {
+      if (day_of_year > 31 + 28) {
+        day_of_year--;
+        if (day_of_year == 31 + 28) leap_day = 1; /* Handle leapyears leapday */
+      }
+    }
+    *ret_month = 1;
+    for (month_pos = days_in_month; day_of_year > static_cast<uint>(*month_pos);
+         day_of_year -= *(month_pos++), (*ret_month)++)
+      ;
+    *ret_year = year;
+    *ret_day = day_of_year + leap_day;
+  }
+}
+
+
+// Source: my_time.cc
+// Lines 2120-2154
+
+
+[ANSWER]
+MUST-NOT

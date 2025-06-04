@@ -1,0 +1,206 @@
+emit_output_reload_insns (class insn_chain *chain, struct reload *rl,
+			  int j)
+{
+  rtx reloadreg;
+  rtx_insn *insn = chain->insn;
+  int special = 0;
+  rtx old = rl->out;
+  machine_mode mode;
+  rtx_insn *p;
+  rtx rl_reg_rtx;
+
+  if (rl->when_needed == RELOAD_OTHER)
+    start_sequence ();
+  else
+    push_to_sequence (output_reload_insns[rl->opnum]);
+
+  rl_reg_rtx = reload_reg_rtx_for_output[j];
+  mode = GET_MODE (rl_reg_rtx);
+
+  reloadreg = rl_reg_rtx;
+
+  /* If we need two reload regs, set RELOADREG to the intermediate
+     one, since it will be stored into OLD.  We might need a secondary
+     register only for an input reload, so check again here.  */
+
+  if (rl->secondary_out_reload >= 0)
+    {
+      rtx real_old = old;
+      int secondary_reload = rl->secondary_out_reload;
+      int tertiary_reload = rld[secondary_reload].secondary_out_reload;
+
+      if (REG_P (old) && REGNO (old) >= FIRST_PSEUDO_REGISTER
+	  && reg_equiv_mem (REGNO (old)) != 0)
+	real_old = reg_equiv_mem (REGNO (old));
+
+      if (secondary_reload_class (0, rl->rclass, mode, real_old) != NO_REGS)
+	{
+	  rtx second_reloadreg = reloadreg;
+	  reloadreg = rld[secondary_reload].reg_rtx;
+
+	  /* See if RELOADREG is to be used as a scratch register
+	     or as an intermediate register.  */
+	  if (rl->secondary_out_icode != CODE_FOR_nothing)
+	    {
+	      /* We'd have to add extra code to handle this case.  */
+	      gcc_assert (tertiary_reload < 0);
+
+	      emit_insn ((GEN_FCN (rl->secondary_out_icode)
+			  (real_old, second_reloadreg, reloadreg)));
+	      special = 1;
+	    }
+	  else
+	    {
+	      /* See if we need both a scratch and intermediate reload
+		 register.  */
+
+	      enum insn_code tertiary_icode
+		= rld[secondary_reload].secondary_out_icode;
+
+	      /* We'd have to add more code for quartary reloads.  */
+	      gcc_assert (tertiary_reload < 0
+			  || rld[tertiary_reload].secondary_out_reload < 0);
+
+	      if (GET_MODE (reloadreg) != mode)
+		reloadreg = reload_adjust_reg_for_mode (reloadreg, mode);
+
+	      if (tertiary_icode != CODE_FOR_nothing)
+		{
+		  rtx third_reloadreg = rld[tertiary_reload].reg_rtx;
+
+		  /* Copy primary reload reg to secondary reload reg.
+		     (Note that these have been swapped above, then
+		     secondary reload reg to OLD using our insn.)  */
+
+		  /* If REAL_OLD is a paradoxical SUBREG, remove it
+		     and try to put the opposite SUBREG on
+		     RELOADREG.  */
+		  strip_paradoxical_subreg (&real_old, &reloadreg);
+
+		  gen_reload (reloadreg, second_reloadreg,
+			      rl->opnum, rl->when_needed);
+		  emit_insn ((GEN_FCN (tertiary_icode)
+			      (real_old, reloadreg, third_reloadreg)));
+		  special = 1;
+		}
+
+	      else
+		{
+		  /* Copy between the reload regs here and then to
+		     OUT later.  */
+
+		  gen_reload (reloadreg, second_reloadreg,
+			      rl->opnum, rl->when_needed);
+		  if (tertiary_reload >= 0)
+		    {
+		      rtx third_reloadreg = rld[tertiary_reload].reg_rtx;
+
+		      gen_reload (third_reloadreg, reloadreg,
+				  rl->opnum, rl->when_needed);
+		      reloadreg = third_reloadreg;
+		    }
+		}
+	    }
+	}
+    }
+
+  /* Output the last reload insn.  */
+  if (! special)
+    {
+      rtx set;
+
+      /* Don't output the last reload if OLD is not the dest of
+	 INSN and is in the src and is clobbered by INSN.  */
+      if (! flag_expensive_optimizations
+	  || !REG_P (old)
+	  || !(set = single_set (insn))
+	  || rtx_equal_p (old, SET_DEST (set))
+	  || !reg_mentioned_p (old, SET_SRC (set))
+	  || !((REGNO (old) < FIRST_PSEUDO_REGISTER)
+	       && regno_clobbered_p (REGNO (old), insn, rl->mode, 0)))
+	gen_reload (old, reloadreg, rl->opnum,
+		    rl->when_needed);
+    }
+
+  /* Look at all insns we emitted, just to be safe.  */
+  for (p = get_insns (); p; p = NEXT_INSN (p))
+    if (INSN_P (p))
+      {
+	rtx pat = PATTERN (p);
+
+	/* If this output reload doesn't come from a spill reg,
+	   clear any memory of reloaded copies of the pseudo reg.
+	   If this output reload comes from a spill reg,
+	   reg_has_output_reload will make this do nothing.  */
+	note_stores (p, forget_old_reloads_1, NULL);
+
+	if (reg_mentioned_p (rl_reg_rtx, pat))
+	  {
+	    rtx set = single_set (insn);
+	    if (reload_spill_index[j] < 0
+		&& set
+		&& SET_SRC (set) == rl_reg_rtx)
+	      {
+		int src = REGNO (SET_SRC (set));
+
+		reload_spill_index[j] = src;
+		SET_HARD_REG_BIT (reg_is_output_reload, src);
+		if (find_regno_note (insn, REG_DEAD, src))
+		  SET_HARD_REG_BIT (reg_reloaded_died, src);
+	      }
+	    if (HARD_REGISTER_P (rl_reg_rtx))
+	      {
+		int s = rl->secondary_out_reload;
+		set = single_set (p);
+		/* If this reload copies only to the secondary reload
+		   register, the secondary reload does the actual
+		   store.  */
+		if (s >= 0 && set == NULL_RTX)
+		  /* We can't tell what function the secondary reload
+		     has and where the actual store to the pseudo is
+		     made; leave new_spill_reg_store alone.  */
+		  ;
+		else if (s >= 0
+			 && SET_SRC (set) == rl_reg_rtx
+			 && SET_DEST (set) == rld[s].reg_rtx)
+		  {
+		    /* Usually the next instruction will be the
+		       secondary reload insn;  if we can confirm
+		       that it is, setting new_spill_reg_store to
+		       that insn will allow an extra optimization.  */
+		    rtx s_reg = rld[s].reg_rtx;
+		    rtx_insn *next = NEXT_INSN (p);
+		    rld[s].out = rl->out;
+		    rld[s].out_reg = rl->out_reg;
+		    set = single_set (next);
+		    if (set && SET_SRC (set) == s_reg
+			&& reload_reg_rtx_reaches_end_p (s_reg, s))
+		      {
+			SET_HARD_REG_BIT (reg_is_output_reload,
+					  REGNO (s_reg));
+			new_spill_reg_store[REGNO (s_reg)] = next;
+		      }
+		  }
+		else if (reload_reg_rtx_reaches_end_p (rl_reg_rtx, j))
+		  new_spill_reg_store[REGNO (rl_reg_rtx)] = p;
+	      }
+	  }
+      }
+
+  if (rl->when_needed == RELOAD_OTHER)
+    {
+      emit_insn (other_output_reload_insns[rl->opnum]);
+      other_output_reload_insns[rl->opnum] = get_insns ();
+    }
+  else
+    output_reload_insns[rl->opnum] = get_insns ();
+
+  if (cfun->can_throw_non_call_exceptions)
+    copy_reg_eh_region_note_forward (insn, get_insns (), NULL);
+
+  end_sequence ();
+}
+
+
+// Source: reload1.c
+// Lines 7551-7752

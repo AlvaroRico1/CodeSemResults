@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'draw' at line 10\n2. Pointer 'list' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\n  bool pop_next(std::string &host, unsigned &port) {\n    if (data_.empty()) return true;\n\n    dns_entry_list_t &list = data_.begin()->second;\n    assert(!list.empty());\n\n    unsigned long sum = 0;\n    for (Dns_entry &elt : list) elt.add_weight_sum(sum);\n\n    unsigned long draw = (std::rand() * 1UL * sum) / RAND_MAX;\n\n    dns_entry_list_t::const_iterator iter = list.cbegin();\n    while (iter->weight_sum() < draw) iter++;\n    assert(iter != list.end());\n\n    host = iter->host();\n    port = iter->port();\n\n    list.erase(iter);\n    if (list.empty()) data_.erase(data_.begin());\n    return false;\n  }\n\n\n// Source: dns_srv_data.h\n// Lines 94-115\n",
+  "ANSWER": "MUST-NOT"
+}

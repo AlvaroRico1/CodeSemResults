@@ -1,0 +1,56 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'repo2' at line 3
+2. Pointer 'reflog' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void assert_appends(const git_signature *committer, const git_oid *oid)
+{
+	git_repository *repo2;
+	git_reference *lookedup_ref;
+	git_reflog *reflog;
+	const git_reflog_entry *entry;
+
+	/* Reopen a new instance of the repository */
+	cl_git_pass(git_repository_open(&repo2, "testrepo.git"));
+
+	/* Lookup the previously created branch */
+	cl_git_pass(git_reference_lookup(&lookedup_ref, repo2, new_ref));
+
+	/* Read and parse the reflog for this branch */
+	cl_git_pass(git_reflog_read(&reflog, repo2, new_ref));
+	cl_assert_equal_i(3, (int)git_reflog_entrycount(reflog));
+
+	/* The first one was the creation of the branch */
+	entry = git_reflog_entry_byindex(reflog, 2);
+	cl_assert(git_oid_streq(&entry->oid_old, GIT_OID_HEX_ZERO) == 0);
+
+	entry = git_reflog_entry_byindex(reflog, 1);
+	assert_signature(committer, entry->committer);
+	cl_assert(git_oid_cmp(oid, &entry->oid_old) == 0);
+	cl_assert(git_oid_cmp(oid, &entry->oid_cur) == 0);
+	cl_assert(entry->msg == NULL);
+
+	entry = git_reflog_entry_byindex(reflog, 0);
+	assert_signature(committer, entry->committer);
+	cl_assert(git_oid_cmp(oid, &entry->oid_cur) == 0);
+	cl_assert_equal_s(commit_msg, entry->msg);
+
+	git_reflog_free(reflog);
+	git_repository_free(repo2);
+
+	git_reference_free(lookedup_ref);
+}
+
+
+// Source: reflog.c
+// Lines 36-72
+
+
+[ANSWER]
+MAY

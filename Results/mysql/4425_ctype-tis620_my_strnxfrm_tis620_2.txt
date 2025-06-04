@@ -1,0 +1,1 @@
+dstlen,mysql/strings/ctype-tis620.cc,2,srclen,mysql/strings/ctype-tis620.cc,3,2

@@ -1,0 +1,60 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'server' at line 2
+2. Pointer 'blank' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static bool get_server_from_table_to_cache(TABLE *table) {
+  /* alloc a server struct */
+  char *ptr;
+  char *blank = const_cast<char *>("");
+  FOREIGN_SERVER *server = new (&mem) FOREIGN_SERVER();
+
+  DBUG_TRACE;
+  table->use_all_columns();
+
+  /* get each field into the server struct ptr */
+  ptr = get_field(&mem, table->field[SERVERS_FIELD_NAME]);
+  server->server_name = ptr ? ptr : blank;
+  server->server_name_length = strlen(server->server_name);
+  ptr = get_field(&mem, table->field[SERVERS_FIELD_HOST]);
+  server->host = ptr ? ptr : blank;
+  ptr = get_field(&mem, table->field[SERVERS_FIELD_DB]);
+  server->db = ptr ? ptr : blank;
+  ptr = get_field(&mem, table->field[SERVERS_FIELD_USERNAME]);
+  server->username = ptr ? ptr : blank;
+  ptr = get_field(&mem, table->field[SERVERS_FIELD_PASSWORD]);
+  server->password = ptr ? ptr : blank;
+  ptr = get_field(&mem, table->field[SERVERS_FIELD_PORT]);
+  server->sport = ptr ? ptr : blank;
+
+  server->port = server->sport ? atoi(server->sport) : 0;
+
+  ptr = get_field(&mem, table->field[SERVERS_FIELD_SOCKET]);
+  server->socket = ptr && strlen(ptr) ? ptr : blank;
+  ptr = get_field(&mem, table->field[SERVERS_FIELD_SCHEME]);
+  server->scheme = ptr ? ptr : blank;
+  ptr = get_field(&mem, table->field[SERVERS_FIELD_OWNER]);
+  server->owner = ptr ? ptr : blank;
+  DBUG_PRINT("info", ("server->server_name %s", server->server_name));
+  DBUG_PRINT("info", ("server->host %s", server->host));
+  DBUG_PRINT("info", ("server->db %s", server->db));
+  DBUG_PRINT("info", ("server->username %s", server->username));
+  DBUG_PRINT("info", ("server->password %s", server->password));
+  DBUG_PRINT("info", ("server->socket %s", server->socket));
+  servers_cache->emplace(server->server_name, server);
+  return false;
+}
+
+
+// Source: sql_servers.cc
+// Lines 346-386
+
+
+[ANSWER]
+MUST

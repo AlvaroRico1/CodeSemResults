@@ -1,0 +1,66 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'i_index' at line 11
+2. Pointer 'ignorecase' at line 13
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int commit_worktree(
+	git_oid *w_commit_oid,
+	git_repository *repo,
+	const git_signature *stasher,
+	const char *message,
+	git_commit *i_commit,
+	git_commit *b_commit,
+	git_commit *u_commit)
+{
+	const git_commit *parents[] = {	NULL, NULL, NULL };
+	git_index *i_index = NULL, *r_index = NULL;
+	git_tree *w_tree = NULL;
+	int error = 0, ignorecase;
+
+	parents[0] = b_commit;
+	parents[1] = i_commit;
+	parents[2] = u_commit;
+
+	if ((error = git_repository_index(&r_index, repo) < 0) ||
+	    (error = git_index_new(&i_index)) < 0 ||
+	    (error = git_index__fill(i_index, &r_index->entries) < 0) ||
+	    (error = git_repository__configmap_lookup(&ignorecase, repo, GIT_CONFIGMAP_IGNORECASE)) < 0)
+		goto cleanup;
+
+	git_index__set_ignore_case(i_index, ignorecase);
+
+	if ((error = build_workdir_tree(&w_tree, repo, i_index, b_commit)) < 0)
+		goto cleanup;
+
+	error = git_commit_create(
+		w_commit_oid,
+		repo,
+		NULL,
+		stasher,
+		stasher,
+		NULL,
+		message,
+		w_tree,
+		u_commit ? 3 : 2,
+		parents);
+
+cleanup:
+	git_tree_free(w_tree);
+	git_index_free(i_index);
+	git_index_free(r_index);
+	return error;
+}
+
+
+// Source: stash.c
+// Lines 391-437
+
+
+[ANSWER]
+MAY

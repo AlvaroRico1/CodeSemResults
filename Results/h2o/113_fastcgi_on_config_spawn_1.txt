@@ -1,0 +1,1 @@
+argv,h2o/lib/handler/configurator/fastcgi.c,7,spawn_cmd,h2o/lib/handler/configurator/fastcgi.c,4,1

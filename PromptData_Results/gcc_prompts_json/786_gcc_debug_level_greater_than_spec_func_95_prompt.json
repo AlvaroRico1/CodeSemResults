@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'converted' at line 3\n2. Pointer 'argv' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ndebug_level_greater_than_spec_func (int argc, const char **argv)\n{\n  char *converted;\n\n  if (argc != 1)\n    fatal_error (input_location,\n\t\t \"wrong number of arguments to %%:debug-level-gt\");\n\n  long arg = strtol (argv[0], &converted, 10);\n  gcc_assert (converted != argv[0]);\n\n  if (debug_info_level > arg)\n    return \"\";\n\n  return NULL;\n}\n\n\n// Source: gcc.c\n// Lines 9999-10014\n",
+  "ANSWER": "MAY"
+}

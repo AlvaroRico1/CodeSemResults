@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'content' at line 3\n2. Pointer 'diff' at line 9\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid test_diff_parse__empty_file(void)\n{\n\tconst char *content =\n\t    \"---\\n\"\n\t    \" file | 0\\n\"\n\t    \" 1 file changed, 0 insertions(+), 0 deletions(-)\\n\"\n\t    \" created mode 100644 file\\n\"\n\t    \"\\n\"\n\t    \"diff --git a/file b/file\\n\"\n\t    \"new file mode 100644\\n\"\n\t    \"index 0000000..e69de29\\n\"\n\t    \"-- \\n\"\n\t    \"2.20.1\\n\";\n\tgit_diff *diff;\n\n\tcl_git_pass(git_diff_from_buffer(\n\t\t&diff, content, strlen(content)));\n\tgit_diff_free(diff);\n}\n\n\n// Source: parse.c\n// Lines 80-98\n",
+  "ANSWER": "MUST-NOT"
+}

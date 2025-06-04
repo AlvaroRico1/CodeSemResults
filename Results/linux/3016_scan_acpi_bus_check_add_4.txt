@@ -1,0 +1,1 @@
+sta,linux/drivers/acpi/scan.c,6,device,linux/drivers/acpi/scan.c,4,2

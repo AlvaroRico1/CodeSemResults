@@ -1,0 +1,136 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'newSkeleton' at line 71
+2. Pointer 'keyTok' at line 70
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+DateIntervalInfo::getBestSkeleton(const UnicodeString& skeleton,
+                                  int8_t& bestMatchDistanceInfo) const {
+#ifdef DTITVINF_DEBUG
+    char result[1000];
+    char result_1[1000];
+    char mesg[2000];
+    skeleton.extract(0,  skeleton.length(), result, "UTF-8");
+    sprintf(mesg, "in getBestSkeleton: skeleton: %s; \n", result);
+    PRINTMESG(mesg)
+#endif
+
+
+    int32_t inputSkeletonFieldWidth[] =
+    {
+    //       A   B   C   D   E   F   G   H   I   J   K   L   M   N   O
+             0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    //   P   Q   R   S   T   U   V   W   X   Y   Z
+         0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, 0, 0,  0, 0, 0,
+    //       a   b   c   d   e   f   g   h   i   j   k   l   m   n   o
+         0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    //   p   q   r   s   t   u   v   w   x   y   z
+         0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0
+    };
+
+    int32_t skeletonFieldWidth[] =
+    {
+    //       A   B   C   D   E   F   G   H   I   J   K   L   M   N   O
+             0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    //   P   Q   R   S   T   U   V   W   X   Y   Z
+         0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, 0, 0,  0, 0, 0,
+    //       a   b   c   d   e   f   g   h   i   j   k   l   m   n   o
+         0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    //   p   q   r   s   t   u   v   w   x   y   z
+         0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0
+    };
+
+    const int32_t DIFFERENT_FIELD = 0x1000;
+    const int32_t STRING_NUMERIC_DIFFERENCE = 0x100;
+    const int32_t BASE = 0x41;
+    const UChar CHAR_V = 0x0076;
+    const UChar CHAR_Z = 0x007A;
+
+    // hack for 'v' and 'z'.
+    // resource bundle only have time skeletons ending with 'v',
+    // but not for time skeletons ending with 'z'.
+    UBool replaceZWithV = false;
+    const UnicodeString* inputSkeleton = &skeleton;
+    UnicodeString copySkeleton;
+    if ( skeleton.indexOf(CHAR_Z) != -1 ) {
+        copySkeleton = skeleton;
+        copySkeleton.findAndReplace(UnicodeString(CHAR_Z), UnicodeString(CHAR_V));
+        inputSkeleton = &copySkeleton;
+        replaceZWithV = true;
+    }
+
+    parseSkeleton(*inputSkeleton, inputSkeletonFieldWidth);
+    int32_t bestDistance = MAX_POSITIVE_INT;
+    const UnicodeString* bestSkeleton = NULL;
+
+    // 0 means exact the same skeletons;
+    // 1 means having the same field, but with different length,
+    // 2 means only z/v differs
+    // -1 means having different field.
+    bestMatchDistanceInfo = 0;
+    int8_t fieldLength = UPRV_LENGTHOF(skeletonFieldWidth);
+
+    int32_t pos = UHASH_FIRST;
+    const UHashElement* elem = NULL;
+    while ( (elem = fIntervalPatterns->nextElement(pos)) != NULL ) {
+        const UHashTok keyTok = elem->key;
+        UnicodeString* newSkeleton = (UnicodeString*)keyTok.pointer;
+#ifdef DTITVINF_DEBUG
+    skeleton->extract(0,  skeleton->length(), result, "UTF-8");
+    sprintf(mesg, "available skeletons: skeleton: %s; \n", result);
+    PRINTMESG(mesg)
+#endif
+
+        // clear skeleton field width
+        int8_t i;
+        for ( i = 0; i < fieldLength; ++i ) {
+            skeletonFieldWidth[i] = 0;
+        }
+        parseSkeleton(*newSkeleton, skeletonFieldWidth);
+        // calculate distance
+        int32_t distance = 0;
+        int8_t fieldDifference = 1;
+        for ( i = 0; i < fieldLength; ++i ) {
+            int32_t inputFieldWidth = inputSkeletonFieldWidth[i];
+            int32_t fieldWidth = skeletonFieldWidth[i];
+            if ( inputFieldWidth == fieldWidth ) {
+                continue;
+            }
+            if ( inputFieldWidth == 0 ) {
+                fieldDifference = -1;
+                distance += DIFFERENT_FIELD;
+            } else if ( fieldWidth == 0 ) {
+                fieldDifference = -1;
+                distance += DIFFERENT_FIELD;
+            } else if (stringNumeric(inputFieldWidth, fieldWidth,
+                                     (char)(i+BASE) ) ) {
+                distance += STRING_NUMERIC_DIFFERENCE;
+            } else {
+                distance += (inputFieldWidth > fieldWidth) ?
+                            (inputFieldWidth - fieldWidth) :
+                            (fieldWidth - inputFieldWidth);
+            }
+        }
+        if ( distance < bestDistance ) {
+            bestSkeleton = newSkeleton;
+            bestDistance = distance;
+            bestMatchDistanceInfo = fieldDifference;
+        }
+        if ( distance == 0 ) {
+            bestMatchDistanceInfo = 0;
+            break;
+        }
+    }
+
+
+// Source: dtitvinf.cpp
+// Lines 531-647
+
+
+[ANSWER]
+MUST

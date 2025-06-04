@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'c' at line 1\n2. Pointer 'argv' at line None\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint getClientType(client *c) {\n    if (c->flags & CLIENT_MASTER) return CLIENT_TYPE_MASTER;\n    /* Even though MONITOR clients are marked as replicas, we\n     * want the expose them as normal clients. */\n    if ((c->flags & CLIENT_SLAVE) && !(c->flags & CLIENT_MONITOR))\n        return CLIENT_TYPE_SLAVE;\n    if (c->flags & CLIENT_PUBSUB) return CLIENT_TYPE_PUBSUB;\n    return CLIENT_TYPE_NORMAL;\n}\n\n\n// Source: networking.c\n// Lines 3183-3191\n",
+  "ANSWER": "MUST"
+}

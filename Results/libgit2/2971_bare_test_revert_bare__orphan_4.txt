@@ -1,0 +1,1 @@
+revert_commit,libgit2/tests/libgit2/revert/bare.c,3,index,libgit2/tests/libgit2/revert/bare.c,5,2

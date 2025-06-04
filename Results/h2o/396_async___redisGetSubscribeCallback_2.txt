@@ -1,0 +1,1 @@
+stype,h2o/deps/hiredis/async.c,6,reply,h2o/deps/hiredis/async.c,1,1

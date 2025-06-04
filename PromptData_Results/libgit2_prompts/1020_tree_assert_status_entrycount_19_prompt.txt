@@ -1,0 +1,28 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'repo' at line 1
+2. Pointer 'status' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void assert_status_entrycount(git_repository *repo, size_t count)
+{
+	git_status_list *status;
+
+	cl_git_pass(git_status_list_new(&status, repo, NULL));
+	cl_assert_equal_i(count, git_status_list_entrycount(status));
+
+	git_status_list_free(status);
+}
+
+
+// Source: tree.c
+// Lines 12-20
+
+
+[ANSWER]
+MUST-NOT

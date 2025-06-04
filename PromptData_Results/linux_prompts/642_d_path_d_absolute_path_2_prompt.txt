@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'buflen' at line 2
+2. Pointer 'res' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+char *d_absolute_path(const struct path *path,
+	       char *buf, int buflen)
+{
+	struct path root = {};
+	char *res = buf + buflen;
+	int error;
+
+	prepend(&res, &buflen, "\0", 1);
+	error = prepend_path(path, &root, &res, &buflen);
+
+	if (error > 1)
+		error = -EINVAL;
+	if (error < 0)
+		return ERR_PTR(error);
+	return res;
+}
+
+
+// Source: d_path.c
+// Lines 191-206
+
+
+[ANSWER]
+MAY

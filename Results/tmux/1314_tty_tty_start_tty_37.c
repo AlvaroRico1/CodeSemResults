@@ -1,0 +1,54 @@
+tty_start_tty(struct tty *tty)
+{
+	struct client	*c = tty->client;
+	struct termios	 tio;
+	struct timeval	 tv = { .tv_sec = 1 };
+
+	setblocking(c->fd, 0);
+	event_add(&tty->event_in, NULL);
+
+	memcpy(&tio, &tty->tio, sizeof tio);
+	tio.c_iflag &= ~(IXON|IXOFF|ICRNL|INLCR|IGNCR|IMAXBEL|ISTRIP);
+	tio.c_iflag |= IGNBRK;
+	tio.c_oflag &= ~(OPOST|ONLCR|OCRNL|ONLRET);
+	tio.c_lflag &= ~(IEXTEN|ICANON|ECHO|ECHOE|ECHONL|ECHOCTL|ECHOPRT|
+	    ECHOKE|ISIG);
+	tio.c_cc[VMIN] = 1;
+	tio.c_cc[VTIME] = 0;
+	if (tcsetattr(c->fd, TCSANOW, &tio) == 0)
+		tcflush(c->fd, TCOFLUSH);
+
+	tty_putcode(tty, TTYC_SMCUP);
+
+	tty_putcode(tty, TTYC_SMKX);
+	tty_putcode(tty, TTYC_CLEAR);
+
+	if (tty_acs_needed(tty)) {
+		log_debug("%s: using capabilities for ACS", c->name);
+		tty_putcode(tty, TTYC_ENACS);
+	} else
+		log_debug("%s: using UTF-8 for ACS", c->name);
+
+	tty_putcode(tty, TTYC_CNORM);
+	if (tty_term_has(tty->term, TTYC_KMOUS)) {
+		tty_puts(tty, "\033[?1000l\033[?1002l\033[?1003l");
+		tty_puts(tty, "\033[?1006l\033[?1005l");
+	}
+
+	evtimer_set(&tty->start_timer, tty_start_timer_callback, tty);
+	evtimer_add(&tty->start_timer, &tv);
+
+	tty->flags |= TTY_STARTED;
+	tty_invalidate(tty);
+
+	if (*tty->ccolour != '\0')
+		tty_force_cursor_colour(tty, "");
+
+	tty->mouse_drag_flag = 0;
+	tty->mouse_drag_update = NULL;
+	tty->mouse_drag_release = NULL;
+}
+
+
+// Source: tty.c
+// Lines 301-350

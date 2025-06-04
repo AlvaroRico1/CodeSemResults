@@ -1,0 +1,68 @@
+format_job_get(struct format_expand_state *es, const char *cmd)
+{
+	struct format_tree		*ft = es->ft;
+	struct format_job_tree		*jobs;
+	struct format_job		 fj0, *fj;
+	time_t				 t;
+	char				*expanded;
+	int				 force;
+	struct format_expand_state	 next;
+
+	if (ft->client == NULL)
+		jobs = &format_jobs;
+	else if (ft->client->jobs != NULL)
+		jobs = ft->client->jobs;
+	else {
+		jobs = ft->client->jobs = xmalloc(sizeof *ft->client->jobs);
+		RB_INIT(jobs);
+	}
+
+	fj0.tag = ft->tag;
+	fj0.cmd = cmd;
+	if ((fj = RB_FIND(format_job_tree, jobs, &fj0)) == NULL) {
+		fj = xcalloc(1, sizeof *fj);
+		fj->client = ft->client;
+		fj->tag = ft->tag;
+		fj->cmd = xstrdup(cmd);
+
+		RB_INSERT(format_job_tree, jobs, fj);
+	}
+
+	format_copy_state(&next, es, FORMAT_EXPAND_NOJOBS);
+	next.flags &= ~FORMAT_EXPAND_TIME;
+
+	expanded = format_expand1(&next, cmd);
+	if (fj->expanded == NULL || strcmp(expanded, fj->expanded) != 0) {
+		free((void *)fj->expanded);
+		fj->expanded = xstrdup(expanded);
+		force = 1;
+	} else
+		force = (ft->flags & FORMAT_FORCE);
+
+	t = time(NULL);
+	if (force && fj->job != NULL)
+	       job_free(fj->job);
+	if (force || (fj->job == NULL && fj->last != t)) {
+		fj->job = job_run(expanded, 0, NULL, NULL, NULL,
+		    server_client_get_cwd(ft->client, NULL), format_job_update,
+		    format_job_complete, NULL, fj, JOB_NOWAIT, -1, -1);
+		if (fj->job == NULL) {
+			free(fj->out);
+			xasprintf(&fj->out, "<'%s' didn't start>", fj->cmd);
+		}
+		fj->last = t;
+		fj->updated = 0;
+	} else if (fj->job != NULL && (t - fj->last) > 1 && fj->out == NULL)
+		xasprintf(&fj->out, "<'%s' not ready>", fj->cmd);
+	free(expanded);
+
+	if (ft->flags & FORMAT_STATUS)
+		fj->status = 1;
+	if (fj->out == NULL)
+		return (xstrdup(""));
+	return (format_expand1(&next, fj->out));
+}
+
+
+// Source: format.c
+// Lines 348-411

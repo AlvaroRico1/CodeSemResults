@@ -1,0 +1,73 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'new' at line 4
+2. Pointer 'old' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static u64 read_hpet(struct clocksource *cs)
+{
+	unsigned long flags;
+	union hpet_lock old, new;
+
+	BUILD_BUG_ON(sizeof(union hpet_lock) != 8);
+
+	/*
+	 * Read HPET directly if in NMI.
+	 */
+	if (in_nmi())
+		return (u64)hpet_readl(HPET_COUNTER);
+
+	/*
+	 * Read the current state of the lock and HPET value atomically.
+	 */
+	old.lockval = READ_ONCE(hpet.lockval);
+
+	if (arch_spin_is_locked(&old.lock))
+		goto contended;
+
+	local_irq_save(flags);
+	if (arch_spin_trylock(&hpet.lock)) {
+		new.value = hpet_readl(HPET_COUNTER);
+		/*
+		 * Use WRITE_ONCE() to prevent store tearing.
+		 */
+		WRITE_ONCE(hpet.value, new.value);
+		arch_spin_unlock(&hpet.lock);
+		local_irq_restore(flags);
+		return (u64)new.value;
+	}
+	local_irq_restore(flags);
+
+contended:
+	/*
+	 * Contended case
+	 * --------------
+	 * Wait until the HPET value change or the lock is free to indicate
+	 * its value is up-to-date.
+	 *
+	 * It is possible that old.value has already contained the latest
+	 * HPET value while the lock holder was in the process of releasing
+	 * the lock. Checking for lock state change will enable us to return
+	 * the value immediately instead of waiting for the next HPET reader
+	 * to come along.
+	 */
+	do {
+		cpu_relax();
+		new.lockval = READ_ONCE(hpet.lockval);
+	} while ((new.value == old.value) && arch_spin_is_locked(&new.lock));
+
+	return (u64)new.value;
+}
+
+
+// Source: hpet.c
+// Lines 683-736
+
+
+[ANSWER]
+MAY

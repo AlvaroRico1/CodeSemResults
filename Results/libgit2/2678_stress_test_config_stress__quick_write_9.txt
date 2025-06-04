@@ -1,0 +1,1 @@
+config_w,libgit2/tests/libgit2/config/stress.c,3,i,libgit2/tests/libgit2/config/stress.c,6,0

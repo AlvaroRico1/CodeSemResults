@@ -1,0 +1,105 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'c' at line 2
+2. Pointer 'conn' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+client *createClient(connection *conn) {
+    client *c = zmalloc(sizeof(client));
+
+    /* passing NULL as conn it is possible to create a non connected client.
+     * This is useful since all the commands needs to be executed
+     * in the context of a client. When commands are executed in other
+     * contexts (for instance a Lua script) we need a non connected client. */
+    if (conn) {
+        connNonBlock(conn);
+        connEnableTcpNoDelay(conn);
+        if (server.tcpkeepalive)
+            connKeepAlive(conn,server.tcpkeepalive);
+        connSetReadHandler(conn, readQueryFromClient);
+        connSetPrivateData(conn, c);
+    }
+
+    selectDb(c,0);
+    uint64_t client_id;
+    atomicGetIncr(server.next_client_id, client_id, 1);
+    c->id = client_id;
+    c->resp = 2;
+    c->conn = conn;
+    c->name = NULL;
+    c->bufpos = 0;
+    c->qb_pos = 0;
+    c->querybuf = sdsempty();
+    c->pending_querybuf = sdsempty();
+    c->querybuf_peak = 0;
+    c->reqtype = 0;
+    c->argc = 0;
+    c->argv = NULL;
+    c->argv_len_sum = 0;
+    c->original_argc = 0;
+    c->original_argv = NULL;
+    c->cmd = c->lastcmd = NULL;
+    c->multibulklen = 0;
+    c->bulklen = -1;
+    c->sentlen = 0;
+    c->flags = 0;
+    c->ctime = c->lastinteraction = server.unixtime;
+    clientSetDefaultAuth(c);
+    c->replstate = REPL_STATE_NONE;
+    c->repl_put_online_on_ack = 0;
+    c->reploff = 0;
+    c->read_reploff = 0;
+    c->repl_ack_off = 0;
+    c->repl_ack_time = 0;
+    c->repl_last_partial_write = 0;
+    c->slave_listening_port = 0;
+    c->slave_addr = NULL;
+    c->slave_capa = SLAVE_CAPA_NONE;
+    c->reply = listCreate();
+    c->reply_bytes = 0;
+    c->obuf_soft_limit_reached_time = 0;
+    listSetFreeMethod(c->reply,freeClientReplyValue);
+    listSetDupMethod(c->reply,dupClientReplyValue);
+    c->btype = BLOCKED_NONE;
+    c->bpop.timeout = 0;
+    c->bpop.keys = dictCreate(&objectKeyHeapPointerValueDictType,NULL);
+    c->bpop.target = NULL;
+    c->bpop.xread_group = NULL;
+    c->bpop.xread_consumer = NULL;
+    c->bpop.xread_group_noack = 0;
+    c->bpop.numreplicas = 0;
+    c->bpop.reploffset = 0;
+    c->woff = 0;
+    c->watched_keys = listCreate();
+    c->pubsub_channels = dictCreate(&objectKeyPointerValueDictType,NULL);
+    c->pubsub_patterns = listCreate();
+    c->peerid = NULL;
+    c->sockname = NULL;
+    c->client_list_node = NULL;
+    c->paused_list_node = NULL;
+    c->client_tracking_redirection = 0;
+    c->client_tracking_prefixes = NULL;
+    c->client_cron_last_memory_usage = 0;
+    c->client_cron_last_memory_type = CLIENT_TYPE_NORMAL;
+    c->auth_callback = NULL;
+    c->auth_callback_privdata = NULL;
+    c->auth_module = NULL;
+    listSetFreeMethod(c->pubsub_patterns,decrRefCountVoid);
+    listSetMatchMethod(c->pubsub_patterns,listMatchObjects);
+    if (conn) linkClient(c);
+    initClientMultiState(c);
+    return c;
+}
+
+
+// Source: networking.c
+// Lines 119-204
+
+
+[ANSWER]
+MUST

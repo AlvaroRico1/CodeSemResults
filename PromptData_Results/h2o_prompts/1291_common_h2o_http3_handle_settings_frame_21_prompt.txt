@@ -1,0 +1,70 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'src_end' at line 3
+2. Pointer 'src' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *payload, size_t length, const char **err_desc)
+{
+    const uint8_t *src = payload, *src_end = src + length;
+    uint32_t header_table_size = 0;
+    uint64_t blocked_streams = 0;
+
+    assert(!h2o_http3_has_received_settings(conn));
+
+    while (src != src_end) {
+        uint64_t id;
+        uint64_t value;
+        if ((id = quicly_decodev(&src, src_end)) == UINT64_MAX)
+            goto Malformed;
+        if ((value = quicly_decodev(&src, src_end)) == UINT64_MAX)
+            goto Malformed;
+        switch (id) {
+        case H2O_HTTP3_SETTINGS_MAX_FIELD_SECTION_SIZE:
+            conn->peer_settings.max_field_section_size = value;
+            break;
+        case H2O_HTTP3_SETTINGS_QPACK_MAX_TABLE_CAPACITY:
+            header_table_size =
+                value < conn->qpack.ctx->encoder_table_capacity ? (uint32_t)value : conn->qpack.ctx->encoder_table_capacity;
+            break;
+        case H2O_HTTP3_SETTINGS_QPACK_BLOCKED_STREAMS:
+            blocked_streams = value;
+            break;
+        case H2O_HTTP3_SETTINGS_H3_DATAGRAM:
+            switch (value) {
+            case 0:
+                break;
+            case 1: {
+                const quicly_transport_parameters_t *remote_tp = quicly_get_remote_transport_parameters(conn->super.quic);
+                if (remote_tp->max_datagram_frame_size == 0)
+                    goto Malformed;
+                conn->peer_settings.h3_datagram = 1;
+            } break;
+            default:
+                goto Malformed;
+            }
+            break;
+        default:
+            break;
+        }
+    }
+
+    conn->qpack.enc = h2o_qpack_create_encoder(header_table_size, blocked_streams);
+    return 0;
+Malformed:
+    *err_desc = "malformed SETTINGS frame";
+    return H2O_HTTP3_ERROR_FRAME;
+}
+
+
+// Source: common.c
+// Lines 1242-1292
+
+
+[ANSWER]
+MUST

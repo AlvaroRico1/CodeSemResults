@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'remote' at line 3\n2. Pointer 'proxy' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void assert_config_match(const char *config, const char *expected)\n{\n\tgit_remote *remote;\n\tchar *proxy;\n\n\tif (config)\n\t\tcl_repo_set_string(repo, config, expected);\n\n\tcl_git_pass(git_remote_lookup(&remote, repo, \"lg2\"));\n\tcl_git_pass(git_remote__http_proxy(&proxy, remote, &url));\n\n\tif (expected)\n\t\tcl_assert_equal_s(proxy, expected);\n\telse\n\t\tcl_assert_equal_p(proxy, expected);\n\n\tgit_remote_free(remote);\n\tgit__free(proxy);\n}\n\n\n// Source: httpproxy.c\n// Lines 60-78\n",
+  "ANSWER": "MAY"
+}

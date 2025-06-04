@@ -1,0 +1,32 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'he' at line 4
+2. Pointer 'p' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+mk_hash_element(const void *key, size_t key_len, const void *p)
+{
+  /* allocate the struct plus memory after it to store the key */
+  struct Curl_hash_element *he = malloc(sizeof(struct Curl_hash_element) +
+                                        key_len);
+  if(he) {
+    /* copy the key */
+    memcpy(he->key, key, key_len);
+    he->key_len = key_len;
+    he->ptr = (void *) p;
+  }
+  return he;
+}
+
+
+// Source: hash.c
+// Lines 85-97
+
+
+[ANSWER]
+MUST

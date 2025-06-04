@@ -1,0 +1,1 @@
+cand,mysql/sql/sql_resolver.cc,166,old_slave,mysql/sql/sql_resolver.cc,59,1

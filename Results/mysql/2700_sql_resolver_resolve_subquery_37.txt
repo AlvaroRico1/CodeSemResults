@@ -1,0 +1,1 @@
+predicate,mysql/sql/sql_resolver.cc,26,outer,mysql/sql/sql_resolver.cc,6,1

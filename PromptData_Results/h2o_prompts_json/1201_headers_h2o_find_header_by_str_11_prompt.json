@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 't' at line 4\n2. Pointer 'headers' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nssize_t h2o_find_header_by_str(const h2o_headers_t *headers, const char *name, size_t name_len, ssize_t cursor)\n{\n    for (++cursor; cursor < headers->size; ++cursor) {\n        h2o_header_t *t = headers->entries + cursor;\n        if (h2o_memis(t->name->base, t->name->len, name, name_len)) {\n            return cursor;\n        }\n    }\n\n\n// Source: headers.c\n// Lines 60-67\n",
+  "ANSWER": "MUST"
+}

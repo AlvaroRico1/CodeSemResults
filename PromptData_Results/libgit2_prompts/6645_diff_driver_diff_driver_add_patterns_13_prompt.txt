@@ -1,0 +1,62 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'end' at line 5
+2. Pointer 'scan' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int diff_driver_add_patterns(
+	git_diff_driver *drv, const char *regex_str, int regex_flags)
+{
+	int error = 0;
+	const char *scan, *end;
+	git_diff_driver_pattern *pat = NULL;
+	git_str buf = GIT_STR_INIT;
+
+	for (scan = regex_str; scan; scan = end) {
+		/* get pattern to fill in */
+		if ((pat = git_array_alloc(drv->fn_patterns)) == NULL) {
+			return -1;
+		}
+
+		pat->flags = regex_flags;
+		if (*scan == '!') {
+			pat->flags |= REG_NEGATE;
+			++scan;
+		}
+
+		if ((end = strchr(scan, '\n')) != NULL) {
+			error = git_str_set(&buf, scan, end - scan);
+			end++;
+		} else {
+			error = git_str_sets(&buf, scan);
+		}
+		if (error < 0)
+			break;
+
+		if ((error = git_regexp_compile(&pat->re, buf.ptr, regex_flags)) != 0) {
+			/*
+			 * TODO: issue a warning
+			 */
+		}
+	}
+
+	if (error && pat != NULL)
+		(void)git_array_pop(drv->fn_patterns); /* release last item */
+	git_str_dispose(&buf);
+
+	/* We want to ignore bad patterns, so return success regardless */
+	return 0;
+}
+
+
+// Source: diff_driver.c
+// Lines 85-127
+
+
+[ANSWER]
+MUST

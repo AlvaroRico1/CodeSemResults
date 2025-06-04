@@ -1,0 +1,1 @@
+exit_status,gcc/gcc/gcc.c,13,new_argv,gcc/gcc/gcc.c,1,2

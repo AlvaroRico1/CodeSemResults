@@ -1,0 +1,1 @@
+placeholder_enum,protobuf/src/google/protobuf/descriptor.cc,55,placeholder_file,protobuf/src/google/protobuf/descriptor.cc,47,1

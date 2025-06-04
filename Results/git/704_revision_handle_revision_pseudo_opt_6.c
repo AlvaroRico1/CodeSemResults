@@ -1,0 +1,120 @@
+static int handle_revision_pseudo_opt(struct rev_info *revs,
+				      const char **argv, int *flags)
+{
+	const char *arg = argv[0];
+	const char *optarg;
+	struct ref_store *refs;
+	int argcount;
+
+	if (revs->repo != the_repository) {
+		/*
+		 * We need some something like get_submodule_worktrees()
+		 * before we can go through all worktrees of a submodule,
+		 * .e.g with adding all HEADs from --all, which is not
+		 * supported right now, so stick to single worktree.
+		 */
+		if (!revs->single_worktree)
+			BUG("--single-worktree cannot be used together with submodule");
+	}
+	refs = get_main_ref_store(revs->repo);
+
+	/*
+	 * NOTE!
+	 *
+	 * Commands like "git shortlog" will not accept the options below
+	 * unless parse_revision_opt queues them (as opposed to erroring
+	 * out).
+	 *
+	 * When implementing your new pseudo-option, remember to
+	 * register it in the list at the top of handle_revision_opt.
+	 */
+	if (!strcmp(arg, "--all")) {
+		handle_refs(refs, revs, *flags, refs_for_each_ref);
+		handle_refs(refs, revs, *flags, refs_head_ref);
+		if (!revs->single_worktree) {
+			struct all_refs_cb cb;
+
+			init_all_refs_cb(&cb, revs, *flags);
+			other_head_refs(handle_one_ref, &cb);
+		}
+		clear_ref_exclusion(&revs->ref_excludes);
+	} else if (!strcmp(arg, "--branches")) {
+		handle_refs(refs, revs, *flags, refs_for_each_branch_ref);
+		clear_ref_exclusion(&revs->ref_excludes);
+	} else if (!strcmp(arg, "--bisect")) {
+		read_bisect_terms(&term_bad, &term_good);
+		handle_refs(refs, revs, *flags, for_each_bad_bisect_ref);
+		handle_refs(refs, revs, *flags ^ (UNINTERESTING | BOTTOM),
+			    for_each_good_bisect_ref);
+		revs->bisect = 1;
+	} else if (!strcmp(arg, "--tags")) {
+		handle_refs(refs, revs, *flags, refs_for_each_tag_ref);
+		clear_ref_exclusion(&revs->ref_excludes);
+	} else if (!strcmp(arg, "--remotes")) {
+		handle_refs(refs, revs, *flags, refs_for_each_remote_ref);
+		clear_ref_exclusion(&revs->ref_excludes);
+	} else if ((argcount = parse_long_opt("glob", argv, &optarg))) {
+		struct all_refs_cb cb;
+		init_all_refs_cb(&cb, revs, *flags);
+		for_each_glob_ref(handle_one_ref, optarg, &cb);
+		clear_ref_exclusion(&revs->ref_excludes);
+		return argcount;
+	} else if ((argcount = parse_long_opt("exclude", argv, &optarg))) {
+		add_ref_exclusion(&revs->ref_excludes, optarg);
+		return argcount;
+	} else if (skip_prefix(arg, "--branches=", &optarg)) {
+		struct all_refs_cb cb;
+		init_all_refs_cb(&cb, revs, *flags);
+		for_each_glob_ref_in(handle_one_ref, optarg, "refs/heads/", &cb);
+		clear_ref_exclusion(&revs->ref_excludes);
+	} else if (skip_prefix(arg, "--tags=", &optarg)) {
+		struct all_refs_cb cb;
+		init_all_refs_cb(&cb, revs, *flags);
+		for_each_glob_ref_in(handle_one_ref, optarg, "refs/tags/", &cb);
+		clear_ref_exclusion(&revs->ref_excludes);
+	} else if (skip_prefix(arg, "--remotes=", &optarg)) {
+		struct all_refs_cb cb;
+		init_all_refs_cb(&cb, revs, *flags);
+		for_each_glob_ref_in(handle_one_ref, optarg, "refs/remotes/", &cb);
+		clear_ref_exclusion(&revs->ref_excludes);
+	} else if (!strcmp(arg, "--reflog")) {
+		add_reflogs_to_pending(revs, *flags);
+	} else if (!strcmp(arg, "--indexed-objects")) {
+		add_index_objects_to_pending(revs, *flags);
+	} else if (!strcmp(arg, "--alternate-refs")) {
+		add_alternate_refs_to_pending(revs, *flags);
+	} else if (!strcmp(arg, "--not")) {
+		*flags ^= UNINTERESTING | BOTTOM;
+	} else if (!strcmp(arg, "--no-walk")) {
+		if (!revs->no_walk && revs->unsorted_input)
+			die(_("--no-walk is incompatible with --unsorted-input"));
+		revs->no_walk = 1;
+	} else if (skip_prefix(arg, "--no-walk=", &optarg)) {
+		if (!revs->no_walk && revs->unsorted_input)
+			die(_("--no-walk is incompatible with --unsorted-input"));
+
+		/*
+		 * Detached form ("--no-walk X" as opposed to "--no-walk=X")
+		 * not allowed, since the argument is optional.
+		 */
+		revs->no_walk = 1;
+		if (!strcmp(optarg, "sorted"))
+			revs->unsorted_input = 0;
+		else if (!strcmp(optarg, "unsorted"))
+			revs->unsorted_input = 1;
+		else
+			return error("invalid argument to --no-walk");
+	} else if (!strcmp(arg, "--do-walk")) {
+		revs->no_walk = 0;
+	} else if (!strcmp(arg, "--single-worktree")) {
+		revs->single_worktree = 1;
+	} else {
+		return 0;
+	}
+
+	return 1;
+}
+
+
+// Source: revision.c
+// Lines 2566-2681

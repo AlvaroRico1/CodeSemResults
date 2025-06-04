@@ -1,0 +1,1 @@
+answer_ptr,gcc/libcpp/directives.c,1,sym,gcc/libcpp/directives.c,19,0

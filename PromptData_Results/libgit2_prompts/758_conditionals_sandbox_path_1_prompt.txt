@@ -1,0 +1,27 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'suffix' at line 1
+2. Pointer 'path' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static char *sandbox_path(git_str *buf, const char *suffix)
+{
+	char *path = p_realpath(clar_sandbox_path(), NULL);
+	cl_assert(path);
+	cl_git_pass(git_str_attach(buf, path, 0));
+	cl_git_pass(git_str_joinpath(buf, buf->ptr, suffix));
+	return buf->ptr;
+}
+
+
+// Source: conditionals.c
+// Lines 53-60
+
+
+[ANSWER]
+MUST-NOT

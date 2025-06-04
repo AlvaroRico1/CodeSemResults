@@ -1,0 +1,52 @@
+size_t zmalloc_get_rss(void) {
+    int page = sysconf(_SC_PAGESIZE);
+    size_t rss;
+    char buf[4096];
+    char filename[256];
+    int fd, count;
+    char *p, *x;
+
+    snprintf(filename,256,"/proc/%ld/stat",(long) getpid());
+    if ((fd = open(filename,O_RDONLY)) == -1) return 0;
+    if (read(fd,buf,4096) <= 0) {
+        close(fd);
+        return 0;
+    }
+    close(fd);
+
+    p = buf;
+    count = 23; /* RSS is the 24th field in /proc/<pid>/stat */
+    while(p && count--) {
+        p = strchr(p,' ');
+        if (p) p++;
+    }
+    if (!p) return 0;
+    x = strchr(p,' ');
+    if (!x) return 0;
+    *x = '\0';
+
+    rss = strtoll(p,NULL,10);
+    rss *= page;
+    return rss;
+}
+#elif defined(HAVE_TASKINFO)
+#include <sys/types.h>
+#include <sys/sysctl.h>
+#include <mach/task.h>
+#include <mach/mach_init.h>
+
+size_t zmalloc_get_rss(void) {
+    task_t task = MACH_PORT_NULL;
+    struct task_basic_info t_info;
+    mach_msg_type_number_t t_info_count = TASK_BASIC_INFO_COUNT;
+
+    if (task_for_pid(current_task(), getpid(), &task) != KERN_SUCCESS)
+        return 0;
+    task_info(task, TASK_BASIC_INFO, (task_info_t)&t_info, &t_info_count);
+
+    return t_info.resident_size;
+}
+
+
+// Source: zmalloc.c
+// Lines 353-400

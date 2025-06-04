@@ -1,0 +1,53 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'i' at line 28
+2. Pointer 'net' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void reset_packet_write_state(NET *net) {
+  DBUG_TRACE;
+  NET_ASYNC *net_async = NET_ASYNC_DATA(net);
+  if (net_async->async_write_vector) {
+    if (net_async->async_write_vector != net_async->inline_async_write_vector) {
+      my_free(net_async->async_write_vector);
+    }
+    net_async->async_write_vector = nullptr;
+  }
+
+  if (net_async->async_write_headers) {
+    if (net_async->async_write_headers !=
+        net_async->inline_async_write_header) {
+      my_free(net_async->async_write_headers);
+    }
+    net_async->async_write_headers = nullptr;
+  }
+
+  net_async->async_write_vector_size = 0;
+  net_async->async_write_vector_current = 0;
+  if (net_async->compressed_write_buffers) {
+    /*
+      There are two entries per packet, one for header and one for payload.
+      We only need to free payloads as headers have their own buffer. If the
+      last packet was size 0, the vector size will be 1 lower and due to int
+      truncation for odd numbers will be correctly accounted for.
+    */
+    for (size_t i = 0; i < net_async->compressed_buffers_size; ++i) {
+      my_free(net_async->compressed_write_buffers[i]);
+    }
+    my_free(net_async->compressed_write_buffers);
+    net_async->compressed_write_buffers = nullptr;
+    net_async->compressed_buffers_size = 0;
+  }
+
+
+// Source: net_serv.cc
+// Lines 476-509
+
+
+[ANSWER]
+MUST-NOT

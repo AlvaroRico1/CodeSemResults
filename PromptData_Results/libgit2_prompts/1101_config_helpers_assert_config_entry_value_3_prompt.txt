@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'repo' at line 2
+2. Pointer 'config' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void assert_config_entry_value(
+	git_repository *repo,
+	const char *name,
+	const char *expected_value)
+{
+	git_config *config;
+	git_buf buf = GIT_BUF_INIT;
+
+	cl_git_pass(git_repository_config__weakptr(&config, repo));
+
+	cl_git_pass(git_config_get_string_buf(&buf, config, name));
+
+	cl_assert_equal_s(expected_value, buf.ptr);
+	git_buf_dispose(&buf);
+}
+
+
+// Source: config_helpers.c
+// Lines 25-39
+
+
+[ANSWER]
+MUST-NOT

@@ -1,0 +1,75 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'b_elt' at line 5
+2. Pointer 'b' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bitmap_and (bitmap dst, const_bitmap a, const_bitmap b)
+{
+  bitmap_element *dst_elt = dst->first;
+  const bitmap_element *a_elt = a->first;
+  const bitmap_element *b_elt = b->first;
+  bitmap_element *dst_prev = NULL;
+
+  gcc_checking_assert (!dst->tree_form && !a->tree_form && !b->tree_form);
+  gcc_assert (dst != a && dst != b);
+
+  if (a == b)
+    {
+      bitmap_copy (dst, a);
+      return;
+    }
+
+  while (a_elt && b_elt)
+    {
+      if (a_elt->indx < b_elt->indx)
+	a_elt = a_elt->next;
+      else if (b_elt->indx < a_elt->indx)
+	b_elt = b_elt->next;
+      else
+	{
+	  /* Matching elts, generate A & B.  */
+	  unsigned ix;
+	  BITMAP_WORD ior = 0;
+
+	  if (!dst_elt)
+	    dst_elt = bitmap_list_insert_element_after (dst, dst_prev,
+							a_elt->indx);
+	  else
+	    dst_elt->indx = a_elt->indx;
+	  for (ix = 0; ix < BITMAP_ELEMENT_WORDS; ix++)
+	    {
+	      BITMAP_WORD r = a_elt->bits[ix] & b_elt->bits[ix];
+
+	      dst_elt->bits[ix] = r;
+	      ior |= r;
+	    }
+	  if (ior)
+	    {
+	      dst_prev = dst_elt;
+	      dst_elt = dst_elt->next;
+	    }
+	  a_elt = a_elt->next;
+	  b_elt = b_elt->next;
+	}
+    }
+  /* Ensure that dst->current is valid.  */
+  dst->current = dst->first;
+  bitmap_elt_clear_from (dst, dst_elt);
+  gcc_checking_assert (!dst->current == !dst->first);
+  if (dst->current)
+    dst->indx = dst->current->indx;
+}
+
+
+// Source: bitmap.c
+// Lines 1247-1302
+
+
+[ANSWER]
+MUST

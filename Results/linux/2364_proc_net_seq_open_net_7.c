@@ -1,0 +1,29 @@
+static int seq_open_net(struct inode *inode, struct file *file)
+{
+	unsigned int state_size = PDE(inode)->state_size;
+	struct seq_net_private *p;
+	struct net *net;
+
+	WARN_ON_ONCE(state_size < sizeof(*p));
+
+	if (file->f_mode & FMODE_WRITE && !PDE(inode)->write)
+		return -EACCES;
+
+	net = get_proc_net(inode);
+	if (!net)
+		return -ENXIO;
+
+	p = __seq_open_private(file, PDE(inode)->seq_ops, state_size);
+	if (!p) {
+		put_net(net);
+		return -ENOMEM;
+	}
+#ifdef CONFIG_NET_NS
+	p->net = net;
+#endif
+	return 0;
+}
+
+
+// Source: proc_net.c
+// Lines 58-82

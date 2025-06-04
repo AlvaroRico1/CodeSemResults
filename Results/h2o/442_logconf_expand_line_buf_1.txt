@@ -1,0 +1,1 @@
+line,h2o/lib/core/logconf.c,1,newpt,h2o/lib/core/logconf.c,12,1

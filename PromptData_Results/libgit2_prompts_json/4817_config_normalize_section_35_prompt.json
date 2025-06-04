@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'scan' at line 3\n2. Pointer 'start' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int normalize_section(char *start, char *end)\n{\n\tchar *scan;\n\n\tif (start == end)\n\t\treturn GIT_EINVALIDSPEC;\n\n\t/* Validate and downcase range */\n\tfor (scan = start; *scan; ++scan) {\n\t\tif (end && scan >= end)\n\t\t\tbreak;\n\t\tif (isalnum(*scan))\n\t\t\t*scan = (char)git__tolower(*scan);\n\t\telse if (*scan != '-' || scan == start)\n\t\t\treturn GIT_EINVALIDSPEC;\n\t}\n\n\tif (scan == start)\n\t\treturn GIT_EINVALIDSPEC;\n\n\treturn 0;\n}\n\n\n// Source: config.c\n// Lines 1429-1450\n",
+  "ANSWER": "MUST"
+}

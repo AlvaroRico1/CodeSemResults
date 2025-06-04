@@ -1,0 +1,1 @@
+pos,mysql/client/mysql.cc,51,error,mysql/client/mysql.cc,6,0

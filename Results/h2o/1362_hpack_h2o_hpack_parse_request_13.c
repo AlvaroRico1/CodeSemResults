@@ -1,0 +1,106 @@
+int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb decode_cb, void *decode_ctx, h2o_iovec_t *method,
+                            const h2o_url_scheme_t **scheme, h2o_iovec_t *authority, h2o_iovec_t *path, h2o_headers_t *headers,
+                            int *pseudo_header_exists_map, size_t *content_length, h2o_cache_digests_t **digests,
+                            h2o_iovec_t *datagram_flow_id, const uint8_t *src, size_t len, const char **err_desc)
+{
+    const uint8_t *src_end = src + len;
+
+    *content_length = SIZE_MAX;
+
+    while (src != src_end) {
+        h2o_iovec_t *name, value;
+        const char *decode_err = NULL;
+        int ret = decode_cb(pool, decode_ctx, &name, &value, &src, src_end, &decode_err);
+        if (ret != 0) {
+            if (ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
+                /* this is a soft error, we continue parsing, but register only the first error */
+                if (*err_desc == NULL) {
+                    *err_desc = decode_err;
+                }
+            } else {
+                *err_desc = decode_err;
+                return ret;
+            }
+        }
+        if (name->base[0] == ':') {
+            if (pseudo_header_exists_map != NULL) {
+                /* FIXME validate the chars in the value (e.g. reject SP in path) */
+                if (name == &H2O_TOKEN_AUTHORITY->buf) {
+                    if (authority->base != NULL)
+                        return H2O_HTTP2_ERROR_PROTOCOL;
+                    *authority = value;
+                    *pseudo_header_exists_map |= H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS;
+                } else if (name == &H2O_TOKEN_METHOD->buf) {
+                    if (method->base != NULL)
+                        return H2O_HTTP2_ERROR_PROTOCOL;
+                    *method = value;
+                    *pseudo_header_exists_map |= H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS;
+                } else if (name == &H2O_TOKEN_PATH->buf) {
+                    if (path->base != NULL)
+                        return H2O_HTTP2_ERROR_PROTOCOL;
+                    if (value.len == 0)
+                        return H2O_HTTP2_ERROR_PROTOCOL;
+                    *path = value;
+                    *pseudo_header_exists_map |= H2O_HPACK_PARSE_HEADERS_PATH_EXISTS;
+                } else if (name == &H2O_TOKEN_SCHEME->buf) {
+                    if (*scheme != NULL)
+                        return H2O_HTTP2_ERROR_PROTOCOL;
+                    if (h2o_memis(value.base, value.len, H2O_STRLIT("https"))) {
+                        *scheme = &H2O_URL_SCHEME_HTTPS;
+                    } else if (h2o_memis(value.base, value.len, H2O_STRLIT("masque"))) {
+                        *scheme = &H2O_URL_SCHEME_MASQUE;
+                    } else {
+                        /* draft-16 8.1.2.3 suggests quote: ":scheme is not restricted to http and https schemed URIs" */
+                        *scheme = &H2O_URL_SCHEME_HTTP;
+                    }
+                    *pseudo_header_exists_map |= H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS;
+                } else {
+                    return H2O_HTTP2_ERROR_PROTOCOL;
+                }
+            } else {
+                return H2O_HTTP2_ERROR_PROTOCOL;
+            }
+        } else {
+            pseudo_header_exists_map = NULL;
+            if (h2o_iovec_is_token(name)) {
+                h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name);
+                if (token->flags.is_hpack_special) {
+                    if (token == H2O_TOKEN_CONTENT_LENGTH) {
+                        if ((*content_length = h2o_strtosize(value.base, value.len)) == SIZE_MAX)
+                            return H2O_HTTP2_ERROR_PROTOCOL;
+                        goto Next;
+                    } else if (token == H2O_TOKEN_HOST) {
+                        /* HTTP2 allows the use of host header (in place of :authority) */
+                        if (authority->base == NULL)
+                            *authority = value;
+                        goto Next;
+                    } else if (token == H2O_TOKEN_TE && h2o_lcstris(value.base, value.len, H2O_STRLIT("trailers"))) {
+                        /* do not reject */
+                    } else if (token == H2O_TOKEN_CACHE_DIGEST && digests != NULL) {
+                        /* TODO cache the decoded result in HPACK, as well as delay the decoding of the digest until being used */
+                        h2o_cache_digests_load_header(digests, value.base, value.len);
+                    } else if (token == H2O_TOKEN_DATAGRAM_FLOW_ID) {
+                        if (datagram_flow_id != NULL)
+                            *datagram_flow_id = value;
+                        goto Next;
+                    } else {
+                        /* rest of the header fields that are marked as special are rejected */
+                        return H2O_HTTP2_ERROR_PROTOCOL;
+                    }
+                }
+                h2o_add_header(pool, headers, token, NULL, value.base, value.len);
+            } else {
+                h2o_add_header_by_str(pool, headers, name->base, name->len, 0, NULL, value.base, value.len);
+            }
+        }
+    Next:;
+    }
+
+    if (*err_desc != NULL)
+        return H2O_HTTP2_ERROR_INVALID_HEADER_CHAR;
+    return 0;
+}
+
+
+// Source: hpack.c
+// Lines 479-580

@@ -1,0 +1,42 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'bp' at line 6
+2. Pointer 'b' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void trim_common_tail(mmfile_t *a, mmfile_t *b, long ctx)
+{
+	const int blk = 1024;
+	long trimmed = 0, recovered = 0;
+	char *ap = a->ptr + a->size;
+	char *bp = b->ptr + b->size;
+	long smaller = (long)((a->size < b->size) ? a->size : b->size);
+
+	if (ctx)
+		return;
+
+	while (blk + trimmed <= smaller && !memcmp(ap - blk, bp - blk, blk)) {
+		trimmed += blk;
+		ap -= blk;
+		bp -= blk;
+	}
+
+	while (recovered < trimmed)
+		if (ap[recovered++] == '\n')
+			break;
+	a->size -= trimmed - recovered;
+	b->size -= trimmed - recovered;
+}
+
+
+// Source: blame_git.c
+// Lines 344-366
+
+
+[ANSWER]
+MUST

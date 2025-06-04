@@ -1,0 +1,238 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tmp_value' at line 106
+2. Pointer 'flags' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool str_to_datetime(const char *str, std::size_t length, MYSQL_TIME *l_time,
+                     my_time_flags_t flags, MYSQL_TIME_STATUS *status) {
+  uint field_length = 0;
+  uint year_length = 0;
+  uint digits;
+  uint i;
+  uint number_of_fields;
+  uint date[MAX_DATE_PARTS];
+  uint date_len[MAX_DATE_PARTS];
+  uint add_hours = 0;
+  uint start_loop;
+  ulong not_zero_date;
+  ulong allow_space;
+  bool is_internal_format = false;
+  const char *pos;
+  const char *last_field_pos = nullptr;
+  const char *end = str + length;
+  const uchar *format_position;
+  bool found_delimiter = false;
+  bool found_space = false;
+  bool found_displacement = false;
+  uint frac_pos;
+  uint frac_len;
+  int displacement = 0;
+
+  assert(status->warnings == 0 && status->fractional_digits == 0 &&
+         status->nanoseconds == 0);
+
+  /* Skip space at start */
+  for (; str != end && isspace_char(*str); str++)
+    ;
+  if (str == end || !isdigit_char(*str)) {
+    status->warnings = MYSQL_TIME_WARN_TRUNCATED;
+    l_time->time_type = MYSQL_TIMESTAMP_NONE;
+    return true;
+  }
+
+  is_internal_format = false;
+  /* This has to be changed if want to activate different timestamp formats */
+  format_position = internal_format_positions;
+
+  /*
+    Calculate number of digits in first part.
+    If length= 8 or >= 14 then year is of format YYYY.
+    (YYYY-MM-DD,  YYYYMMDD, YYYYYMMDDHHMMSS)
+  */
+  for (pos = str; pos != end && (isdigit_char(*pos) || *pos == 'T'); pos++)
+    ;
+
+  digits = static_cast<uint>(pos - str);
+  start_loop = 0;                   /* Start of scan loop */
+  date_len[format_position[0]] = 0; /* Length of year field */
+  if (pos == end || *pos == '.') {
+    /* Found date in internal format (only numbers like YYYYMMDD) */
+    year_length = (digits == 4 || digits == 8 || digits >= 14) ? 4 : 2;
+    field_length = year_length;
+    is_internal_format = true;
+    format_position = internal_format_positions;
+  } else {
+    if (format_position[0] >= 3) /* If year is after HHMMDD */
+    {
+      /*
+        If year is not in first part then we have to determinate if we got
+        a date field or a datetime field.
+        We do this by checking if there is two numbers separated by
+        space in the input.
+      */
+      while (pos < end && !isspace_char(*pos)) pos++;
+      while (pos < end && !isdigit_char(*pos)) pos++;
+      if (pos == end) {
+        if (flags & TIME_DATETIME_ONLY) {
+          status->warnings = MYSQL_TIME_WARN_TRUNCATED;
+          l_time->time_type = MYSQL_TIMESTAMP_NONE;
+          return true; /* Can't be a full datetime */
+        }
+        /* Date field.  Set hour, minutes and seconds to 0 */
+        date[0] = 0;
+        date[1] = 0;
+        date[2] = 0;
+        date[3] = 0;
+        date[4] = 0;
+        start_loop = 5; /* Start with first date part */
+      }
+    }
+
+    field_length = format_position[0] == 0 ? 4 : 2;
+  }
+
+  /*
+    Only allow space in the first "part" of the datetime field and:
+    - after days, part seconds
+    - before and after AM/PM (handled by code later)
+
+    2003-03-03 20:00:20 AM
+    20:00:20.000000 AM 03-03-2000
+  */
+  i = *std::max_element(format_position, format_position + 3);
+
+  allow_space = ((1 << i) | (1 << format_position[6]));
+  allow_space &= (1 | 2 | 4 | 8 | 64);
+
+  not_zero_date = 0;
+  for (i = start_loop;
+       i < MAX_DATE_PARTS - 1 && str != end && isdigit_char(*str); i++) {
+    const char *start = str;
+    ulong tmp_value = static_cast<uchar>(*str++ - '0');
+
+    /*
+      Internal format means no delimiters; every field has a fixed
+      width. Otherwise, we scan until we find a delimiter and discard
+      leading zeroes -- except for the microsecond part, where leading
+      zeroes are significant, and where we never process more than six
+      digits.
+    */
+    bool scan_until_delim = !is_internal_format && (i != format_position[6]);
+
+    while (str != end && isdigit_char(str[0]) &&
+           (scan_until_delim || --field_length)) {
+      tmp_value =
+          tmp_value * 10 + static_cast<ulong>(static_cast<uchar>(*str - '0'));
+      str++;
+      if (tmp_value > 999999) /* Impossible date part */
+      {
+        status->warnings = MYSQL_TIME_WARN_TRUNCATED;
+        l_time->time_type = MYSQL_TIMESTAMP_NONE;
+        return true;
+      }
+    }
+    date_len[i] = static_cast<uint>(str - start);
+    date[i] = tmp_value;
+    not_zero_date |= tmp_value;
+
+    /* Length of next field */
+    field_length = format_position[i + 1] == 0 ? 4 : 2;
+
+    if ((last_field_pos = str) == end) {
+      i++; /* Register last found part */
+      break;
+    }
+    /* Allow a 'T' after day to allow CCYYMMDDT type of fields */
+    if (i == format_position[2] && *str == 'T') {
+      str++; /* ISO8601:  CCYYMMDDThhmmss */
+      continue;
+    }
+    if (i == format_position[5]) /* Seconds */
+    {
+      if (*str == '.') /* Followed by part seconds */
+      {
+        str++;
+        /*
+          Shift last_field_pos, so '2001-01-01 00:00:00.'
+          is treated as a valid value
+        */
+        last_field_pos = str;
+        field_length = 6; /* 6 digits */
+      } else if (isdigit_char(str[0])) {
+        /*
+          We do not see a decimal point which would have indicated a
+          fractional second part in further read. So we skip the further
+          processing of digits.
+        */
+        i++;
+        break;
+      } else if (str[0] == '+' || str[0] == '-') {
+        if (!time_zone_displacement_to_seconds(str, end - str, &displacement)) {
+          found_displacement = true;
+          str += end - str;
+          last_field_pos = str;
+        } else {
+          status->warnings = MYSQL_TIME_WARN_TRUNCATED;
+          l_time->time_type = MYSQL_TIMESTAMP_NONE;
+          return true;
+        }
+      }
+      continue;
+    }
+    if (i == format_position[6] && (str[0] == '+' || str[0] == '-')) {
+      if (!time_zone_displacement_to_seconds(str, end - str, &displacement)) {
+        found_displacement = true;
+        str += end - str;
+        last_field_pos = str;
+      } else {
+        status->warnings = MYSQL_TIME_WARN_TRUNCATED;
+        l_time->time_type = MYSQL_TIMESTAMP_NONE;
+        return true;
+      }
+    }
+
+    while (str != end && (ispunct_char(*str) || isspace_char(*str))) {
+      if (isspace_char(*str)) {
+        if (!(allow_space & (1 << i))) {
+          status->warnings = MYSQL_TIME_WARN_TRUNCATED;
+          l_time->time_type = MYSQL_TIMESTAMP_NONE;
+          return true;
+        }
+        found_space = true;
+      }
+      str++;
+      found_delimiter = true; /* Should be a 'normal' date */
+    }
+    /* Check if next position is AM/PM */
+    if (i == format_position[6]) /* Seconds, time for AM/PM */
+    {
+      i++;                           /* Skip AM/PM part */
+      if (format_position[7] != 255) /* If using AM/PM */
+      {
+        if (str + 2 <= end && (str[1] == 'M' || str[1] == 'm')) {
+          if (str[0] == 'p' || str[0] == 'P')
+            add_hours = 12;
+          else if (str[0] != 'a' && str[0] != 'A')
+            continue; /* Not AM/PM */
+          str += 2;   /* Skip AM/PM */
+          /* Skip space after AM/PM */
+          while (str != end && isspace_char(*str)) str++;
+        }
+      }
+    }
+    last_field_pos = str;
+  }
+
+
+// Source: my_time.cc
+// Lines 370-588
+
+
+[ANSWER]
+MUST-NOT

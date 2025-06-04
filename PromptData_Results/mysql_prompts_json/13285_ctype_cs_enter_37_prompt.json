@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'i' at line 2\n2. Pointer 'st' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int cs_enter(MY_XML_PARSER *st, const char *attr, size_t len) {\n  struct my_cs_file_info *i = (struct my_cs_file_info *)st->user_data;\n  struct my_cs_file_section_st *s = cs_file_sec(attr, len);\n  int state = s ? s->state : 0;\n\n  switch (state) {\n    case 0:\n      i->loader->reporter(WARNING_LEVEL, EE_UNKNOWN_LDML_TAG, (int)len, attr);\n      break;\n\n    case _CS_CHARSET:\n      my_charset_file_reset_charset(i);\n      break;\n\n    case _CS_COLLATION:\n      my_charset_file_reset_collation(i);\n      break;\n\n    case _CS_RESET:\n      return tailoring_append(st, \" &\", 0, nullptr);\n\n    default:\n      break;\n  }\n  return MY_XML_OK;\n}\n\n\n// Source: ctype.cc\n// Lines 429-454\n",
+  "ANSWER": "MUST"
+}

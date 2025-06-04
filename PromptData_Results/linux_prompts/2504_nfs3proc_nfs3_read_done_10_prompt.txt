@@ -1,0 +1,37 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'inode' at line 3
+2. Pointer 'hdr' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int nfs3_read_done(struct rpc_task *task, struct nfs_pgio_header *hdr)
+{
+	struct inode *inode = hdr->inode;
+	struct nfs_server *server = NFS_SERVER(inode);
+
+	if (hdr->pgio_done_cb != NULL)
+		return hdr->pgio_done_cb(task, hdr);
+
+	if (nfs3_async_handle_jukebox(task, inode))
+		return -EAGAIN;
+
+	if (task->tk_status >= 0 && !server->read_hdrsize)
+		cmpxchg(&server->read_hdrsize, 0, hdr->res.replen);
+
+	nfs_invalidate_atime(inode);
+	nfs_refresh_inode(inode, &hdr->fattr);
+	return 0;
+}
+
+
+// Source: nfs3proc.c
+// Lines 786-803
+
+
+[ANSWER]
+MUST

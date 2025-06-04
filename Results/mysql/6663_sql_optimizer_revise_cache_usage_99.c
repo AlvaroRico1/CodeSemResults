@@ -1,0 +1,22 @@
+static void revise_cache_usage(JOIN_TAB *join_tab) {
+  plan_idx first_inner = join_tab->first_inner();
+  JOIN *const join = join_tab->join();
+  if (first_inner != NO_PLAN_IDX) {
+    plan_idx end_tab = join_tab->idx();
+    for (first_inner = join_tab->first_inner(); first_inner != NO_PLAN_IDX;
+         first_inner = join->best_ref[first_inner]->first_upper()) {
+      for (plan_idx i = end_tab - 1; i >= first_inner; --i)
+        join->best_ref[i]->set_use_join_cache(JOIN_CACHE::ALG_NONE);
+      end_tab = first_inner;
+    }
+  } else if (join_tab->get_sj_strategy() == SJ_OPT_FIRST_MATCH) {
+    plan_idx first_sj_inner = join_tab->first_sj_inner();
+    for (plan_idx i = join_tab->idx() - 1; i >= first_sj_inner; --i) {
+      JOIN_TAB *tab = join->best_ref[i];
+      if (tab->first_sj_inner() == first_sj_inner)
+        tab->set_use_join_cache(JOIN_CACHE::ALG_NONE);
+    }
+
+
+// Source: sql_optimizer.cc
+// Lines 3067-3084

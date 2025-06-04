@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'input' at line 1\n2. Pointer 'output' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nxmemdup (const PTR input, size_t copy_size, size_t alloc_size)\n{\n  PTR output = xmalloc (alloc_size);\n  if (alloc_size > copy_size)\n    memset ((char *) output + copy_size, 0, alloc_size - copy_size);\n  return (PTR) memcpy (output, input, copy_size);\n}\n\n\n// Source: xmemdup.c\n// Lines 35-41\n",
+  "ANSWER": "MAY"
+}

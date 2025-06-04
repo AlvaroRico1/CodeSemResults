@@ -1,0 +1,77 @@
+static int generate_request(
+	git_http_client *client,
+	git_http_request *request)
+{
+	git_str *buf;
+	size_t i;
+	int error;
+
+	GIT_ASSERT_ARG(client);
+	GIT_ASSERT_ARG(request);
+
+	git_str_clear(&client->request_msg);
+	buf = &client->request_msg;
+
+	/* GET|POST path HTTP/1.1 */
+	git_str_puts(buf, name_for_method(request->method));
+	git_str_putc(buf, ' ');
+
+	if (request->proxy && strcmp(request->url->scheme, "https"))
+		git_net_url_fmt(buf, request->url);
+	else
+		git_net_url_fmt_path(buf, request->url);
+
+	git_str_puts(buf, " HTTP/1.1\r\n");
+
+	git_str_puts(buf, "User-Agent: ");
+	git_http__user_agent(buf);
+	git_str_puts(buf, "\r\n");
+
+	git_str_puts(buf, "Host: ");
+	puts_host_and_port(buf, request->url, false);
+	git_str_puts(buf, "\r\n");
+
+	if (request->accept)
+		git_str_printf(buf, "Accept: %s\r\n", request->accept);
+	else
+		git_str_puts(buf, "Accept: */*\r\n");
+
+	if (request->content_type)
+		git_str_printf(buf, "Content-Type: %s\r\n",
+			request->content_type);
+
+	if (request->chunked)
+		git_str_puts(buf, "Transfer-Encoding: chunked\r\n");
+
+	if (request->content_length > 0)
+		git_str_printf(buf, "Content-Length: %"PRIuZ "\r\n",
+			request->content_length);
+
+	if (request->expect_continue)
+		git_str_printf(buf, "Expect: 100-continue\r\n");
+
+	if ((error = apply_server_credentials(buf, client, request)) < 0 ||
+	    (!use_connect_proxy(client) &&
+			(error = apply_proxy_credentials(buf, client, request)) < 0))
+		return error;
+
+	if (request->custom_headers) {
+		for (i = 0; i < request->custom_headers->count; i++) {
+			const char *hdr = request->custom_headers->strings[i];
+
+			if (hdr)
+				git_str_printf(buf, "%s\r\n", hdr);
+		}
+	}
+
+	git_str_puts(buf, "\r\n");
+
+	if (git_str_oom(buf))
+		return -1;
+
+	return 0;
+}
+
+
+// Source: httpclient.c
+// Lines 689-761

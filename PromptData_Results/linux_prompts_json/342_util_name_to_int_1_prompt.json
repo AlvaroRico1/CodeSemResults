@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'name' at line 3\n2. Pointer 'qstr' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nunsigned name_to_int(const struct qstr *qstr)\n{\n\tconst char *name = qstr->name;\n\tint len = qstr->len;\n\tunsigned n = 0;\n\n\tif (len > 1 && *name == '0')\n\t\tgoto out;\n\tdo {\n\t\tunsigned c = *name++ - '0';\n\t\tif (c > 9)\n\t\t\tgoto out;\n\t\tif (n >= (~0U-9)/10)\n\t\t\tgoto out;\n\t\tn *= 10;\n\t\tn += c;\n\t} while (--len > 0);\n\treturn n;\nout:\n\treturn ~0U;\n}\n\n\n// Source: util.c\n// Lines 4-24\n",
+  "ANSWER": "MUST"
+}

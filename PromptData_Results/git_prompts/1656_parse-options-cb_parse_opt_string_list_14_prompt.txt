@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'v' at line 3
+2. Pointer 'opt' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int parse_opt_string_list(const struct option *opt, const char *arg, int unset)
+{
+	struct string_list *v = opt->value;
+
+	if (unset) {
+		string_list_clear(v, 0);
+		return 0;
+	}
+
+	if (!arg)
+		return -1;
+
+	string_list_append(v, arg);
+	return 0;
+}
+
+
+// Source: parse-options-cb.c
+// Lines 194-208
+
+
+[ANSWER]
+MUST

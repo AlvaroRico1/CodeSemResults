@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'prev' at line 3
+2. Pointer 'start' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+before_next_cfi_note (rtx_insn *start)
+{
+  rtx_insn *prev = start;
+  while (start)
+    {
+      if (NOTE_P (start) && NOTE_KIND (start) == NOTE_INSN_CFI)
+	return prev;
+      prev = start;
+      start = NEXT_INSN (start);
+    }
+  gcc_unreachable ();
+}
+
+
+// Source: dwarf2cfi.c
+// Lines 2790-2801
+
+
+[ANSWER]
+MUST

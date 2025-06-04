@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ds' at line 3\n2. Pointer 'arg' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic enum cb_next match_prefix(const struct object_id *oid, void *arg)\n{\n\tstruct disambiguate_state *ds = arg;\n\t/* no need to call match_hash, oidtree_each did prefix match */\n\tupdate_candidates(ds, oid);\n\treturn ds->ambiguous ? CB_BREAK : CB_CONTINUE;\n}\n\n\n// Source: object-name.c\n// Lines 90-96\n",
+  "ANSWER": "MUST"
+}

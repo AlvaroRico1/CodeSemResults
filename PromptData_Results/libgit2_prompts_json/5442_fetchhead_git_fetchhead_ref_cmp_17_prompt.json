@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'one' at line 3\n2. Pointer 'a' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint git_fetchhead_ref_cmp(const void *a, const void *b)\n{\n\tconst git_fetchhead_ref *one = (const git_fetchhead_ref *)a;\n\tconst git_fetchhead_ref *two = (const git_fetchhead_ref *)b;\n\n\tif (one->is_merge && !two->is_merge)\n\t\treturn -1;\n\tif (two->is_merge && !one->is_merge)\n\t\treturn 1;\n\n\tif (one->ref_name && two->ref_name)\n\t\treturn strcmp(one->ref_name, two->ref_name);\n\telse if (one->ref_name)\n\t\treturn -1;\n\telse if (two->ref_name)\n\t\treturn 1;\n\n\treturn 0;\n}\n\n\n// Source: fetchhead.c\n// Lines 20-38\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,66 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'src' at line 3
+2. Pointer 'dst' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static size_t my_strnxfrm_latin1_de(const CHARSET_INFO *cs, uchar *dst,
+                                    size_t dstlen, uint nweights,
+                                    const uchar *src, size_t srclen,
+                                    uint flags) {
+  uchar *de = dst + dstlen;
+  const uchar *se = src + srclen;
+  uchar *d0 = dst;
+  for (; src < se && dst < de && nweights; src++, nweights--) {
+    uchar chr = combo1map[*src];
+    *dst++ = chr;
+    if ((chr = combo2map[*src]) && dst < de) {
+      *dst++ = chr;
+    }
+  }
+  return my_strxfrm_pad(cs, d0, dst, de, nweights, flags);
+}
+
+static void my_hash_sort_latin1_de(
+    const CHARSET_INFO *cs MY_ATTRIBUTE((unused)), const uchar *key, size_t len,
+    uint64 *nr1, uint64 *nr2) {
+  const uchar *end;
+  uint64 tmp1;
+  uint64 tmp2;
+
+  /*
+    Remove end space. We have to do this to be able to compare
+    'AE' and 'Ä' as identical
+  */
+  end = skip_trailing_space(key, len);
+
+  tmp1 = *nr1;
+  tmp2 = *nr2;
+
+  for (; key < end; key++) {
+    uint X = (uint)combo1map[(uint)*key];
+    tmp1 ^= (uint64)((((uint)tmp1 & 63) + tmp2) * X) + (tmp1 << 8);
+    tmp2 += 3;
+    if ((X = combo2map[*key])) {
+      tmp1 ^= (uint64)((((uint)tmp1 & 63) + tmp2) * X) + (tmp1 << 8);
+      tmp2 += 3;
+    }
+  }
+
+  *nr1 = tmp1;
+  *nr2 = tmp2;
+}
+}  // extern "C"
+
+
+// Source: ctype-latin1.cc
+// Lines 573-619
+
+
+[ANSWER]
+MUST-NOT

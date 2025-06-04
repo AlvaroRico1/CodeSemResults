@@ -1,0 +1,1 @@
+c,tmux/status.c,3,data,tmux/status.c,1,1

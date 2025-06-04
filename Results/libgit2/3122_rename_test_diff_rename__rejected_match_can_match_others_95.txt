@@ -1,0 +1,1 @@
+tree,libgit2/tests/libgit2/diff/rename.c,5,ptr,libgit2/tests/libgit2/diff/rename.c,15,0

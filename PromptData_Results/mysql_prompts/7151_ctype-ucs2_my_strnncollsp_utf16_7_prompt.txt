@@ -1,0 +1,72 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 's_wc' at line 4
+2. Pointer 't_wc' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int my_strnncollsp_utf16(const CHARSET_INFO *cs, const uchar *s,
+                                size_t slen, const uchar *t, size_t tlen) {
+  int res;
+  my_wc_t s_wc = 0, t_wc = 0;
+  const uchar *se = s + slen, *te = t + tlen;
+  const MY_UNICASE_INFO *uni_plane = cs->caseinfo;
+
+  assert((slen % 2) == 0);
+  assert((tlen % 2) == 0);
+
+  while (s < se && t < te) {
+    int s_res = cs->cset->mb_wc(cs, &s_wc, s, se);
+    int t_res = cs->cset->mb_wc(cs, &t_wc, t, te);
+
+    if (s_res <= 0 || t_res <= 0) {
+      /* Incorrect string, compare bytewise */
+      return my_bincmp(s, se, t, te);
+    }
+
+    my_tosort_utf16(uni_plane, &s_wc);
+    my_tosort_utf16(uni_plane, &t_wc);
+
+    if (s_wc != t_wc) {
+      return s_wc > t_wc ? 1 : -1;
+    }
+
+    s += s_res;
+    t += t_res;
+  }
+
+  slen = (size_t)(se - s);
+  tlen = (size_t)(te - t);
+  res = 0;
+
+  if (slen != tlen) {
+    int s_res, swap = 1;
+    if (slen < tlen) {
+      slen = tlen;
+      s = t;
+      se = te;
+      swap = -1;
+      res = -res;
+    }
+
+    for (; s < se; s += s_res) {
+      if ((s_res = cs->cset->mb_wc(cs, &s_wc, s, se)) <= 0) {
+        return 0;
+      }
+      if (s_wc != ' ') return (s_wc < ' ') ? -swap : swap;
+    }
+  }
+  return res;
+}
+
+
+// Source: ctype-ucs2.cc
+// Lines 1134-1186
+
+
+[ANSWER]
+MAY

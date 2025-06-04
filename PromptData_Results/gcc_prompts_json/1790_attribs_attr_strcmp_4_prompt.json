@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'c1' at line 3\n2. Pointer 'c2' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nattr_strcmp (const void *v1, const void *v2)\n{\n  const char *c1 = *(char *const*)v1;\n  const char *c2 = *(char *const*)v2;\n  return strcmp (c1, c2);\n}\n\n\n// Source: attribs.c\n// Lines 878-883\n",
+  "ANSWER": "MUST-NOT"
+}

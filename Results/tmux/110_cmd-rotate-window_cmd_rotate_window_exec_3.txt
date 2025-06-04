@@ -1,0 +1,1 @@
+wp,tmux/cmd-rotate-window.c,8,wp2,tmux/cmd-rotate-window.c,8,1

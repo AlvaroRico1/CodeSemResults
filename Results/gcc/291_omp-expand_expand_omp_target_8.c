@@ -1,0 +1,417 @@
+expand_omp_target (struct omp_region *region)
+{
+  basic_block entry_bb, exit_bb, new_bb;
+  struct function *child_cfun;
+  tree child_fn, block, t;
+  gimple_stmt_iterator gsi;
+  gomp_target *entry_stmt;
+  gimple *stmt;
+  edge e;
+  bool offloaded;
+  int target_kind;
+
+  entry_stmt = as_a <gomp_target *> (last_stmt (region->entry));
+  target_kind = gimple_omp_target_kind (entry_stmt);
+  new_bb = region->entry;
+
+  offloaded = is_gimple_omp_offloaded (entry_stmt);
+  switch (target_kind)
+    {
+    case GF_OMP_TARGET_KIND_REGION:
+    case GF_OMP_TARGET_KIND_UPDATE:
+    case GF_OMP_TARGET_KIND_ENTER_DATA:
+    case GF_OMP_TARGET_KIND_EXIT_DATA:
+    case GF_OMP_TARGET_KIND_OACC_PARALLEL:
+    case GF_OMP_TARGET_KIND_OACC_KERNELS:
+    case GF_OMP_TARGET_KIND_OACC_SERIAL:
+    case GF_OMP_TARGET_KIND_OACC_UPDATE:
+    case GF_OMP_TARGET_KIND_OACC_ENTER_EXIT_DATA:
+    case GF_OMP_TARGET_KIND_OACC_DECLARE:
+    case GF_OMP_TARGET_KIND_DATA:
+    case GF_OMP_TARGET_KIND_OACC_DATA:
+    case GF_OMP_TARGET_KIND_OACC_HOST_DATA:
+      break;
+    default:
+      gcc_unreachable ();
+    }
+
+  child_fn = NULL_TREE;
+  child_cfun = NULL;
+  if (offloaded)
+    {
+      child_fn = gimple_omp_target_child_fn (entry_stmt);
+      child_cfun = DECL_STRUCT_FUNCTION (child_fn);
+    }
+
+  /* Supported by expand_omp_taskreg, but not here.  */
+  if (child_cfun != NULL)
+    gcc_checking_assert (!child_cfun->cfg);
+  gcc_checking_assert (!gimple_in_ssa_p (cfun));
+
+  entry_bb = region->entry;
+  exit_bb = region->exit;
+
+  if (target_kind == GF_OMP_TARGET_KIND_OACC_KERNELS)
+    mark_loops_in_oacc_kernels_region (region->entry, region->exit);
+
+  /* Going on, all OpenACC compute constructs are mapped to
+     'BUILT_IN_GOACC_PARALLEL', and get their compute regions outlined.
+     To distinguish between them, we attach attributes.  */
+  switch (target_kind)
+    {
+    case GF_OMP_TARGET_KIND_OACC_PARALLEL:
+      DECL_ATTRIBUTES (child_fn)
+	= tree_cons (get_identifier ("oacc parallel"),
+		     NULL_TREE, DECL_ATTRIBUTES (child_fn));
+      break;
+    case GF_OMP_TARGET_KIND_OACC_KERNELS:
+      DECL_ATTRIBUTES (child_fn)
+	= tree_cons (get_identifier ("oacc kernels"),
+		     NULL_TREE, DECL_ATTRIBUTES (child_fn));
+      break;
+    case GF_OMP_TARGET_KIND_OACC_SERIAL:
+      DECL_ATTRIBUTES (child_fn)
+	= tree_cons (get_identifier ("oacc serial"),
+		     NULL_TREE, DECL_ATTRIBUTES (child_fn));
+      break;
+    default:
+      /* Make sure we don't miss any.  */
+      gcc_checking_assert (!(is_gimple_omp_oacc (entry_stmt)
+			     && is_gimple_omp_offloaded (entry_stmt)));
+      break;
+    }
+
+  if (offloaded)
+    {
+      unsigned srcidx, dstidx, num;
+
+      /* If the offloading region needs data sent from the parent
+	 function, then the very first statement (except possible
+	 tree profile counter updates) of the offloading body
+	 is a copy assignment .OMP_DATA_I = &.OMP_DATA_O.  Since
+	 &.OMP_DATA_O is passed as an argument to the child function,
+	 we need to replace it with the argument as seen by the child
+	 function.
+
+	 In most cases, this will end up being the identity assignment
+	 .OMP_DATA_I = .OMP_DATA_I.  However, if the offloading body had
+	 a function call that has been inlined, the original PARM_DECL
+	 .OMP_DATA_I may have been converted into a different local
+	 variable.  In which case, we need to keep the assignment.  */
+      tree data_arg = gimple_omp_target_data_arg (entry_stmt);
+      if (data_arg)
+	{
+	  basic_block entry_succ_bb = single_succ (entry_bb);
+	  gimple_stmt_iterator gsi;
+	  tree arg;
+	  gimple *tgtcopy_stmt = NULL;
+	  tree sender = TREE_VEC_ELT (data_arg, 0);
+
+	  for (gsi = gsi_start_bb (entry_succ_bb); ; gsi_next (&gsi))
+	    {
+	      gcc_assert (!gsi_end_p (gsi));
+	      stmt = gsi_stmt (gsi);
+	      if (gimple_code (stmt) != GIMPLE_ASSIGN)
+		continue;
+
+	      if (gimple_num_ops (stmt) == 2)
+		{
+		  tree arg = gimple_assign_rhs1 (stmt);
+
+		  /* We're ignoring the subcode because we're
+		     effectively doing a STRIP_NOPS.  */
+
+		  if (TREE_CODE (arg) == ADDR_EXPR
+		      && TREE_OPERAND (arg, 0) == sender)
+		    {
+		      tgtcopy_stmt = stmt;
+		      break;
+		    }
+		}
+	    }
+
+	  gcc_assert (tgtcopy_stmt != NULL);
+	  arg = DECL_ARGUMENTS (child_fn);
+
+	  gcc_assert (gimple_assign_lhs (tgtcopy_stmt) == arg);
+	  gsi_remove (&gsi, true);
+	}
+
+      /* Declare local variables needed in CHILD_CFUN.  */
+      block = DECL_INITIAL (child_fn);
+      BLOCK_VARS (block) = vec2chain (child_cfun->local_decls);
+      /* The gimplifier could record temporaries in the offloading block
+	 rather than in containing function's local_decls chain,
+	 which would mean cgraph missed finalizing them.  Do it now.  */
+      for (t = BLOCK_VARS (block); t; t = DECL_CHAIN (t))
+	if (VAR_P (t) && TREE_STATIC (t) && !DECL_EXTERNAL (t))
+	  varpool_node::finalize_decl (t);
+      DECL_SAVED_TREE (child_fn) = NULL;
+      /* We'll create a CFG for child_fn, so no gimple body is needed.  */
+      gimple_set_body (child_fn, NULL);
+      TREE_USED (block) = 1;
+
+      /* Reset DECL_CONTEXT on function arguments.  */
+      for (t = DECL_ARGUMENTS (child_fn); t; t = DECL_CHAIN (t))
+	DECL_CONTEXT (t) = child_fn;
+
+      /* Split ENTRY_BB at GIMPLE_*,
+	 so that it can be moved to the child function.  */
+      gsi = gsi_last_nondebug_bb (entry_bb);
+      stmt = gsi_stmt (gsi);
+      gcc_assert (stmt
+		  && gimple_code (stmt) == gimple_code (entry_stmt));
+      e = split_block (entry_bb, stmt);
+      gsi_remove (&gsi, true);
+      entry_bb = e->dest;
+      single_succ_edge (entry_bb)->flags = EDGE_FALLTHRU;
+
+      /* Convert GIMPLE_OMP_RETURN into a RETURN_EXPR.  */
+      if (exit_bb)
+	{
+	  gsi = gsi_last_nondebug_bb (exit_bb);
+	  gcc_assert (!gsi_end_p (gsi)
+		      && gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_RETURN);
+	  stmt = gimple_build_return (NULL);
+	  gsi_insert_after (&gsi, stmt, GSI_SAME_STMT);
+	  gsi_remove (&gsi, true);
+	}
+
+      /* Move the offloading region into CHILD_CFUN.  */
+
+      block = gimple_block (entry_stmt);
+
+      new_bb = move_sese_region_to_fn (child_cfun, entry_bb, exit_bb, block);
+      if (exit_bb)
+	single_succ_edge (new_bb)->flags = EDGE_FALLTHRU;
+      /* When the OMP expansion process cannot guarantee an up-to-date
+	 loop tree arrange for the child function to fixup loops.  */
+      if (loops_state_satisfies_p (LOOPS_NEED_FIXUP))
+	child_cfun->x_current_loops->state |= LOOPS_NEED_FIXUP;
+
+      /* Remove non-local VAR_DECLs from child_cfun->local_decls list.  */
+      num = vec_safe_length (child_cfun->local_decls);
+      for (srcidx = 0, dstidx = 0; srcidx < num; srcidx++)
+	{
+	  t = (*child_cfun->local_decls)[srcidx];
+	  if (DECL_CONTEXT (t) == cfun->decl)
+	    continue;
+	  if (srcidx != dstidx)
+	    (*child_cfun->local_decls)[dstidx] = t;
+	  dstidx++;
+	}
+      if (dstidx != num)
+	vec_safe_truncate (child_cfun->local_decls, dstidx);
+
+      /* Inform the callgraph about the new function.  */
+      child_cfun->curr_properties = cfun->curr_properties;
+      child_cfun->has_simduid_loops |= cfun->has_simduid_loops;
+      child_cfun->has_force_vectorize_loops |= cfun->has_force_vectorize_loops;
+      cgraph_node *node = cgraph_node::get_create (child_fn);
+      node->parallelized_function = 1;
+      cgraph_node::add_new_function (child_fn, true);
+
+      /* Add the new function to the offload table.  */
+      if (ENABLE_OFFLOADING)
+	{
+	  if (in_lto_p)
+	    DECL_PRESERVE_P (child_fn) = 1;
+	  vec_safe_push (offload_funcs, child_fn);
+	}
+
+      bool need_asm = DECL_ASSEMBLER_NAME_SET_P (current_function_decl)
+		      && !DECL_ASSEMBLER_NAME_SET_P (child_fn);
+
+      /* Fix the callgraph edges for child_cfun.  Those for cfun will be
+	 fixed in a following pass.  */
+      push_cfun (child_cfun);
+      if (need_asm)
+	assign_assembler_name_if_needed (child_fn);
+      cgraph_edge::rebuild_edges ();
+
+      /* Some EH regions might become dead, see PR34608.  If
+	 pass_cleanup_cfg isn't the first pass to happen with the
+	 new child, these dead EH edges might cause problems.
+	 Clean them up now.  */
+      if (flag_exceptions)
+	{
+	  basic_block bb;
+	  bool changed = false;
+
+	  FOR_EACH_BB_FN (bb, cfun)
+	    changed |= gimple_purge_dead_eh_edges (bb);
+	  if (changed)
+	    cleanup_tree_cfg ();
+	}
+      if (flag_checking && !loops_state_satisfies_p (LOOPS_NEED_FIXUP))
+	verify_loop_structure ();
+      pop_cfun ();
+
+      if (dump_file && !gimple_in_ssa_p (cfun))
+	{
+	  omp_any_child_fn_dumped = true;
+	  dump_function_header (dump_file, child_fn, dump_flags);
+	  dump_function_to_file (child_fn, dump_file, dump_flags);
+	}
+
+      adjust_context_and_scope (region, gimple_block (entry_stmt), child_fn);
+    }
+
+  /* Emit a library call to launch the offloading region, or do data
+     transfers.  */
+  tree t1, t2, t3, t4, depend, c, clauses;
+  enum built_in_function start_ix;
+  unsigned int flags_i = 0;
+
+  switch (gimple_omp_target_kind (entry_stmt))
+    {
+    case GF_OMP_TARGET_KIND_REGION:
+      start_ix = BUILT_IN_GOMP_TARGET;
+      break;
+    case GF_OMP_TARGET_KIND_DATA:
+      start_ix = BUILT_IN_GOMP_TARGET_DATA;
+      break;
+    case GF_OMP_TARGET_KIND_UPDATE:
+      start_ix = BUILT_IN_GOMP_TARGET_UPDATE;
+      break;
+    case GF_OMP_TARGET_KIND_ENTER_DATA:
+      start_ix = BUILT_IN_GOMP_TARGET_ENTER_EXIT_DATA;
+      break;
+    case GF_OMP_TARGET_KIND_EXIT_DATA:
+      start_ix = BUILT_IN_GOMP_TARGET_ENTER_EXIT_DATA;
+      flags_i |= GOMP_TARGET_FLAG_EXIT_DATA;
+      break;
+    case GF_OMP_TARGET_KIND_OACC_PARALLEL:
+    case GF_OMP_TARGET_KIND_OACC_KERNELS:
+    case GF_OMP_TARGET_KIND_OACC_SERIAL:
+      start_ix = BUILT_IN_GOACC_PARALLEL;
+      break;
+    case GF_OMP_TARGET_KIND_OACC_DATA:
+    case GF_OMP_TARGET_KIND_OACC_HOST_DATA:
+      start_ix = BUILT_IN_GOACC_DATA_START;
+      break;
+    case GF_OMP_TARGET_KIND_OACC_UPDATE:
+      start_ix = BUILT_IN_GOACC_UPDATE;
+      break;
+    case GF_OMP_TARGET_KIND_OACC_ENTER_EXIT_DATA:
+      start_ix = BUILT_IN_GOACC_ENTER_EXIT_DATA;
+      break;
+    case GF_OMP_TARGET_KIND_OACC_DECLARE:
+      start_ix = BUILT_IN_GOACC_DECLARE;
+      break;
+    default:
+      gcc_unreachable ();
+    }
+
+  clauses = gimple_omp_target_clauses (entry_stmt);
+
+  tree device = NULL_TREE;
+  location_t device_loc = UNKNOWN_LOCATION;
+  tree goacc_flags = NULL_TREE;
+  if (is_gimple_omp_oacc (entry_stmt))
+    {
+      /* By default, no GOACC_FLAGs are set.  */
+      goacc_flags = integer_zero_node;
+    }
+  else
+    {
+      c = omp_find_clause (clauses, OMP_CLAUSE_DEVICE);
+      if (c)
+	{
+	  device = OMP_CLAUSE_DEVICE_ID (c);
+	  device_loc = OMP_CLAUSE_LOCATION (c);
+	}
+      else
+	{
+	  /* By default, the value of DEVICE is GOMP_DEVICE_ICV (let runtime
+	     library choose).  */
+	  device = build_int_cst (integer_type_node, GOMP_DEVICE_ICV);
+	  device_loc = gimple_location (entry_stmt);
+	}
+
+      c = omp_find_clause (clauses, OMP_CLAUSE_NOWAIT);
+      if (c)
+	flags_i |= GOMP_TARGET_FLAG_NOWAIT;
+    }
+
+  /* By default, there is no conditional.  */
+  tree cond = NULL_TREE;
+  c = omp_find_clause (clauses, OMP_CLAUSE_IF);
+  if (c)
+    cond = OMP_CLAUSE_IF_EXPR (c);
+  /* If we found the clause 'if (cond)', build:
+     OpenACC: goacc_flags = (cond ? goacc_flags : flags | GOACC_FLAG_HOST_FALLBACK)
+     OpenMP: device = (cond ? device : GOMP_DEVICE_HOST_FALLBACK) */
+  if (cond)
+    {
+      tree *tp;
+      if (is_gimple_omp_oacc (entry_stmt))
+	tp = &goacc_flags;
+      else
+	{
+	  /* Ensure 'device' is of the correct type.  */
+	  device = fold_convert_loc (device_loc, integer_type_node, device);
+
+	  tp = &device;
+	}
+
+      cond = gimple_boolify (cond);
+
+      basic_block cond_bb, then_bb, else_bb;
+      edge e;
+      tree tmp_var;
+
+      tmp_var = create_tmp_var (TREE_TYPE (*tp));
+      if (offloaded)
+	e = split_block_after_labels (new_bb);
+      else
+	{
+	  gsi = gsi_last_nondebug_bb (new_bb);
+	  gsi_prev (&gsi);
+	  e = split_block (new_bb, gsi_stmt (gsi));
+	}
+      cond_bb = e->src;
+      new_bb = e->dest;
+      remove_edge (e);
+
+      then_bb = create_empty_bb (cond_bb);
+      else_bb = create_empty_bb (then_bb);
+      set_immediate_dominator (CDI_DOMINATORS, then_bb, cond_bb);
+      set_immediate_dominator (CDI_DOMINATORS, else_bb, cond_bb);
+
+      stmt = gimple_build_cond_empty (cond);
+      gsi = gsi_last_bb (cond_bb);
+      gsi_insert_after (&gsi, stmt, GSI_CONTINUE_LINKING);
+
+      gsi = gsi_start_bb (then_bb);
+      stmt = gimple_build_assign (tmp_var, *tp);
+      gsi_insert_after (&gsi, stmt, GSI_CONTINUE_LINKING);
+
+      gsi = gsi_start_bb (else_bb);
+      if (is_gimple_omp_oacc (entry_stmt))
+	stmt = gimple_build_assign (tmp_var,
+				    BIT_IOR_EXPR,
+				    *tp,
+				    build_int_cst (integer_type_node,
+						   GOACC_FLAG_HOST_FALLBACK));
+      else
+	stmt = gimple_build_assign (tmp_var,
+				    build_int_cst (integer_type_node,
+						   GOMP_DEVICE_HOST_FALLBACK));
+      gsi_insert_after (&gsi, stmt, GSI_CONTINUE_LINKING);
+
+      make_edge (cond_bb, then_bb, EDGE_TRUE_VALUE);
+      make_edge (cond_bb, else_bb, EDGE_FALSE_VALUE);
+      add_bb_to_loop (then_bb, cond_bb->loop_father);
+      add_bb_to_loop (else_bb, cond_bb->loop_father);
+      make_edge (then_bb, new_bb, EDGE_FALLTHRU);
+      make_edge (else_bb, new_bb, EDGE_FALLTHRU);
+
+      *tp = tmp_var;
+
+      gsi = gsi_last_nondebug_bb (new_bb);
+    }
+
+
+// Source: omp-expand.c
+// Lines 7914-8326

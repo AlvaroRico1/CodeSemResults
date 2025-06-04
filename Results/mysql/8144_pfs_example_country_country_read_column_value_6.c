@@ -1,0 +1,37 @@
+int country_read_column_value(PSI_table_handle *handle, PSI_field *field,
+                              unsigned int index) {
+  Country_Table_Handle *h = (Country_Table_Handle *)handle;
+
+  switch (index) {
+    case 0: /* COUNTRY_NAME */
+      mysql_service_pfs_plugin_table->set_field_char_utf8(
+          field, h->current_row.name, h->current_row.name_length);
+      break;
+    case 1: /* CONTINENT_NAME */
+      mysql_service_pfs_plugin_table->set_field_char_utf8(
+          field, h->current_row.continent_name,
+          h->current_row.continent_name_length);
+      break;
+    case 2: /* YEAR */
+      mysql_service_pfs_plugin_table->set_field_year(field,
+                                                     h->current_row.year);
+      break;
+    case 3: /* POPULATION */
+      mysql_service_pfs_plugin_table->set_field_bigint(
+          field, h->current_row.population);
+      break;
+    case 4: /* GROWTH_FACTOR */
+      mysql_service_pfs_plugin_table->set_field_double(
+          field, h->current_row.growth_factor);
+      break;
+    default: /* We should never reach here */
+      assert(0);
+      break;
+  }
+
+  return 0;
+}
+
+
+// Source: pfs_example_country.cc
+// Lines 228-260

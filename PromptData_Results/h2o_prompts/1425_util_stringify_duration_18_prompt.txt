@@ -1,0 +1,38 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'pos' at line 5
+2. Pointer 'buf' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+size_t stringify_duration(char *buf, int64_t usec)
+{
+    int32_t msec = (int32_t)(usec / 1000);
+    usec -= ((int64_t)msec * 1000);
+    char *pos = buf;
+    pos += sprintf(pos, "dur=%" PRId32, msec);
+    if (usec != 0) {
+        *pos++ = '.';
+        int denom;
+        for (denom = 100; denom != 0; denom /= 10) {
+            int d = (int)usec / denom;
+            *pos++ = '0' + d;
+            usec -= d * denom;
+            if (usec == 0)
+                break;
+        }
+    }
+    return pos - buf;
+}
+
+
+// Source: util.c
+// Lines 790-808
+
+
+[ANSWER]
+MUST

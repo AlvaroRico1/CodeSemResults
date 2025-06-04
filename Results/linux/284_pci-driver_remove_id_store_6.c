@@ -1,0 +1,38 @@
+static ssize_t remove_id_store(struct device_driver *driver, const char *buf,
+			       size_t count)
+{
+	struct pci_dynid *dynid, *n;
+	struct pci_driver *pdrv = to_pci_driver(driver);
+	u32 vendor, device, subvendor = PCI_ANY_ID,
+		subdevice = PCI_ANY_ID, class = 0, class_mask = 0;
+	int fields = 0;
+	size_t retval = -ENODEV;
+
+	fields = sscanf(buf, "%x %x %x %x %x %x",
+			&vendor, &device, &subvendor, &subdevice,
+			&class, &class_mask);
+	if (fields < 2)
+		return -EINVAL;
+
+	spin_lock(&pdrv->dynids.lock);
+	list_for_each_entry_safe(dynid, n, &pdrv->dynids.list, node) {
+		struct pci_device_id *id = &dynid->id;
+		if ((id->vendor == vendor) &&
+		    (id->device == device) &&
+		    (subvendor == PCI_ANY_ID || id->subvendor == subvendor) &&
+		    (subdevice == PCI_ANY_ID || id->subdevice == subdevice) &&
+		    !((id->class ^ class) & class_mask)) {
+			list_del(&dynid->node);
+			kfree(dynid);
+			retval = count;
+			break;
+		}
+	}
+	spin_unlock(&pdrv->dynids.lock);
+
+	return retval;
+}
+
+
+// Source: pci-driver.c
+// Lines 166-199

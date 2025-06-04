@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'env' at line 3\n2. Pointer 'result' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nbool cl_is_env_set(const char *name)\n{\n\tchar *env = cl_getenv(name);\n\tbool result = (env != NULL);\n\tgit__free(env);\n\treturn result;\n}\n\n\n// Source: clar_libgit2.c\n// Lines 89-95\n",
+  "ANSWER": "MUST-NOT"
+}

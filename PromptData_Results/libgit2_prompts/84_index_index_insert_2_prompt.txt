@@ -1,0 +1,110 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'position' at line 10
+2. Pointer 'existing' at line 9
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int index_insert(
+	git_index *index,
+	git_index_entry **entry_ptr,
+	int replace,
+	bool trust_path,
+	bool trust_mode,
+	bool trust_id)
+{
+	git_index_entry *existing, *best, *entry;
+	size_t path_length, position;
+	int error;
+
+	GIT_ASSERT_ARG(index);
+	GIT_ASSERT_ARG(entry_ptr);
+
+	entry = *entry_ptr;
+
+	/* Make sure that the path length flag is correct */
+	path_length = ((struct entry_internal *)entry)->pathlen;
+	index_entry_adjust_namemask(entry, path_length);
+
+	/* This entry is now up-to-date and should not be checked for raciness */
+	entry->flags_extended |= GIT_INDEX_ENTRY_UPTODATE;
+
+	git_vector_sort(&index->entries);
+
+	/*
+	 * Look if an entry with this path already exists, either staged, or (if
+	 * this entry is a regular staged item) as the "ours" side of a conflict.
+	 */
+	index_existing_and_best(&existing, &position, &best, index, entry);
+
+	/* Update the file mode */
+	entry->mode = trust_mode ?
+		git_index__create_mode(entry->mode) :
+		index_merge_mode(index, best, entry->mode);
+
+	/* Canonicalize the directory name */
+	if (!trust_path && (error = canonicalize_directory_path(index, entry, best)) < 0)
+		goto out;
+
+	/* Ensure that the given id exists (unless it's a submodule) */
+	if (!trust_id && INDEX_OWNER(index) &&
+	    (entry->mode & GIT_FILEMODE_COMMIT) != GIT_FILEMODE_COMMIT) {
+
+		if (!git_object__is_valid(INDEX_OWNER(index), &entry->id,
+					  git_object__type_from_filemode(entry->mode))) {
+			error = -1;
+			goto out;
+		}
+	}
+
+	/* Look for tree / blob name collisions, removing conflicts if requested */
+	if ((error = check_file_directory_collision(index, entry, position, replace)) < 0)
+		goto out;
+
+	/*
+	 * If we are replacing an existing item, overwrite the existing entry
+	 * and return it in place of the passed in one.
+	 */
+	if (existing) {
+		if (replace) {
+			index_entry_cpy(existing, entry);
+
+			if (trust_path)
+				memcpy((char *)existing->path, entry->path, strlen(entry->path));
+		}
+
+		index_entry_free(entry);
+		*entry_ptr = existing;
+	} else {
+		/*
+		 * If replace is not requested or no existing entry exists, insert
+		 * at the sorted position.  (Since we re-sort after each insert to
+		 * check for dups, this is actually cheaper in the long run.)
+		 */
+		if ((error = git_vector_insert_sorted(&index->entries, entry, index_no_dups)) < 0 ||
+		    (error = index_map_set(index->entries_map, entry, index->ignore_case)) < 0)
+			goto out;
+	}
+
+	index->dirty = 1;
+
+out:
+	if (error < 0) {
+		index_entry_free(*entry_ptr);
+		*entry_ptr = NULL;
+	}
+
+	return error;
+}
+
+
+// Source: index.c
+// Lines 1339-1429
+
+
+[ANSWER]
+MAY

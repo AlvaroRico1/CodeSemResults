@@ -1,0 +1,1 @@
+tp,gcc/gcc/c/c-typeck.c,6,first_non_one,gcc/gcc/c/c-typeck.c,4,0

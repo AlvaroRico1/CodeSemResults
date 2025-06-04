@@ -1,0 +1,79 @@
+void lsetCommand(client *c) {
+    robj *o = lookupKeyWriteOrReply(c,c->argv[1],shared.nokeyerr);
+    if (o == NULL || checkType(c,o,OBJ_LIST)) return;
+    long index;
+    robj *value = c->argv[3];
+
+    if (sdslen(value->ptr) > LIST_MAX_ITEM_SIZE) {
+        addReplyError(c, "Element too large");
+        return;
+    }
+
+    if ((getLongFromObjectOrReply(c, c->argv[2], &index, NULL) != C_OK))
+        return;
+
+    if (o->encoding == OBJ_ENCODING_QUICKLIST) {
+        quicklist *ql = o->ptr;
+        int replaced = quicklistReplaceAtIndex(ql, index,
+                                               value->ptr, sdslen(value->ptr));
+        if (!replaced) {
+            addReplyErrorObject(c,shared.outofrangeerr);
+        } else {
+            addReply(c,shared.ok);
+            signalModifiedKey(c,c->db,c->argv[1]);
+            notifyKeyspaceEvent(NOTIFY_LIST,"lset",c->argv[1],c->db->id);
+            server.dirty++;
+        }
+    } else {
+        serverPanic("Unknown list encoding");
+    }
+}
+
+/* A helper for replying with a list's range between the inclusive start and end
+ * indexes as multi-bulk, with support for negative indexes. Note that start
+ * must be less than end or an empty array is returned. When the reverse
+ * argument is set to a non-zero value, the reply is reversed so that elements
+ * are returned from end to start. */
+void addListRangeReply(client *c, robj *o, long start, long end, int reverse) {
+    long rangelen, llen = listTypeLength(o);
+
+    /* Convert negative indexes. */
+    if (start < 0) start = llen+start;
+    if (end < 0) end = llen+end;
+    if (start < 0) start = 0;
+
+    /* Invariant: start >= 0, so this test will be true when end < 0.
+     * The range is empty when start > end or start >= length. */
+    if (start > end || start >= llen) {
+        addReply(c,shared.emptyarray);
+        return;
+    }
+    if (end >= llen) end = llen-1;
+    rangelen = (end-start)+1;
+
+    /* Return the result in form of a multi-bulk reply */
+    addReplyArrayLen(c,rangelen);
+    if (o->encoding == OBJ_ENCODING_QUICKLIST) {
+        int from = reverse ? end : start;
+        int direction = reverse ? LIST_HEAD : LIST_TAIL;
+        listTypeIterator *iter = listTypeInitIterator(o,from,direction);
+
+        while(rangelen--) {
+            listTypeEntry entry;
+            listTypeNext(iter, &entry);
+            quicklistEntry *qe = &entry.entry;
+            if (qe->value) {
+                addReplyBulkCBuffer(c,qe->value,qe->sz);
+            } else {
+                addReplyBulkLongLong(c,qe->longval);
+            }
+        }
+        listTypeReleaseIterator(iter);
+    } else {
+        serverPanic("Unknown list encoding");
+    }
+}
+
+
+// Source: t_list.c
+// Lines 365-439

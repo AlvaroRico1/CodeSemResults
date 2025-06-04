@@ -1,0 +1,1 @@
+beg,mysql/strings/ctype-uca.cc,2,wc,mysql/strings/ctype-uca.cc,95,2

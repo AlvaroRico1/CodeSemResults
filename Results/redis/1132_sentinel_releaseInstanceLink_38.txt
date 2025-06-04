@@ -1,0 +1,1 @@
+cb,redis/src/sentinel.c,12,callbacks,redis/src/sentinel.c,7,1

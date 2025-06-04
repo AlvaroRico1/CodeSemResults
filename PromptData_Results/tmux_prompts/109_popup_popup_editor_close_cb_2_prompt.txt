@@ -1,0 +1,51 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'pe' at line 3
+2. Pointer 'arg' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+popup_editor_close_cb(int status, void *arg)
+{
+	struct popup_editor	*pe = arg;
+	FILE			*f;
+	char			*buf = NULL;
+	off_t			 len = 0;
+
+	if (status != 0) {
+		pe->cb(NULL, 0, pe->arg);
+		popup_editor_free(pe);
+		return;
+	}
+
+	f = fopen(pe->path, "r");
+	if (f != NULL) {
+		fseeko(f, 0, SEEK_END);
+		len = ftello(f);
+		fseeko(f, 0, SEEK_SET);
+
+		if (len == 0 ||
+		    (uintmax_t)len > (uintmax_t)SIZE_MAX ||
+		    (buf = malloc(len)) == NULL ||
+		    fread(buf, len, 1, f) != 1) {
+			free(buf);
+			buf = NULL;
+			len = 0;
+		}
+		fclose(f);
+	}
+	pe->cb(buf, len, pe->arg); /* callback now owns buffer */
+	popup_editor_free(pe);
+}
+
+
+// Source: popup.c
+// Lines 711-742
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,46 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ret' at line 9
+2. Pointer 'extension' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+MessageLite* ExtensionSet::ReleaseMessage(int number,
+                                          const MessageLite& prototype) {
+  Extension* extension = FindOrNull(number);
+  if (extension == nullptr) {
+    // Not present.  Return nullptr.
+    return nullptr;
+  } else {
+    GOOGLE_DCHECK_TYPE(*extension, OPTIONAL_FIELD, MESSAGE);
+    MessageLite* ret = nullptr;
+    if (extension->is_lazy) {
+      ret = extension->lazymessage_value->ReleaseMessage(prototype, arena_);
+      if (arena_ == nullptr) {
+        delete extension->lazymessage_value;
+      }
+    } else {
+      if (arena_ == nullptr) {
+        ret = extension->message_value;
+      } else {
+        // ReleaseMessage() always returns a heap-allocated message, and we are
+        // on an arena, so we need to make a copy of this message to return.
+        ret = extension->message_value->New();
+        ret->CheckTypeAndMergeFrom(*extension->message_value);
+      }
+    }
+    Erase(number);
+    return ret;
+  }
+
+
+// Source: extension_set.cc
+// Lines 747-773
+
+
+[ANSWER]
+MUST

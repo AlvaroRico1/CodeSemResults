@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'wp' at line 3\n2. Pointer 'ictx' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ninput_osc_111(struct input_ctx *ictx, const char *p)\n{\n\tstruct window_pane\t*wp = ictx->wp;\n\n\tif (*p != '\\0')\n\t\treturn;\n\tif (ictx->palette != NULL) {\n\t\tictx->palette->bg = 8;\n\t\tif (wp != NULL)\n\t\t\twp->flags |= PANE_STYLECHANGED;\n\t\tscreen_write_fullredraw(&ictx->ctx);\n\t}\n}\n\n\n// Source: input.c\n// Lines 2613-2625\n",
+  "ANSWER": "MUST"
+}

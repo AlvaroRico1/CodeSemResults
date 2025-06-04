@@ -1,0 +1,42 @@
+static double prev_record_reads(JOIN *join, uint idx, table_map found_ref) {
+  double found = 1.0;
+  POSITION *pos_end = join->positions - 1;
+  for (POSITION *pos = join->positions + idx - 1; pos != pos_end; pos--) {
+    const double fanout = pos->rows_fetched * pos->filter_effect;
+    if (pos->table->table_ref->map() & found_ref) {
+      found_ref |= pos->ref_depend_map;
+      /*
+        For the case of "t1 LEFT JOIN t2 ON ..." where t2 is a const table
+        with no matching row we will get position[t2].rows_fetched==0.
+        Actually the size of output is one null-complemented row, therefore
+        we will use value of 1 whenever we get rows_fetched==0.
+
+        Note
+        - the above case can't occur if inner part of outer join has more
+          than one table: table with no matches will not be marked as const.
+
+        - Ideally we should add 1 to rows_fetched for every possible null-
+          complemented row. We're not doing it because: 1. it will require
+          non-trivial code and add overhead. 2. The value of rows_fetched
+          is an inprecise estimate and adding 1 (or, in the worst case,
+          #max_nested_outer_joins=64-1) will not make it any more precise.
+      */
+      if (pos->rows_fetched > DBL_EPSILON) found *= fanout;
+    } else if (fanout < 1.0) {
+      /*
+        With condition filtering it is possible that a table has a
+        lower fanout than 1.0. If so, calculate the fanout of this
+        table into the found rows estimate so the produced number is
+        not too pessimistic. Otherwise, the expected number of row
+        combinations returned by this function may be higher than the
+        prefix_rowcount for the table. See BUG#18352936
+      */
+      found *= fanout;
+    }
+  }
+  return found;
+}
+
+
+// Source: sql_planner.cc
+// Lines 3249-3286

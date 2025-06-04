@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'rawmem' at line 5\n2. Pointer 'options' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int add_init_command(struct st_mysql_options *options, const char *cmd) {\n  char *tmp;\n\n  if (!options->init_commands) {\n    void *rawmem = my_malloc(key_memory_mysql_options,\n                             sizeof(Init_commands_array), MYF(MY_WME));\n    if (!rawmem) return 1;\n    options->init_commands =\n        new (rawmem) Init_commands_array(key_memory_mysql_options);\n  }\n\n\n// Source: client.cc\n// Lines 2013-2022\n",
+  "ANSWER": "MUST-NOT"
+}

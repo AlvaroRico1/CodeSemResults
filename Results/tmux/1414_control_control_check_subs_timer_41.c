@@ -1,0 +1,34 @@
+control_check_subs_timer(__unused int fd, __unused short events, void *data)
+{
+	struct client		*c = data;
+	struct control_state	*cs = c->control_state;
+	struct control_sub	*csub, *csub1;
+	struct timeval		 tv = { .tv_sec = 1 };
+
+	log_debug("%s: timer fired", __func__);
+	evtimer_add(&cs->subs_timer, &tv);
+
+	RB_FOREACH_SAFE(csub, control_subs, &cs->subs, csub1) {
+		switch (csub->type) {
+		case CONTROL_SUB_SESSION:
+			control_check_subs_session(c, csub);
+			break;
+		case CONTROL_SUB_PANE:
+			control_check_subs_pane(c, csub);
+			break;
+		case CONTROL_SUB_ALL_PANES:
+			control_check_subs_all_panes(c, csub);
+			break;
+		case CONTROL_SUB_WINDOW:
+			control_check_subs_window(c, csub);
+			break;
+		case CONTROL_SUB_ALL_WINDOWS:
+			control_check_subs_all_windows(c, csub);
+			break;
+		}
+	}
+}
+
+
+// Source: control.c
+// Lines 1035-1064

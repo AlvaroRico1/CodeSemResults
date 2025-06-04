@@ -1,0 +1,130 @@
+static int acpi_pci_root_add(struct acpi_device *device,
+			     const struct acpi_device_id *not_used)
+{
+	unsigned long long segment, bus;
+	acpi_status status;
+	int result;
+	struct acpi_pci_root *root;
+	acpi_handle handle = device->handle;
+	int no_aspm = 0;
+	bool hotadd = system_state == SYSTEM_RUNNING;
+	bool is_pcie;
+
+	root = kzalloc(sizeof(struct acpi_pci_root), GFP_KERNEL);
+	if (!root)
+		return -ENOMEM;
+
+	segment = 0;
+	status = acpi_evaluate_integer(handle, METHOD_NAME__SEG, NULL,
+				       &segment);
+	if (ACPI_FAILURE(status) && status != AE_NOT_FOUND) {
+		dev_err(&device->dev,  "can't evaluate _SEG\n");
+		result = -ENODEV;
+		goto end;
+	}
+
+	/* Check _CRS first, then _BBN.  If no _BBN, default to zero. */
+	root->secondary.flags = IORESOURCE_BUS;
+	status = try_get_root_bridge_busnr(handle, &root->secondary);
+	if (ACPI_FAILURE(status)) {
+		/*
+		 * We need both the start and end of the downstream bus range
+		 * to interpret _CBA (MMCONFIG base address), so it really is
+		 * supposed to be in _CRS.  If we don't find it there, all we
+		 * can do is assume [_BBN-0xFF] or [0-0xFF].
+		 */
+		root->secondary.end = 0xFF;
+		dev_warn(&device->dev,
+			 FW_BUG "no secondary bus range in _CRS\n");
+		status = acpi_evaluate_integer(handle, METHOD_NAME__BBN,
+					       NULL, &bus);
+		if (ACPI_SUCCESS(status))
+			root->secondary.start = bus;
+		else if (status == AE_NOT_FOUND)
+			root->secondary.start = 0;
+		else {
+			dev_err(&device->dev, "can't evaluate _BBN\n");
+			result = -ENODEV;
+			goto end;
+		}
+	}
+
+	root->device = device;
+	root->segment = segment & 0xFFFF;
+	strcpy(acpi_device_name(device), ACPI_PCI_ROOT_DEVICE_NAME);
+	strcpy(acpi_device_class(device), ACPI_PCI_ROOT_CLASS);
+	device->driver_data = root;
+
+	if (hotadd && dmar_device_add(handle)) {
+		result = -ENXIO;
+		goto end;
+	}
+
+	pr_info(PREFIX "%s [%s] (domain %04x %pR)\n",
+	       acpi_device_name(device), acpi_device_bid(device),
+	       root->segment, &root->secondary);
+
+	root->mcfg_addr = acpi_pci_root_get_mcfg_addr(handle);
+
+	is_pcie = strcmp(acpi_device_hid(device), "PNP0A08") == 0;
+	negotiate_os_control(root, &no_aspm, is_pcie);
+
+	/*
+	 * TBD: Need PCI interface for enumeration/configuration of roots.
+	 */
+
+	/*
+	 * Scan the Root Bridge
+	 * --------------------
+	 * Must do this prior to any attempt to bind the root device, as the
+	 * PCI namespace does not get created until this call is made (and
+	 * thus the root bridge's pci_dev does not exist).
+	 */
+	root->bus = pci_acpi_scan_root(root);
+	if (!root->bus) {
+		dev_err(&device->dev,
+			"Bus %04x:%02x not present in PCI namespace\n",
+			root->segment, (unsigned int)root->secondary.start);
+		device->driver_data = NULL;
+		result = -ENODEV;
+		goto remove_dmar;
+	}
+
+	if (no_aspm)
+		pcie_no_aspm();
+
+	pci_acpi_add_bus_pm_notifier(device);
+	device_set_wakeup_capable(root->bus->bridge, device->wakeup.flags.valid);
+
+	if (hotadd) {
+		pcibios_resource_survey_bus(root->bus);
+		pci_assign_unassigned_root_bus_resources(root->bus);
+		/*
+		 * This is only called for the hotadd case. For the boot-time
+		 * case, we need to wait until after PCI initialization in
+		 * order to deal with IOAPICs mapped in on a PCI BAR.
+		 *
+		 * This is currently x86-specific, because acpi_ioapic_add()
+		 * is an empty function without CONFIG_ACPI_HOTPLUG_IOAPIC.
+		 * And CONFIG_ACPI_HOTPLUG_IOAPIC depends on CONFIG_X86_IO_APIC
+		 * (see drivers/acpi/Kconfig).
+		 */
+		acpi_ioapic_add(root->device->handle);
+	}
+
+	pci_lock_rescan_remove();
+	pci_bus_add_devices(root->bus);
+	pci_unlock_rescan_remove();
+	return 1;
+
+remove_dmar:
+	if (hotadd)
+		dmar_device_remove(handle);
+end:
+	kfree(root);
+	return result;
+}
+
+
+// Source: pci_root.c
+// Lines 522-647

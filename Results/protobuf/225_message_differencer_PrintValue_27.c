@@ -1,0 +1,54 @@
+void MessageDifferencer::StreamReporter::PrintValue(
+    const Message& message, const std::vector<SpecificField>& field_path,
+    bool left_side) {
+  const SpecificField& specific_field = field_path.back();
+  const FieldDescriptor* field = specific_field.field;
+  if (field != NULL) {
+    std::string output;
+    int index = left_side ? specific_field.index : specific_field.new_index;
+    if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
+      const Reflection* reflection = message.GetReflection();
+      const Message& field_message =
+          field->is_repeated()
+              ? reflection->GetRepeatedMessage(message, field, index)
+              : reflection->GetMessage(message, field);
+      const FieldDescriptor* fd = nullptr;
+
+      if (field->is_map() && message1_ != nullptr && message2_ != nullptr) {
+        fd = field_message.GetDescriptor()->field(1);
+        if (fd->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
+          output = PrintShortTextFormat(
+              field_message.GetReflection()->GetMessage(field_message, fd));
+        } else {
+          TextFormat::PrintFieldValueToString(field_message, fd, -1, &output);
+        }
+      } else {
+        output = PrintShortTextFormat(field_message);
+      }
+      if (output.empty()) {
+        printer_->Print("{ }");
+      } else {
+        if ((fd != nullptr) &&
+            (fd->cpp_type() != FieldDescriptor::CPPTYPE_MESSAGE)) {
+          printer_->PrintRaw(output);
+        } else {
+          printer_->Print("{ $name$ }", "name", output);
+        }
+      }
+    } else {
+      TextFormat::PrintFieldValueToString(message, field, index, &output);
+      printer_->PrintRaw(output);
+    }
+  } else {
+    const UnknownFieldSet* unknown_fields =
+        (left_side ? specific_field.unknown_field_set1
+                   : specific_field.unknown_field_set2);
+    const UnknownField* unknown_field =
+        &unknown_fields->field(left_side ? specific_field.unknown_field_index1
+                                         : specific_field.unknown_field_index2);
+    PrintUnknownFieldValue(unknown_field);
+  }
+
+
+// Source: message_differencer.cc
+// Lines 2016-2065

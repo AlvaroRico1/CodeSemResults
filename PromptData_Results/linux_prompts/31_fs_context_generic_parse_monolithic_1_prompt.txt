@@ -1,0 +1,46 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'value' at line 16
+2. Pointer 'options' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int generic_parse_monolithic(struct fs_context *fc, void *data)
+{
+	char *options = data, *key;
+	int ret = 0;
+
+	if (!options)
+		return 0;
+
+	ret = security_sb_eat_lsm_opts(options, &fc->security);
+	if (ret)
+		return ret;
+
+	while ((key = strsep(&options, ",")) != NULL) {
+		if (*key) {
+			size_t v_len = 0;
+			char *value = strchr(key, '=');
+
+			if (value) {
+				if (value == key)
+					continue;
+				*value++ = 0;
+				v_len = strlen(value);
+			}
+			ret = vfs_parse_fs_string(fc, key, value, v_len);
+			if (ret < 0)
+				break;
+		}
+
+
+// Source: fs_context.c
+// Lines 205-231
+
+
+[ANSWER]
+MAY

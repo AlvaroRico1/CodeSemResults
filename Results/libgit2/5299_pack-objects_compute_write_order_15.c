@@ -1,0 +1,107 @@
+static int compute_write_order(git_pobject ***out, git_packbuilder *pb)
+{
+	size_t i, wo_end, last_untagged;
+	git_pobject **wo;
+
+	*out = NULL;
+
+	if (!pb->nr_objects)
+		return 0;
+
+	if ((wo = git__mallocarray(pb->nr_objects, sizeof(*wo))) == NULL)
+		return -1;
+
+	for (i = 0; i < pb->nr_objects; i++) {
+		git_pobject *po = pb->object_list + i;
+		po->tagged = 0;
+		po->filled = 0;
+		po->delta_child = NULL;
+		po->delta_sibling = NULL;
+	}
+
+	/*
+	 * Fully connect delta_child/delta_sibling network.
+	 * Make sure delta_sibling is sorted in the original
+	 * recency order.
+	 */
+	for (i = pb->nr_objects; i > 0;) {
+		git_pobject *po = &pb->object_list[--i];
+		if (!po->delta)
+			continue;
+		/* Mark me as the first child */
+		po->delta_sibling = po->delta->delta_child;
+		po->delta->delta_child = po;
+	}
+
+	/*
+	 * Mark objects that are at the tip of tags.
+	 */
+	if (git_tag_foreach(pb->repo, &cb_tag_foreach, pb) < 0) {
+		git__free(wo);
+		return -1;
+	}
+
+	/*
+	 * Give the objects in the original recency order until
+	 * we see a tagged tip.
+	 */
+	for (i = wo_end = 0; i < pb->nr_objects; i++) {
+		git_pobject *po = pb->object_list + i;
+		if (po->tagged)
+			break;
+		add_to_write_order(wo, &wo_end, po);
+	}
+	last_untagged = i;
+
+	/*
+	 * Then fill all the tagged tips.
+	 */
+	for (; i < pb->nr_objects; i++) {
+		git_pobject *po = pb->object_list + i;
+		if (po->tagged)
+			add_to_write_order(wo, &wo_end, po);
+	}
+
+	/*
+	 * And then all remaining commits and tags.
+	 */
+	for (i = last_untagged; i < pb->nr_objects; i++) {
+		git_pobject *po = pb->object_list + i;
+		if (po->type != GIT_OBJECT_COMMIT &&
+		    po->type != GIT_OBJECT_TAG)
+			continue;
+		add_to_write_order(wo, &wo_end, po);
+	}
+
+	/*
+	 * And then all the trees.
+	 */
+	for (i = last_untagged; i < pb->nr_objects; i++) {
+		git_pobject *po = pb->object_list + i;
+		if (po->type != GIT_OBJECT_TREE)
+			continue;
+		add_to_write_order(wo, &wo_end, po);
+	}
+
+	/*
+	 * Finally all the rest in really tight order
+	 */
+	for (i = last_untagged; i < pb->nr_objects; i++) {
+		git_pobject *po = pb->object_list + i;
+		if (!po->filled)
+			add_family_to_write_order(wo, &wo_end, po);
+	}
+
+	if (wo_end != pb->nr_objects) {
+		git__free(wo);
+		git_error_set(GIT_ERROR_INVALID, "invalid write order");
+		return -1;
+	}
+
+	*out = wo;
+	return 0;
+}
+
+
+// Source: pack-objects.c
+// Lines 521-623

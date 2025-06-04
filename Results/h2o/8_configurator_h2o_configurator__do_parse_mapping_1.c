@@ -1,0 +1,73 @@
+int h2o_configurator__do_parse_mapping(h2o_configurator_command_t *cmd, yoml_t *node, const char *keys_required,
+                                       const char *keys_optional, yoml_t ****values, size_t num_values)
+{
+    struct {
+        h2o_iovec_t key;
+        int is_required;
+        unsigned type_mask;
+    } *keys = alloca(sizeof(keys[0]) * num_values);
+    size_t i, j;
+
+    assert(node->type == YOML_TYPE_MAPPING);
+
+    /* parse keys */
+    i = 0;
+    if (keys_required != NULL) {
+        const char *p = keys_required;
+        for (; p != NULL; ++i) {
+            assert(i < num_values);
+            p = get_next_key(p, &keys[i].key, &keys[i].type_mask);
+            keys[i].is_required = 1;
+        }
+    }
+    if (keys_optional != NULL) {
+        const char *p = keys_optional;
+        for (; p != NULL; ++i) {
+            assert(i < num_values);
+            p = get_next_key(p, &keys[i].key, &keys[i].type_mask);
+            keys[i].is_required = 0;
+        }
+    }
+    assert(i == num_values);
+
+    /* clear the output */
+    for (i = 0; i != num_values; ++i)
+        *values[i] = NULL;
+
+    /* extract the attributes */
+    for (i = 0; i != node->data.mapping.size; ++i) {
+        yoml_mapping_element_t *element = node->data.mapping.elements + i;
+        if (element->key->type != YOML_TYPE_SCALAR) {
+            h2o_configurator_errprintf(cmd, element->key, "key must be a scalar");
+            return -1;
+        }
+        size_t element_key_len = strlen(element->key->data.scalar);
+        for (j = 0; j != num_values; ++j)
+            if (keys[j].key.len == element_key_len &&
+                strncasecmp(keys[j].key.base, element->key->data.scalar, element_key_len) == 0)
+                goto Found;
+        /* not found */
+        h2o_configurator_errprintf(cmd, element->key, "unexpected key:%s", element->key->data.scalar);
+        return -1;
+    Found:
+        if (*values[j] != NULL) {
+            h2o_configurator_errprintf(cmd, element->key, "duplicate key found");
+            return -1;
+        }
+        if ((keys[j].type_mask & (1u << element->value->type)) == 0) {
+            char permitted_types[sizeof(" or a scalar or a sequence or a mapping")] = "";
+            snprintf(permitted_types, sizeof(permitted_types), "%s%s%s",
+                     (keys[j].type_mask & (1u << YOML_TYPE_SCALAR)) != 0 ? " or a scalar" : "",
+                     (keys[j].type_mask & (1u << YOML_TYPE_SEQUENCE)) != 0 ? " or a sequence" : "",
+                     (keys[j].type_mask & (1u << YOML_TYPE_MAPPING)) != 0 ? " or a mapping" : "");
+            assert(strlen(permitted_types) != 0);
+            h2o_configurator_errprintf(cmd, element->value, "attribute `%s` must be %s", element->key->data.scalar,
+                                       permitted_types + 4);
+            return -1;
+        }
+        *values[j] = &element->value;
+    }
+
+
+// Source: configurator.c
+// Lines 1330-1398

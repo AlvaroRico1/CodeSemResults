@@ -1,0 +1,33 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'name' at line 4
+2. Pointer 'sign' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void assert_name_and_email(
+	const char *expected_name,
+	const char *expected_email,
+	const char *name,
+	const char *email)
+{
+	git_signature *sign;
+
+	cl_git_pass(git_signature_new(&sign, name, email, 1234567890, 60));
+	cl_assert_equal_s(expected_name, sign->name);
+	cl_assert_equal_s(expected_email, sign->email);
+
+	git_signature_free(sign);
+}
+
+
+// Source: signature.c
+// Lines 17-30
+
+
+[ANSWER]
+MUST-NOT

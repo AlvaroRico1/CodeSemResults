@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'b' at line 4\n2. Pointer 'b_' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int compare_pt(const void *a_, const void *b_)\n{\n\tstruct possible_tag *a = (struct possible_tag *)a_;\n\tstruct possible_tag *b = (struct possible_tag *)b_;\n\tif (a->depth != b->depth)\n\t\treturn a->depth - b->depth;\n\tif (a->found_order != b->found_order)\n\t\treturn a->found_order - b->found_order;\n\treturn 0;\n}\n\n\n// Source: describe.c\n// Lines 277-286\n",
+  "ANSWER": "MUST"
+}

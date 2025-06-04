@@ -1,0 +1,257 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'c' at line 3
+2. Pointer 'clsu' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static Int decUnitAddSub(const Unit *a, Int alength,
+                         const Unit *b, Int blength, Int bshift,
+                         Unit *c, Int m) {
+  const Unit *alsu=a;              /* A lsu [need to remember it]  */
+  Unit *clsu=c;                    /* C ditto  */
+  Unit *minC;                      /* low water mark for C  */
+  Unit *maxC;                      /* high water mark for C  */
+  eInt carry=0;                    /* carry integer (could be Long)  */
+  Int  add;                        /* work  */
+  #if DECDPUN<=4                   /* myriadal, millenary, etc.  */
+  Int  est;                        /* estimated quotient  */
+  #endif
+
+  #if DECTRACE
+  if (alength<1 || blength<1)
+    printf("decUnitAddSub: alen blen m %ld %ld [%ld]\n", alength, blength, m);
+  #endif
+
+  maxC=c+alength;                  /* A is usually the longer  */
+  minC=c+blength;                  /* .. and B the shorter  */
+  if (bshift!=0) {                 /* B is shifted; low As copy across  */
+    minC+=bshift;
+    /* if in place [common], skip copy unless there's a gap [rare]  */
+    if (a==c && bshift<=alength) {
+      c+=bshift;
+      a+=bshift;
+      }
+     else for (; c<clsu+bshift; a++, c++) {  /* copy needed  */
+      if (a<alsu+alength) *c=*a;
+       else *c=0;
+      }
+    }
+  if (minC>maxC) { /* swap  */
+    Unit *hold=minC;
+    minC=maxC;
+    maxC=hold;
+    }
+
+  /* For speed, do the addition as two loops; the first where both A  */
+  /* and B contribute, and the second (if necessary) where only one or  */
+  /* other of the numbers contribute.  */
+  /* Carry handling is the same (i.e., duplicated) in each case.  */
+  for (; c<minC; c++) {
+    carry+=*a;
+    a++;
+    carry+=((eInt)*b)*m;                /* [special-casing m=1/-1  */
+    b++;                                /* here is not a win]  */
+    /* here carry is new Unit of digits; it could be +ve or -ve  */
+    if ((ueInt)carry<=DECDPUNMAX) {     /* fastpath 0-DECDPUNMAX  */
+      *c=(Unit)carry;
+      carry=0;
+      continue;
+      }
+    #if DECDPUN==4                           /* use divide-by-multiply  */
+      if (carry>=0) {
+        est=(((ueInt)carry>>11)*53687)>>18;
+        *c=(Unit)(carry-est*(DECDPUNMAX+1)); /* remainder  */
+        carry=est;                           /* likely quotient [89%]  */
+        if (*c<DECDPUNMAX+1) continue;       /* estimate was correct  */
+        carry++;
+        *c-=DECDPUNMAX+1;
+        continue;
+        }
+      /* negative case  */
+      carry=carry+(eInt)(DECDPUNMAX+1)*(DECDPUNMAX+1); /* make positive  */
+      est=(((ueInt)carry>>11)*53687)>>18;
+      *c=(Unit)(carry-est*(DECDPUNMAX+1));
+      carry=est-(DECDPUNMAX+1);              /* correctly negative  */
+      if (*c<DECDPUNMAX+1) continue;         /* was OK  */
+      carry++;
+      *c-=DECDPUNMAX+1;
+    #elif DECDPUN==3
+      if (carry>=0) {
+        est=(((ueInt)carry>>3)*16777)>>21;
+        *c=(Unit)(carry-est*(DECDPUNMAX+1)); /* remainder  */
+        carry=est;                           /* likely quotient [99%]  */
+        if (*c<DECDPUNMAX+1) continue;       /* estimate was correct  */
+        carry++;
+        *c-=DECDPUNMAX+1;
+        continue;
+        }
+      /* negative case  */
+      carry=carry+(eInt)(DECDPUNMAX+1)*(DECDPUNMAX+1); /* make positive  */
+      est=(((ueInt)carry>>3)*16777)>>21;
+      *c=(Unit)(carry-est*(DECDPUNMAX+1));
+      carry=est-(DECDPUNMAX+1);              /* correctly negative  */
+      if (*c<DECDPUNMAX+1) continue;         /* was OK  */
+      carry++;
+      *c-=DECDPUNMAX+1;
+    #elif DECDPUN<=2
+      /* Can use QUOT10 as carry <= 4 digits  */
+      if (carry>=0) {
+        est=QUOT10(carry, DECDPUN);
+        *c=(Unit)(carry-est*(DECDPUNMAX+1)); /* remainder  */
+        carry=est;                           /* quotient  */
+        continue;
+        }
+      /* negative case  */
+      carry=carry+(eInt)(DECDPUNMAX+1)*(DECDPUNMAX+1); /* make positive  */
+      est=QUOT10(carry, DECDPUN);
+      *c=(Unit)(carry-est*(DECDPUNMAX+1));
+      carry=est-(DECDPUNMAX+1);              /* correctly negative  */
+    #else
+      /* remainder operator is undefined if negative, so must test  */
+      if ((ueInt)carry<(DECDPUNMAX+1)*2) {   /* fastpath carry +1  */
+        *c=(Unit)(carry-(DECDPUNMAX+1));     /* [helps additions]  */
+        carry=1;
+        continue;
+        }
+      if (carry>=0) {
+        *c=(Unit)(carry%(DECDPUNMAX+1));
+        carry=carry/(DECDPUNMAX+1);
+        continue;
+        }
+      /* negative case  */
+      carry=carry+(eInt)(DECDPUNMAX+1)*(DECDPUNMAX+1); /* make positive  */
+      *c=(Unit)(carry%(DECDPUNMAX+1));
+      carry=carry/(DECDPUNMAX+1)-(DECDPUNMAX+1);
+    #endif
+    } /* c  */
+
+  /* now may have one or other to complete  */
+  /* [pretest to avoid loop setup/shutdown]  */
+  if (c<maxC) for (; c<maxC; c++) {
+    if (a<alsu+alength) {               /* still in A  */
+      carry+=*a;
+      a++;
+      }
+     else {                             /* inside B  */
+      carry+=((eInt)*b)*m;
+      b++;
+      }
+    /* here carry is new Unit of digits; it could be +ve or -ve and  */
+    /* magnitude up to DECDPUNMAX squared  */
+    if ((ueInt)carry<=DECDPUNMAX) {     /* fastpath 0-DECDPUNMAX  */
+      *c=(Unit)carry;
+      carry=0;
+      continue;
+      }
+    /* result for this unit is negative or >DECDPUNMAX  */
+    #if DECDPUN==4                           /* use divide-by-multiply  */
+      if (carry>=0) {
+        est=(((ueInt)carry>>11)*53687)>>18;
+        *c=(Unit)(carry-est*(DECDPUNMAX+1)); /* remainder  */
+        carry=est;                           /* likely quotient [79.7%]  */
+        if (*c<DECDPUNMAX+1) continue;       /* estimate was correct  */
+        carry++;
+        *c-=DECDPUNMAX+1;
+        continue;
+        }
+      /* negative case  */
+      carry=carry+(eInt)(DECDPUNMAX+1)*(DECDPUNMAX+1); /* make positive  */
+      est=(((ueInt)carry>>11)*53687)>>18;
+      *c=(Unit)(carry-est*(DECDPUNMAX+1));
+      carry=est-(DECDPUNMAX+1);              /* correctly negative  */
+      if (*c<DECDPUNMAX+1) continue;         /* was OK  */
+      carry++;
+      *c-=DECDPUNMAX+1;
+    #elif DECDPUN==3
+      if (carry>=0) {
+        est=(((ueInt)carry>>3)*16777)>>21;
+        *c=(Unit)(carry-est*(DECDPUNMAX+1)); /* remainder  */
+        carry=est;                           /* likely quotient [99%]  */
+        if (*c<DECDPUNMAX+1) continue;       /* estimate was correct  */
+        carry++;
+        *c-=DECDPUNMAX+1;
+        continue;
+        }
+      /* negative case  */
+      carry=carry+(eInt)(DECDPUNMAX+1)*(DECDPUNMAX+1); /* make positive  */
+      est=(((ueInt)carry>>3)*16777)>>21;
+      *c=(Unit)(carry-est*(DECDPUNMAX+1));
+      carry=est-(DECDPUNMAX+1);              /* correctly negative  */
+      if (*c<DECDPUNMAX+1) continue;         /* was OK  */
+      carry++;
+      *c-=DECDPUNMAX+1;
+    #elif DECDPUN<=2
+      if (carry>=0) {
+        est=QUOT10(carry, DECDPUN);
+        *c=(Unit)(carry-est*(DECDPUNMAX+1)); /* remainder  */
+        carry=est;                           /* quotient  */
+        continue;
+        }
+      /* negative case  */
+      carry=carry+(eInt)(DECDPUNMAX+1)*(DECDPUNMAX+1); /* make positive  */
+      est=QUOT10(carry, DECDPUN);
+      *c=(Unit)(carry-est*(DECDPUNMAX+1));
+      carry=est-(DECDPUNMAX+1);              /* correctly negative  */
+    #else
+      if ((ueInt)carry<(DECDPUNMAX+1)*2){    /* fastpath carry 1  */
+        *c=(Unit)(carry-(DECDPUNMAX+1));
+        carry=1;
+        continue;
+        }
+      /* remainder operator is undefined if negative, so must test  */
+      if (carry>=0) {
+        *c=(Unit)(carry%(DECDPUNMAX+1));
+        carry=carry/(DECDPUNMAX+1);
+        continue;
+        }
+      /* negative case  */
+      carry=carry+(eInt)(DECDPUNMAX+1)*(DECDPUNMAX+1); /* make positive  */
+      *c=(Unit)(carry%(DECDPUNMAX+1));
+      carry=carry/(DECDPUNMAX+1)-(DECDPUNMAX+1);
+    #endif
+    } /* c  */
+
+  /* OK, all A and B processed; might still have carry or borrow  */
+  /* return number of Units in the result, negated if a borrow  */
+  if (carry==0) return static_cast<int32_t>(c-clsu);     /* no carry, so no more to do  */
+  if (carry>0) {                   /* positive carry  */
+    *c=(Unit)carry;                /* place as new unit  */
+    c++;                           /* ..  */
+    return static_cast<int32_t>(c-clsu);
+    }
+  /* -ve carry: it's a borrow; complement needed  */
+  add=1;                           /* temporary carry...  */
+  for (c=clsu; c<maxC; c++) {
+    add=DECDPUNMAX+add-*c;
+    if (add<=DECDPUNMAX) {
+      *c=(Unit)add;
+      add=0;
+      }
+     else {
+      *c=0;
+      add=1;
+      }
+    }
+  /* add an extra unit iff it would be non-zero  */
+  #if DECTRACE
+    printf("UAS borrow: add %ld, carry %ld\n", add, carry);
+  #endif
+  if ((add-carry-1)!=0) {
+    *c=(Unit)(add-carry-1);
+    c++;                      /* interesting, include it  */
+    }
+  return static_cast<int32_t>(clsu-c);              /* -ve result indicates borrowed  */
+  } /* decUnitAddSub  */
+
+
+// Source: decNumber.cpp
+// Lines 6383-6620
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,51 @@
+static int apply_gitbuf(
+	const git_str *old,
+	const char *oldname,
+	const git_str *new,
+	const char *newname,
+	const char *patch_expected,
+	const git_diff_options *diff_opts)
+{
+	git_patch *patch;
+	git_str result = GIT_STR_INIT;
+	git_buf patchbuf = GIT_BUF_INIT;
+	char *filename;
+	unsigned int mode;
+	int error;
+
+	cl_git_pass(git_patch_from_buffers(&patch,
+		old ? old->ptr : NULL, old ? old->size : 0,
+		oldname,
+		new ? new->ptr : NULL, new ? new->size : 0,
+		newname,
+		diff_opts));
+
+	if (patch_expected) {
+		cl_git_pass(git_patch_to_buf(&patchbuf, patch));
+		cl_assert_equal_s(patch_expected, patchbuf.ptr);
+	}
+
+	error = git_apply__patch(&result, &filename, &mode, old ? old->ptr : NULL, old ? old->size : 0, patch, NULL);
+
+	if (error == 0 && new == NULL) {
+		cl_assert_equal_i(0, result.size);
+		cl_assert_equal_p(NULL, filename);
+		cl_assert_equal_i(0, mode);
+	}
+	else if (error == 0) {
+		cl_assert_equal_s(new->ptr, result.ptr);
+		cl_assert_equal_s(newname ? newname : oldname, filename);
+		cl_assert_equal_i(0100644, mode);
+	}
+
+	git__free(filename);
+	git_str_dispose(&result);
+	git_buf_dispose(&patchbuf);
+	git_patch_free(patch);
+
+	return error;
+}
+
+
+// Source: fromdiff.c
+// Lines 24-70

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'mson' at line 3\n2. Pointer 'occ' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\net_recomp_min (struct et_occ *occ)\n{\n  struct et_occ *mson = occ->prev;\n\n  if (!mson\n      || (occ->next\n\t  && mson->min > occ->next->min))\n      mson = occ->next;\n\n  if (mson && mson->min < 0)\n    {\n      occ->min = mson->min + occ->depth;\n      occ->min_occ = mson->min_occ;\n    }\n  else\n    {\n      occ->min = occ->depth;\n      occ->min_occ = occ;\n    }\n}\n\n\n// Source: et-forest.c\n// Lines 116-135\n",
+  "ANSWER": "MUST"
+}

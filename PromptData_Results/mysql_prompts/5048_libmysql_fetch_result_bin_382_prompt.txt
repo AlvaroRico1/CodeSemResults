@@ -1,0 +1,29 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'copy_length' at line 5
+2. Pointer 'param' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void fetch_result_bin(MYSQL_BIND *param,
+                             MYSQL_FIELD *field MY_ATTRIBUTE((unused)),
+                             uchar **row) {
+  ulong length = net_field_length(row);
+  ulong copy_length = std::min(length, param->buffer_length);
+  memcpy(param->buffer, (char *)*row, copy_length);
+  *param->length = length;
+  *param->error = copy_length < length;
+  *row += length;
+}
+
+
+// Source: libmysql.cc
+// Lines 3316-3325
+
+
+[ANSWER]
+MUST-NOT

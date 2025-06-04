@@ -1,0 +1,133 @@
+bool JOIN::optimize_distinct_group_order() {
+  DBUG_TRACE;
+  ASSERT_BEST_REF_IN_JOIN_ORDER(this);
+  const bool windowing = m_windows.elements > 0;
+  const bool may_trace = select_distinct || !group_list.empty() ||
+                         !order.empty() || windowing ||
+                         tmp_table_param.sum_func_count;
+  Opt_trace_context *const trace = &thd->opt_trace;
+  Opt_trace_disable_I_S trace_disabled(trace, !may_trace);
+  Opt_trace_object wrapper(trace);
+  Opt_trace_object trace_opt(trace, "optimizing_distinct_group_by_order_by");
+  /* Optimize distinct away if possible */
+  {
+    ORDER *org_order = order.order;
+    order = ORDER_with_src(
+        remove_const(order.order, where_cond, rollup_state == RollupState::NONE,
+                     &simple_order, false),
+        order.src);
+    if (thd->is_error()) {
+      error = 1;
+      DBUG_PRINT("error", ("Error from remove_const"));
+      return true;
+    }
+
+    /*
+      If we are using ORDER BY NULL or ORDER BY const_expression,
+      return result in any order (even if we are using a GROUP BY)
+    */
+    if (order.empty() && org_order) skip_sort_order = true;
+  }
+  /*
+     Check if we can optimize away GROUP BY/DISTINCT.
+     We can do that if there are no aggregate functions, the
+     fields in DISTINCT clause (if present) and/or columns in GROUP BY
+     (if present) contain direct references to all key parts of
+     an unique index (in whatever order) and if the key parts of the
+     unique index cannot contain NULLs.
+     Note that the unique keys for DISTINCT and GROUP BY should not
+     be the same (as long as they are unique).
+
+     The FROM clause must contain a single non-constant table.
+
+     @todo Apart from the LIS test, every condition depends only on facts
+     which can be known in Query_block::prepare(), possibly this block should
+     move there.
+  */
+
+  JOIN_TAB *const tab = best_ref[const_tables];
+
+  if (plan_is_single_table() && (!group_list.empty() || select_distinct) &&
+      !tmp_table_param.sum_func_count &&
+      (!tab->quick() ||
+       tab->quick()->get_type() != QUICK_SELECT_I::QS_TYPE_GROUP_MIN_MAX)) {
+    if (!group_list.empty() && rollup_state == RollupState::NONE &&
+        list_contains_unique_index(tab, find_field_in_order_list,
+                                   (void *)group_list.order)) {
+      /*
+        We have found that grouping can be removed since groups correspond to
+        only one row anyway.
+      */
+      group_list.clean();
+      grouped = false;
+    }
+    if (select_distinct &&
+        list_contains_unique_index(tab, find_field_in_item_list, fields)) {
+      select_distinct = false;
+      trace_opt.add("distinct_is_on_unique", true)
+          .add("removed_distinct", true);
+    }
+  }
+  if (!(!group_list.empty() || tmp_table_param.sum_func_count || windowing) &&
+      select_distinct && plan_is_single_table() &&
+      rollup_state == RollupState::NONE) {
+    int order_idx = -1, group_idx = -1;
+    /*
+      We are only using one table. In this case we change DISTINCT to a
+      GROUP BY query if:
+      - The GROUP BY can be done through indexes (no sort) and the ORDER
+        BY only uses selected fields.
+        (In this case we can later optimize away GROUP BY and ORDER BY)
+      - We are scanning the whole table without LIMIT
+        This can happen if:
+        - We are using CALC_FOUND_ROWS
+        - We are using an ORDER BY that can't be optimized away.
+      - Selected expressions are not set functions (those cannot be put
+      into GROUP BY).
+
+      We don't want to use this optimization when we are using LIMIT
+      because in this case we can just create a temporary table that
+      holds LIMIT rows and stop when this table is full.
+    */
+    if (!order.empty()) {
+      skip_sort_order = test_if_skip_sort_order(
+          tab, order, m_select_limit,
+          true,  // no_changes
+          &tab->table()->keys_in_use_for_order_by, &order_idx);
+      count_field_types(query_block, &tmp_table_param, *fields, false, false);
+    }
+    ORDER *o;
+    bool all_order_fields_used;
+    if ((o = create_order_from_distinct(
+             thd, ref_items[REF_SLICE_ACTIVE], order.order, fields,
+             /*skip_aggregates=*/true,
+             /*convert_bit_fields_to_long=*/true, &all_order_fields_used))) {
+      group_list = ORDER_with_src(o, ESC_DISTINCT);
+      const bool skip_group =
+          skip_sort_order &&
+          test_if_skip_sort_order(tab, group_list, m_select_limit,
+                                  true,  // no_changes
+                                  &tab->table()->keys_in_use_for_group_by,
+                                  &group_idx);
+      count_field_types(query_block, &tmp_table_param, *fields, false, false);
+      // ORDER BY and GROUP BY are using different indexes, can't skip sorting
+      if (group_idx >= 0 && order_idx >= 0 && group_idx != order_idx)
+        skip_sort_order = false;
+      if ((skip_group && all_order_fields_used) ||
+          m_select_limit == HA_POS_ERROR ||
+          (!order.empty() && !skip_sort_order)) {
+        /*  Change DISTINCT to GROUP BY */
+        select_distinct = false;
+        /*
+          group_list was created with ORDER BY clause as prefix and
+          replaces it. So it must respect ordering. If there is no
+          ORDER BY, GROUP BY need not have to provide order.
+        */
+        if (order.empty()) {
+          for (ORDER *group = group_list.order; group; group = group->next)
+            group->direction = ORDER_NOT_RELEVANT;
+        }
+
+
+// Source: sql_optimizer.cc
+// Lines 1272-1400

@@ -1,0 +1,1 @@
+r_index,libgit2/src/libgit2/stash.c,11,ignorecase,libgit2/src/libgit2/stash.c,13,2

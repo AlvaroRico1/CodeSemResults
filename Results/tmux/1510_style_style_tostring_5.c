@@ -1,0 +1,86 @@
+style_tostring(struct style *sy)
+{
+	struct grid_cell	*gc = &sy->gc;
+	int			 off = 0;
+	const char		*comma = "", *tmp = "";
+	static char		 s[256];
+	char			 b[16];
+
+	*s = '\0';
+
+	if (sy->list != STYLE_LIST_OFF) {
+		if (sy->list == STYLE_LIST_ON)
+			tmp = "on";
+		else if (sy->list == STYLE_LIST_FOCUS)
+			tmp = "focus";
+		else if (sy->list == STYLE_LIST_LEFT_MARKER)
+			tmp = "left-marker";
+		else if (sy->list == STYLE_LIST_RIGHT_MARKER)
+			tmp = "right-marker";
+		off += xsnprintf(s + off, sizeof s - off, "%slist=%s", comma,
+		    tmp);
+		comma = ",";
+	}
+	if (sy->range_type != STYLE_RANGE_NONE) {
+		if (sy->range_type == STYLE_RANGE_LEFT)
+			tmp = "left";
+		else if (sy->range_type == STYLE_RANGE_RIGHT)
+			tmp = "right";
+		else if (sy->range_type == STYLE_RANGE_WINDOW) {
+			snprintf(b, sizeof b, "window|%u", sy->range_argument);
+			tmp = b;
+		}
+		off += xsnprintf(s + off, sizeof s - off, "%srange=%s", comma,
+		    tmp);
+		comma = ",";
+	}
+	if (sy->align != STYLE_ALIGN_DEFAULT) {
+		if (sy->align == STYLE_ALIGN_LEFT)
+			tmp = "left";
+		else if (sy->align == STYLE_ALIGN_CENTRE)
+			tmp = "centre";
+		else if (sy->align == STYLE_ALIGN_RIGHT)
+			tmp = "right";
+		else if (sy->align == STYLE_ALIGN_ABSOLUTE_CENTRE)
+			tmp = "absolute-centre";
+		off += xsnprintf(s + off, sizeof s - off, "%salign=%s", comma,
+		    tmp);
+		comma = ",";
+	}
+	if (sy->default_type != STYLE_DEFAULT_BASE) {
+		if (sy->default_type == STYLE_DEFAULT_PUSH)
+			tmp = "push-default";
+		else if (sy->default_type == STYLE_DEFAULT_POP)
+			tmp = "pop-default";
+		off += xsnprintf(s + off, sizeof s - off, "%s%s", comma, tmp);
+		comma = ",";
+	}
+	if (sy->fill != 8) {
+		off += xsnprintf(s + off, sizeof s - off, "%sfill=%s", comma,
+		    colour_tostring(sy->fill));
+		comma = ",";
+	}
+	if (gc->fg != 8) {
+		off += xsnprintf(s + off, sizeof s - off, "%sfg=%s", comma,
+		    colour_tostring(gc->fg));
+		comma = ",";
+	}
+	if (gc->bg != 8) {
+		off += xsnprintf(s + off, sizeof s - off, "%sbg=%s", comma,
+		    colour_tostring(gc->bg));
+		comma = ",";
+	}
+	if (gc->attr != 0) {
+		xsnprintf(s + off, sizeof s - off, "%s%s", comma,
+		    attributes_tostring(gc->attr));
+		comma = ",";
+	}
+
+	if (*s == '\0')
+		return ("default");
+	return (s);
+}
+
+
+// Source: style.c
+// Lines 189-270

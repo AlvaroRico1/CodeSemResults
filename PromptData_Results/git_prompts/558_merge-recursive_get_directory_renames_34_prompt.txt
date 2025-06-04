@@ -1,0 +1,79 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'best' at line None
+2. Pointer 'count' at line 28
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static struct hashmap *get_directory_renames(struct diff_queue_struct *pairs)
+{
+	struct hashmap *dir_renames;
+	struct hashmap_iter iter;
+	struct dir_rename_entry *entry;
+	int i;
+
+	/*
+	 * Typically, we think of a directory rename as all files from a
+	 * certain directory being moved to a target directory.  However,
+	 * what if someone first moved two files from the original
+	 * directory in one commit, and then renamed the directory
+	 * somewhere else in a later commit?  At merge time, we just know
+	 * that files from the original directory went to two different
+	 * places, and that the bulk of them ended up in the same place.
+	 * We want each directory rename to represent where the bulk of the
+	 * files from that directory end up; this function exists to find
+	 * where the bulk of the files went.
+	 *
+	 * The first loop below simply iterates through the list of file
+	 * renames, finding out how often each directory rename pair
+	 * possibility occurs.
+	 */
+	dir_renames = xmalloc(sizeof(*dir_renames));
+	dir_rename_init(dir_renames);
+	for (i = 0; i < pairs->nr; ++i) {
+		struct string_list_item *item;
+		int *count;
+		struct diff_filepair *pair = pairs->queue[i];
+		char *old_dir, *new_dir;
+
+		/* File not part of directory rename if it wasn't renamed */
+		if (pair->status != 'R')
+			continue;
+
+		get_renamed_dir_portion(pair->one->path, pair->two->path,
+					&old_dir,        &new_dir);
+		if (!old_dir)
+			/* Directory didn't change at all; ignore this one. */
+			continue;
+
+		entry = dir_rename_find_entry(dir_renames, old_dir);
+		if (!entry) {
+			entry = xmalloc(sizeof(*entry));
+			dir_rename_entry_init(entry, old_dir);
+			hashmap_put(dir_renames, &entry->ent);
+		} else {
+			free(old_dir);
+		}
+		item = string_list_lookup(&entry->possible_new_dirs, new_dir);
+		if (!item) {
+			item = string_list_insert(&entry->possible_new_dirs,
+						  new_dir);
+			item->util = xcalloc(1, sizeof(int));
+		} else {
+			free(new_dir);
+		}
+		count = item->util;
+		*count += 1;
+	}
+
+
+// Source: merge-recursive.c
+// Lines 2253-2312
+
+
+[ANSWER]
+MAY

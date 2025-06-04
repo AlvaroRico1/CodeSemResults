@@ -1,0 +1,59 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'psx' at line 1
+2. Pointer 'buf' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+window_copy_search_rl_regex(struct grid *gd, u_int *ppx, u_int *psx, u_int py,
+    u_int first, u_int last, regex_t *reg)
+{
+	int			eflags = 0;
+	u_int			endline, len, pywrap, size = 1;
+	char		       *buf;
+	struct grid_line       *gl;
+
+	/* Set flags for regex search. */
+	if (first != 0)
+		eflags |= REG_NOTBOL;
+
+	/* Need to look at the entire string. */
+	buf = xmalloc(size);
+	buf[0] = '\0';
+	buf = window_copy_stringify(gd, py, first, gd->sx, buf, &size);
+	len = gd->sx - first;
+	endline = gd->hsize + gd->sy - 1;
+	pywrap = py;
+	while (buf != NULL && (pywrap <= endline)) {
+		gl = grid_get_line(gd, pywrap);
+		if (~gl->flags & GRID_LINE_WRAPPED)
+			break;
+		pywrap++;
+		buf = window_copy_stringify(gd, pywrap, 0, gd->sx, buf, &size);
+		len += gd->sx;
+	}
+
+	if (window_copy_last_regex(gd, py, first, last, len, ppx, psx, buf,
+	    reg, eflags))
+	{
+		free(buf);
+		return (1);
+	}
+
+	free(buf);
+	*ppx = 0;
+	*psx = 0;
+	return (0);
+}
+
+
+// Source: window-copy.c
+// Lines 3083-3122
+
+
+[ANSWER]
+MAY

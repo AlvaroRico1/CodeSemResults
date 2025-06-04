@@ -1,0 +1,66 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ent' at line 4
+2. Pointer 'blame' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int blame_internal(git_blame *blame)
+{
+	int error;
+	git_blame__entry *ent = NULL;
+	git_blame__origin *o;
+
+	if ((error = load_blob(blame)) < 0 ||
+	    (error = git_blame__get_origin(&o, blame, blame->final, blame->path)) < 0)
+		goto cleanup;
+
+	if (git_blob_rawsize(blame->final_blob) > SIZE_MAX) {
+		git_error_set(GIT_ERROR_NOMEMORY, "blob is too large to blame");
+		error = -1;
+		goto cleanup;
+	}
+
+	blame->final_buf = git_blob_rawcontent(blame->final_blob);
+	blame->final_buf_size = (size_t)git_blob_rawsize(blame->final_blob);
+
+	ent = git__calloc(1, sizeof(git_blame__entry));
+	GIT_ERROR_CHECK_ALLOC(ent);
+
+	ent->num_lines = index_blob_lines(blame);
+	ent->lno = blame->options.min_line - 1;
+	ent->num_lines = ent->num_lines - blame->options.min_line + 1;
+	if (blame->options.max_line > 0)
+		ent->num_lines = blame->options.max_line - blame->options.min_line + 1;
+	ent->s_lno = ent->lno;
+	ent->suspect = o;
+
+	blame->ent = ent;
+
+	error = git_blame__like_git(blame, blame->options.flags);
+
+cleanup:
+	for (ent = blame->ent; ent; ) {
+		git_blame__entry *e = ent->next;
+		git_blame_hunk *h = hunk_from_entry(ent, blame);
+
+		git_vector_insert(&blame->hunks, h);
+
+		git_blame__free_entry(ent);
+		ent = e;
+	}
+
+	return error;
+}
+
+
+// Source: blame.c
+// Lines 335-381
+
+
+[ANSWER]
+MUST

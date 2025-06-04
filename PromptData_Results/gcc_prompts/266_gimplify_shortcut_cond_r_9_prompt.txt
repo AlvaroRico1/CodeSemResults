@@ -1,0 +1,114 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'true_label_p' at line 1
+2. Pointer 'local_label' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+shortcut_cond_r (tree pred, tree *true_label_p, tree *false_label_p,
+		 location_t locus)
+{
+  tree local_label = NULL_TREE;
+  tree t, expr = NULL;
+
+  /* OK, it's not a simple case; we need to pull apart the COND_EXPR to
+     retain the shortcut semantics.  Just insert the gotos here;
+     shortcut_cond_expr will append the real blocks later.  */
+  if (TREE_CODE (pred) == TRUTH_ANDIF_EXPR)
+    {
+      location_t new_locus;
+
+      /* Turn if (a && b) into
+
+	 if (a); else goto no;
+	 if (b) goto yes; else goto no;
+	 (no:) */
+
+      if (false_label_p == NULL)
+	false_label_p = &local_label;
+
+      /* Keep the original source location on the first 'if'.  */
+      t = shortcut_cond_r (TREE_OPERAND (pred, 0), NULL, false_label_p, locus);
+      append_to_statement_list (t, &expr);
+
+      /* Set the source location of the && on the second 'if'.  */
+      new_locus = rexpr_location (pred, locus);
+      t = shortcut_cond_r (TREE_OPERAND (pred, 1), true_label_p, false_label_p,
+			   new_locus);
+      append_to_statement_list (t, &expr);
+    }
+  else if (TREE_CODE (pred) == TRUTH_ORIF_EXPR)
+    {
+      location_t new_locus;
+
+      /* Turn if (a || b) into
+
+	 if (a) goto yes;
+	 if (b) goto yes; else goto no;
+	 (yes:) */
+
+      if (true_label_p == NULL)
+	true_label_p = &local_label;
+
+      /* Keep the original source location on the first 'if'.  */
+      t = shortcut_cond_r (TREE_OPERAND (pred, 0), true_label_p, NULL, locus);
+      append_to_statement_list (t, &expr);
+
+      /* Set the source location of the || on the second 'if'.  */
+      new_locus = rexpr_location (pred, locus);
+      t = shortcut_cond_r (TREE_OPERAND (pred, 1), true_label_p, false_label_p,
+			   new_locus);
+      append_to_statement_list (t, &expr);
+    }
+  else if (TREE_CODE (pred) == COND_EXPR
+	   && !VOID_TYPE_P (TREE_TYPE (TREE_OPERAND (pred, 1)))
+	   && !VOID_TYPE_P (TREE_TYPE (TREE_OPERAND (pred, 2))))
+    {
+      location_t new_locus;
+
+      /* As long as we're messing with gotos, turn if (a ? b : c) into
+	 if (a)
+	   if (b) goto yes; else goto no;
+	 else
+	   if (c) goto yes; else goto no;
+
+	 Don't do this if one of the arms has void type, which can happen
+	 in C++ when the arm is throw.  */
+
+      /* Keep the original source location on the first 'if'.  Set the source
+	 location of the ? on the second 'if'.  */
+      new_locus = rexpr_location (pred, locus);
+      expr = build3 (COND_EXPR, void_type_node, TREE_OPERAND (pred, 0),
+		     shortcut_cond_r (TREE_OPERAND (pred, 1), true_label_p,
+				      false_label_p, locus),
+		     shortcut_cond_r (TREE_OPERAND (pred, 2), true_label_p,
+				      false_label_p, new_locus));
+    }
+  else
+    {
+      expr = build3 (COND_EXPR, void_type_node, pred,
+		     build_and_jump (true_label_p),
+		     build_and_jump (false_label_p));
+      SET_EXPR_LOCATION (expr, locus);
+    }
+
+  if (local_label)
+    {
+      t = build1 (LABEL_EXPR, void_type_node, local_label);
+      append_to_statement_list (t, &expr);
+    }
+
+  return expr;
+}
+
+
+// Source: gimplify.c
+// Lines 3607-3701
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,1 @@
+sleep_type_a,linux/drivers/acpi/acpica/hwxface.c,8,elements,linux/drivers/acpi/acpica/hwxface.c,24,2

@@ -1,0 +1,74 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'data' at line 11
+2. Pointer 'type' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void fetch_float_with_conversion(MYSQL_BIND *param, MYSQL_FIELD *field,
+                                        double value, my_gcvt_arg_type type) {
+  uchar *buffer = pointer_cast<uchar *>(param->buffer);
+  double val64 = (value < 0 ? -floor(-value) : floor(value));
+
+  switch (param->buffer_type) {
+    case MYSQL_TYPE_NULL: /* do nothing */
+      break;
+    case MYSQL_TYPE_TINY:
+      /*
+        We need to _store_ data in the buffer before the truncation check to
+        workaround Intel FPU executive precision feature.
+        (See http://gcc.gnu.org/bugzilla/show_bug.cgi?id=323 for details)
+        Sic: AFAIU it does not guarantee to work.
+      */
+      if (param->is_unsigned) {
+        if (value < 0.0) {
+          *param->error = true;
+          break;
+        }
+        *buffer = (uint8)value;
+      } else {
+        *buffer = (int8)value;
+      }
+      *param->error = val64 != (param->is_unsigned ? (double)((uint8)*buffer)
+                                                   : (double)((int8)*buffer));
+      break;
+    case MYSQL_TYPE_SHORT:
+      if (param->is_unsigned) {
+        if (value < 0.0) {
+          *param->error = true;
+          break;
+        }
+        ushort data = (ushort)value;
+        shortstore(buffer, data);
+      } else {
+        short data = (short)value;
+        shortstore(buffer, data);
+      }
+      *param->error =
+          val64 != (param->is_unsigned ? (double)(*(ushort *)buffer)
+                                       : (double)(*(short *)buffer));
+      break;
+    case MYSQL_TYPE_LONG:
+      if (param->is_unsigned) {
+        if (value < 0.0) {
+          *param->error = true;
+          break;
+        }
+        uint32 data = (uint32)value;
+        longstore(buffer, data);
+      } else {
+        int32 data = (int32)value;
+        longstore(buffer, data);
+      }
+
+
+// Source: libmysql.cc
+// Lines 2947-3001
+
+
+[ANSWER]
+MUST-NOT

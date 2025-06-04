@@ -1,0 +1,1 @@
+patternlen,git/dir.c,5,string,git/dir.c,1,2

@@ -1,0 +1,84 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'walk' at line 1
+2. Pointer 'next' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int prepare_walk(git_revwalk *walk)
+{
+	int error = 0;
+	git_commit_list *list, *commits = NULL;
+	git_commit_list_node *next;
+
+	/* If there were no pushes, we know that the walk is already over */
+	if (!walk->did_push) {
+		git_error_clear();
+		return GIT_ITEROVER;
+	}
+
+	for (list = walk->user_input; list; list = list->next) {
+		git_commit_list_node *commit = list->item;
+		if ((error = git_commit_list_parse(walk, commit)) < 0)
+			return error;
+
+		if (commit->uninteresting)
+			mark_parents_uninteresting(commit);
+
+		if (!commit->seen) {
+			commit->seen = 1;
+			git_commit_list_insert(commit, &commits);
+		}
+	}
+
+	if (walk->limited && (error = limit_list(&commits, walk, commits)) < 0)
+		return error;
+
+	if (walk->sorting & GIT_SORT_TOPOLOGICAL) {
+		error = sort_in_topological_order(&walk->iterator_topo, walk, commits);
+		git_commit_list_free(&commits);
+
+		if (error < 0)
+			return error;
+
+		walk->get_next = &revwalk_next_toposort;
+	} else if (walk->sorting & GIT_SORT_TIME) {
+		for (list = commits; list && !error; list = list->next)
+			error = walk->enqueue(walk, list->item);
+
+		git_commit_list_free(&commits);
+
+		if (error < 0)
+			return error;
+	} else {
+		walk->iterator_rand = commits;
+		walk->get_next = revwalk_next_unsorted;
+	}
+
+	if (walk->sorting & GIT_SORT_REVERSE) {
+
+		while ((error = walk->get_next(&next, walk)) == 0)
+			if (git_commit_list_insert(next, &walk->iterator_reverse) == NULL)
+				return -1;
+
+		if (error != GIT_ITEROVER)
+			return error;
+
+		walk->get_next = &revwalk_next_reverse;
+	}
+
+	walk->walking = 1;
+	return 0;
+}
+
+
+// Source: revwalk.c
+// Lines 605-669
+
+
+[ANSWER]
+MAY

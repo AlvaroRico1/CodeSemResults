@@ -1,0 +1,38 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'state' at line 4
+2. Pointer 'item' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+cmdq_add_message(struct cmdq_item *item)
+{
+	struct client		*c = item->client;
+	struct cmdq_state	*state = item->state;
+	const char		*name, *key;
+	char			*tmp;
+
+	tmp = cmd_print(item->cmd);
+	if (c != NULL) {
+		name = c->name;
+		if (c->session != NULL && state->event.key != KEYC_NONE) {
+			key = key_string_lookup_key(state->event.key, 0);
+			server_add_message("%s key %s: %s", name, key, tmp);
+		} else
+			server_add_message("%s command: %s", name, tmp);
+	} else
+		server_add_message("command: %s", tmp);
+	free(tmp);
+}
+
+
+// Source: cmd-queue.c
+// Lines 557-575
+
+
+[ANSWER]
+MUST

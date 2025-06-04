@@ -1,0 +1,1 @@
+lf_info,mysql/sql/sql_load.cc,11,thd,mysql/sql/sql_load.cc,1,1

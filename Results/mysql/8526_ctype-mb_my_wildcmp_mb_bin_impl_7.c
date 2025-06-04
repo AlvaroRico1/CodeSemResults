@@ -1,0 +1,87 @@
+static int my_wildcmp_mb_bin_impl(const CHARSET_INFO *cs, const char *str,
+                                  const char *str_end, const char *wildstr_arg,
+                                  const char *wildend_arg, int escape,
+                                  int w_one, int w_many, int recurse_level) {
+  int result = -1; /* Not found, using wildcards */
+  const uchar *wildstr = pointer_cast<const uchar *>(wildstr_arg);
+  const uchar *wildend = pointer_cast<const uchar *>(wildend_arg);
+
+  if (my_string_stack_guard && my_string_stack_guard(recurse_level)) return 1;
+  while (wildstr != wildend) {
+    while (*wildstr != w_many && *wildstr != w_one) {
+      int l;
+      if (*wildstr == escape && wildstr + 1 != wildend) wildstr++;
+      if ((l = my_ismbchar(cs, wildstr, wildend))) {
+        if (str + l > str_end || memcmp(str, wildstr, l) != 0) return 1;
+        str += l;
+        wildstr += l;
+      } else if (str == str_end || *wildstr++ != static_cast<uchar>(*str++))
+        return (1); /* No match */
+      if (wildstr == wildend)
+        return (str != str_end); /* Match if both are at end */
+      result = 1;                /* Found an anchor char */
+    }
+    if (*wildstr == w_one) {
+      do {
+        if (str == str_end) /* Skip one char if possible */
+          return (result);
+        INC_PTR(cs, str, str_end);
+      } while (++wildstr < wildend && *wildstr == w_one);
+      if (wildstr == wildend) break;
+    }
+    if (*wildstr == w_many) { /* Found w_many */
+      int cmp;
+      const uchar *mb = wildstr;
+      int mb_len = 0;
+
+      wildstr++;
+      /* Remove any '%' and '_' from the wild search string */
+      for (; wildstr != wildend; wildstr++) {
+        if (*wildstr == w_many) continue;
+        if (*wildstr == w_one) {
+          if (str == str_end) return (-1);
+          INC_PTR(cs, str, str_end);
+          continue;
+        }
+        break; /* Not a wild character */
+      }
+      if (wildstr == wildend) return (0); /* Ok if w_many is last */
+      if (str == str_end) return -1;
+
+      if ((cmp = *wildstr) == escape && wildstr + 1 != wildend)
+        cmp = *++wildstr;
+
+      mb = wildstr;
+      mb_len = my_ismbchar(cs, wildstr, wildend);
+      INC_PTR(cs, wildstr, wildend); /* This is compared trough cmp */
+      do {
+        for (;;) {
+          if (str >= str_end) return -1;
+          if (mb_len) {
+            if (str + mb_len <= str_end && memcmp(str, mb, mb_len) == 0) {
+              str += mb_len;
+              break;
+            }
+          } else if (!my_ismbchar(cs, str, str_end) &&
+                     static_cast<uchar>(*str) == cmp) {
+            str++;
+            break;
+          }
+          INC_PTR(cs, str, str_end);
+        }
+        {
+          int tmp = my_wildcmp_mb_bin_impl(
+              cs, str, str_end, pointer_cast<const char *>(wildstr),
+              wildend_arg, escape, w_one, w_many, recurse_level + 1);
+          if (tmp <= 0) return (tmp);
+        }
+      } while (str != str_end);
+      return (-1);
+    }
+  }
+  return (str != str_end ? 1 : 0);
+}
+
+
+// Source: ctype-mb.cc
+// Lines 957-1039

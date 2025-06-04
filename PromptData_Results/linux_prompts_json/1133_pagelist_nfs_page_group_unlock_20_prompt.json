@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'head' at line 3\n2. Pointer 'req' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nnfs_page_group_unlock(struct nfs_page *req)\n{\n\tstruct nfs_page *head = req->wb_head;\n\n\tWARN_ON_ONCE(head != head->wb_head);\n\n\tsmp_mb__before_atomic();\n\tclear_bit(PG_HEADLOCK, &head->wb_flags);\n\tsmp_mb__after_atomic();\n\tif (!test_bit(PG_CONTENDED1, &head->wb_flags))\n\t\treturn;\n\twake_up_bit(&head->wb_flags, PG_HEADLOCK);\n}\n\n\n// Source: pagelist.c\n// Lines 165-177\n",
+  "ANSWER": "MUST"
+}

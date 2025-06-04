@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'seq' at line 18\n2. Pointer 'next' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nremove_insn (rtx_insn *insn)\n{\n  rtx_insn *next = NEXT_INSN (insn);\n  rtx_insn *prev = PREV_INSN (insn);\n  basic_block bb;\n\n  if (prev)\n    {\n      SET_NEXT_INSN (prev) = next;\n      if (NONJUMP_INSN_P (prev) && GET_CODE (PATTERN (prev)) == SEQUENCE)\n\t{\n\t  rtx_sequence *sequence = as_a <rtx_sequence *> (PATTERN (prev));\n\t  SET_NEXT_INSN (sequence->insn (sequence->len () - 1)) = next;\n\t}\n    }\n  else\n    {\n      struct sequence_stack *seq;\n\n      for (seq = get_current_sequence (); seq; seq = seq->next)\n\tif (insn == seq->first)\n\t  {\n\t    seq->first = next;\n\t    break;\n\t  }\n\n      gcc_assert (seq);\n    }\n\n\n// Source: emit-rtl.c\n// Lines 4298-4325\n",
+  "ANSWER": "MUST"
+}

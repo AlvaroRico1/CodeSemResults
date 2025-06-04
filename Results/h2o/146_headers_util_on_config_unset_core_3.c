@@ -1,0 +1,45 @@
+static int on_config_unset_core(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node, int cmd_id)
+{
+    yoml_t **headers;
+    size_t num_headers;
+    h2o_headers_command_when_t when;
+    struct headers_util_configurator_t *self = (void *)cmd->configurator;
+
+    if (parse_header_node(cmd, &node, &headers, &num_headers, &when) != 0)
+        return -1;
+
+    struct headers_util_add_arg_t args[num_headers];
+    int i;
+    for (i = 0; i != num_headers; ++i) {
+        args[i].node = headers[i];
+        if (cmd_id == H2O_HEADERS_CMD_UNSET || cmd_id == H2O_HEADERS_CMD_UNSETUNLESS) {
+            if (extract_name(args[i].node->data.scalar, strlen(args[i].node->data.scalar), &args[i].name) != 0) {
+                h2o_configurator_errprintf(cmd, args[i].node, "invalid header name");
+                return -1;
+            }
+        } else {
+            h2o_iovec_t tmp;
+
+            tmp = h2o_str_stripws(args[i].node->data.scalar, strlen(args[i].node->data.scalar));
+            if (tmp.len == 0) {
+                h2o_configurator_errprintf(cmd, args[i].node, "invalid header name");
+                return -1;
+            }
+            args[i].name = h2o_mem_alloc(sizeof(*args[0].name));
+            *args[i].name = h2o_strdup(NULL, tmp.base, tmp.len);
+        }
+    }
+    if (add_cmd(cmd, cmd_id, args, num_headers, when, self->get_commands(self->child)) != 0) {
+        for (i = 0; i != num_headers; i++) {
+            if (!h2o_iovec_is_token(args[i].name))
+                free(args[i].name->base);
+        }
+        return -1;
+    }
+
+    return 0;
+}
+
+
+// Source: headers_util.c
+// Lines 159-199

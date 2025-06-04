@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'envent' at line 3\n2. Pointer 'name' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nenviron_find(struct environ *env, const char *name)\n{\n\tstruct environ_entry\tenvent;\n\n\tenvent.name = (char *) name;\n\treturn (RB_FIND(environ, env, &envent));\n}\n\n\n// Source: environ.c\n// Lines 99-105\n",
+  "ANSWER": "MUST"
+}

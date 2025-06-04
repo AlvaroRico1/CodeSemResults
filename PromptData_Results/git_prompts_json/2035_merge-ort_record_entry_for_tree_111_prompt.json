@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'info' at line None\n2. Pointer 'new_directory_name' at line None\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void record_entry_for_tree(struct directory_versions *dir_metadata,\n\t\t\t\t  const char *path,\n\t\t\t\t  struct merged_info *mi)\n{\n\tconst char *basename;\n\n\tif (mi->is_null)\n\t\t/* nothing to record */\n\t\treturn;\n\n\tbasename = path + mi->basename_offset;\n\tassert(strchr(basename, '/') == NULL);\n\tstring_list_append(&dir_metadata->versions,\n\t\t\t   basename)->util = &mi->result;\n}\n\n\n// Source: merge-ort.c\n// Lines 3360-3374\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,81 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'field_count' at line 3
+2. Pointer 'mysql' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool cli_read_prepare_result(MYSQL *mysql, MYSQL_STMT *stmt) {
+  uchar *pos;
+  uint field_count, param_count;
+  ulong packet_length;
+  DBUG_TRACE;
+
+  /* free old result and initialize mysql->field_alloc */
+  free_old_query(mysql);
+
+  if ((packet_length = cli_safe_read(mysql, nullptr)) == packet_error)
+    return true;
+  mysql->warning_count = 0;
+
+  pos = (uchar *)mysql->net.read_pos;
+  stmt->stmt_id = uint4korr(pos + 1);
+  pos += 5;
+  /* Number of columns in result set */
+  field_count = uint2korr(pos);
+  pos += 2;
+  /* Number of placeholders in the statement */
+  param_count = uint2korr(pos);
+  pos += 2;
+
+  mysql->resultset_metadata = RESULTSET_METADATA_FULL;
+  if (packet_length >= 12) {
+    mysql->warning_count = uint2korr(pos + 1);
+    if (mysql->client_flag & CLIENT_OPTIONAL_RESULTSET_METADATA) {
+      mysql->resultset_metadata =
+          static_cast<enum enum_resultset_metadata>(*(pos + 3));
+    }
+  }
+
+  if (param_count != 0 &&
+      mysql->resultset_metadata == RESULTSET_METADATA_FULL) {
+    MYSQL_TRACE_STAGE(mysql, WAIT_FOR_PARAM_DEF);
+    /* skip parameters data: we don't support it yet */
+    if (!(cli_read_metadata(mysql, param_count, 7))) return true;
+    /* free memory allocated by cli_read_metadata() for parameters data */
+    free_root(mysql->field_alloc, MYF(0));
+  }
+
+  if (field_count != 0) {
+    if (!(mysql->server_status & SERVER_STATUS_AUTOCOMMIT))
+      mysql->server_status |= SERVER_STATUS_IN_TRANS;
+
+    if (mysql->resultset_metadata == RESULTSET_METADATA_FULL) {
+      MYSQL_TRACE_STAGE(mysql, WAIT_FOR_FIELD_DEF);
+      if (!(stmt->fields =
+                cli_read_metadata_ex(mysql, stmt->mem_root, field_count, 7)))
+        return true;
+    }
+  }
+
+  MYSQL_TRACE_STAGE(mysql, READY_FOR_COMMAND);
+
+  stmt->field_count = field_count;
+  stmt->param_count = (ulong)param_count;
+  DBUG_PRINT("exit", ("field_count: %u  param_count: %u  warning_count: %u",
+                      field_count, param_count, (uint)mysql->warning_count));
+
+  return false;
+}
+
+
+// Source: libmysql.cc
+// Lines 1274-1335
+
+
+[ANSWER]
+MUST-NOT

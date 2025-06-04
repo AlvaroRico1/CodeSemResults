@@ -1,0 +1,36 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'str' at line 3
+2. Pointer '_str' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+size_t git_utf8_char_length(const char *_str, size_t str_len)
+{
+	const uint8_t *str = (const uint8_t *)_str;
+	size_t offset = 0, count = 0;
+
+	while (offset < str_len) {
+		int length = utf8_charlen(str + offset, str_len - offset);
+
+		if (length < 0)
+			length = 1;
+
+		offset += length;
+		count++;
+	}
+
+	return count;
+}
+
+
+// Source: utf8.c
+// Lines 117-133
+
+
+[ANSWER]
+MUST

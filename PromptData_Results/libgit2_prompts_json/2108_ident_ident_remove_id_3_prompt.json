@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'from_end' at line 4\n2. Pointer 'from' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int ident_remove_id(\n\tgit_str *to, const git_str *from)\n{\n\tconst char *id_start, *id_end, *from_end = from->ptr + from->size;\n\tsize_t need_size;\n\n\tif (ident_find_id(&id_start, &id_end, from->ptr, from->size) < 0)\n\t\treturn GIT_PASSTHROUGH;\n\n\tneed_size = (size_t)(id_start - from->ptr) +\n\t\t4 /* \"$Id$\" */ + (size_t)(from_end - id_end);\n\n\tif (git_str_grow(to, need_size) < 0)\n\t\treturn -1;\n\n\tgit_str_set(to, from->ptr, (size_t)(id_start - from->ptr));\n\tgit_str_put(to, \"$Id$\", 4);\n\tgit_str_put(to, id_end, (size_t)(from_end - id_end));\n\n\treturn git_str_oom(to) ? -1 : 0;\n}\n\n\n// Source: ident.c\n// Lines 75-95\n",
+  "ANSWER": "MUST"
+}

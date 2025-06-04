@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'new_cmd' at line 3\n2. Pointer 'cmd' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ncmd_copy(struct cmd *cmd, int argc, char **argv)\n{\n\tstruct cmd\t*new_cmd;\n\n\tnew_cmd = xcalloc(1, sizeof *new_cmd);\n\tnew_cmd->entry = cmd->entry;\n\tnew_cmd->args = args_copy(cmd->args, argc, argv);\n\n\tif (cmd->file != NULL)\n\t\tnew_cmd->file = xstrdup(cmd->file);\n\tnew_cmd->line = cmd->line;\n\n\treturn (new_cmd);\n}\n\n\n// Source: cmd.c\n// Lines 548-561\n",
+  "ANSWER": "MUST"
+}

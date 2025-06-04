@@ -1,0 +1,66 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'b' at line 4
+2. Pointer 'ci' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int handle_rename_rename_2to1(struct merge_options *opt,
+				     struct rename_conflict_info *ci)
+{
+	/* Two files, a & b, were renamed to the same thing, c. */
+	struct diff_filespec *a = ci->ren1->pair->one;
+	struct diff_filespec *b = ci->ren2->pair->one;
+	struct diff_filespec *c1 = ci->ren1->pair->two;
+	struct diff_filespec *c2 = ci->ren2->pair->two;
+	char *path = c1->path; /* == c2->path */
+	char *path_side_1_desc;
+	char *path_side_2_desc;
+	struct merge_file_info mfi_c1;
+	struct merge_file_info mfi_c2;
+	int ostage1, ostage2;
+
+	output(opt, 1, _("CONFLICT (rename/rename): "
+	       "Rename %s->%s in %s. "
+	       "Rename %s->%s in %s"),
+	       a->path, c1->path, ci->ren1->branch,
+	       b->path, c2->path, ci->ren2->branch);
+
+	path_side_1_desc = xstrfmt("version of %s from %s", path, a->path);
+	path_side_2_desc = xstrfmt("version of %s from %s", path, b->path);
+	ostage1 = ci->ren1->branch == opt->branch1 ? 3 : 2;
+	ostage2 = flip_stage(ostage1);
+	ci->ren1->src_entry->stages[ostage1].path = a->path;
+	ci->ren2->src_entry->stages[ostage2].path = b->path;
+	if (merge_mode_and_contents(opt, a, c1,
+				    &ci->ren1->src_entry->stages[ostage1],
+				    path_side_1_desc,
+				    opt->branch1, opt->branch2,
+				    1 + opt->priv->call_depth * 2, &mfi_c1) ||
+	    merge_mode_and_contents(opt, b,
+				    &ci->ren2->src_entry->stages[ostage2],
+				    c2, path_side_2_desc,
+				    opt->branch1, opt->branch2,
+				    1 + opt->priv->call_depth * 2, &mfi_c2))
+		return -1;
+	free(path_side_1_desc);
+	free(path_side_2_desc);
+	mfi_c1.blob.path = path;
+	mfi_c2.blob.path = path;
+
+	return handle_file_collision(opt, path, a->path, b->path,
+				     ci->ren1->branch, ci->ren2->branch,
+				     &mfi_c1.blob, &mfi_c2.blob);
+}
+
+
+// Source: merge-recursive.c
+// Lines 1823-1869
+
+
+[ANSWER]
+MUST

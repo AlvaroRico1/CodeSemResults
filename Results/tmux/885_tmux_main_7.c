@@ -1,0 +1,193 @@
+main(int argc, char **argv)
+{
+	char					*path = NULL, *label = NULL;
+	char					*cause, **var;
+	const char				*s, *cwd;
+	int					 opt, keys, feat = 0, fflag = 0;
+	uint64_t				 flags = 0;
+	const struct options_table_entry	*oe;
+	u_int					 i;
+
+	if (setlocale(LC_CTYPE, "en_US.UTF-8") == NULL &&
+	    setlocale(LC_CTYPE, "C.UTF-8") == NULL) {
+		if (setlocale(LC_CTYPE, "") == NULL)
+			errx(1, "invalid LC_ALL, LC_CTYPE or LANG");
+		s = nl_langinfo(CODESET);
+		if (strcasecmp(s, "UTF-8") != 0 && strcasecmp(s, "UTF8") != 0)
+			errx(1, "need UTF-8 locale (LC_CTYPE) but have %s", s);
+	}
+
+	setlocale(LC_TIME, "");
+	tzset();
+
+	if (**argv == '-')
+		flags = CLIENT_LOGIN;
+
+	global_environ = environ_create();
+	for (var = environ; *var != NULL; var++)
+		environ_put(global_environ, *var, 0);
+	if ((cwd = find_cwd()) != NULL)
+		environ_set(global_environ, "PWD", 0, "%s", cwd);
+	expand_paths(TMUX_CONF, &cfg_files, &cfg_nfiles, 1);
+
+	while ((opt = getopt(argc, argv, "2c:CDdf:lL:NqS:T:uUvV")) != -1) {
+		switch (opt) {
+		case '2':
+			tty_add_features(&feat, "256", ":,");
+			break;
+		case 'c':
+			shell_command = optarg;
+			break;
+		case 'D':
+			flags |= CLIENT_NOFORK;
+			break;
+		case 'C':
+			if (flags & CLIENT_CONTROL)
+				flags |= CLIENT_CONTROLCONTROL;
+			else
+				flags |= CLIENT_CONTROL;
+			break;
+		case 'f':
+			if (!fflag) {
+				fflag = 1;
+				for (i = 0; i < cfg_nfiles; i++)
+					free(cfg_files[i]);
+				cfg_nfiles = 0;
+			}
+			cfg_files = xreallocarray(cfg_files, cfg_nfiles + 1,
+			    sizeof *cfg_files);
+			cfg_files[cfg_nfiles++] = xstrdup(optarg);
+			cfg_quiet = 0;
+			break;
+ 		case 'V':
+			printf("%s %s\n", getprogname(), getversion());
+ 			exit(0);
+		case 'l':
+			flags |= CLIENT_LOGIN;
+			break;
+		case 'L':
+			free(label);
+			label = xstrdup(optarg);
+			break;
+		case 'N':
+			flags |= CLIENT_NOSTARTSERVER;
+			break;
+		case 'q':
+			break;
+		case 'S':
+			free(path);
+			path = xstrdup(optarg);
+			break;
+		case 'T':
+			tty_add_features(&feat, optarg, ":,");
+			break;
+		case 'u':
+			flags |= CLIENT_UTF8;
+			break;
+		case 'v':
+			log_add_level();
+			break;
+		default:
+			usage();
+		}
+	}
+	argc -= optind;
+	argv += optind;
+
+	if (shell_command != NULL && argc != 0)
+		usage();
+	if ((flags & CLIENT_NOFORK) && argc != 0)
+		usage();
+
+	if ((ptm_fd = getptmfd()) == -1)
+		err(1, "getptmfd");
+	if (pledge("stdio rpath wpath cpath flock fattr unix getpw sendfd "
+	    "recvfd proc exec tty ps", NULL) != 0)
+		err(1, "pledge");
+
+	/*
+	 * tmux is a UTF-8 terminal, so if TMUX is set, assume UTF-8.
+	 * Otherwise, if the user has set LC_ALL, LC_CTYPE or LANG to contain
+	 * UTF-8, it is a safe assumption that either they are using a UTF-8
+	 * terminal, or if not they know that output from UTF-8-capable
+	 * programs may be wrong.
+	 */
+	if (getenv("TMUX") != NULL)
+		flags |= CLIENT_UTF8;
+	else {
+		s = getenv("LC_ALL");
+		if (s == NULL || *s == '\0')
+			s = getenv("LC_CTYPE");
+		if (s == NULL || *s == '\0')
+			s = getenv("LANG");
+		if (s == NULL || *s == '\0')
+			s = "";
+		if (strcasestr(s, "UTF-8") != NULL ||
+		    strcasestr(s, "UTF8") != NULL)
+			flags |= CLIENT_UTF8;
+	}
+
+	global_options = options_create(NULL);
+	global_s_options = options_create(NULL);
+	global_w_options = options_create(NULL);
+	for (oe = options_table; oe->name != NULL; oe++) {
+		if (oe->scope & OPTIONS_TABLE_SERVER)
+			options_default(global_options, oe);
+		if (oe->scope & OPTIONS_TABLE_SESSION)
+			options_default(global_s_options, oe);
+		if (oe->scope & OPTIONS_TABLE_WINDOW)
+			options_default(global_w_options, oe);
+	}
+
+	/*
+	 * The default shell comes from SHELL or from the user's passwd entry
+	 * if available.
+	 */
+	options_set_string(global_s_options, "default-shell", 0, "%s",
+	    getshell());
+
+	/* Override keys to vi if VISUAL or EDITOR are set. */
+	if ((s = getenv("VISUAL")) != NULL || (s = getenv("EDITOR")) != NULL) {
+		options_set_string(global_options, "editor", 0, "%s", s);
+		if (strrchr(s, '/') != NULL)
+			s = strrchr(s, '/') + 1;
+		if (strstr(s, "vi") != NULL)
+			keys = MODEKEY_VI;
+		else
+			keys = MODEKEY_EMACS;
+		options_set_number(global_s_options, "status-keys", keys);
+		options_set_number(global_w_options, "mode-keys", keys);
+	}
+
+	/*
+	 * If socket is specified on the command-line with -S or -L, it is
+	 * used. Otherwise, $TMUX is checked and if that fails "default" is
+	 * used.
+	 */
+	if (path == NULL && label == NULL) {
+		s = getenv("TMUX");
+		if (s != NULL && *s != '\0' && *s != ',') {
+			path = xstrdup(s);
+			path[strcspn(path, ",")] = '\0';
+		}
+	}
+	if (path == NULL) {
+		if ((path = make_label(label, &cause)) == NULL) {
+			if (cause != NULL) {
+				fprintf(stderr, "%s\n", cause);
+				free(cause);
+			}
+			exit(1);
+		}
+		flags |= CLIENT_DEFAULTSOCKET;
+	}
+	socket_path = path;
+	free(label);
+
+	/* Pass control to the client. */
+	exit(client_main(osdep_event_init(), argc, argv, flags, feat));
+}
+
+
+// Source: tmux.c
+// Lines 332-520

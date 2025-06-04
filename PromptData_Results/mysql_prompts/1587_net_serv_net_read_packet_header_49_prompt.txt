@@ -1,0 +1,98 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'pkt_nr' at line 2
+2. Pointer 'rc' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static bool net_read_packet_header(NET *net) {
+  uchar pkt_nr;
+  size_t count = NET_HEADER_SIZE;
+  bool rc;
+
+  if (net->compress) count += COMP_HEADER_SIZE;
+
+#ifdef MYSQL_SERVER
+  NET_SERVER *server_extension;
+
+  server_extension = static_cast<NET_SERVER *>(net->extension);
+
+  if (server_extension != nullptr && server_extension->m_user_data != nullptr) {
+    void *user_data = server_extension->m_user_data;
+    assert(server_extension->m_before_header != nullptr);
+    assert(server_extension->m_after_header != nullptr);
+
+    server_extension->m_before_header(net, user_data, count);
+    rc = net_read_raw_loop(net, count);
+    server_extension->m_after_header(net, user_data, count, rc);
+  } else
+#endif
+  {
+    rc = net_read_raw_loop(net, count);
+  }
+
+  if (rc) return true;
+
+  DBUG_DUMP("packet_header", net->buff + net->where_b, NET_HEADER_SIZE);
+
+  pkt_nr = net->buff[net->where_b + 3];
+
+  /*
+    Verify packet serial number against the truncated packet counter.
+    The local packet counter must be truncated since its not reset.
+  */
+  if (pkt_nr != (uchar)net->pkt_nr) {
+    /* Not a NET error on the client. XXX: why? */
+#if !defined(MYSQL_SERVER)
+    DBUG_PRINT("info", ("pkt_nr %u net->pkt_nr %u", pkt_nr, net->pkt_nr));
+    if (net->pkt_nr == 1) {
+      assert(net->where_b == 0);
+      /*
+        Server may have sent an error before it received our new command.
+        Perhaps due to wait_timeout.
+        Only use what is already read and then close the socket.
+      */
+      net->error = NET_ERROR_SOCKET_UNUSABLE;
+      net->last_errno = ER_NET_PACKETS_OUT_OF_ORDER;
+      net->pkt_nr = pkt_nr + 1;
+
+      /*
+        The caller should handle the error code in the packet
+        and the socket are blocked from further usage,
+        so reading the packet header was OK.
+      */
+      return false;
+    }
+#endif
+#if defined(MYSQL_SERVER)
+    my_error(ER_NET_PACKETS_OUT_OF_ORDER, MYF(0));
+#elif defined(EXTRA_DEBUG)
+    /*
+      We don't make noise server side, since the client is expected
+      to break the protocol for e.g. --send LOAD DATA .. LOCAL where
+      the server expects the client to send a file, but the client
+      may reply with a new command instead.
+    */
+    my_message_local(ERROR_LEVEL, EE_PACKETS_OUT_OF_ORDER, (uint)pkt_nr,
+                     net->pkt_nr);
+    assert(pkt_nr == net->pkt_nr);
+#endif
+    return true;
+  }
+
+  net->pkt_nr++;
+
+  return false;
+}
+
+
+// Source: net_serv.cc
+// Lines 1418-1496
+
+
+[ANSWER]
+MUST-NOT

@@ -1,0 +1,96 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'b' at line 2
+2. Pointer 't' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+do_add (REAL_VALUE_TYPE *r, const REAL_VALUE_TYPE *a,
+	const REAL_VALUE_TYPE *b, int subtract_p)
+{
+  int dexp, sign, exp;
+  REAL_VALUE_TYPE t;
+  bool inexact = false;
+
+  /* Determine if we need to add or subtract.  */
+  sign = a->sign;
+  subtract_p = (sign ^ b->sign) ^ subtract_p;
+
+  switch (CLASS2 (a->cl, b->cl))
+    {
+    case CLASS2 (rvc_zero, rvc_zero):
+      /* -0 + -0 = -0, -0 - +0 = -0; all other cases yield +0.  */
+      get_zero (r, sign & !subtract_p);
+      return false;
+
+    case CLASS2 (rvc_zero, rvc_normal):
+    case CLASS2 (rvc_zero, rvc_inf):
+    case CLASS2 (rvc_zero, rvc_nan):
+      /* 0 + ANY = ANY.  */
+    case CLASS2 (rvc_normal, rvc_nan):
+    case CLASS2 (rvc_inf, rvc_nan):
+    case CLASS2 (rvc_nan, rvc_nan):
+      /* ANY + NaN = NaN.  */
+    case CLASS2 (rvc_normal, rvc_inf):
+      /* R + Inf = Inf.  */
+      *r = *b;
+      /* Make resulting NaN value to be qNaN. The caller has the
+         responsibility to avoid the operation if flag_signaling_nans
+         is on.  */
+      r->signalling = 0;
+      r->sign = sign ^ subtract_p;
+      return false;
+
+    case CLASS2 (rvc_normal, rvc_zero):
+    case CLASS2 (rvc_inf, rvc_zero):
+    case CLASS2 (rvc_nan, rvc_zero):
+      /* ANY + 0 = ANY.  */
+    case CLASS2 (rvc_nan, rvc_normal):
+    case CLASS2 (rvc_nan, rvc_inf):
+      /* NaN + ANY = NaN.  */
+    case CLASS2 (rvc_inf, rvc_normal):
+      /* Inf + R = Inf.  */
+      *r = *a;
+      /* Make resulting NaN value to be qNaN. The caller has the
+         responsibility to avoid the operation if flag_signaling_nans
+         is on.  */
+      r->signalling = 0;
+      return false;
+
+    case CLASS2 (rvc_inf, rvc_inf):
+      if (subtract_p)
+	/* Inf - Inf = NaN.  */
+	get_canonical_qnan (r, 0);
+      else
+	/* Inf + Inf = Inf.  */
+	*r = *a;
+      return false;
+
+    case CLASS2 (rvc_normal, rvc_normal):
+      break;
+
+    default:
+      gcc_unreachable ();
+    }
+
+  /* Swap the arguments such that A has the larger exponent.  */
+  dexp = REAL_EXP (a) - REAL_EXP (b);
+  if (dexp < 0)
+    {
+      const REAL_VALUE_TYPE *t;
+      t = a, a = b, b = t;
+      dexp = -dexp;
+      sign ^= subtract_p;
+    }
+
+
+// Source: real.c
+// Lines 518-594
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,32 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'spec' at line 5
+2. Pointer 'path' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static struct diff_filespec *pool_alloc_filespec(struct mem_pool *pool,
+						 const char *path)
+{
+	/* Similar to alloc_filespec(), but allocate from pool and reuse path */
+	struct diff_filespec *spec;
+
+	spec = mem_pool_calloc(pool, 1, sizeof(*spec));
+	spec->path = (char*)path; /* spec won't modify it */
+
+	spec->count = 1;
+	spec->is_binary = -1;
+	return spec;
+}
+
+
+// Source: merge-ort.c
+// Lines 650-662
+
+
+[ANSWER]
+MUST

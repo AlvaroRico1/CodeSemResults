@@ -1,0 +1,116 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tmp' at line 25
+2. Pointer 'builtins' at line 16
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool plugin_register_builtin_and_init_core_se(int *argc, char **argv) {
+  bool mandatory = true;
+  DBUG_TRACE;
+
+  /* Don't allow initializing twice */
+  assert(!initialized);
+
+  /* Allocate the temporary mem root, will be freed before returning */
+  MEM_ROOT tmp_root;
+  init_alloc_root(key_memory_plugin_init_tmp, &tmp_root, 4096, 4096);
+
+  mysql_mutex_lock(&LOCK_plugin);
+  initialized = true;
+
+  /* First we register the builtin mandatory and optional plugins */
+  for (struct st_mysql_plugin **builtins = mysql_mandatory_plugins;
+       *builtins || mandatory; builtins++) {
+    /* Switch to optional plugins when done with the mandatory ones */
+    if (!*builtins) {
+      builtins = mysql_optional_plugins;
+      mandatory = false;
+      if (!*builtins) break;
+    }
+    for (struct st_mysql_plugin *plugin = *builtins; plugin->info; plugin++) {
+      struct st_plugin_int tmp;
+      tmp.plugin = plugin;
+      tmp.name.str = plugin->name;
+      tmp.name.length = strlen(plugin->name);
+      tmp.state = 0;
+      tmp.load_option = mandatory ? PLUGIN_FORCE : PLUGIN_ON;
+
+      /*
+        If the performance schema is compiled in,
+        treat the storage engine plugin as 'mandatory',
+        to suppress any plugin-level options such as '--performance-schema'.
+        This is specific to the performance schema, and is done on purpose:
+        the server-level option '--performance-schema' controls the overall
+        performance schema initialization, which consists of much more that
+        the underlying storage engine initialization.
+        See mysqld.cc, set_vars.cc.
+        Suppressing ways to interfere directly with the storage engine alone
+        prevents awkward situations where:
+        - the user wants the performance schema functionality, by using
+          '--enable-performance-schema' (the server option),
+        - yet disable explicitly a component needed for the functionality
+          to work, by using '--skip-performance-schema' (the plugin)
+      */
+      if (!my_strcasecmp(&my_charset_latin1, plugin->name,
+                         "PERFORMANCE_SCHEMA")) {
+        tmp.load_option = PLUGIN_FORCE;
+      }
+
+      free_root(&tmp_root, MYF(MY_MARK_BLOCKS_FREE));
+      if (test_plugin_options(&tmp_root, &tmp, argc, argv))
+        tmp.state = PLUGIN_IS_DISABLED;
+      else
+        tmp.state = PLUGIN_IS_UNINITIALIZED;
+
+      struct st_plugin_int *plugin_ptr;  // Pointer to registered plugin
+      if (register_builtin(plugin, &tmp, &plugin_ptr)) goto err_unlock;
+
+      /*
+        Only initialize daemon_keyring_proxy, MyISAM, InnoDB and CSV at this
+        stage. Note that when the --help option is supplied,
+        daemon_keyring_proxy and InnoDB are not initialized because the plugin
+        table will not be read anyway, as indicated by the flag set when the
+        plugin_init() function is called.
+      */
+      bool is_daemon_keyring_proxy = !my_strcasecmp(
+          &my_charset_latin1, plugin->name, "daemon_keyring_proxy_plugin");
+      bool is_myisam =
+          !my_strcasecmp(&my_charset_latin1, plugin->name, "MyISAM");
+      bool is_innodb =
+          !my_strcasecmp(&my_charset_latin1, plugin->name, "InnoDB");
+      if ((!is_daemon_keyring_proxy || is_help_or_validate_option()) &&
+          !is_myisam && (!is_innodb || is_help_or_validate_option()) &&
+          my_strcasecmp(&my_charset_latin1, plugin->name, "CSV"))
+        continue;
+
+      if (plugin_ptr->state != PLUGIN_IS_UNINITIALIZED ||
+          plugin_initialize(plugin_ptr))
+        goto err_unlock;
+
+      /*
+        Initialize the global default storage engine so that it may
+        not be null in any child thread.
+      */
+      if (is_myisam) {
+        assert(!global_system_variables.table_plugin);
+        assert(!global_system_variables.temp_table_plugin);
+        global_system_variables.table_plugin =
+            my_intern_plugin_lock(nullptr, plugin_int_to_ref(plugin_ptr));
+        global_system_variables.temp_table_plugin =
+            my_intern_plugin_lock(nullptr, plugin_int_to_ref(plugin_ptr));
+        assert(plugin_ptr->ref_count == 2);
+      }
+    }
+
+
+// Source: sql_plugin.cc
+// Lines 1517-1613
+
+
+[ANSWER]
+MUST

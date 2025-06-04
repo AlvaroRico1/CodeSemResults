@@ -1,0 +1,1 @@
+l0,libgit2/tests/libgit2/diff/blob.c,3,delta,libgit2/tests/libgit2/diff/blob.c,5,0

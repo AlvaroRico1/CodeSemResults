@@ -1,0 +1,1 @@
+term,gcc/gcc/diagnostic-color.c,6,colorterm,gcc/gcc/diagnostic-color.c,6,2

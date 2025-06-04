@@ -1,0 +1,191 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'offset' at line 8
+2. Pointer 'arg' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int trace_uprobe_create(int argc, const char **argv)
+{
+	struct trace_uprobe *tu;
+	const char *event = NULL, *group = UPROBE_EVENT_SYSTEM;
+	char *arg, *filename, *rctr, *rctr_end, *tmp;
+	char buf[MAX_EVENT_NAME_LEN];
+	struct path path;
+	unsigned long offset, ref_ctr_offset;
+	bool is_return = false;
+	int i, ret;
+
+	ret = 0;
+	ref_ctr_offset = 0;
+
+	switch (argv[0][0]) {
+	case 'r':
+		is_return = true;
+		break;
+	case 'p':
+		break;
+	default:
+		return -ECANCELED;
+	}
+
+	if (argc < 2)
+		return -ECANCELED;
+
+	if (argv[0][1] == ':')
+		event = &argv[0][2];
+
+	if (!strchr(argv[1], '/'))
+		return -ECANCELED;
+
+	filename = kstrdup(argv[1], GFP_KERNEL);
+	if (!filename)
+		return -ENOMEM;
+
+	/* Find the last occurrence, in case the path contains ':' too. */
+	arg = strrchr(filename, ':');
+	if (!arg || !isdigit(arg[1])) {
+		kfree(filename);
+		return -ECANCELED;
+	}
+
+	trace_probe_log_init("trace_uprobe", argc, argv);
+	trace_probe_log_set_index(1);	/* filename is the 2nd argument */
+
+	*arg++ = '\0';
+	ret = kern_path(filename, LOOKUP_FOLLOW, &path);
+	if (ret) {
+		trace_probe_log_err(0, FILE_NOT_FOUND);
+		kfree(filename);
+		trace_probe_log_clear();
+		return ret;
+	}
+	if (!d_is_reg(path.dentry)) {
+		trace_probe_log_err(0, NO_REGULAR_FILE);
+		ret = -EINVAL;
+		goto fail_address_parse;
+	}
+
+	/* Parse reference counter offset if specified. */
+	rctr = strchr(arg, '(');
+	if (rctr) {
+		rctr_end = strchr(rctr, ')');
+		if (!rctr_end) {
+			ret = -EINVAL;
+			rctr_end = rctr + strlen(rctr);
+			trace_probe_log_err(rctr_end - filename,
+					    REFCNT_OPEN_BRACE);
+			goto fail_address_parse;
+		} else if (rctr_end[1] != '\0') {
+			ret = -EINVAL;
+			trace_probe_log_err(rctr_end + 1 - filename,
+					    BAD_REFCNT_SUFFIX);
+			goto fail_address_parse;
+		}
+
+		*rctr++ = '\0';
+		*rctr_end = '\0';
+		ret = kstrtoul(rctr, 0, &ref_ctr_offset);
+		if (ret) {
+			trace_probe_log_err(rctr - filename, BAD_REFCNT);
+			goto fail_address_parse;
+		}
+	}
+
+	/* Parse uprobe offset. */
+	ret = kstrtoul(arg, 0, &offset);
+	if (ret) {
+		trace_probe_log_err(arg - filename, BAD_UPROBE_OFFS);
+		goto fail_address_parse;
+	}
+
+	/* setup a probe */
+	trace_probe_log_set_index(0);
+	if (event) {
+		ret = traceprobe_parse_event_name(&event, &group, buf,
+						  event - argv[0]);
+		if (ret)
+			goto fail_address_parse;
+	} else {
+		char *tail;
+		char *ptr;
+
+		tail = kstrdup(kbasename(filename), GFP_KERNEL);
+		if (!tail) {
+			ret = -ENOMEM;
+			goto fail_address_parse;
+		}
+
+		ptr = strpbrk(tail, ".-_");
+		if (ptr)
+			*ptr = '\0';
+
+		snprintf(buf, MAX_EVENT_NAME_LEN, "%c_%s_0x%lx", 'p', tail, offset);
+		event = buf;
+		kfree(tail);
+	}
+
+	argc -= 2;
+	argv += 2;
+
+	tu = alloc_trace_uprobe(group, event, argc, is_return);
+	if (IS_ERR(tu)) {
+		ret = PTR_ERR(tu);
+		/* This must return -ENOMEM otherwise there is a bug */
+		WARN_ON_ONCE(ret != -ENOMEM);
+		goto fail_address_parse;
+	}
+	tu->offset = offset;
+	tu->ref_ctr_offset = ref_ctr_offset;
+	tu->path = path;
+	tu->filename = filename;
+
+	/* parse arguments */
+	for (i = 0; i < argc && i < MAX_TRACE_ARGS; i++) {
+		tmp = kstrdup(argv[i], GFP_KERNEL);
+		if (!tmp) {
+			ret = -ENOMEM;
+			goto error;
+		}
+
+		trace_probe_log_set_index(i + 2);
+		ret = traceprobe_parse_probe_arg(&tu->tp, i, tmp,
+					is_return ? TPARG_FL_RETURN : 0);
+		kfree(tmp);
+		if (ret)
+			goto error;
+	}
+
+	ret = traceprobe_set_print_fmt(&tu->tp, is_ret_probe(tu));
+	if (ret < 0)
+		goto error;
+
+	ret = register_trace_uprobe(tu);
+	if (!ret)
+		goto out;
+
+error:
+	free_trace_uprobe(tu);
+out:
+	trace_probe_log_clear();
+	return ret;
+
+fail_address_parse:
+	trace_probe_log_clear();
+	path_put(&path);
+	kfree(filename);
+
+	return ret;
+}
+
+
+// Source: trace_uprobe.c
+// Lines 434-605
+
+
+[ANSWER]
+MAY

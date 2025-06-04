@@ -1,0 +1,61 @@
+bool Query_block::resolve_rollup(THD *thd) {
+  DBUG_TRACE;
+
+  uint send_group_parts = group_list_size();
+
+  for (auto it = fields.begin(); it != fields.end(); ++it) {
+    Item *item = *it;
+    Item *new_item;
+    if (item->type() == Item::SUM_FUNC_ITEM && !item->const_item() &&
+        down_cast<Item_sum *>(item)->aggr_query_block == this) {
+      // This is a top level aggregate, which must be replaced with
+      // a different one for each rollup level.
+      new_item = create_rollup_switcher(thd, this, item, send_group_parts);
+    } else {
+      new_item = resolve_rollup_item(thd, item);
+    }
+    if (new_item == nullptr) {
+      return true;
+    }
+    *it = new_item;
+  }
+
+  /*
+    ORDER BY items haven't been induced into select list yet, so need to
+    process these items too
+  */
+
+  // Allow local set functions in ORDER BY
+  const bool saved_allow = thd->lex->allow_sum_func;
+  thd->lex->allow_sum_func |= (nesting_map)1 << nest_level;
+  thd->where = "order clause";
+
+  for (ORDER *order = order_list.first; order; order = order->next) {
+    Item *order_item = *order->item;
+
+    order->in_field_list = false;
+    bool ret =
+        (!order_item->fixed && (order_item->fix_fields(thd, order->item) ||
+                                (order_item = *order->item)->check_cols(1)));
+    if (ret) return true; /* Wrong field. */
+
+    if (order_item->type() == Item::SUM_FUNC_ITEM &&
+        !order_item->const_item() &&
+        down_cast<Item_sum *>(order_item)->aggr_query_block == this) {
+      // This is a top level aggregate, which must be replaced with
+      // a different one for each rollup level.
+      *order->item =
+          create_rollup_switcher(thd, this, order_item, send_group_parts);
+    } else {
+      *order->item = resolve_rollup_item(thd, order_item);
+    }
+    if (*order->item == nullptr) return true;
+  }
+
+  thd->lex->allow_sum_func = saved_allow;
+  return false;
+}
+
+
+// Source: sql_resolver.cc
+// Lines 4850-4906

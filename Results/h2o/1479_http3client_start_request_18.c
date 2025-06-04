@@ -1,0 +1,56 @@
+void start_request(struct st_h2o_http3client_req_t *req)
+{
+    h2o_iovec_t method;
+    h2o_url_t url;
+    const h2o_header_t *headers;
+    size_t num_headers;
+    h2o_iovec_t body;
+    h2o_httpclient_properties_t props = {NULL};
+    char datagram_flow_id_buf[sizeof(H2O_UINT64_LONGEST_STR)];
+    int ret;
+
+    assert(req->quic == NULL);
+    assert(!h2o_linklist_is_linked(&req->link));
+
+    if ((req->super._cb.on_head = req->super._cb.on_connect(&req->super, NULL, &method, &url, &headers, &num_headers, &body,
+                                                            &req->proceed_req.cb, &props, &req->conn->server.origin_url)) == NULL) {
+        destroy_request(req);
+        return;
+    }
+
+    if ((ret = quicly_open_stream(req->conn->super.super.quic, &req->quic, 0)) != 0) {
+        notify_response_error(req, "failed to open stream");
+        destroy_request(req);
+        return;
+    }
+    req->quic->data = req;
+
+    /* send request (TODO optimize) */
+    h2o_iovec_t datagram_flow_id = {};
+    if (req->super.upgrade_to == h2o_httpclient_upgrade_to_connect &&
+        h2o_memis(method.base, method.len, H2O_STRLIT("CONNECT-UDP")) && h2o_http3_can_use_h3_datagram(&req->conn->super)) {
+        datagram_flow_id.len = sprintf(datagram_flow_id_buf, "%" PRIu64, req->quic->stream_id);
+        datagram_flow_id.base = datagram_flow_id_buf;
+        req->offered_datagram_flow_id = 1;
+    }
+    h2o_iovec_t headers_frame =
+        h2o_qpack_flatten_request(req->conn->super.qpack.enc, req->super.pool, req->quic->stream_id, NULL, method, url.scheme,
+                                  url.authority, url.path, headers, num_headers, datagram_flow_id);
+    h2o_buffer_append(&req->sendbuf, headers_frame.base, headers_frame.len);
+    if (body.len != 0)
+        emit_data(req, body);
+    if (req->proceed_req.cb != NULL) {
+        req->super.write_req = do_write_req;
+        if (body.len != 0)
+            req->proceed_req.bytes_inflight = body.len;
+    }
+    if (req->proceed_req.cb == NULL && req->super.upgrade_to == NULL)
+        quicly_sendstate_shutdown(&req->quic->sendstate, req->sendbuf->size);
+    quicly_stream_sync_sendbuf(req->quic, 1);
+
+    req->handle_input = handle_input_expect_headers;
+}
+
+
+// Source: http3client.c
+// Lines 717-768

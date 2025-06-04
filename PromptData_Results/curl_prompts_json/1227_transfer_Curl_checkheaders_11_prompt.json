@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'head' at line 4\n2. Pointer 'head' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nchar *Curl_checkheaders(const struct Curl_easy *data,\n                        const char *thisheader)\n{\n  struct curl_slist *head;\n  size_t thislen = strlen(thisheader);\n  DEBUGASSERT(thislen);\n  DEBUGASSERT(thisheader[thislen-1] != ':');\n\n  for(head = data->set.headers; head; head = head->next) {\n    if(strncasecompare(head->data, thisheader, thislen) &&\n       Curl_headersep(head->data[thislen]) )\n      return head->data;\n  }\n\n  return NULL;\n}\n\n\n// Source: transfer.c\n// Lines 97-112\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'se' at line 6
+2. Pointer 'src' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static size_t my_strnxfrm_latin1_de(const CHARSET_INFO *cs, uchar *dst,
+                                    size_t dstlen, uint nweights,
+                                    const uchar *src, size_t srclen,
+                                    uint flags) {
+  uchar *de = dst + dstlen;
+  const uchar *se = src + srclen;
+  uchar *d0 = dst;
+  for (; src < se && dst < de && nweights; src++, nweights--) {
+    uchar chr = combo1map[*src];
+    *dst++ = chr;
+    if ((chr = combo2map[*src]) && dst < de) {
+      *dst++ = chr;
+    }
+  }
+  return my_strxfrm_pad(cs, d0, dst, de, nweights, flags);
+}
+
+
+// Source: ctype-latin1.cc
+// Lines 573-588
+
+
+[ANSWER]
+MUST-NOT

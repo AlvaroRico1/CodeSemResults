@@ -1,0 +1,39 @@
+static int my_strnncoll_cp932(const CHARSET_INFO *cs, const uchar *a,
+                              size_t a_length, const uchar *b, size_t b_length,
+                              bool b_is_prefix) {
+  int res = my_strnncoll_cp932_internal(cs, &a, a_length, &b, b_length);
+  if (b_is_prefix && a_length > b_length) a_length = b_length;
+  return res ? res : (int)(a_length - b_length);
+}
+
+static int my_strnncollsp_cp932(const CHARSET_INFO *cs, const uchar *a,
+                                size_t a_length, const uchar *b,
+                                size_t b_length) {
+  const uchar *a_end = a + a_length;
+  const uchar *b_end = b + b_length;
+  int res = my_strnncoll_cp932_internal(cs, &a, a_length, &b, b_length);
+
+  if (!res && (a != a_end || b != b_end)) {
+    int swap = 1;
+    /*
+      Check the next not space character of the longer key. If it's < ' ',
+      then it's smaller than the other key.
+    */
+    if (a == a_end) {
+      /* put shorter key in a */
+      a_end = b_end;
+      a = b;
+      swap = -1; /* swap sign of result */
+      res = -res;
+    }
+    for (; a < a_end; a++) {
+      if (*a != (uchar)' ') return (*a < (uchar)' ') ? -swap : swap;
+    }
+  }
+  return res;
+}
+}  // extern "C"
+
+
+// Source: ctype-cp932.cc
+// Lines 2183-2217

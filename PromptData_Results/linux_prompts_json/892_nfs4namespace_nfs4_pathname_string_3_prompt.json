@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'end' at line 4\n2. Pointer 'buffer' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic inline char *nfs4_pathname_string(const struct nfs4_pathname *pathname,\n\t\t\t\t\t char *buffer, ssize_t buflen)\n{\n\tchar *end = buffer + buflen;\n\tint n;\n\n\t*--end = '\\0';\n\tbuflen--;\n\n\tn = pathname->ncomponents;\n\twhile (--n >= 0) {\n\t\tconst struct nfs4_string *component = &pathname->components[n];\n\t\tbuflen -= component->len + 1;\n\t\tif (buflen < 0)\n\t\t\tgoto Elong;\n\t\tend -= component->len;\n\t\tmemcpy(end, component->data, component->len);\n\t\t*--end = '/';\n\t}\n\treturn end;\nElong:\n\treturn ERR_PTR(-ENAMETOOLONG);\n}\n\n\n// Source: nfs4namespace.c\n// Lines 33-55\n",
+  "ANSWER": "MUST"
+}

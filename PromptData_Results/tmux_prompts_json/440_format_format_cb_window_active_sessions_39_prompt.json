@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'w' at line 3\n2. Pointer 'ft' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nformat_cb_window_active_sessions(struct format_tree *ft)\n{\n\tstruct window\t*w;\n\tstruct winlink\t*wl;\n\tu_int\t\t n = 0;\n\tchar\t\t*value;\n\n\tif (ft->wl == NULL)\n\t\treturn (NULL);\n\tw = ft->wl->window;\n\n\tTAILQ_FOREACH(wl, &w->winlinks, wentry) {\n\t\tif (wl->session->curw == wl)\n\t\t\tn++;\n\t}\n\n\txasprintf(&value, \"%u\", n);\n\treturn (value);\n}\n\n\n// Source: format.c\n// Lines 648-666\n",
+  "ANSWER": "MUST"
+}

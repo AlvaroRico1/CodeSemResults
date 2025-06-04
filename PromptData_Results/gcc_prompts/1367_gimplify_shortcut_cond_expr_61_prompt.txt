@@ -1,0 +1,186 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'false_label_p' at line 8
+2. Pointer 'false_label' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+shortcut_cond_expr (tree expr)
+{
+  tree pred = TREE_OPERAND (expr, 0);
+  tree then_ = TREE_OPERAND (expr, 1);
+  tree else_ = TREE_OPERAND (expr, 2);
+  tree true_label, false_label, end_label, t;
+  tree *true_label_p;
+  tree *false_label_p;
+  bool emit_end, emit_false, jump_over_else;
+  bool then_se = then_ && TREE_SIDE_EFFECTS (then_);
+  bool else_se = else_ && TREE_SIDE_EFFECTS (else_);
+
+  /* First do simple transformations.  */
+  if (!else_se)
+    {
+      /* If there is no 'else', turn
+	   if (a && b) then c
+	 into
+	   if (a) if (b) then c.  */
+      while (TREE_CODE (pred) == TRUTH_ANDIF_EXPR)
+	{
+	  /* Keep the original source location on the first 'if'.  */
+	  location_t locus = EXPR_LOC_OR_LOC (expr, input_location);
+	  TREE_OPERAND (expr, 0) = TREE_OPERAND (pred, 1);
+	  /* Set the source location of the && on the second 'if'.  */
+	  if (rexpr_has_location (pred))
+	    SET_EXPR_LOCATION (expr, rexpr_location (pred));
+	  then_ = shortcut_cond_expr (expr);
+	  then_se = then_ && TREE_SIDE_EFFECTS (then_);
+	  pred = TREE_OPERAND (pred, 0);
+	  expr = build3 (COND_EXPR, void_type_node, pred, then_, NULL_TREE);
+	  SET_EXPR_LOCATION (expr, locus);
+	}
+    }
+
+  if (!then_se)
+    {
+      /* If there is no 'then', turn
+	   if (a || b); else d
+	 into
+	   if (a); else if (b); else d.  */
+      while (TREE_CODE (pred) == TRUTH_ORIF_EXPR)
+	{
+	  /* Keep the original source location on the first 'if'.  */
+	  location_t locus = EXPR_LOC_OR_LOC (expr, input_location);
+	  TREE_OPERAND (expr, 0) = TREE_OPERAND (pred, 1);
+	  /* Set the source location of the || on the second 'if'.  */
+	  if (rexpr_has_location (pred))
+	    SET_EXPR_LOCATION (expr, rexpr_location (pred));
+	  else_ = shortcut_cond_expr (expr);
+	  else_se = else_ && TREE_SIDE_EFFECTS (else_);
+	  pred = TREE_OPERAND (pred, 0);
+	  expr = build3 (COND_EXPR, void_type_node, pred, NULL_TREE, else_);
+	  SET_EXPR_LOCATION (expr, locus);
+	}
+    }
+
+  /* If we're done, great.  */
+  if (TREE_CODE (pred) != TRUTH_ANDIF_EXPR
+      && TREE_CODE (pred) != TRUTH_ORIF_EXPR)
+    return expr;
+
+  /* Otherwise we need to mess with gotos.  Change
+       if (a) c; else d;
+     to
+       if (a); else goto no;
+       c; goto end;
+       no: d; end:
+     and recursively gimplify the condition.  */
+
+  true_label = false_label = end_label = NULL_TREE;
+
+  /* If our arms just jump somewhere, hijack those labels so we don't
+     generate jumps to jumps.  */
+
+  if (tree then_goto = find_goto_label (then_))
+    {
+      true_label = GOTO_DESTINATION (then_goto);
+      then_ = NULL;
+      then_se = false;
+    }
+
+  if (tree else_goto = find_goto_label (else_))
+    {
+      false_label = GOTO_DESTINATION (else_goto);
+      else_ = NULL;
+      else_se = false;
+    }
+
+  /* If we aren't hijacking a label for the 'then' branch, it falls through.  */
+  if (true_label)
+    true_label_p = &true_label;
+  else
+    true_label_p = NULL;
+
+  /* The 'else' branch also needs a label if it contains interesting code.  */
+  if (false_label || else_se)
+    false_label_p = &false_label;
+  else
+    false_label_p = NULL;
+
+  /* If there was nothing else in our arms, just forward the label(s).  */
+  if (!then_se && !else_se)
+    return shortcut_cond_r (pred, true_label_p, false_label_p,
+			    EXPR_LOC_OR_LOC (expr, input_location));
+
+  /* If our last subexpression already has a terminal label, reuse it.  */
+  if (else_se)
+    t = expr_last (else_);
+  else if (then_se)
+    t = expr_last (then_);
+  else
+    t = NULL;
+  if (t && TREE_CODE (t) == LABEL_EXPR)
+    end_label = LABEL_EXPR_LABEL (t);
+
+  /* If we don't care about jumping to the 'else' branch, jump to the end
+     if the condition is false.  */
+  if (!false_label_p)
+    false_label_p = &end_label;
+
+  /* We only want to emit these labels if we aren't hijacking them.  */
+  emit_end = (end_label == NULL_TREE);
+  emit_false = (false_label == NULL_TREE);
+
+  /* We only emit the jump over the else clause if we have to--if the
+     then clause may fall through.  Otherwise we can wind up with a
+     useless jump and a useless label at the end of gimplified code,
+     which will cause us to think that this conditional as a whole
+     falls through even if it doesn't.  If we then inline a function
+     which ends with such a condition, that can cause us to issue an
+     inappropriate warning about control reaching the end of a
+     non-void function.  */
+  jump_over_else = block_may_fallthru (then_);
+
+  pred = shortcut_cond_r (pred, true_label_p, false_label_p,
+			  EXPR_LOC_OR_LOC (expr, input_location));
+
+  expr = NULL;
+  append_to_statement_list (pred, &expr);
+
+  append_to_statement_list (then_, &expr);
+  if (else_se)
+    {
+      if (jump_over_else)
+	{
+	  tree last = expr_last (expr);
+	  t = build_and_jump (&end_label);
+	  if (rexpr_has_location (last))
+	    SET_EXPR_LOCATION (t, rexpr_location (last));
+	  append_to_statement_list (t, &expr);
+	}
+      if (emit_false)
+	{
+	  t = build1 (LABEL_EXPR, void_type_node, false_label);
+	  append_to_statement_list (t, &expr);
+	}
+      append_to_statement_list (else_, &expr);
+    }
+  if (emit_end && end_label)
+    {
+      t = build1 (LABEL_EXPR, void_type_node, end_label);
+      append_to_statement_list (t, &expr);
+    }
+
+  return expr;
+}
+
+
+// Source: gimplify.c
+// Lines 3747-3913
+
+
+[ANSWER]
+MUST

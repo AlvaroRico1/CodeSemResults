@@ -1,0 +1,99 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'e' at line 3
+2. Pointer 'node' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+flatten_function (struct cgraph_node *node, bool early, bool update)
+{
+  struct cgraph_edge *e;
+
+  /* We shouldn't be called recursively when we are being processed.  */
+  gcc_assert (node->aux == NULL);
+
+  node->aux = (void *) node;
+
+  for (e = node->callees; e; e = e->next_callee)
+    {
+      struct cgraph_node *orig_callee;
+      struct cgraph_node *callee = e->callee->ultimate_alias_target ();
+
+      /* We've hit cycle?  It is time to give up.  */
+      if (callee->aux)
+	{
+	  if (dump_enabled_p ())
+	    dump_printf_loc (MSG_MISSED_OPTIMIZATION, e->call_stmt,
+			     "Not inlining %C into %C to avoid cycle.\n",
+			     callee, e->caller);
+	  if (cgraph_inline_failed_type (e->inline_failed) != CIF_FINAL_ERROR)
+	    e->inline_failed = CIF_RECURSIVE_INLINING;
+	  continue;
+	}
+
+      /* When the edge is already inlined, we just need to recurse into
+	 it in order to fully flatten the leaves.  */
+      if (!e->inline_failed)
+	{
+	  flatten_function (callee, early, false);
+	  continue;
+	}
+
+      /* Flatten attribute needs to be processed during late inlining. For
+	 extra code quality we however do flattening during early optimization,
+	 too.  */
+      if (!early
+	  ? !can_inline_edge_p (e, true)
+	    && !can_inline_edge_by_limits_p (e, true)
+	  : !can_early_inline_edge_p (e))
+	continue;
+
+      if (e->recursive_p ())
+	{
+	  if (dump_enabled_p ())
+	    dump_printf_loc (MSG_MISSED_OPTIMIZATION, e->call_stmt,
+			     "Not inlining: recursive call.\n");
+	  continue;
+	}
+
+      if (gimple_in_ssa_p (DECL_STRUCT_FUNCTION (node->decl))
+	  != gimple_in_ssa_p (DECL_STRUCT_FUNCTION (callee->decl)))
+	{
+	  if (dump_enabled_p ())
+	    dump_printf_loc (MSG_MISSED_OPTIMIZATION, e->call_stmt,
+			     "Not inlining: SSA form does not match.\n");
+	  continue;
+	}
+
+      /* Inline the edge and flatten the inline clone.  Avoid
+         recursing through the original node if the node was cloned.  */
+      if (dump_enabled_p ())
+	dump_printf_loc (MSG_OPTIMIZED_LOCATIONS, e->call_stmt,
+			 " Inlining %C into %C.\n",
+			 callee, e->caller);
+      orig_callee = callee;
+      inline_call (e, true, NULL, NULL, false);
+      if (e->callee != orig_callee)
+	orig_callee->aux = (void *) node;
+      flatten_function (e->callee, early, false);
+      if (e->callee != orig_callee)
+	orig_callee->aux = NULL;
+    }
+
+  node->aux = NULL;
+  cgraph_node *where = node->inlined_to ? node->inlined_to : node;
+  if (update && opt_for_fn (where->decl, optimize))
+    ipa_update_overall_fn_summary (where);
+}
+
+
+// Source: ipa-inline.c
+// Lines 2286-2365
+
+
+[ANSWER]
+MUST

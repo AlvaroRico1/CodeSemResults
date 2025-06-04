@@ -1,0 +1,1 @@
+iter_head,libgit2/src/libgit2/merge.c,4,wd_conflicts,libgit2/src/libgit2/merge.c,10,2

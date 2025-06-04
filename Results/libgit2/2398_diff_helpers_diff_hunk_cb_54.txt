@@ -1,0 +1,1 @@
+delta,libgit2/tests/libgit2/diff/diff_helpers.c,2,scan_end,libgit2/tests/libgit2/diff/diff_helpers.c,7,0

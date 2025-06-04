@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'paddr' at line 3\n2. Pointer 'prot' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint track_pfn_copy(struct vm_area_struct *vma)\n{\n\tresource_size_t paddr;\n\tunsigned long prot;\n\tunsigned long vma_size = vma->vm_end - vma->vm_start;\n\tpgprot_t pgprot;\n\n\tif (vma->vm_flags & VM_PAT) {\n\t\t/*\n\t\t * reserve the whole chunk covered by vma. We need the\n\t\t * starting address and protection from pte.\n\t\t */\n\t\tif (follow_phys(vma, vma->vm_start, 0, &prot, &paddr)) {\n\t\t\tWARN_ON_ONCE(1);\n\t\t\treturn -EINVAL;\n\t\t}\n\t\tpgprot = __pgprot(prot);\n\t\treturn reserve_pfn_range(paddr, vma_size, &pgprot, 1);\n\t}\n\n\treturn 0;\n}\n\n\n// Source: pat.c\n// Lines 965-986\n",
+  "ANSWER": "MAY"
+}

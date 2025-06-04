@@ -1,0 +1,1 @@
+rename_log_table,mysql/sql/sql_rename.cc,17,ren_table,mysql/sql/sql_rename.cc,2,1

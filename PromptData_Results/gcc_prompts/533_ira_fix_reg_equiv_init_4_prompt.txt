@@ -1,0 +1,66 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'prev' at line 6
+2. Pointer 'next' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+fix_reg_equiv_init (void)
+{
+  int max_regno = max_reg_num ();
+  int i, new_regno, max;
+  rtx set;
+  rtx_insn_list *x, *next, *prev;
+  rtx_insn *insn;
+
+  if (max_regno_before_ira < max_regno)
+    {
+      max = vec_safe_length (reg_equivs);
+      grow_reg_equivs ();
+      for (i = FIRST_PSEUDO_REGISTER; i < max; i++)
+	for (prev = NULL, x = reg_equiv_init (i);
+	     x != NULL_RTX;
+	     x = next)
+	  {
+	    next = x->next ();
+	    insn = x->insn ();
+	    set = single_set (insn);
+	    ira_assert (set != NULL_RTX
+			&& (REG_P (SET_DEST (set)) || REG_P (SET_SRC (set))));
+	    if (REG_P (SET_DEST (set))
+		&& ((int) REGNO (SET_DEST (set)) == i
+		    || (int) ORIGINAL_REGNO (SET_DEST (set)) == i))
+	      new_regno = REGNO (SET_DEST (set));
+	    else if (REG_P (SET_SRC (set))
+		     && ((int) REGNO (SET_SRC (set)) == i
+			 || (int) ORIGINAL_REGNO (SET_SRC (set)) == i))
+	      new_regno = REGNO (SET_SRC (set));
+	    else
+ 	      gcc_unreachable ();
+	    if (new_regno == i)
+	      prev = x;
+	    else
+	      {
+		/* Remove the wrong list element.  */
+		if (prev == NULL_RTX)
+		  reg_equiv_init (i) = next;
+		else
+		  XEXP (prev, 1) = next;
+		XEXP (x, 1) = reg_equiv_init (new_regno);
+		reg_equiv_init (new_regno) = x;
+	      }
+	  }
+    }
+}
+
+
+// Source: ira.c
+// Lines 2666-2712
+
+
+[ANSWER]
+MUST

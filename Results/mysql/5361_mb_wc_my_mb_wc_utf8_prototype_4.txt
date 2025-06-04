@@ -1,0 +1,1 @@
+e,mysql/strings/mb_wc.h,2,four_bytes,mysql/strings/mb_wc.h,53,2

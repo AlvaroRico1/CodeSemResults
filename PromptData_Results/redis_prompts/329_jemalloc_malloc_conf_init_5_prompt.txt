@@ -1,0 +1,394 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'opts' at line 4
+2. Pointer 'buf' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+malloc_conf_init(void) {
+	unsigned i;
+	char buf[PATH_MAX + 1];
+	const char *opts, *k, *v;
+	size_t klen, vlen;
+
+	for (i = 0; i < 4; i++) {
+		/* Get runtime configuration. */
+		switch (i) {
+		case 0:
+			opts = config_malloc_conf;
+			break;
+		case 1:
+			if (je_malloc_conf != NULL) {
+				/*
+				 * Use options that were compiled into the
+				 * program.
+				 */
+				opts = je_malloc_conf;
+			} else {
+				/* No configuration specified. */
+				buf[0] = '\0';
+				opts = buf;
+			}
+			break;
+		case 2: {
+			ssize_t linklen = 0;
+#ifndef _WIN32
+			int saved_errno = errno;
+			const char *linkname =
+#  ifdef JEMALLOC_PREFIX
+			    "/etc/"JEMALLOC_PREFIX"malloc.conf"
+#  else
+			    "/etc/malloc.conf"
+#  endif
+			    ;
+
+			/*
+			 * Try to use the contents of the "/etc/malloc.conf"
+			 * symbolic link's name.
+			 */
+			linklen = readlink(linkname, buf, sizeof(buf) - 1);
+			if (linklen == -1) {
+				/* No configuration specified. */
+				linklen = 0;
+				/* Restore errno. */
+				set_errno(saved_errno);
+			}
+#endif
+			buf[linklen] = '\0';
+			opts = buf;
+			break;
+		} case 3: {
+			const char *envname =
+#ifdef JEMALLOC_PREFIX
+			    JEMALLOC_CPREFIX"MALLOC_CONF"
+#else
+			    "MALLOC_CONF"
+#endif
+			    ;
+
+			if ((opts = jemalloc_secure_getenv(envname)) != NULL) {
+				/*
+				 * Do nothing; opts is already initialized to
+				 * the value of the MALLOC_CONF environment
+				 * variable.
+				 */
+			} else {
+				/* No configuration specified. */
+				buf[0] = '\0';
+				opts = buf;
+			}
+			break;
+		} default:
+			not_reached();
+			buf[0] = '\0';
+			opts = buf;
+		}
+
+		while (*opts != '\0' && !malloc_conf_next(&opts, &k, &klen, &v,
+		    &vlen)) {
+#define CONF_MATCH(n)							\
+	(sizeof(n)-1 == klen && strncmp(n, k, klen) == 0)
+#define CONF_MATCH_VALUE(n)						\
+	(sizeof(n)-1 == vlen && strncmp(n, v, vlen) == 0)
+#define CONF_HANDLE_BOOL(o, n)						\
+			if (CONF_MATCH(n)) {				\
+				if (CONF_MATCH_VALUE("true")) {		\
+					o = true;			\
+				} else if (CONF_MATCH_VALUE("false")) {	\
+					o = false;			\
+				} else {				\
+					malloc_conf_error(		\
+					    "Invalid conf value",	\
+					    k, klen, v, vlen);		\
+				}					\
+				continue;				\
+			}
+#define CONF_MIN_no(um, min)	false
+#define CONF_MIN_yes(um, min)	((um) < (min))
+#define CONF_MAX_no(um, max)	false
+#define CONF_MAX_yes(um, max)	((um) > (max))
+#define CONF_HANDLE_T_U(t, o, n, min, max, check_min, check_max, clip)	\
+			if (CONF_MATCH(n)) {				\
+				uintmax_t um;				\
+				char *end;				\
+									\
+				set_errno(0);				\
+				um = malloc_strtoumax(v, &end, 0);	\
+				if (get_errno() != 0 || (uintptr_t)end -\
+				    (uintptr_t)v != vlen) {		\
+					malloc_conf_error(		\
+					    "Invalid conf value",	\
+					    k, klen, v, vlen);		\
+				} else if (clip) {			\
+					if (CONF_MIN_##check_min(um,	\
+					    (t)(min))) {		\
+						o = (t)(min);		\
+					} else if (			\
+					    CONF_MAX_##check_max(um,	\
+					    (t)(max))) {		\
+						o = (t)(max);		\
+					} else {			\
+						o = (t)um;		\
+					}				\
+				} else {				\
+					if (CONF_MIN_##check_min(um,	\
+					    (t)(min)) ||		\
+					    CONF_MAX_##check_max(um,	\
+					    (t)(max))) {		\
+						malloc_conf_error(	\
+						    "Out-of-range "	\
+						    "conf value",	\
+						    k, klen, v, vlen);	\
+					} else {			\
+						o = (t)um;		\
+					}				\
+				}					\
+				continue;				\
+			}
+#define CONF_HANDLE_UNSIGNED(o, n, min, max, check_min, check_max,	\
+    clip)								\
+			CONF_HANDLE_T_U(unsigned, o, n, min, max,	\
+			    check_min, check_max, clip)
+#define CONF_HANDLE_SIZE_T(o, n, min, max, check_min, check_max, clip)	\
+			CONF_HANDLE_T_U(size_t, o, n, min, max,		\
+			    check_min, check_max, clip)
+#define CONF_HANDLE_SSIZE_T(o, n, min, max)				\
+			if (CONF_MATCH(n)) {				\
+				long l;					\
+				char *end;				\
+									\
+				set_errno(0);				\
+				l = strtol(v, &end, 0);			\
+				if (get_errno() != 0 || (uintptr_t)end -\
+				    (uintptr_t)v != vlen) {		\
+					malloc_conf_error(		\
+					    "Invalid conf value",	\
+					    k, klen, v, vlen);		\
+				} else if (l < (ssize_t)(min) || l >	\
+				    (ssize_t)(max)) {			\
+					malloc_conf_error(		\
+					    "Out-of-range conf value",	\
+					    k, klen, v, vlen);		\
+				} else {				\
+					o = l;				\
+				}					\
+				continue;				\
+			}
+#define CONF_HANDLE_CHAR_P(o, n, d)					\
+			if (CONF_MATCH(n)) {				\
+				size_t cpylen = (vlen <=		\
+				    sizeof(o)-1) ? vlen :		\
+				    sizeof(o)-1;			\
+				strncpy(o, v, cpylen);			\
+				o[cpylen] = '\0';			\
+				continue;				\
+			}
+
+			CONF_HANDLE_BOOL(opt_abort, "abort")
+			CONF_HANDLE_BOOL(opt_abort_conf, "abort_conf")
+			if (strncmp("metadata_thp", k, klen) == 0) {
+				int i;
+				bool match = false;
+				for (i = 0; i < metadata_thp_mode_limit; i++) {
+					if (strncmp(metadata_thp_mode_names[i],
+					    v, vlen) == 0) {
+						opt_metadata_thp = i;
+						match = true;
+						break;
+					}
+				}
+				if (!match) {
+					malloc_conf_error("Invalid conf value",
+					    k, klen, v, vlen);
+				}
+				continue;
+			}
+			CONF_HANDLE_BOOL(opt_retain, "retain")
+			if (strncmp("dss", k, klen) == 0) {
+				int i;
+				bool match = false;
+				for (i = 0; i < dss_prec_limit; i++) {
+					if (strncmp(dss_prec_names[i], v, vlen)
+					    == 0) {
+						if (extent_dss_prec_set(i)) {
+							malloc_conf_error(
+							    "Error setting dss",
+							    k, klen, v, vlen);
+						} else {
+							opt_dss =
+							    dss_prec_names[i];
+							match = true;
+							break;
+						}
+					}
+				}
+				if (!match) {
+					malloc_conf_error("Invalid conf value",
+					    k, klen, v, vlen);
+				}
+				continue;
+			}
+			CONF_HANDLE_UNSIGNED(opt_narenas, "narenas", 1,
+			    UINT_MAX, yes, no, false)
+			CONF_HANDLE_SSIZE_T(opt_dirty_decay_ms,
+			    "dirty_decay_ms", -1, NSTIME_SEC_MAX * KQU(1000) <
+			    QU(SSIZE_MAX) ? NSTIME_SEC_MAX * KQU(1000) :
+			    SSIZE_MAX);
+			CONF_HANDLE_SSIZE_T(opt_muzzy_decay_ms,
+			    "muzzy_decay_ms", -1, NSTIME_SEC_MAX * KQU(1000) <
+			    QU(SSIZE_MAX) ? NSTIME_SEC_MAX * KQU(1000) :
+			    SSIZE_MAX);
+			CONF_HANDLE_BOOL(opt_stats_print, "stats_print")
+			if (CONF_MATCH("stats_print_opts")) {
+				init_opt_stats_print_opts(v, vlen);
+				continue;
+			}
+			if (config_fill) {
+				if (CONF_MATCH("junk")) {
+					if (CONF_MATCH_VALUE("true")) {
+						opt_junk = "true";
+						opt_junk_alloc = opt_junk_free =
+						    true;
+					} else if (CONF_MATCH_VALUE("false")) {
+						opt_junk = "false";
+						opt_junk_alloc = opt_junk_free =
+						    false;
+					} else if (CONF_MATCH_VALUE("alloc")) {
+						opt_junk = "alloc";
+						opt_junk_alloc = true;
+						opt_junk_free = false;
+					} else if (CONF_MATCH_VALUE("free")) {
+						opt_junk = "free";
+						opt_junk_alloc = false;
+						opt_junk_free = true;
+					} else {
+						malloc_conf_error(
+						    "Invalid conf value", k,
+						    klen, v, vlen);
+					}
+					continue;
+				}
+				CONF_HANDLE_BOOL(opt_zero, "zero")
+			}
+			if (config_utrace) {
+				CONF_HANDLE_BOOL(opt_utrace, "utrace")
+			}
+			if (config_xmalloc) {
+				CONF_HANDLE_BOOL(opt_xmalloc, "xmalloc")
+			}
+			CONF_HANDLE_BOOL(opt_tcache, "tcache")
+			CONF_HANDLE_SIZE_T(opt_lg_extent_max_active_fit,
+			    "lg_extent_max_active_fit", 0,
+			    (sizeof(size_t) << 3), yes, yes, false)
+			CONF_HANDLE_SSIZE_T(opt_lg_tcache_max, "lg_tcache_max",
+			    -1, (sizeof(size_t) << 3) - 1)
+			if (strncmp("percpu_arena", k, klen) == 0) {
+				bool match = false;
+				for (int i = percpu_arena_mode_names_base; i <
+				    percpu_arena_mode_names_limit; i++) {
+					if (strncmp(percpu_arena_mode_names[i],
+					    v, vlen) == 0) {
+						if (!have_percpu_arena) {
+							malloc_conf_error(
+							    "No getcpu support",
+							    k, klen, v, vlen);
+						}
+						opt_percpu_arena = i;
+						match = true;
+						break;
+					}
+				}
+				if (!match) {
+					malloc_conf_error("Invalid conf value",
+					    k, klen, v, vlen);
+				}
+				continue;
+			}
+			CONF_HANDLE_BOOL(opt_background_thread,
+			    "background_thread");
+			CONF_HANDLE_SIZE_T(opt_max_background_threads,
+					   "max_background_threads", 1,
+					   opt_max_background_threads, yes, yes,
+					   true);
+			if (config_prof) {
+				CONF_HANDLE_BOOL(opt_prof, "prof")
+				CONF_HANDLE_CHAR_P(opt_prof_prefix,
+				    "prof_prefix", "jeprof")
+				CONF_HANDLE_BOOL(opt_prof_active, "prof_active")
+				CONF_HANDLE_BOOL(opt_prof_thread_active_init,
+				    "prof_thread_active_init")
+				CONF_HANDLE_SIZE_T(opt_lg_prof_sample,
+				    "lg_prof_sample", 0, (sizeof(uint64_t) << 3)
+				    - 1, no, yes, true)
+				CONF_HANDLE_BOOL(opt_prof_accum, "prof_accum")
+				CONF_HANDLE_SSIZE_T(opt_lg_prof_interval,
+				    "lg_prof_interval", -1,
+				    (sizeof(uint64_t) << 3) - 1)
+				CONF_HANDLE_BOOL(opt_prof_gdump, "prof_gdump")
+				CONF_HANDLE_BOOL(opt_prof_final, "prof_final")
+				CONF_HANDLE_BOOL(opt_prof_leak, "prof_leak")
+			}
+			if (config_log) {
+				if (CONF_MATCH("log")) {
+					size_t cpylen = (
+					    vlen <= sizeof(log_var_names) ?
+					    vlen : sizeof(log_var_names) - 1);
+					strncpy(log_var_names, v, cpylen);
+					log_var_names[cpylen] = '\0';
+					continue;
+				}
+			}
+			if (CONF_MATCH("thp")) {
+				bool match = false;
+				for (int i = 0; i < thp_mode_names_limit; i++) {
+					if (strncmp(thp_mode_names[i],v, vlen)
+					    == 0) {
+						if (!have_madvise_huge) {
+							malloc_conf_error(
+							    "No THP support",
+							    k, klen, v, vlen);
+						}
+						opt_thp = i;
+						match = true;
+						break;
+					}
+				}
+				if (!match) {
+					malloc_conf_error("Invalid conf value",
+					    k, klen, v, vlen);
+				}
+				continue;
+			}
+			malloc_conf_error("Invalid conf pair", k, klen, v,
+			    vlen);
+#undef CONF_MATCH
+#undef CONF_MATCH_VALUE
+#undef CONF_HANDLE_BOOL
+#undef CONF_MIN_no
+#undef CONF_MIN_yes
+#undef CONF_MAX_no
+#undef CONF_MAX_yes
+#undef CONF_HANDLE_T_U
+#undef CONF_HANDLE_UNSIGNED
+#undef CONF_HANDLE_SIZE_T
+#undef CONF_HANDLE_SSIZE_T
+#undef CONF_HANDLE_CHAR_P
+		}
+		if (opt_abort_conf && had_conf_error) {
+			malloc_abort_invalid_conf();
+		}
+	}
+	atomic_store_b(&log_init_done, true, ATOMIC_RELEASE);
+}
+
+
+// Source: jemalloc.c
+// Lines 872-1246
+
+
+[ANSWER]
+MUST

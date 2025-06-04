@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'end_pfn' at line 3\n2. Pointer 'start_pfn' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid __init free_bootmem_with_active_regions(int nid, unsigned long max_low_pfn)\n{\n\tunsigned long start_pfn, end_pfn;\n\tint i, this_nid;\n\n\tfor_each_mem_pfn_range(i, nid, &start_pfn, &end_pfn, &this_nid) {\n\t\tstart_pfn = min(start_pfn, max_low_pfn);\n\t\tend_pfn = min(end_pfn, max_low_pfn);\n\n\t\tif (start_pfn < end_pfn)\n\t\t\tmemblock_free_early_nid(PFN_PHYS(start_pfn),\n\t\t\t\t\t(end_pfn - start_pfn) << PAGE_SHIFT,\n\t\t\t\t\tthis_nid);\n\t}\n}\n\n\n// Source: page_alloc.c\n// Lines 6224-6238\n",
+  "ANSWER": "MAY"
+}

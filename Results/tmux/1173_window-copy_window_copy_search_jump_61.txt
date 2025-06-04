@@ -1,0 +1,1 @@
+px,tmux/window-copy.c,5,ssize,tmux/window-copy.c,5,2

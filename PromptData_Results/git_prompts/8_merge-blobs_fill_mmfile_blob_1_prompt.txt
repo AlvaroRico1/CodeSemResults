@@ -1,0 +1,36 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'size' at line 4
+2. Pointer 'type' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int fill_mmfile_blob(mmfile_t *f, struct blob *obj)
+{
+	void *buf;
+	unsigned long size;
+	enum object_type type;
+
+	buf = read_object_file(&obj->object.oid, &type, &size);
+	if (!buf)
+		return -1;
+	if (type != OBJ_BLOB) {
+		free(buf);
+		return -1;
+	}
+	f->ptr = buf;
+	f->size = size;
+	return 0;
+}
+
+
+// Source: merge-blobs.c
+// Lines 9-25
+
+
+[ANSWER]
+MAY

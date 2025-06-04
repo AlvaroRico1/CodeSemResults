@@ -1,0 +1,1 @@
+output,protobuf/src/google/protobuf/extension_set_heavy.cc,1,extension,protobuf/src/google/protobuf/extension_set_heavy.cc,2,1

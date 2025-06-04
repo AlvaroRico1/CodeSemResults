@@ -1,0 +1,69 @@
+int compare_commits_by_commit_date(const void *a_, const void *b_, void *unused)
+{
+	const struct commit *a = a_, *b = b_;
+	/* newer commits with larger date first */
+	if (a->date < b->date)
+		return 1;
+	else if (a->date > b->date)
+		return -1;
+	return 0;
+}
+
+/*
+ * Performs an in-place topological sort on the list supplied.
+ */
+void sort_in_topological_order(struct commit_list **list, enum rev_sort_order sort_order)
+{
+	struct commit_list *next, *orig = *list;
+	struct commit_list **pptr;
+	struct indegree_slab indegree;
+	struct prio_queue queue;
+	struct commit *commit;
+	struct author_date_slab author_date;
+
+	if (!orig)
+		return;
+	*list = NULL;
+
+	init_indegree_slab(&indegree);
+	memset(&queue, '\0', sizeof(queue));
+
+	switch (sort_order) {
+	default: /* REV_SORT_IN_GRAPH_ORDER */
+		queue.compare = NULL;
+		break;
+	case REV_SORT_BY_COMMIT_DATE:
+		queue.compare = compare_commits_by_commit_date;
+		break;
+	case REV_SORT_BY_AUTHOR_DATE:
+		init_author_date_slab(&author_date);
+		queue.compare = compare_commits_by_author_date;
+		queue.cb_data = &author_date;
+		break;
+	}
+
+	/* Mark them and clear the indegree */
+	for (next = orig; next; next = next->next) {
+		struct commit *commit = next->item;
+		*(indegree_slab_at(&indegree, commit)) = 1;
+		/* also record the author dates, if needed */
+		if (sort_order == REV_SORT_BY_AUTHOR_DATE)
+			record_author_date(&author_date, commit);
+	}
+
+	/* update the indegree */
+	for (next = orig; next; next = next->next) {
+		struct commit_list *parents = next->item->parents;
+		while (parents) {
+			struct commit *parent = parents->item;
+			int *pi = indegree_slab_at(&indegree, parent);
+
+			if (*pi)
+				(*pi)++;
+			parents = parents->next;
+		}
+	}
+
+
+// Source: commit.c
+// Lines 789-853

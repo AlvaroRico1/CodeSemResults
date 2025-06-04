@@ -1,0 +1,32 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'hend' at line 3
+2. Pointer 'hp' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int envname_is_headername(const h2o_iovec_t *env, const h2o_iovec_t *header)
+{
+    const char *ep, *hp, *hend;
+
+    if (env->len != 5 + header->len)
+        return 0;
+    if (memcmp(env->base, "HTTP_", 5) != 0)
+        return 0;
+    for (ep = env->base + 5, hp = header->base, hend = hp + header->len; hp < hend; ++ep, ++hp)
+        if (*ep != h2o_toupper(*hp))
+            return 0;
+    return 1;
+}
+
+
+// Source: fastcgi.c
+// Lines 202-214
+
+
+[ANSWER]
+MUST

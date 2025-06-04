@@ -1,0 +1,1 @@
+last,gcc/gcc/emit-rtl.c,1,insn,gcc/gcc/emit-rtl.c,5,1

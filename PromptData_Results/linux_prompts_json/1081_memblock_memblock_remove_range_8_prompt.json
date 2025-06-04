@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'start_rgn' at line 4\n2. Pointer 'end_rgn' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int __init_memblock memblock_remove_range(struct memblock_type *type,\n\t\t\t\t\t  phys_addr_t base, phys_addr_t size)\n{\n\tint start_rgn, end_rgn;\n\tint i, ret;\n\n\tret = memblock_isolate_range(type, base, size, &start_rgn, &end_rgn);\n\tif (ret)\n\t\treturn ret;\n\n\tfor (i = end_rgn - 1; i >= start_rgn; i--)\n\t\tmemblock_remove_region(type, i);\n\treturn 0;\n}\n\n\n// Source: memblock.c\n// Lines 783-796\n",
+  "ANSWER": "MAY"
+}

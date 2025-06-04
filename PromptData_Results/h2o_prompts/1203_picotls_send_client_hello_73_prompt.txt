@@ -1,0 +1,64 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tls' at line 1
+2. Pointer 'cipher_suite' at line 28
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int send_client_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptls_handshake_properties_t *properties,
+                             ptls_iovec_t *cookie)
+{
+    ptls_iovec_t resumption_secret = {NULL}, resumption_ticket;
+    char *published_sni = NULL;
+    uint32_t obfuscated_ticket_age = 0;
+    size_t msghash_off;
+    uint8_t binder_key[PTLS_MAX_DIGEST_SIZE];
+    int ret, is_second_flight = tls->key_schedule != NULL,
+             send_sni = tls->server_name != NULL && !ptls_server_name_is_ipaddr(tls->server_name);
+
+    if (properties != NULL) {
+        /* try to use ESNI */
+        if (!is_second_flight && send_sni && properties->client.esni_keys.base != NULL) {
+            if ((ret = client_setup_esni(tls->ctx, &tls->esni, properties->client.esni_keys, &published_sni, tls->client_random)) !=
+                0) {
+                goto Exit;
+            }
+            if (tls->ctx->update_esni_key != NULL) {
+                if ((ret = tls->ctx->update_esni_key->cb(tls->ctx->update_esni_key, tls, tls->esni->secret,
+                                                         tls->esni->client.cipher->hash, tls->esni->esni_contents_hash)) != 0)
+                    goto Exit;
+            }
+        }
+        /* setup resumption-related data. If successful, resumption_secret becomes a non-zero value. */
+        if (properties->client.session_ticket.base != NULL) {
+            ptls_key_exchange_algorithm_t *key_share = NULL;
+            ptls_cipher_suite_t *cipher_suite = NULL;
+            uint32_t max_early_data_size;
+            if (decode_stored_session_ticket(tls, &key_share, &cipher_suite, &resumption_secret, &obfuscated_ticket_age,
+                                             &resumption_ticket, &max_early_data_size, properties->client.session_ticket.base,
+                                             properties->client.session_ticket.base + properties->client.session_ticket.len) == 0) {
+                tls->client.offered_psk = 1;
+                /* key-share selected by HRR should not be overridden */
+                if (tls->key_share == NULL)
+                    tls->key_share = key_share;
+                tls->cipher_suite = cipher_suite;
+                if (!is_second_flight && max_early_data_size != 0 && properties->client.max_early_data_size != NULL) {
+                    tls->client.using_early_data = 1;
+                    *properties->client.max_early_data_size = max_early_data_size;
+                }
+            } else {
+                resumption_secret = ptls_iovec_init(NULL, 0);
+            }
+        }
+
+
+// Source: picotls.c
+// Lines 1925-1969
+
+
+[ANSWER]
+MUST

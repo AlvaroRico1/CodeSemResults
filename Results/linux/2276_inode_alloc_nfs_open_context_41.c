@@ -1,0 +1,31 @@
+struct nfs_open_context *alloc_nfs_open_context(struct dentry *dentry,
+						fmode_t f_mode,
+						struct file *filp)
+{
+	struct nfs_open_context *ctx;
+	const struct cred *cred = get_current_cred();
+
+	ctx = kmalloc(sizeof(*ctx), GFP_KERNEL);
+	if (!ctx) {
+		put_cred(cred);
+		return ERR_PTR(-ENOMEM);
+	}
+	nfs_sb_active(dentry->d_sb);
+	ctx->dentry = dget(dentry);
+	ctx->cred = cred;
+	ctx->ll_cred = NULL;
+	ctx->state = NULL;
+	ctx->mode = f_mode;
+	ctx->flags = 0;
+	ctx->error = 0;
+	ctx->flock_owner = (fl_owner_t)filp;
+	nfs_init_lock_context(&ctx->lock_context);
+	ctx->lock_context.open_context = ctx;
+	INIT_LIST_HEAD(&ctx->list);
+	ctx->mdsthreshold = NULL;
+	return ctx;
+}
+
+
+// Source: inode.c
+// Lines 957-983

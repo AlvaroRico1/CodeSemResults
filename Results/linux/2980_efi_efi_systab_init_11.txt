@@ -1,0 +1,1 @@
+systab32,linux/arch/x86/platform/efi/efi.c,60,systab64,linux/arch/x86/platform/efi/efi.c,4,2

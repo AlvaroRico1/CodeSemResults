@@ -1,0 +1,1 @@
+op,linux/fs/fat/namei_vfat.c,6,ip,linux/fs/fat/namei_vfat.c,5,2

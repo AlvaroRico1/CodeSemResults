@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'cp' at line 12\n2. Pointer 'line' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int is_rfc2822_header(const struct strbuf *line)\n{\n\t/*\n\t * The section that defines the loosest possible\n\t * field name is \"3.6.8 Optional fields\".\n\t *\n\t * optional-field = field-name \":\" unstructured CRLF\n\t * field-name = 1*ftext\n\t * ftext = %d33-57 / %59-126\n\t */\n\tint ch;\n\tchar *cp = line->buf;\n\n\t/* Count mbox From headers as headers */\n\tif (starts_with(cp, \"From \") || starts_with(cp, \">From \"))\n\t\treturn 1;\n\n\twhile ((ch = *cp++)) {\n\t\tif (ch == ':')\n\t\t\treturn 1;\n\t\tif ((33 <= ch && ch <= 57) ||\n\t\t    (59 <= ch && ch <= 126))\n\t\t\tcontinue;\n\t\tbreak;\n\t}\n\treturn 0;\n}\n\n\n// Source: mailinfo.c\n// Lines 860-886\n",
+  "ANSWER": "MUST"
+}

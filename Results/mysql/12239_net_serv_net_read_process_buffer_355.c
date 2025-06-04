@@ -1,0 +1,56 @@
+static bool net_read_process_buffer(NET *net, size_t &start_of_packet,
+                                    size_t &buf_length, uint &multi_byte_packet,
+                                    size_t &first_packet_offset) {
+  DBUG_TRACE;
+begin:
+  DBUG_PRINT("info", ("async_buf_length : %zu, remaining_buf : %lu, "
+                      "first_packet_offset : %zu,  start_of_packet : %zu, "
+                      "net->where_b : %lu, multi_byte_packet : %u ",
+                      buf_length, net->remain_in_buf, first_packet_offset,
+                      start_of_packet, net->where_b, multi_byte_packet));
+  size_t remain_in_buf = buf_length - start_of_packet;
+  if (remain_in_buf >= NET_HEADER_SIZE) {
+    size_t read_length = uint3korr(net->buff + start_of_packet);
+    DBUG_PRINT("info", ("read_length : %zu", read_length));
+    if (!read_length) {
+      start_of_packet += NET_HEADER_SIZE; /* End of multi-byte packet */
+      return true;
+    }
+    if (read_length + NET_HEADER_SIZE <= remain_in_buf) {
+      if (multi_byte_packet) {
+        /*
+          It's never the buffer on the first loop iteration that will have
+          multi_byte_packet on. Thus there shall never be a non-zero
+          first_packet_offset here.
+        */
+        assert(first_packet_offset == 0);
+        /* Remove packet header for second packet */
+        memmove(net->buff + start_of_packet,
+                net->buff + start_of_packet + NET_HEADER_SIZE,
+                remain_in_buf - NET_HEADER_SIZE);
+        start_of_packet += read_length;
+        buf_length -= NET_HEADER_SIZE;
+      } else {
+        start_of_packet += read_length + NET_HEADER_SIZE;
+      }
+      /* last packet */
+      if (read_length < MAX_PACKET_LENGTH) {
+        multi_byte_packet = 0; /* No last zero len packet */
+        return true;
+      }
+      multi_byte_packet = NET_HEADER_SIZE;
+      /* Move data down to read next data packet after current one */
+      if (first_packet_offset) {
+        memmove(net->buff, net->buff + first_packet_offset,
+                buf_length - first_packet_offset);
+        buf_length -= first_packet_offset;
+        start_of_packet -= first_packet_offset;
+        first_packet_offset = 0;
+      }
+      goto begin; /* Process the next data packet*/
+    }
+  }
+
+
+// Source: net_serv.cc
+// Lines 1804-1855

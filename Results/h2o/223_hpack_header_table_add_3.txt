@@ -1,0 +1,1 @@
+table,h2o/lib/http2/hpack.c,1,new_entries,h2o/lib/http2/hpack.c,21,1

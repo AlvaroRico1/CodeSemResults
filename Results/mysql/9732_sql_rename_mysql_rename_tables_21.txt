@@ -1,0 +1,1 @@
+ren_table,mysql/sql/sql_rename.cc,2,ren_table,mysql/sql/sql_rename.cc,2,1

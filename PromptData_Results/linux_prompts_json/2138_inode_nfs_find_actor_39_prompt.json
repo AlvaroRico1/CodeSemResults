@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'fh' at line 4\n2. Pointer 'desc' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nnfs_find_actor(struct inode *inode, void *opaque)\n{\n\tstruct nfs_find_desc\t*desc = (struct nfs_find_desc *)opaque;\n\tstruct nfs_fh\t\t*fh = desc->fh;\n\tstruct nfs_fattr\t*fattr = desc->fattr;\n\n\tif (NFS_FILEID(inode) != fattr->fileid)\n\t\treturn 0;\n\tif ((S_IFMT & inode->i_mode) != (S_IFMT & fattr->mode))\n\t\treturn 0;\n\tif (nfs_compare_fh(NFS_FH(inode), fh))\n\t\treturn 0;\n\tif (is_bad_inode(inode) || NFS_STALE(inode))\n\t\treturn 0;\n\treturn 1;\n}\n\n\n// Source: inode.c\n// Lines 305-320\n",
+  "ANSWER": "MUST"
+}

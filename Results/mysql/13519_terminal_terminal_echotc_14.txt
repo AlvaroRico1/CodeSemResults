@@ -1,0 +1,1 @@
+argv,mysql/extra/libedit/libedit-20191231-3.1/src/terminal.c,2,area,mysql/extra/libedit/libedit-20191231-3.1/src/terminal.c,8,2

@@ -1,0 +1,32 @@
+static void AppendUTF8(uint32_t code_point, std::string* output) {
+  uint32_t tmp = 0;
+  int len = 0;
+  if (code_point <= 0x7f) {
+    tmp = code_point;
+    len = 1;
+  } else if (code_point <= 0x07ff) {
+    tmp = 0x0000c080 | ((code_point & 0x07c0) << 2) | (code_point & 0x003f);
+    len = 2;
+  } else if (code_point <= 0xffff) {
+    tmp = 0x00e08080 | ((code_point & 0xf000) << 4) |
+          ((code_point & 0x0fc0) << 2) | (code_point & 0x003f);
+    len = 3;
+  } else if (code_point <= 0x10ffff) {
+    tmp = 0xf0808080 | ((code_point & 0x1c0000) << 6) |
+          ((code_point & 0x03f000) << 4) | ((code_point & 0x000fc0) << 2) |
+          (code_point & 0x003f);
+    len = 4;
+  } else {
+    // Unicode code points end at 0x10FFFF, so this is out-of-range.
+    // ConsumeString permits hex values up to 0x1FFFFF, and FetchUnicodePoint
+    // doesn't perform a range check.
+    StringAppendF(output, "\\U%08x", code_point);
+    return;
+  }
+  tmp = ghtonl(tmp);
+  output->append(reinterpret_cast<const char*>(&tmp) + sizeof(tmp) - len, len);
+}
+
+
+// Source: tokenizer.cc
+// Lines 981-1008

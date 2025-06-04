@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'c' at line 2\n2. Pointer 'ud' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nLUA_API int lua_cpcall (lua_State *L, lua_CFunction func, void *ud) {\n  struct CCallS c;\n  int status;\n  lua_lock(L);\n  c.func = func;\n  c.ud = ud;\n  status = luaD_pcall(L, f_Ccall, &c, savestack(L, L->top), 0);\n  lua_unlock(L);\n  return status;\n}\n\n\n// Source: lapi.c\n// Lines 850-859\n",
+  "ANSWER": "MUST"
+}

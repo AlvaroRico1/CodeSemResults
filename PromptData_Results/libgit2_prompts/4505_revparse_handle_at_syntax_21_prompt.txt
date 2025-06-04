@@ -1,0 +1,64 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'parsed' at line 4
+2. Pointer 'timestamp' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int handle_at_syntax(git_object **out, git_reference **ref, const char *spec, size_t identifier_len, git_repository *repo, const char *curly_braces_content)
+{
+	bool is_numeric;
+	int parsed = 0, error = -1;
+	git_str identifier = GIT_STR_INIT;
+	git_time_t timestamp;
+
+	GIT_ASSERT(*out == NULL);
+
+	if (git_str_put(&identifier, spec, identifier_len) < 0)
+		return -1;
+
+	is_numeric = !try_parse_numeric(&parsed, curly_braces_content);
+
+	if (*curly_braces_content == '-' && (!is_numeric || parsed == 0)) {
+		error = GIT_EINVALIDSPEC;
+		goto cleanup;
+	}
+
+	if (is_numeric) {
+		if (parsed < 0)
+			error = retrieve_previously_checked_out_branch_or_revision(out, ref, repo, git_str_cstr(&identifier), -parsed);
+		else
+			error = retrieve_revobject_from_reflog(out, ref, repo, git_str_cstr(&identifier), parsed);
+
+		goto cleanup;
+	}
+
+	if (!strcmp(curly_braces_content, "u") || !strcmp(curly_braces_content, "upstream")) {
+		error = retrieve_remote_tracking_reference(ref, git_str_cstr(&identifier), repo);
+
+		goto cleanup;
+	}
+
+	if (git_date_parse(&timestamp, curly_braces_content) < 0) {
+		error = GIT_EINVALIDSPEC;
+		goto cleanup;
+	}
+
+	error = retrieve_revobject_from_reflog(out, ref, repo, git_str_cstr(&identifier), (size_t)timestamp);
+
+cleanup:
+	git_str_dispose(&identifier);
+	return error;
+}
+
+
+// Source: revparse.c
+// Lines 321-365
+
+
+[ANSWER]
+MAY

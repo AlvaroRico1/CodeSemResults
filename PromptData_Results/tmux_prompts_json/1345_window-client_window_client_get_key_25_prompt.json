@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'item' at line 4\n2. Pointer 'itemdata' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nwindow_client_get_key(void *modedata, void *itemdata, u_int line)\n{\n\tstruct window_client_modedata\t*data = modedata;\n\tstruct window_client_itemdata\t*item = itemdata;\n\tstruct format_tree\t\t*ft;\n\tchar\t\t\t\t*expanded;\n\tkey_code\t\t\t key;\n\n\tft = format_create(NULL, NULL, FORMAT_NONE, 0);\n\tformat_defaults(ft, item->c, NULL, 0, NULL);\n\tformat_add(ft, \"line\", \"%u\", line);\n\n\texpanded = format_expand(ft, data->key_format);\n\tkey = key_string_lookup_string(expanded);\n\tfree(expanded);\n\tformat_free(ft);\n\treturn key;\n}\n\n\n// Source: window-client.c\n// Lines 268-285\n",
+  "ANSWER": "MUST"
+}

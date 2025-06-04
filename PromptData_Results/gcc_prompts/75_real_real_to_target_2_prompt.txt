@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'buf' at line 1
+2. Pointer 'buf1' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+real_to_target (long *buf, const REAL_VALUE_TYPE *r_orig,
+		format_helper fmt)
+{
+  REAL_VALUE_TYPE r;
+  long buf1;
+
+  r = *r_orig;
+  round_for_format (fmt, &r);
+
+  if (!buf)
+    buf = &buf1;
+  (*fmt->encode) (fmt, buf, &r);
+
+  return *buf;
+}
+
+
+// Source: real.c
+// Lines 2827-2841
+
+
+[ANSWER]
+MUST

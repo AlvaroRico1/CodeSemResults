@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'inode' at line 3\n2. Pointer 'hdr' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int nfs_read_done(struct rpc_task *task, struct nfs_pgio_header *hdr)\n{\n\tstruct inode *inode = hdr->inode;\n\n\tnfs_invalidate_atime(inode);\n\tif (task->tk_status >= 0) {\n\t\tnfs_refresh_inode(inode, hdr->res.fattr);\n\t\t/* Emulate the eof flag, which isn't normally needed in NFSv2\n\t\t * as it is guaranteed to always return the file attributes\n\t\t */\n\t\tif ((hdr->res.count == 0 && hdr->args.count > 0) ||\n\t\t    hdr->args.offset + hdr->res.count >= hdr->res.fattr->size)\n\t\t\thdr->res.eof = 1;\n\t}\n\treturn 0;\n}\n\n\n// Source: proc.c\n// Lines 587-602\n",
+  "ANSWER": "MUST"
+}

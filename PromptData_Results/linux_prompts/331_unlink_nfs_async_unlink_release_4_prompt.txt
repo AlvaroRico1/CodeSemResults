@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'sb' at line 5
+2. Pointer 'dentry' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void nfs_async_unlink_release(void *calldata)
+{
+	struct nfs_unlinkdata	*data = calldata;
+	struct dentry *dentry = data->dentry;
+	struct super_block *sb = dentry->d_sb;
+
+	up_read_non_owner(&NFS_I(d_inode(dentry->d_parent))->rmdir_sem);
+	d_lookup_done(dentry);
+	nfs_free_unlinkdata(data);
+	dput(dentry);
+	nfs_sb_deactive(sb);
+}
+
+
+// Source: unlink.c
+// Lines 63-74
+
+
+[ANSWER]
+MUST

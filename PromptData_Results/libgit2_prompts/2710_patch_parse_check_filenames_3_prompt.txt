@@ -1,0 +1,65 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'old_prefixlen' at line 4
+2. Pointer 'new_prefixlen' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int check_filenames(git_patch_parsed *patch)
+{
+	const char *prefixed_new, *prefixed_old;
+	size_t old_prefixlen = 0, new_prefixlen = 0;
+	bool added = (patch->base.delta->status == GIT_DELTA_ADDED);
+	bool deleted = (patch->base.delta->status == GIT_DELTA_DELETED);
+
+	if (patch->old_path && !patch->new_path)
+		return git_parse_err("missing new path");
+
+	if (!patch->old_path && patch->new_path)
+		return git_parse_err("missing old path");
+
+	/* Ensure (non-renamed) paths match */
+	if (check_header_names(patch->header_old_path, patch->old_path, "old", added) < 0 ||
+	    check_header_names(patch->header_new_path, patch->new_path, "new", deleted) < 0)
+		return -1;
+
+	prefixed_old = (!added && patch->old_path) ? patch->old_path : patch->header_old_path;
+	prefixed_new = (!deleted && patch->new_path) ? patch->new_path : patch->header_new_path;
+
+	if ((prefixed_old && check_prefix(&patch->old_prefix, &old_prefixlen, patch, prefixed_old) < 0) ||
+	    (prefixed_new && check_prefix(&patch->new_prefix, &new_prefixlen, patch, prefixed_new) < 0))
+		return -1;
+
+	/* Prefer the rename filenames as they are unambiguous and unprefixed */
+	if (patch->rename_old_path)
+		patch->base.delta->old_file.path = patch->rename_old_path;
+	else if (prefixed_old)
+		patch->base.delta->old_file.path = prefixed_old + old_prefixlen;
+	else
+		patch->base.delta->old_file.path = NULL;
+
+	if (patch->rename_new_path)
+		patch->base.delta->new_file.path = patch->rename_new_path;
+	else if (prefixed_new)
+		patch->base.delta->new_file.path = prefixed_new + new_prefixlen;
+	else
+		patch->base.delta->new_file.path = NULL;
+
+	if (!patch->base.delta->old_file.path &&
+	    !patch->base.delta->new_file.path)
+		return git_parse_err("git diff header lacks old / new paths");
+
+	return 0;
+}
+
+
+// Source: patch_parse.c
+// Lines 1002-1047
+
+
+[ANSWER]
+MAY

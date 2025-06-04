@@ -1,0 +1,46 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'r' at line 2
+2. Pointer 'reply' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void freeReplyObject(void *reply) {
+    redisReply *r = reply;
+    size_t j;
+
+    if (r == NULL)
+        return;
+
+    switch(r->type) {
+    case REDIS_REPLY_INTEGER:
+        break; /* Nothing to free */
+    case REDIS_REPLY_ARRAY:
+        if (r->element != NULL) {
+            for (j = 0; j < r->elements; j++)
+                if (r->element[j] != NULL)
+                    freeReplyObject(r->element[j]);
+            free(r->element);
+        }
+        break;
+    case REDIS_REPLY_ERROR:
+    case REDIS_REPLY_STATUS:
+    case REDIS_REPLY_STRING:
+        if (r->str != NULL)
+            free(r->str);
+        break;
+    }
+    free(r);
+}
+
+
+// Source: hiredis.c
+// Lines 74-100
+
+
+[ANSWER]
+MUST

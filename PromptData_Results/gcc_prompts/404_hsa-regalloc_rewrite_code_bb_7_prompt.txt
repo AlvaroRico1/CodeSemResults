@@ -1,0 +1,61 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'insn' at line 4
+2. Pointer 'next_insn' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+rewrite_code_bb (basic_block bb, struct m_reg_class_desc *classes)
+{
+  hsa_bb *hbb = hsa_bb_for_bb (bb);
+  hsa_insn_basic *insn, *next_insn;
+
+  for (insn = hbb->m_first_insn; insn; insn = next_insn)
+    {
+      next_insn = insn->m_next;
+      unsigned count = insn->operand_count ();
+      for (unsigned i = 0; i < count; i++)
+	{
+	  gcc_checking_assert (insn->get_op (i));
+	  hsa_op_reg **regaddr = insn_reg_addr (insn, i);
+
+	  if (regaddr)
+	    {
+	      hsa_op_reg *reg = *regaddr;
+	      if (reg->m_reg_class)
+		continue;
+	      gcc_assert (reg->m_spill_sym);
+
+	      int cl = m_reg_class_for_type (reg->m_type);
+	      hsa_op_reg *tmp, *tmp2;
+	      if (insn->op_output_p (i))
+		tmp = hsa_spill_out (insn, reg, &tmp2);
+	      else
+		tmp = hsa_spill_in (insn, reg, &tmp2);
+
+	      *regaddr = tmp;
+
+	      tmp->m_reg_class = classes[cl].cl_char;
+	      tmp->m_hard_num = (char) (classes[cl].max_num + i);
+	      if (tmp2)
+		{
+		  gcc_assert (cl == 0);
+		  tmp2->m_reg_class = classes[1].cl_char;
+		  tmp2->m_hard_num = (char) (classes[1].max_num + i);
+		}
+	    }
+	}
+    }
+}
+
+
+// Source: hsa-regalloc.c
+// Lines 205-246
+
+
+[ANSWER]
+MUST

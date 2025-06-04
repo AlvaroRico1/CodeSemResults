@@ -1,0 +1,1 @@
+b_end,mysql/strings/ctype-latin1.cc,6,b,mysql/strings/ctype-latin1.cc,3,0

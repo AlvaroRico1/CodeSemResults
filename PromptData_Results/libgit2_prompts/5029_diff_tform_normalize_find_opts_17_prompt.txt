@@ -1,0 +1,56 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'opts' at line 3
+2. Pointer 'boolval' at line 24
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int normalize_find_opts(
+	git_diff *diff,
+	git_diff_find_options *opts,
+	const git_diff_find_options *given)
+{
+	git_config *cfg = NULL;
+	git_hashsig_option_t hashsig_opts;
+
+	GIT_ERROR_CHECK_VERSION(given, GIT_DIFF_FIND_OPTIONS_VERSION, "git_diff_find_options");
+
+	if (diff->repo != NULL &&
+		git_repository_config__weakptr(&cfg, diff->repo) < 0)
+		return -1;
+
+	if (given)
+		memcpy(opts, given, sizeof(*opts));
+
+	if (!given ||
+		 (given->flags & GIT_DIFF_FIND_ALL) == GIT_DIFF_FIND_BY_CONFIG)
+	{
+		if (cfg) {
+			char *rule =
+				git_config__get_string_force(cfg, "diff.renames", "true");
+			int boolval;
+
+			if (!git__parse_bool(&boolval, rule) && !boolval)
+				/* don't set FIND_RENAMES if bool value is false */;
+			else if (!strcasecmp(rule, "copies") || !strcasecmp(rule, "copy"))
+				opts->flags |= GIT_DIFF_FIND_RENAMES | GIT_DIFF_FIND_COPIES;
+			else
+				opts->flags |= GIT_DIFF_FIND_RENAMES;
+
+			git__free(rule);
+		} else {
+			/* set default flag */
+			opts->flags |= GIT_DIFF_FIND_RENAMES;
+		}
+
+
+// Source: diff_tform.c
+// Lines 246-282
+
+
+[ANSWER]
+MAY

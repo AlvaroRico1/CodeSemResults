@@ -1,0 +1,1 @@
+quit_tracing,mysql/libmysql/mysql_trace.cc,6,trace_info,mysql/libmysql/mysql_trace.cc,3,0

@@ -1,0 +1,1 @@
+sx,tmux/layout-custom.c,4,layout,tmux/layout-custom.c,1,2

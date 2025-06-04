@@ -1,0 +1,38 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'li' at line 3
+2. Pointer 'subject' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+listTypeIterator *listTypeInitIterator(robj *subject, long index,
+                                       unsigned char direction) {
+    listTypeIterator *li = zmalloc(sizeof(listTypeIterator));
+    li->subject = subject;
+    li->encoding = subject->encoding;
+    li->direction = direction;
+    li->iter = NULL;
+    /* LIST_HEAD means start at TAIL and move *towards* head.
+     * LIST_TAIL means start at HEAD and move *towards tail. */
+    int iter_direction =
+        direction == LIST_HEAD ? AL_START_TAIL : AL_START_HEAD;
+    if (li->encoding == OBJ_ENCODING_QUICKLIST) {
+        li->iter = quicklistGetIteratorAtIdx(li->subject->ptr,
+                                             iter_direction, index);
+    } else {
+        serverPanic("Unknown list encoding");
+    }
+    return li;
+}
+
+
+// Source: t_list.c
+// Lines 88-106
+
+
+[ANSWER]
+MUST

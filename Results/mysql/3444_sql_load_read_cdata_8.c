@@ -1,0 +1,49 @@
+int READ_INFO::read_cdata(String *val, bool *have_cdata) {
+  const char cdata_head[] = "![CDATA[";
+  const char *head_ptr = cdata_head;
+
+  /* Check for CDATA head "![CDATA[" */
+  for (size_t i = 0; i < strlen(cdata_head); i++) {
+    int chr = GET;
+
+    if (chr != *head_ptr++) {
+      /*
+        Didn't find "![CDATA[" head,
+        push back the last (unmatched) character
+      */
+      PUSH(chr);
+      /* and all matched from the head. */
+      while (i--) PUSH(*--head_ptr);
+
+      *have_cdata = false;
+      return '<';
+    }
+  }
+
+  int tail[3]{0};
+  for (tail[2] = GET; tail[2] != my_b_EOF; tail[2] = GET) {
+    /* Check for CDATA tail "]]>" */
+    if (tail[0] == ']' && tail[1] == ']' && tail[2] == '>') {
+      /* Cut last two characters ("]]") which were appended to val. */
+      assert(val->length() >= 2);
+      val->length(val->length() - 2);
+
+      *have_cdata = true;
+      return '>';
+    }
+    /* Shift the tail */
+    tail[0] = tail[1];
+    tail[1] = tail[2];
+
+    val->append(tail[2]);
+  }
+
+  /* Didn't find CDATA tail "]]>", the last character read must be my_b_EOF. */
+  assert(tail[2] == my_b_EOF);
+  *have_cdata = false;
+  return my_b_EOF;
+}
+
+
+// Source: sql_load.cc
+// Lines 1883-1927

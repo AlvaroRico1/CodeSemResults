@@ -1,0 +1,34 @@
+static void __user *get_sigframe(struct ksignal *ksig, struct pt_regs *regs,
+				 size_t frame_size,
+				 void __user **fpstate)
+{
+	unsigned long sp, fx_aligned, math_size;
+
+	/* Default to using normal stack */
+	sp = regs->sp;
+
+	/* This is the X/Open sanctioned signal stack switching.  */
+	if (ksig->ka.sa.sa_flags & SA_ONSTACK)
+		sp = sigsp(sp, ksig);
+	/* This is the legacy signal stack switching. */
+	else if (regs->ss != __USER32_DS &&
+		!(ksig->ka.sa.sa_flags & SA_RESTORER) &&
+		 ksig->ka.sa.sa_restorer)
+		sp = (unsigned long) ksig->ka.sa.sa_restorer;
+
+	sp = fpu__alloc_mathframe(sp, 1, &fx_aligned, &math_size);
+	*fpstate = (struct _fpstate_32 __user *) sp;
+	if (copy_fpstate_to_sigframe(*fpstate, (void __user *)fx_aligned,
+				     math_size) < 0)
+		return (void __user *) -1L;
+
+	sp -= frame_size;
+	/* Align the stack pointer according to the i386 ABI,
+	 * i.e. so that on function entry ((sp + 4) & 15) == 0. */
+	sp = ((sp + 4) & -16ul) - 4;
+	return (void __user *) sp;
+}
+
+
+// Source: ia32_signal.c
+// Lines 220-249

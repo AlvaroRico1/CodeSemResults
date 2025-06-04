@@ -1,0 +1,1 @@
+type2_found,mysql/libmysql/libmysql.cc,10,type1_found,mysql/libmysql/libmysql.cc,10,0

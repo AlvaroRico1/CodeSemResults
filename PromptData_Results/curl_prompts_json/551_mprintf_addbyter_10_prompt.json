@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'infop' at line 3\n2. Pointer 'data' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int addbyter(int output, FILE *data)\n{\n  struct nsprintf *infop = (struct nsprintf *)data;\n  unsigned char outc = (unsigned char)output;\n\n  if(infop->length < infop->max) {\n    /* only do this if we haven't reached max length yet */\n    infop->buffer[0] = outc; /* store */\n    infop->buffer++; /* increase pointer */\n    infop->length++; /* we are now one byte larger */\n    return outc;     /* fputc() returns like this on success */\n  }\n  return -1;\n}\n\n\n// Source: mprintf.c\n// Lines 992-1005\n",
+  "ANSWER": "MUST"
+}

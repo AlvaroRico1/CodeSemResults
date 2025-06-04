@@ -1,0 +1,42 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'mime' at line 1
+2. Pointer 'part' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+curl_mimepart *curl_mime_addpart(curl_mime *mime)
+{
+  curl_mimepart *part;
+
+  if(!mime)
+    return NULL;
+
+  part = (curl_mimepart *) malloc(sizeof(*part));
+
+  if(part) {
+    Curl_mime_initpart(part, mime->easy);
+    part->parent = mime;
+
+    if(mime->lastpart)
+      mime->lastpart->nextpart = part;
+    else
+      mime->firstpart = part;
+
+    mime->lastpart = part;
+  }
+
+  return part;
+}
+
+
+// Source: mime.c
+// Lines 1342-1364
+
+
+[ANSWER]
+MUST

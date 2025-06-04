@@ -1,0 +1,263 @@
+void BrotliOptimizeHuffmanCountsForRle(size_t length, uint32_t* counts,
+                                       uint8_t* good_for_rle) {
+  size_t nonzero_count = 0;
+  size_t stride;
+  size_t limit;
+  size_t sum;
+  const size_t streak_limit = 1240;
+  /* Let's make the Huffman code more compatible with RLE encoding. */
+  size_t i;
+  for (i = 0; i < length; i++) {
+    if (counts[i]) {
+      ++nonzero_count;
+    }
+  }
+  if (nonzero_count < 16) {
+    return;
+  }
+  while (length != 0 && counts[length - 1] == 0) {
+    --length;
+  }
+  if (length == 0) {
+    return;  /* All zeros. */
+  }
+  /* Now counts[0..length - 1] does not have trailing zeros. */
+  {
+    size_t nonzeros = 0;
+    uint32_t smallest_nonzero = 1 << 30;
+    for (i = 0; i < length; ++i) {
+      if (counts[i] != 0) {
+        ++nonzeros;
+        if (smallest_nonzero > counts[i]) {
+          smallest_nonzero = counts[i];
+        }
+      }
+    }
+    if (nonzeros < 5) {
+      /* Small histogram will model it well. */
+      return;
+    }
+    if (smallest_nonzero < 4) {
+      size_t zeros = length - nonzeros;
+      if (zeros < 6) {
+        for (i = 1; i < length - 1; ++i) {
+          if (counts[i - 1] != 0 && counts[i] == 0 && counts[i + 1] != 0) {
+            counts[i] = 1;
+          }
+        }
+      }
+    }
+    if (nonzeros < 28) {
+      return;
+    }
+  }
+  /* 2) Let's mark all population counts that already can be encoded
+     with an RLE code. */
+  memset(good_for_rle, 0, length);
+  {
+    /* Let's not spoil any of the existing good RLE codes.
+       Mark any seq of 0's that is longer as 5 as a good_for_rle.
+       Mark any seq of non-0's that is longer as 7 as a good_for_rle. */
+    uint32_t symbol = counts[0];
+    size_t step = 0;
+    for (i = 0; i <= length; ++i) {
+      if (i == length || counts[i] != symbol) {
+        if ((symbol == 0 && step >= 5) ||
+            (symbol != 0 && step >= 7)) {
+          size_t k;
+          for (k = 0; k < step; ++k) {
+            good_for_rle[i - k - 1] = 1;
+          }
+        }
+        step = 1;
+        if (i != length) {
+          symbol = counts[i];
+        }
+      } else {
+        ++step;
+      }
+    }
+  }
+  /* 3) Let's replace those population counts that lead to more RLE codes.
+     Math here is in 24.8 fixed point representation. */
+  stride = 0;
+  limit = 256 * (counts[0] + counts[1] + counts[2]) / 3 + 420;
+  sum = 0;
+  for (i = 0; i <= length; ++i) {
+    if (i == length || good_for_rle[i] ||
+        (i != 0 && good_for_rle[i - 1]) ||
+        (256 * counts[i] - limit + streak_limit) >= 2 * streak_limit) {
+      if (stride >= 4 || (stride >= 3 && sum == 0)) {
+        size_t k;
+        /* The stride must end, collapse what we have, if we have enough (4). */
+        size_t count = (sum + stride / 2) / stride;
+        if (count == 0) {
+          count = 1;
+        }
+        if (sum == 0) {
+          /* Don't make an all zeros stride to be upgraded to ones. */
+          count = 0;
+        }
+        for (k = 0; k < stride; ++k) {
+          /* We don't want to change value at counts[i],
+             that is already belonging to the next stride. Thus - 1. */
+          counts[i - k - 1] = (uint32_t)count;
+        }
+      }
+      stride = 0;
+      sum = 0;
+      if (i < length - 2) {
+        /* All interesting strides have a count of at least 4, */
+        /* at least when non-zeros. */
+        limit = 256 * (counts[i] + counts[i + 1] + counts[i + 2]) / 3 + 420;
+      } else if (i < length) {
+        limit = 256 * counts[i];
+      } else {
+        limit = 0;
+      }
+    }
+    ++stride;
+    if (i != length) {
+      sum += counts[i];
+      if (stride >= 4) {
+        limit = (256 * sum + stride / 2) / stride;
+      }
+      if (stride == 4) {
+        limit += 120;
+      }
+    }
+  }
+}
+
+static void DecideOverRleUse(const uint8_t* depth, const size_t length,
+                             BROTLI_BOOL *use_rle_for_non_zero,
+                             BROTLI_BOOL *use_rle_for_zero) {
+  size_t total_reps_zero = 0;
+  size_t total_reps_non_zero = 0;
+  size_t count_reps_zero = 1;
+  size_t count_reps_non_zero = 1;
+  size_t i;
+  for (i = 0; i < length;) {
+    const uint8_t value = depth[i];
+    size_t reps = 1;
+    size_t k;
+    for (k = i + 1; k < length && depth[k] == value; ++k) {
+      ++reps;
+    }
+    if (reps >= 3 && value == 0) {
+      total_reps_zero += reps;
+      ++count_reps_zero;
+    }
+    if (reps >= 4 && value != 0) {
+      total_reps_non_zero += reps;
+      ++count_reps_non_zero;
+    }
+    i += reps;
+  }
+  *use_rle_for_non_zero =
+      TO_BROTLI_BOOL(total_reps_non_zero > count_reps_non_zero * 2);
+  *use_rle_for_zero = TO_BROTLI_BOOL(total_reps_zero > count_reps_zero * 2);
+}
+
+void BrotliWriteHuffmanTree(const uint8_t* depth,
+                            size_t length,
+                            size_t* tree_size,
+                            uint8_t* tree,
+                            uint8_t* extra_bits_data) {
+  uint8_t previous_value = BROTLI_INITIAL_REPEATED_CODE_LENGTH;
+  size_t i;
+  BROTLI_BOOL use_rle_for_non_zero = BROTLI_FALSE;
+  BROTLI_BOOL use_rle_for_zero = BROTLI_FALSE;
+
+  /* Throw away trailing zeros. */
+  size_t new_length = length;
+  for (i = 0; i < length; ++i) {
+    if (depth[length - i - 1] == 0) {
+      --new_length;
+    } else {
+      break;
+    }
+  }
+
+  /* First gather statistics on if it is a good idea to do RLE. */
+  if (length > 50) {
+    /* Find RLE coding for longer codes.
+       Shorter codes seem not to benefit from RLE. */
+    DecideOverRleUse(depth, new_length,
+                     &use_rle_for_non_zero, &use_rle_for_zero);
+  }
+
+  /* Actual RLE coding. */
+  for (i = 0; i < new_length;) {
+    const uint8_t value = depth[i];
+    size_t reps = 1;
+    if ((value != 0 && use_rle_for_non_zero) ||
+        (value == 0 && use_rle_for_zero)) {
+      size_t k;
+      for (k = i + 1; k < new_length && depth[k] == value; ++k) {
+        ++reps;
+      }
+    }
+    if (value == 0) {
+      BrotliWriteHuffmanTreeRepetitionsZeros(
+          reps, tree_size, tree, extra_bits_data);
+    } else {
+      BrotliWriteHuffmanTreeRepetitions(previous_value,
+                                        value, reps, tree_size,
+                                        tree, extra_bits_data);
+      previous_value = value;
+    }
+    i += reps;
+  }
+}
+
+static uint16_t BrotliReverseBits(size_t num_bits, uint16_t bits) {
+  static const size_t kLut[16] = {  /* Pre-reversed 4-bit values. */
+    0x0, 0x8, 0x4, 0xc, 0x2, 0xa, 0x6, 0xe,
+    0x1, 0x9, 0x5, 0xd, 0x3, 0xb, 0x7, 0xf
+  };
+  size_t retval = kLut[bits & 0xf];
+  size_t i;
+  for (i = 4; i < num_bits; i += 4) {
+    retval <<= 4;
+    bits = (uint16_t)(bits >> 4);
+    retval |= kLut[bits & 0xf];
+  }
+  retval >>= ((0 - num_bits) & 0x3);
+  return (uint16_t)retval;
+}
+
+/* 0..15 are values for bits */
+#define MAX_HUFFMAN_BITS 16
+
+void BrotliConvertBitDepthsToSymbols(const uint8_t *depth,
+                                     size_t len,
+                                     uint16_t *bits) {
+  /* In Brotli, all bit depths are [1..15]
+     0 bit depth means that the symbol does not exist. */
+  uint16_t bl_count[MAX_HUFFMAN_BITS] = { 0 };
+  uint16_t next_code[MAX_HUFFMAN_BITS];
+  size_t i;
+  int code = 0;
+  for (i = 0; i < len; ++i) {
+    ++bl_count[depth[i]];
+  }
+  bl_count[0] = 0;
+  next_code[0] = 0;
+  for (i = 1; i < MAX_HUFFMAN_BITS; ++i) {
+    code = (code + bl_count[i - 1]) << 1;
+    next_code[i] = (uint16_t)code;
+  }
+  for (i = 0; i < len; ++i) {
+    if (depth[i]) {
+      bits[i] = BrotliReverseBits(depth[i], next_code[depth[i]]++);
+    }
+  }
+}
+
+#if defined(__cplusplus) || defined(c_plusplus)
+}  /* extern "C" */
+
+
+// Source: entropy_encode.c
+// Lines 242-500

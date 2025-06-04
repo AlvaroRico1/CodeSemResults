@@ -1,0 +1,87 @@
+client_dispatch_attached(struct imsg *imsg)
+{
+	struct sigaction	 sigact;
+	char			*data;
+	ssize_t			 datalen;
+
+	data = imsg->data;
+	datalen = imsg->hdr.len - IMSG_HEADER_SIZE;
+
+	switch (imsg->hdr.type) {
+	case MSG_FLAGS:
+		if (datalen != sizeof client_flags)
+			fatalx("bad MSG_FLAGS string");
+
+		memcpy(&client_flags, data, sizeof client_flags);
+		log_debug("new flags are %#llx",
+		    (unsigned long long)client_flags);
+		break;
+	case MSG_DETACH:
+	case MSG_DETACHKILL:
+		if (datalen == 0 || data[datalen - 1] != '\0')
+			fatalx("bad MSG_DETACH string");
+
+		client_exitsession = xstrdup(data);
+		client_exittype = imsg->hdr.type;
+		if (imsg->hdr.type == MSG_DETACHKILL)
+			client_exitreason = CLIENT_EXIT_DETACHED_HUP;
+		else
+			client_exitreason = CLIENT_EXIT_DETACHED;
+		proc_send(client_peer, MSG_EXITING, -1, NULL, 0);
+		break;
+	case MSG_EXEC:
+		if (datalen == 0 || data[datalen - 1] != '\0' ||
+		    strlen(data) + 1 == (size_t)datalen)
+			fatalx("bad MSG_EXEC string");
+		client_execcmd = xstrdup(data);
+		client_execshell = xstrdup(data + strlen(data) + 1);
+
+		client_exittype = imsg->hdr.type;
+		proc_send(client_peer, MSG_EXITING, -1, NULL, 0);
+		break;
+	case MSG_EXIT:
+		client_dispatch_exit_message(data, datalen);
+		if (client_exitreason == CLIENT_EXIT_NONE)
+			client_exitreason = CLIENT_EXIT_EXITED;
+		proc_send(client_peer, MSG_EXITING, -1, NULL, 0);
+		break;
+	case MSG_EXITED:
+		if (datalen != 0)
+			fatalx("bad MSG_EXITED size");
+
+		proc_exit(client_proc);
+		break;
+	case MSG_SHUTDOWN:
+		if (datalen != 0)
+			fatalx("bad MSG_SHUTDOWN size");
+
+		proc_send(client_peer, MSG_EXITING, -1, NULL, 0);
+		client_exitreason = CLIENT_EXIT_SERVER_EXITED;
+		client_exitval = 1;
+		break;
+	case MSG_SUSPEND:
+		if (datalen != 0)
+			fatalx("bad MSG_SUSPEND size");
+
+		memset(&sigact, 0, sizeof sigact);
+		sigemptyset(&sigact.sa_mask);
+		sigact.sa_flags = SA_RESTART;
+		sigact.sa_handler = SIG_DFL;
+		if (sigaction(SIGTSTP, &sigact, NULL) != 0)
+			fatal("sigaction failed");
+		client_suspended = 1;
+		kill(getpid(), SIGTSTP);
+		break;
+	case MSG_LOCK:
+		if (datalen == 0 || data[datalen - 1] != '\0')
+			fatalx("bad MSG_LOCK string");
+
+		system(data);
+		proc_send(client_peer, MSG_UNLOCK, -1, NULL, 0);
+		break;
+	}
+}
+
+
+// Source: client.c
+// Lines 718-800

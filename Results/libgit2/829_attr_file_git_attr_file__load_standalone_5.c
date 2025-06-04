@@ -1,0 +1,32 @@
+int git_attr_file__load_standalone(git_attr_file **out, const char *path)
+{
+	git_str content = GIT_STR_INIT;
+	git_attr_file_source source = { GIT_ATTR_FILE_SOURCE_FILE };
+	git_attr_file *file = NULL;
+	int error;
+
+	if ((error = git_futils_readbuffer(&content, path)) < 0)
+		goto out;
+
+	/*
+	 * Because the cache entry is allocated from the file's own pool, we
+	 * don't have to free it - freeing file+pool will free cache entry, too.
+	 */
+
+	if ((error = git_attr_file__new(&file, NULL, &source)) < 0 ||
+	    (error = git_attr_file__parse_buffer(NULL, file, content.ptr, true)) < 0 ||
+	    (error = git_attr_cache__alloc_file_entry(&file->entry, NULL, NULL, path, &file->pool)) < 0)
+		goto out;
+
+	*out = file;
+out:
+	if (error < 0)
+		git_attr_file__free(file);
+	git_str_dispose(&content);
+
+	return error;
+}
+
+
+// Source: attr_file.c
+// Lines 436-463

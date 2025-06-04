@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'mtm' at line 4\n2. Pointer 'data' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nmode_tree_menu_callback(__unused struct menu *menu, __unused u_int idx,\n    key_code key, void *data)\n{\n\tstruct mode_tree_menu\t\t*mtm = data;\n\tstruct mode_tree_data\t\t*mtd = mtm->data;\n\tstruct mode_tree_item\t\t*mti;\n\n\tif (mtd->dead || key == KEYC_NONE)\n\t\tgoto out;\n\n\tif (mtm->line >= mtd->line_size)\n\t\tgoto out;\n\tmti = mtd->line_list[mtm->line].item;\n\tif (mti->itemdata != mtm->itemdata)\n\t\tgoto out;\n\tmtd->current = mtm->line;\n\tmtd->menucb(mtd->modedata, mtm->c, key);\n\nout:\n\tmode_tree_remove_ref(mtd);\n\tfree(mtm);\n}\n\n\n// Source: mode-tree.c\n// Lines 909-930\n",
+  "ANSWER": "MUST"
+}

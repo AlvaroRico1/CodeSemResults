@@ -1,0 +1,1 @@
+edge,gcc/gcc/ipa-comdats.c,59,cnode,gcc/gcc/ipa-comdats.c,56,1

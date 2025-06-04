@@ -1,0 +1,1 @@
+name,libgit2/tests/libgit2/clone/transport.c,4,error,libgit2/tests/libgit2/clone/transport.c,8,0

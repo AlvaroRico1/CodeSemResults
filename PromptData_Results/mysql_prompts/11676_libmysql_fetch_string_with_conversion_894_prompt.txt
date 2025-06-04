@@ -1,0 +1,134 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'value' at line 1
+2. Pointer 'endptr' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void fetch_string_with_conversion(MYSQL_BIND *param, char *value,
+                                         size_t length) {
+  uchar *buffer = pointer_cast<uchar *>(param->buffer);
+  const char *endptr = value + length;
+
+  /*
+    This function should support all target buffer types: the rest
+    of conversion functions can delegate conversion to it.
+  */
+  switch (param->buffer_type) {
+    case MYSQL_TYPE_NULL: /* do nothing */
+      break;
+    case MYSQL_TYPE_TINY: {
+      int err;
+      longlong data = my_strtoll10(value, &endptr, &err);
+      *param->error = (IS_TRUNCATED(data, param->is_unsigned, INT_MIN8,
+                                    INT_MAX8, UINT_MAX8) ||
+                       err > 0);
+      *buffer = (uchar)data;
+      break;
+    }
+    case MYSQL_TYPE_SHORT: {
+      int err;
+      longlong data = my_strtoll10(value, &endptr, &err);
+      *param->error = (IS_TRUNCATED(data, param->is_unsigned, INT_MIN16,
+                                    INT_MAX16, UINT_MAX16) ||
+                       err > 0);
+      shortstore(buffer, (short)data);
+      break;
+    }
+    case MYSQL_TYPE_LONG: {
+      int err;
+      longlong data = my_strtoll10(value, &endptr, &err);
+      *param->error = (IS_TRUNCATED(data, param->is_unsigned, INT_MIN32,
+                                    INT_MAX32, UINT_MAX32) ||
+                       err > 0);
+      longstore(buffer, (int32)data);
+      break;
+    }
+    case MYSQL_TYPE_LONGLONG: {
+      int err;
+      longlong data = my_strtoll10(value, &endptr, &err);
+      *param->error =
+          param->is_unsigned ? err != 0 : (err > 0 || (err == 0 && data < 0));
+      longlongstore(buffer, data);
+      break;
+    }
+    case MYSQL_TYPE_FLOAT: {
+      int err;
+      double data =
+          my_strntod(&my_charset_latin1, value, length, &endptr, &err);
+      float fdata = (float)data;
+      *param->error = (fdata != data) | (err != 0);
+      floatstore(buffer, fdata);
+      break;
+    }
+    case MYSQL_TYPE_DOUBLE: {
+      int err;
+      double data =
+          my_strntod(&my_charset_latin1, value, length, &endptr, &err);
+      *param->error = (err != 0);
+      doublestore(buffer, data);
+      break;
+    }
+    case MYSQL_TYPE_TIME: {
+      MYSQL_TIME_STATUS status;
+      MYSQL_TIME *tm = (MYSQL_TIME *)buffer;
+      str_to_time(value, length, tm, &status);
+      *param->error = (status.warnings != 0);
+      break;
+    }
+    case MYSQL_TYPE_DATE:
+    case MYSQL_TYPE_DATETIME:
+    case MYSQL_TYPE_TIMESTAMP: {
+      MYSQL_TIME_STATUS status;
+      MYSQL_TIME *tm = (MYSQL_TIME *)buffer;
+      (void)str_to_datetime(value, length, tm, TIME_FUZZY_DATE, &status);
+      *param->error =
+          (status.warnings != 0) && (param->buffer_type == MYSQL_TYPE_DATE &&
+                                     tm->time_type != MYSQL_TIMESTAMP_DATE);
+      break;
+    }
+    case MYSQL_TYPE_TINY_BLOB:
+    case MYSQL_TYPE_MEDIUM_BLOB:
+    case MYSQL_TYPE_LONG_BLOB:
+    case MYSQL_TYPE_BLOB:
+    case MYSQL_TYPE_DECIMAL:
+    case MYSQL_TYPE_NEWDECIMAL:
+    default: {
+      /*
+        Copy column data to the buffer taking into account offset,
+        data length and buffer length.
+      */
+      char *start = value + param->offset;
+      char *end = value + length;
+      size_t copy_length;
+      if (start < end) {
+        copy_length = end - start;
+        /* We've got some data beyond offset: copy up to buffer_length bytes */
+        if (param->buffer_length)
+          memcpy(buffer, start,
+                 std::min<size_t>(copy_length, param->buffer_length));
+      } else
+        copy_length = 0;
+      if (copy_length < param->buffer_length) buffer[copy_length] = '\0';
+      *param->error = copy_length > param->buffer_length;
+      /*
+        param->length will always contain length of entire column;
+        number of copied bytes may be way different:
+      */
+      *param->length = (unsigned long)length;
+      break;
+    }
+  }
+}
+
+
+// Source: libmysql.cc
+// Lines 2695-2809
+
+
+[ANSWER]
+MUST-NOT

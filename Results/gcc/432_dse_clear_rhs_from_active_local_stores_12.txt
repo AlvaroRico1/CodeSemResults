@@ -1,0 +1,1 @@
+store_info,gcc/gcc/dse.c,7,ptr,gcc/gcc/dse.c,3,1

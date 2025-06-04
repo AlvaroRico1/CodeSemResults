@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'odb' at line 3\n2. Pointer 'odb' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void find_short_object_filename(struct disambiguate_state *ds)\n{\n\tstruct object_directory *odb;\n\n\tfor (odb = ds->repo->objects->odb; odb && !ds->ambiguous; odb = odb->next)\n\t\toidtree_each(odb_loose_cache(odb, &ds->bin_pfx),\n\t\t\t\t&ds->bin_pfx, ds->len, match_prefix, ds);\n}\n\n\n// Source: object-name.c\n// Lines 98-105\n",
+  "ANSWER": "MUST"
+}

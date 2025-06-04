@@ -1,0 +1,100 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'w_curs' at line 7
+2. Pointer 'curpos' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int pack_dependency_chain(git_dependency_chain *chain_out,
+				 git_pack_cache_entry **cached_out, off64_t *cached_off,
+				 struct pack_chain_elem *small_stack, size_t *stack_sz,
+				 struct git_pack_file *p, off64_t obj_offset)
+{
+	git_dependency_chain chain = GIT_ARRAY_INIT;
+	git_mwindow *w_curs = NULL;
+	off64_t curpos = obj_offset, base_offset;
+	int error = 0, use_heap = 0;
+	size_t size, elem_pos;
+	git_object_t type;
+
+	elem_pos = 0;
+	while (true) {
+		struct pack_chain_elem *elem;
+		git_pack_cache_entry *cached = NULL;
+
+		/* if we have a base cached, we can stop here instead */
+		if ((cached = cache_get(&p->bases, obj_offset)) != NULL) {
+			*cached_out = cached;
+			*cached_off = obj_offset;
+			break;
+		}
+
+		/* if we run out of space on the small stack, use the array */
+		if (elem_pos == SMALL_STACK_SIZE) {
+			git_array_init_to_size(chain, elem_pos);
+			GIT_ERROR_CHECK_ARRAY(chain);
+			memcpy(chain.ptr, small_stack, elem_pos * sizeof(struct pack_chain_elem));
+			chain.size = elem_pos;
+			use_heap = 1;
+		}
+
+		curpos = obj_offset;
+		if (!use_heap) {
+			elem = &small_stack[elem_pos];
+		} else {
+			elem = git_array_alloc(chain);
+			if (!elem) {
+				error = -1;
+				goto on_error;
+			}
+		}
+
+		elem->base_key = obj_offset;
+
+		error = git_packfile_unpack_header(&size, &type, p, &w_curs, &curpos);
+		if (error < 0)
+			goto on_error;
+
+		elem->offset = curpos;
+		elem->size = size;
+		elem->type = type;
+		elem->base_key = obj_offset;
+
+		if (type != GIT_OBJECT_OFS_DELTA && type != GIT_OBJECT_REF_DELTA)
+			break;
+
+		error = get_delta_base(&base_offset, p, &w_curs, &curpos, type, obj_offset);
+		git_mwindow_close(&w_curs);
+
+		if (error < 0)
+			goto on_error;
+
+		/* we need to pass the pos *after* the delta-base bit */
+		elem->offset = curpos;
+
+		/* go through the loop again, but with the new object */
+		obj_offset = base_offset;
+		elem_pos++;
+	}
+
+
+	*stack_sz = elem_pos + 1;
+	*chain_out = chain;
+	return error;
+
+on_error:
+	git_array_clear(chain);
+	return error;
+}
+
+
+// Source: pack.c
+// Lines 584-664
+
+
+[ANSWER]
+MAY

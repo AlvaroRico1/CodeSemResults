@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ctx' at line 3\n2. Pointer 'eckey' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int x9_62_init_key(ptls_key_exchange_algorithm_t *algo, ptls_key_exchange_context_t **_ctx, EC_KEY *eckey)\n{\n    struct st_x9_62_keyex_context_t *ctx = NULL;\n    int ret;\n\n    if ((ret = x9_62_create_context(algo, &ctx)) != 0)\n        goto Exit;\n    ctx->privkey = eckey;\n    if ((ret = x9_62_setup_pubkey(ctx)) != 0)\n        goto Exit;\n    ret = 0;\n\nExit:\n    if (ret == 0) {\n        *_ctx = &ctx->super;\n    } else {\n        if (ctx != NULL)\n            x9_62_free_context(ctx);\n        *_ctx = NULL;\n    }\n    return ret;\n}\n\n\n// Source: openssl.c\n// Lines 362-383\n",
+  "ANSWER": "MUST"
+}

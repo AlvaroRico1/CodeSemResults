@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'name' at line 8\n2. Pointer 'attr' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint git_attr_file__lookup_one(\n\tgit_attr_file *file,\n\tgit_attr_path *path,\n\tconst char *attr,\n\tconst char **value)\n{\n\tsize_t i;\n\tgit_attr_name name;\n\tgit_attr_rule *rule;\n\n\t*value = NULL;\n\n\tname.name = attr;\n\tname.name_hash = git_attr_file__name_hash(attr);\n\n\tgit_attr_file__foreach_matching_rule(file, path, i, rule) {\n\t\tsize_t pos;\n\n\t\tif (!git_vector_bsearch(&pos, &rule->assigns, &name)) {\n\t\t\t*value = ((git_attr_assignment *)\n\t\t\t\t\t  git_vector_get(&rule->assigns, pos))->value;\n\t\t\tbreak;\n\t\t}\n\t}\n\n\treturn 0;\n}\n\n\n// Source: attr_file.c\n// Lines 408-434\n",
+  "ANSWER": "MUST"
+}

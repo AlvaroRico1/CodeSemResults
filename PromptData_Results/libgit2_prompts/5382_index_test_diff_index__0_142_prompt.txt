@@ -1,0 +1,96 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'a_commit' at line 4
+2. Pointer 'b' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_diff_index__0(void)
+{
+	/* grabbed a couple of commit oids from the history of the attr repo */
+	const char *a_commit = "26a125ee1bf"; /* the current HEAD */
+	const char *b_commit = "0017bd4ab1ec3"; /* the start */
+	git_tree *a = resolve_commit_oid_to_tree(g_repo, a_commit);
+	git_tree *b = resolve_commit_oid_to_tree(g_repo, b_commit);
+	git_diff_options opts = GIT_DIFF_OPTIONS_INIT;
+	git_diff *diff = NULL;
+	diff_expects exp;
+
+	cl_assert(a);
+	cl_assert(b);
+
+	opts.context_lines = 1;
+	opts.interhunk_lines = 1;
+
+	memset(&exp, 0, sizeof(exp));
+
+	cl_git_pass(git_diff_tree_to_index(&diff, g_repo, a, NULL, &opts));
+
+	cl_git_pass(git_diff_foreach(
+		diff, diff_file_cb, diff_binary_cb, diff_hunk_cb, diff_line_cb, &exp));
+
+	/* to generate these values:
+	 * - cd to tests/resources/status,
+	 * - mv .gitted .git
+	 * - git diff --name-status --cached 26a125ee1bf
+	 * - git diff -U1 --cached 26a125ee1bf
+	 * - mv .git .gitted
+	 */
+	cl_assert_equal_i(8, exp.files);
+	cl_assert_equal_i(3, exp.file_status[GIT_DELTA_ADDED]);
+	cl_assert_equal_i(2, exp.file_status[GIT_DELTA_DELETED]);
+	cl_assert_equal_i(3, exp.file_status[GIT_DELTA_MODIFIED]);
+
+	cl_assert_equal_i(8, exp.hunks);
+
+	cl_assert_equal_i(11, exp.lines);
+	cl_assert_equal_i(3, exp.line_ctxt);
+	cl_assert_equal_i(6, exp.line_adds);
+	cl_assert_equal_i(2, exp.line_dels);
+
+	git_diff_free(diff);
+	diff = NULL;
+	memset(&exp, 0, sizeof(exp));
+
+	cl_git_pass(git_diff_tree_to_index(&diff, g_repo, b, NULL, &opts));
+
+	cl_git_pass(git_diff_foreach(
+		diff, diff_file_cb, diff_binary_cb, diff_hunk_cb, diff_line_cb, &exp));
+
+	/* to generate these values:
+	 * - cd to tests/resources/status,
+	 * - mv .gitted .git
+	 * - git diff --name-status --cached 0017bd4ab1ec3
+	 * - git diff -U1 --cached 0017bd4ab1ec3
+	 * - mv .git .gitted
+	 */
+	cl_assert_equal_i(12, exp.files);
+	cl_assert_equal_i(7, exp.file_status[GIT_DELTA_ADDED]);
+	cl_assert_equal_i(2, exp.file_status[GIT_DELTA_DELETED]);
+	cl_assert_equal_i(3, exp.file_status[GIT_DELTA_MODIFIED]);
+
+	cl_assert_equal_i(12, exp.hunks);
+
+	cl_assert_equal_i(16, exp.lines);
+	cl_assert_equal_i(3, exp.line_ctxt);
+	cl_assert_equal_i(11, exp.line_adds);
+	cl_assert_equal_i(2, exp.line_dels);
+
+	git_diff_free(diff);
+	diff = NULL;
+
+	git_tree_free(a);
+	git_tree_free(b);
+}
+
+
+// Source: index.c
+// Lines 16-92
+
+
+[ANSWER]
+MUST-NOT

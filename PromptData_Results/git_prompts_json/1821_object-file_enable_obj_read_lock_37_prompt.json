@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'oi' at line None\n2. Pointer 'blank_oi' at line None\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid enable_obj_read_lock(void)\n{\n\tif (obj_read_use_lock)\n\t\treturn;\n\n\tobj_read_use_lock = 1;\n\tinit_recursive_mutex(&obj_read_mutex);\n}\n\n\n// Source: object-file.c\n// Lines 1472-1479\n",
+  "ANSWER": "MUST"
+}

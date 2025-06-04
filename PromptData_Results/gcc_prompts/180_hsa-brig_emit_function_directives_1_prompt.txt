@@ -1,0 +1,81 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'slot' at line 57
+2. Pointer 'int_fn' at line 59
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+emit_function_directives (hsa_function_representation *f, bool is_declaration)
+{
+  struct BrigDirectiveExecutable fndir;
+  unsigned name_offset, inarg_off, scoped_off, next_toplev_off;
+  int count = 0;
+  void *ptr_to_fndir;
+  hsa_symbol *sym;
+
+  if (!f->m_declaration_p)
+    for (int i = 0; f->m_global_symbols.iterate (i, &sym); i++)
+      {
+	gcc_assert (!sym->m_emitted_to_brig);
+	sym->m_emitted_to_brig = true;
+	emit_directive_variable (sym);
+	brig_insn_count++;
+      }
+
+  name_offset = brig_emit_string (f->m_name, '&');
+  inarg_off = brig_code.total_size + sizeof (fndir)
+    + (f->m_output_arg ? sizeof (struct BrigDirectiveVariable) : 0);
+  scoped_off = inarg_off
+    + f->m_input_args.length () * sizeof (struct BrigDirectiveVariable);
+
+  if (!f->m_declaration_p)
+    {
+      count += f->m_spill_symbols.length ();
+      count += f->m_private_variables.length ();
+    }
+
+  next_toplev_off = scoped_off + count * sizeof (struct BrigDirectiveVariable);
+
+  memset (&fndir, 0, sizeof (fndir));
+  fndir.base.byteCount = lendian16 (sizeof (fndir));
+  fndir.base.kind = lendian16 (f->m_kern_p ? BRIG_KIND_DIRECTIVE_KERNEL
+			       : BRIG_KIND_DIRECTIVE_FUNCTION);
+  fndir.name = lendian32 (name_offset);
+  fndir.inArgCount = lendian16 (f->m_input_args.length ());
+  fndir.outArgCount = lendian16 (f->m_output_arg ? 1 : 0);
+  fndir.firstInArg = lendian32 (inarg_off);
+  fndir.firstCodeBlockEntry = lendian32 (scoped_off);
+  fndir.nextModuleEntry = lendian32 (next_toplev_off);
+  fndir.linkage = f->get_linkage ();
+  if (!f->m_declaration_p)
+    fndir.modifier |= BRIG_EXECUTABLE_DEFINITION;
+  memset (&fndir.reserved, 0, sizeof (fndir.reserved));
+
+  /* Once we put a definition of function_offsets, we should not overwrite
+     it with a declaration of the function.  */
+  if (f->m_internal_fn == NULL)
+    {
+      if (!function_offsets->get (f->m_decl) || !is_declaration)
+	function_offsets->put (f->m_decl, brig_code.total_size);
+    }
+  else
+    {
+      /* Internal function.  */
+      hsa_internal_fn **slot
+	= hsa_emitted_internal_decls->find_slot (f->m_internal_fn, INSERT);
+      hsa_internal_fn *int_fn = new hsa_internal_fn (f->m_internal_fn);
+      int_fn->m_offset = brig_code.total_size;
+      *slot = int_fn;
+    }
+
+
+// Source: hsa-brig.c
+// Lines 653-714
+
+
+[ANSWER]
+MUST

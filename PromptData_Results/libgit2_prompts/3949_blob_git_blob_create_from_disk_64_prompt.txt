@@ -1,0 +1,42 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'hintpath' at line 6
+2. Pointer 'full_path' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_blob_create_from_disk(
+	git_oid *id, git_repository *repo, const char *path)
+{
+	int error;
+	git_str full_path = GIT_STR_INIT;
+	const char *workdir, *hintpath = NULL;
+
+	if ((error = git_fs_path_prettify(&full_path, path, NULL)) < 0) {
+		git_str_dispose(&full_path);
+		return error;
+	}
+
+	workdir  = git_repository_workdir(repo);
+
+	if (workdir && !git__prefixcmp(full_path.ptr, workdir))
+		hintpath = full_path.ptr + strlen(workdir);
+
+	error = git_blob__create_from_paths(
+		id, NULL, repo, git_str_cstr(&full_path), hintpath, 0, !!hintpath);
+
+	git_str_dispose(&full_path);
+	return error;
+}
+
+
+// Source: blob.c
+// Lines 276-298
+
+
+[ANSWER]
+MUST

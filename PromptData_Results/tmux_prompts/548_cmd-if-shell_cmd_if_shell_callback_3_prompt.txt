@@ -1,0 +1,57 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'state' at line 6
+2. Pointer 'cdata' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+cmd_if_shell_callback(struct job *job)
+{
+	struct cmd_if_shell_data	*cdata = job_get_data(job);
+	struct client			*c = cdata->client;
+	struct cmdq_item		*item = cdata->item, *new_item;
+	struct args_command_state	*state;
+	struct cmd_list			*cmdlist;
+	char				*error;
+	int				 status;
+
+	status = job_get_status(job);
+	if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
+		state = cdata->cmd_else;
+	else
+		state = cdata->cmd_if;
+	if (state == NULL)
+		goto out;
+
+	cmdlist = args_make_commands(state, 0, NULL, &error);
+	if (cmdlist == NULL) {
+		if (cdata->item == NULL) {
+			*error = toupper((u_char)*error);
+			status_message_set(c, -1, 1, 0, "%s", error);
+		} else
+			cmdq_error(cdata->item, "%s", error);
+		free(error);
+	} else if (item == NULL) {
+		new_item = cmdq_get_command(cmdlist, NULL);
+		cmdq_append(c, new_item);
+	} else {
+		new_item = cmdq_get_command(cmdlist, cmdq_get_state(item));
+		cmdq_insert_after(item, new_item);
+	}
+
+out:
+	if (cdata->item != NULL)
+		cmdq_continue(cdata->item);
+}
+
+
+// Source: cmd-if-shell.c
+// Lines 138-175
+
+
+[ANSWER]
+MUST

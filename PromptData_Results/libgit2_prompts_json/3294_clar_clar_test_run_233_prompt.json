@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'explicit' at line 4\n2. Pointer 'i' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nclar_test_run(void)\n{\n\tsize_t i;\n\tstruct clar_explicit *explicit;\n\n\tif (_clar.explicit) {\n\t\tfor (explicit = _clar.explicit; explicit; explicit = explicit->next)\n\t\t\tclar_run_suite(&_clar_suites[explicit->suite_idx], explicit->filter);\n\t} else {\n\t\tfor (i = 0; i < _clar_suite_count; ++i)\n\t\t\tclar_run_suite(&_clar_suites[i], NULL);\n\t}\n\n\treturn _clar.total_errors;\n}\n\n\n// Source: clar.c\n// Lines 534-548\n",
+  "ANSWER": "MUST-NOT"
+}

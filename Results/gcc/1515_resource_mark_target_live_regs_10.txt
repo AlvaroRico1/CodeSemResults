@@ -1,0 +1,1 @@
+insn,gcc/gcc/resource.c,6,start_insn,gcc/gcc/resource.c,88,1

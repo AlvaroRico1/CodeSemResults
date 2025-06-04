@@ -1,0 +1,28 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'hostconf' at line 6
+2. Pointer 'hostconfs' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static h2o_hostconf_t *find_default_hostconf(h2o_hostconf_t **hostconfs)
+{
+    h2o_hostconf_t *fallback_host = hostconfs[0]->global->fallback_host;
+
+    do {
+        h2o_hostconf_t *hostconf = *hostconfs;
+        if (!hostconf->strict_match)
+            return hostconf;
+    } while (*++hostconfs != NULL);
+
+
+// Source: request.c
+// Lines 117-125
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,63 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'file_out' at line 1
+2. Pointer 'file' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_commit_graph_file_open(git_commit_graph_file **file_out, const char *path)
+{
+	git_commit_graph_file *file;
+	git_file fd = -1;
+	size_t cgraph_size;
+	struct stat st;
+	int error;
+
+	/* TODO: properly open the file without access time using O_NOATIME */
+	fd = git_futils_open_ro(path);
+	if (fd < 0)
+		return fd;
+
+	if (p_fstat(fd, &st) < 0) {
+		p_close(fd);
+		git_error_set(GIT_ERROR_ODB, "commit-graph file not found - '%s'", path);
+		return GIT_ENOTFOUND;
+	}
+
+	if (!S_ISREG(st.st_mode) || !git__is_sizet(st.st_size)) {
+		p_close(fd);
+		git_error_set(GIT_ERROR_ODB, "invalid pack index '%s'", path);
+		return GIT_ENOTFOUND;
+	}
+	cgraph_size = (size_t)st.st_size;
+
+	file = git__calloc(1, sizeof(git_commit_graph_file));
+	GIT_ERROR_CHECK_ALLOC(file);
+
+	error = git_futils_mmap_ro(&file->graph_map, fd, 0, cgraph_size);
+	p_close(fd);
+	if (error < 0) {
+		git_commit_graph_file_free(file);
+		return error;
+	}
+
+	if ((error = git_commit_graph_file_parse(file, file->graph_map.data, cgraph_size)) < 0) {
+		git_commit_graph_file_free(file);
+		return error;
+	}
+
+	*file_out = file;
+	return 0;
+}
+
+
+// Source: commit_graph.c
+// Lines 339-382
+
+
+[ANSWER]
+MUST

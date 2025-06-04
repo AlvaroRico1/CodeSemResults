@@ -1,0 +1,1 @@
+ptr,gcc/gcc/gcc.c,7,argv,gcc/gcc/gcc.c,1,2

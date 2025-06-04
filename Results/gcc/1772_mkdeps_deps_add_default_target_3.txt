@@ -1,0 +1,1 @@
+suffix,gcc/libcpp/mkdeps.c,17,tgt,gcc/libcpp/mkdeps.c,1,2

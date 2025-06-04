@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ppos' at line 2\n2. Pointer 'val' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nbuffer_percent_write(struct file *filp, const char __user *ubuf,\n\t\t     size_t cnt, loff_t *ppos)\n{\n\tstruct trace_array *tr = filp->private_data;\n\tunsigned long val;\n\tint ret;\n\n\tret = kstrtoul_from_user(ubuf, cnt, 10, &val);\n\tif (ret)\n\t\treturn ret;\n\n\tif (val > 100)\n\t\treturn -EINVAL;\n\n\tif (!val)\n\t\tval = 1;\n\n\ttr->buffer_percent = val;\n\n\t(*ppos)++;\n\n\treturn cnt;\n}\n\n\n// Source: trace.c\n// Lines 8180-8202\n",
+  "ANSWER": "MAY"
+}

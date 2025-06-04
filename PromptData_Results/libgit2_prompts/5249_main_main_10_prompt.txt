@@ -1,0 +1,36 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'argv' at line 1
+2. Pointer 'msg' at line 14
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int __cdecl main(int argc, char *argv[])
+#else
+int main(int argc, char *argv[])
+#endif
+{
+	int res;
+	char *at_exit_cmd;
+
+	clar_test_init(argc, argv);
+
+	res = git_libgit2_init();
+	if (res < 0) {
+		const git_error *err = git_error_last();
+		const char *msg = err ? err->message : "unknown failure";
+		fprintf(stderr, "failed to init libgit2: %s\n", msg);
+		return res;
+	}
+
+
+// Source: main.c
+// Lines 9-25
+
+
+[ANSWER]
+MUST-NOT

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ret' at line 2\n2. Pointer 'A' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic inline int32 sint4korr(const uchar *A) {\n  int32 ret;\n  memcpy(&ret, A, sizeof(ret));\n  return ret;\n}\n\n\n// Source: little_endian.h\n// Lines 54-58\n",
+  "ANSWER": "MUST-NOT"
+}

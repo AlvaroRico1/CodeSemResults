@@ -1,0 +1,114 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'field' at line 2
+2. Pointer 'ptr' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static bool set_up_field_array(TABLE *table, bool is_sub_part) {
+  Field **ptr, *field, **field_array;
+  uint num_fields = 0;
+  uint size_field_array;
+  uint i = 0;
+  uint inx;
+  partition_info *part_info = table->part_info;
+  int result = false;
+  DBUG_TRACE;
+
+  ptr = table->field;
+  while ((field = *(ptr++))) {
+    if (field->is_flag_set(GET_FIXED_FIELDS_FLAG)) num_fields++;
+  }
+  if (num_fields > MAX_REF_PARTS) {
+    const char *err_str;
+    if (is_sub_part)
+      err_str = "subpartition function";
+    else
+      err_str = "partition function";
+    my_error(ER_TOO_MANY_PARTITION_FUNC_FIELDS_ERROR, MYF(0), err_str);
+    return true;
+  }
+  if (num_fields == 0) {
+    /*
+      We are using hidden key as partitioning field
+    */
+    assert(!is_sub_part);
+    return result;
+  }
+  size_field_array = (num_fields + 1) * sizeof(Field *);
+  field_array = (Field **)sql_calloc(size_field_array);
+  if (unlikely(!field_array)) {
+    mem_alloc_error(size_field_array);
+    result = true;
+  }
+  ptr = table->field;
+  while ((field = *(ptr++))) {
+    if (field->is_flag_set(GET_FIXED_FIELDS_FLAG)) {
+      field->clear_flag(GET_FIXED_FIELDS_FLAG);
+      field->set_flag(FIELD_IN_PART_FUNC_FLAG);
+      if (likely(!result)) {
+        if (!is_sub_part && part_info->column_list) {
+          List_iterator<char> it(part_info->part_field_list);
+          char *field_name;
+
+          assert(num_fields == part_info->part_field_list.elements);
+          inx = 0;
+          do {
+            field_name = it++;
+            if (!my_strcasecmp(system_charset_info, field_name,
+                               field->field_name))
+              break;
+          } while (++inx < num_fields);
+          if (inx == num_fields) {
+            /*
+              Should not occur since it should already been checked in either
+              add_column_list_values, handle_list_of_fields,
+              check_partition_info etc.
+            */
+            assert(0);
+            my_error(ER_FIELD_NOT_FOUND_PART_ERROR, MYF(0));
+            result = true;
+            continue;
+          }
+        } else
+          inx = i;
+        field_array[inx] = field;
+        i++;
+
+        /*
+          We check that the fields are proper. It is required for each
+          field in a partition function to:
+          1) Not be a BLOB of any type
+            A BLOB takes too long time to evaluate so we don't want it for
+            performance reasons.
+        */
+
+        if (field->is_flag_set(BLOB_FLAG)) {
+          my_error(ER_BLOB_FIELD_IN_PART_FUNC_ERROR, MYF(0));
+          result = true;
+        }
+      }
+    }
+  }
+  field_array[num_fields] = nullptr;
+  if (!is_sub_part) {
+    part_info->part_field_array = field_array;
+    part_info->num_part_fields = num_fields;
+  } else {
+    part_info->subpart_field_array = field_array;
+    part_info->num_subpart_fields = num_fields;
+  }
+  return result;
+}
+
+
+// Source: sql_partition.cc
+// Lines 430-524
+
+
+[ANSWER]
+MUST

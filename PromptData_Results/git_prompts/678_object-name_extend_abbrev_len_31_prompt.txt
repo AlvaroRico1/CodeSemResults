@@ -1,0 +1,32 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'mad' at line 3
+2. Pointer 'cb_data' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int extend_abbrev_len(const struct object_id *oid, void *cb_data)
+{
+	struct min_abbrev_data *mad = cb_data;
+
+	unsigned int i = mad->init_len;
+	while (mad->hex[i] && mad->hex[i] == get_hex_char_from_oid(oid, i))
+		i++;
+
+	if (i < GIT_MAX_RAWSZ && i >= mad->cur_len)
+		mad->cur_len = i + 1;
+
+	return 0;
+}
+
+
+// Source: object-name.c
+// Lines 556-568
+
+
+[ANSWER]
+MUST

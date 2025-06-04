@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'p' at line 3\n2. Pointer 'nfspath' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic char *nfs_path_component(const char *nfspath, const char *end)\n{\n\tchar *p;\n\n\tif (*nfspath == '[') {\n\t\t/* parse [] escaped IPv6 addrs */\n\t\tp = strchr(nfspath, ']');\n\t\tif (p != NULL && ++p < end && *p == ':')\n\t\t\treturn p + 1;\n\t} else {\n\t\t/* otherwise split on first colon */\n\t\tp = strchr(nfspath, ':');\n\t\tif (p != NULL && p < end)\n\t\t\treturn p + 1;\n\t}\n\treturn NULL;\n}\n\n\n// Source: nfs4namespace.c\n// Lines 63-79\n",
+  "ANSWER": "MUST"
+}

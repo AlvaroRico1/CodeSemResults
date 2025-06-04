@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'bit' at line 6\n2. Pointer 'group' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\next4_mb_release_group_pa(struct ext4_buddy *e4b,\n\t\t\t\tstruct ext4_prealloc_space *pa)\n{\n\tstruct super_block *sb = e4b->bd_sb;\n\text4_group_t group;\n\text4_grpblk_t bit;\n\n\ttrace_ext4_mb_release_group_pa(sb, pa);\n\tBUG_ON(pa->pa_deleted == 0);\n\text4_get_group_no_and_offset(sb, pa->pa_pstart, &group, &bit);\n\tBUG_ON(group != e4b->bd_group && pa->pa_len != 0);\n\tmb_free_blocks(pa->pa_inode, e4b, bit, pa->pa_len);\n\tatomic_add(pa->pa_len, &EXT4_SB(sb)->s_mb_discarded);\n\ttrace_ext4_mballoc_discard(sb, NULL, group, bit, pa->pa_len);\n\n\treturn 0;\n}\n\n\n// Source: mballoc.c\n// Lines 3850-3866\n",
+  "ANSWER": "MAY"
+}

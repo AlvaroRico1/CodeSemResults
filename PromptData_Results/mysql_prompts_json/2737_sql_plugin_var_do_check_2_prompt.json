@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'value' at line 2\n2. Pointer 'var' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nbool sys_var_pluginvar::do_check(THD *thd, set_var *var) {\n  st_item_value_holder value;\n  assert(plugin_var->check);\n\n  value.value_type = item_value_type;\n  value.val_str = item_val_str;\n  value.val_int = item_val_int;\n  value.val_real = item_val_real;\n  value.is_unsigned = item_is_unsigned;\n  value.item = var->value;\n\n  return plugin_var->check(thd, plugin_var, &var->save_result, &value);\n}\n\n\n// Source: sql_plugin_var.cc\n// Lines 321-333\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'bout' at line 7\n2. Pointer 'out' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void hash_generate(const cf_chash *H,\n                          uint8_t *data, size_t ndata, /* initialised with V */\n                          void *out, size_t nout)\n{\n  cf_chash_ctx ctx;\n  uint8_t w[CF_MAXHASH];\n  uint8_t *bout = out;\n  uint8_t one = 1;\n\n  while (nout)\n  {\n    /* 4.1. w = Hash(data) */\n    H->init(&ctx);\n    H->update(&ctx, data, ndata);\n    H->digest(&ctx, w);\n\n    /* 4.2. W = W || w */\n    size_t take = MIN(H->hashsz, nout);\n    memcpy(bout, w, take);\n    bout += take;\n    nout -= take;\n\n    /* 4.3. data = (data + 1) mod 2 ^ seedlen */\n    add(data, ndata, &one, sizeof one);\n  }\n}\n\n\n// Source: drbg.c\n// Lines 136-161\n",
+  "ANSWER": "MUST"
+}

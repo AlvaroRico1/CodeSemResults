@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'd' at line 3\n2. Pointer '_data' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void *lazy_dir_thread_proc(void *_data)\n{\n\tstruct lazy_dir_thread_data *d = _data;\n\tstruct strbuf prefix = STRBUF_INIT;\n\thandle_range_1(d->istate, d->k_start, d->k_end, NULL, &prefix, d->lazy_entries);\n\tstrbuf_release(&prefix);\n\treturn NULL;\n}\n\n\n// Source: name-hash.c\n// Lines 462-469\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,1 @@
+info_offset,libgit2/deps/ntlmclient/ntlm.c,10,reserved,libgit2/deps/ntlmclient/ntlm.c,67,2

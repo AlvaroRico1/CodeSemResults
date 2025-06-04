@@ -1,0 +1,35 @@
+static void graceful_shutdown_resend_goaway(h2o_timer_t *entry)
+{
+    h2o_context_t *ctx = H2O_STRUCT_FROM_MEMBER(h2o_context_t, http3._graceful_shutdown_timeout, entry);
+    h2o_linklist_t *node;
+    int do_close_stragglers = 0;
+
+    /* HTTP/3 draft section 5.2.8 --
+     * "After allowing time for any in-flight requests or pushes to arrive, the endpoint can send another GOAWAY frame
+     * indicating which requests or pushes it might accept before the end of the connection.
+     * This ensures that a connection can be cleanly shut down without losing requests. */
+    for (node = ctx->http3._conns.next; node != &ctx->http3._conns; node = node->next) {
+        struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, _conns, node);
+        if (conn->h3.state < H2O_HTTP3_CONN_STATE_HALF_CLOSED && quicly_get_state(conn->h3.super.quic) == QUICLY_STATE_CONNECTED) {
+            quicly_stream_id_t next_stream_id = quicly_get_remote_next_stream_id(conn->h3.super.quic, 0 /* == bidi */);
+            /* Section 5.2-1: "This identifier MAY be zero if no requests or pushes were processed."" */
+            quicly_stream_id_t max_stream_id = next_stream_id < 4 ? 0 /* we haven't received any stream yet */ : next_stream_id - 4;
+            h2o_http3_send_goaway_frame(&conn->h3, max_stream_id);
+            conn->h3.state = H2O_HTTP3_CONN_STATE_HALF_CLOSED;
+            do_close_stragglers = 1;
+        }
+    }
+
+    /* After waiting a second, we still had active connections. If configured, wait one
+     * final timeout before closing the connections */
+    if (do_close_stragglers && ctx->globalconf->http3.graceful_shutdown_timeout > 0) {
+        ctx->http3._graceful_shutdown_timeout.cb = graceful_shutdown_close_stragglers;
+        h2o_timer_link(ctx->loop, ctx->globalconf->http3.graceful_shutdown_timeout, &ctx->http3._graceful_shutdown_timeout);
+    } else {
+        ctx->http3._graceful_shutdown_timeout.cb = NULL;
+    }
+}
+
+
+// Source: server.c
+// Lines 1918-1948

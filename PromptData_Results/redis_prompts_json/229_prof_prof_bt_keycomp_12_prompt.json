@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'bt1' at line 2\n2. Pointer 'k1' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nprof_bt_keycomp(const void *k1, const void *k2) {\n\tconst prof_bt_t *bt1 = (prof_bt_t *)k1;\n\tconst prof_bt_t *bt2 = (prof_bt_t *)k2;\n\n\tcassert(config_prof);\n\n\tif (bt1->len != bt2->len) {\n\t\treturn false;\n\t}\n\treturn (memcmp(bt1->vec, bt2->vec, bt1->len * sizeof(void *)) == 0);\n}\n\n\n// Source: prof.c\n// Lines 1878-1888\n",
+  "ANSWER": "MUST"
+}

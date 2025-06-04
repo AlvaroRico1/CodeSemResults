@@ -1,0 +1,110 @@
+recursive_inlining (struct cgraph_edge *edge,
+		    vec<cgraph_edge *> *new_edges)
+{
+  cgraph_node *to  = (edge->caller->inlined_to
+		      ? edge->caller->inlined_to : edge->caller);
+  int limit = opt_for_fn (to->decl,
+			  param_max_inline_insns_recursive_auto);
+  edge_heap_t heap (sreal::min ());
+  struct cgraph_node *node;
+  struct cgraph_edge *e;
+  struct cgraph_node *master_clone = NULL, *next;
+  int depth = 0;
+  int n = 0;
+
+  node = edge->caller;
+  if (node->inlined_to)
+    node = node->inlined_to;
+
+  if (DECL_DECLARED_INLINE_P (node->decl))
+    limit = opt_for_fn (to->decl, param_max_inline_insns_recursive);
+
+  /* Make sure that function is small enough to be considered for inlining.  */
+  if (estimate_size_after_inlining (node, edge)  >= limit)
+    return false;
+  lookup_recursive_calls (node, node, &heap);
+  if (heap.empty ())
+    return false;
+
+  if (dump_file)
+    fprintf (dump_file,
+	     "  Performing recursive inlining on %s\n", node->dump_name ());
+
+  /* Do the inlining and update list of recursive call during process.  */
+  while (!heap.empty ())
+    {
+      struct cgraph_edge *curr = heap.extract_min ();
+      struct cgraph_node *cnode, *dest = curr->callee;
+
+      if (!can_inline_edge_p (curr, true)
+	  || !can_inline_edge_by_limits_p (curr, true))
+	continue;
+
+      /* MASTER_CLONE is produced in the case we already started modified
+	 the function. Be sure to redirect edge to the original body before
+	 estimating growths otherwise we will be seeing growths after inlining
+	 the already modified body.  */
+      if (master_clone)
+	{
+	  curr->redirect_callee (master_clone);
+	  if (edge_growth_cache != NULL)
+	    edge_growth_cache->remove (curr);
+	}
+
+      if (estimate_size_after_inlining (node, curr) > limit)
+	{
+	  curr->redirect_callee (dest);
+	  if (edge_growth_cache != NULL)
+	    edge_growth_cache->remove (curr);
+	  break;
+	}
+
+      depth = 1;
+      for (cnode = curr->caller;
+	   cnode->inlined_to; cnode = cnode->callers->caller)
+	if (node->decl
+	    == curr->callee->ultimate_alias_target ()->decl)
+          depth++;
+
+      if (!want_inline_self_recursive_call_p (curr, node, false, depth))
+	{
+	  curr->redirect_callee (dest);
+	  if (edge_growth_cache != NULL)
+	    edge_growth_cache->remove (curr);
+	  continue;
+	}
+
+      if (dump_file)
+	{
+	  fprintf (dump_file,
+		   "   Inlining call of depth %i", depth);
+	  if (node->count.nonzero_p () && curr->count.initialized_p ())
+	    {
+	      fprintf (dump_file, " called approx. %.2f times per call",
+		       (double)curr->count.to_gcov_type ()
+		       / node->count.to_gcov_type ());
+	    }
+	  fprintf (dump_file, "\n");
+	}
+      if (!master_clone)
+	{
+	  /* We need original clone to copy around.  */
+	  master_clone = node->create_clone (node->decl, node->count,
+	    false, vNULL, true, NULL, NULL);
+	  for (e = master_clone->callees; e; e = e->next_callee)
+	    if (!e->inline_failed)
+	      clone_inlined_nodes (e, true, false, NULL);
+	  curr->redirect_callee (master_clone);
+	  if (edge_growth_cache != NULL)
+	    edge_growth_cache->remove (curr);
+	}
+
+      inline_call (curr, false, new_edges, &overall_size, true);
+      reset_node_cache (node);
+      lookup_recursive_calls (node, curr->callee, &heap);
+      n++;
+    }
+
+
+// Source: ipa-inline.c
+// Lines 1585-1690

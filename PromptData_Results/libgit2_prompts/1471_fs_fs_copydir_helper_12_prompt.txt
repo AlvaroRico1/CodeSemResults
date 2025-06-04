@@ -1,0 +1,42 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'source' at line 1
+2. Pointer 'source_dir' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+fs_copydir_helper(const char *source, const char *dest, int dest_mode)
+{
+	DIR *source_dir;
+	struct dirent *d;
+
+	mkdir(dest, dest_mode);
+
+	cl_assert_(source_dir = opendir(source), "Could not open source dir");
+	while ((d = (errno = 0, readdir(source_dir))) != NULL) {
+		char *child;
+
+		if (!strcmp(d->d_name, ".") || !strcmp(d->d_name, ".."))
+			continue;
+
+		child = joinpath(source, d->d_name, -1);
+		fs_copy(child, dest);
+		free(child);
+	}
+
+	cl_assert_(errno == 0, "Failed to iterate source dir");
+
+	closedir(source_dir);
+}
+
+
+// Source: fs.h
+// Lines 367-389
+
+
+[ANSWER]
+MUST-NOT

@@ -1,0 +1,63 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'min' at line 30
+2. Pointer 'dummy' at line 31
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+dev_t name_to_dev_t(const char *name)
+{
+	char s[32];
+	char *p;
+	dev_t res = 0;
+	int part;
+
+#ifdef CONFIG_BLOCK
+	if (strncmp(name, "PARTUUID=", 9) == 0) {
+		name += 9;
+		res = devt_from_partuuid(name);
+		if (!res)
+			goto fail;
+		goto done;
+	} else if (strncmp(name, "PARTLABEL=", 10) == 0) {
+		struct device *dev;
+
+		dev = class_find_device(&block_class, NULL, name + 10,
+					&match_dev_by_label);
+		if (!dev)
+			goto fail;
+
+		res = dev->devt;
+		put_device(dev);
+		goto done;
+	}
+#endif
+
+	if (strncmp(name, "/dev/", 5) != 0) {
+		unsigned maj, min, offset;
+		char dummy;
+
+		if ((sscanf(name, "%u:%u%c", &maj, &min, &dummy) == 2) ||
+		    (sscanf(name, "%u:%u:%u:%c", &maj, &min, &offset, &dummy) == 3)) {
+			res = MKDEV(maj, min);
+			if (maj != MAJOR(res) || min != MINOR(res))
+				goto fail;
+		} else {
+			res = new_decode_dev(simple_strtoul(name, &p, 16));
+			if (*p)
+				goto fail;
+		}
+		goto done;
+	}
+
+
+// Source: do_mounts.c
+// Lines 222-265
+
+
+[ANSWER]
+MAY

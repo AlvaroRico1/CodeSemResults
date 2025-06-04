@@ -1,0 +1,1 @@
+fn_prev,gcc/gcc/coverage.c,7,fn,gcc/gcc/coverage.c,6,1

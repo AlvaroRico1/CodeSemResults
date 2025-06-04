@@ -1,0 +1,96 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'mem_usage' at line 8
+2. Pointer 'ret' at line 60
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int find_deltas(git_packbuilder *pb, git_pobject **list,
+	size_t *list_size, size_t window, size_t depth)
+{
+	git_pobject *po;
+	git_str zbuf = GIT_STR_INIT;
+	struct unpacked *array;
+	size_t idx = 0, count = 0;
+	size_t mem_usage = 0;
+	size_t i;
+	int error = -1;
+
+	array = git__calloc(window, sizeof(struct unpacked));
+	GIT_ERROR_CHECK_ALLOC(array);
+
+	for (;;) {
+		struct unpacked *n = array + idx;
+		size_t max_depth, j, best_base = SIZE_MAX;
+
+		GIT_ASSERT(git_packbuilder__progress_lock(pb) == 0);
+		if (!*list_size) {
+			GIT_ASSERT(git_packbuilder__progress_unlock(pb) == 0);
+			break;
+		}
+
+		pb->nr_deltified += 1;
+		report_delta_progress(pb, pb->nr_deltified, false);
+
+		po = *list++;
+		(*list_size)--;
+		GIT_ASSERT(git_packbuilder__progress_unlock(pb) == 0);
+
+		mem_usage -= free_unpacked(n);
+		n->object = po;
+
+		while (pb->window_memory_limit &&
+		       mem_usage > pb->window_memory_limit &&
+		       count > 1) {
+			size_t tail = (idx + window - count) % window;
+			mem_usage -= free_unpacked(array + tail);
+			count--;
+		}
+
+		/*
+		 * If the current object is at pack edge, take the depth the
+		 * objects that depend on the current object into account
+		 * otherwise they would become too deep.
+		 */
+		max_depth = depth;
+		if (po->delta_child) {
+			size_t delta_limit = check_delta_limit(po, 0);
+
+			if (delta_limit > max_depth)
+				goto next;
+
+			max_depth -= delta_limit;
+		}
+
+		j = window;
+		while (--j > 0) {
+			int ret;
+			size_t other_idx = idx + j;
+			struct unpacked *m;
+
+			if (other_idx >= window)
+				other_idx -= window;
+
+			m = array + other_idx;
+			if (!m->object)
+				break;
+
+			if (try_delta(pb, n, m, max_depth, &mem_usage, &ret) < 0)
+				goto on_error;
+			if (ret < 0)
+				break;
+			else if (ret > 0)
+				best_base = other_idx;
+		}
+
+
+// Source: pack-objects.c
+// Lines 947-1023
+
+
+[ANSWER]
+MAY

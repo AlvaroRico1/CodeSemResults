@@ -1,0 +1,1 @@
+type,gcc/gcc/c/c-decl.c,7,expr,gcc/gcc/c/c-decl.c,4,0

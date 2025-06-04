@@ -1,0 +1,1 @@
+emb_tbl_nest,mysql/sql/sql_resolver.cc,3,wrap_nest,mysql/sql/sql_resolver.cc,65,1

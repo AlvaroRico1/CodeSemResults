@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'consumed' at line 3
+2. Pointer 'ptr' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int gitno_consume(gitno_buffer *buf, const char *ptr)
+{
+	size_t consumed;
+
+	GIT_ASSERT(ptr - buf->data >= 0);
+	GIT_ASSERT(ptr - buf->data <= (int) buf->len);
+
+	consumed = ptr - buf->data;
+
+	memmove(buf->data, ptr, buf->offset - consumed);
+	memset(buf->data + buf->offset, 0x0, buf->len - buf->offset);
+	buf->offset -= consumed;
+
+	return 0;
+}
+
+
+// Source: netops.c
+// Lines 63-77
+
+
+[ANSWER]
+MUST

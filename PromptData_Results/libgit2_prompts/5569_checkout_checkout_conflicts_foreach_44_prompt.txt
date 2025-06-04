@@ -1,0 +1,51 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'iterator' at line 9
+2. Pointer 'ours' at line 10
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int checkout_conflicts_foreach(
+	checkout_data *data,
+	git_index *index,
+	git_iterator *workdir,
+	git_vector *pathspec,
+	int (*cb)(const git_index_entry *, const git_index_entry *, const git_index_entry *, void *),
+	void *payload)
+{
+	git_index_conflict_iterator *iterator = NULL;
+	const git_index_entry *ancestor, *ours, *theirs;
+	int error = 0;
+
+	if ((error = git_index_conflict_iterator_new(&iterator, index)) < 0)
+		goto done;
+
+	/* Collect the conflicts */
+	while ((error = git_index_conflict_next(&ancestor, &ours, &theirs, iterator)) == 0) {
+		if (!conflict_pathspec_match(data, workdir, pathspec, ancestor, ours, theirs))
+			continue;
+
+		if ((error = cb(ancestor, ours, theirs, payload)) < 0)
+			goto done;
+	}
+
+	if (error == GIT_ITEROVER)
+		error = 0;
+
+done:
+	git_index_conflict_iterator_free(iterator);
+
+	return error;
+}
+
+
+// Source: checkout.c
+// Lines 929-960
+
+
+[ANSWER]
+MAY

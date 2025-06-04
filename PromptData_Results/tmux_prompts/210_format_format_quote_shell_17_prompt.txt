@@ -1,0 +1,33 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'cp' at line 3
+2. Pointer 's' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+format_quote_shell(const char *s)
+{
+	const char	*cp;
+	char		*out, *at;
+
+	at = out = xmalloc(strlen(s) * 2 + 1);
+	for (cp = s; *cp != '\0'; cp++) {
+		if (strchr("|&;<>()$`\\\"'*?[# =%", *cp) != NULL)
+			*at++ = '\\';
+		*at++ = *cp;
+	}
+	*at = '\0';
+	return (out);
+}
+
+
+// Source: format.c
+// Lines 3232-3245
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,1 @@
+nested_join,mysql/sql/sql_parse.cc,3,ptr,mysql/sql/sql_parse.cc,2,1

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ptr' at line 7\n2. Pointer 'data' at line 10\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nuint8_t* EpsCopyOutputStream::Next() {\n  GOOGLE_DCHECK(!had_error_);  // NOLINT\n  if (PROTOBUF_PREDICT_FALSE(stream_ == nullptr)) return Error();\n  if (buffer_end_) {\n    // We're in the patch buffer and need to fill up the previous buffer.\n    std::memcpy(buffer_end_, buffer_, end_ - buffer_);\n    uint8_t* ptr;\n    int size;\n    do {\n      void* data;\n      if (PROTOBUF_PREDICT_FALSE(!stream_->Next(&data, &size))) {\n        // Stream has an error, we use the patch buffer to continue to be\n        // able to write.\n        return Error();\n      }\n      ptr = static_cast<uint8_t*>(data);\n    } while (size == 0);\n\n\n// Source: coded_stream.cc\n// Lines 788-804\n",
+  "ANSWER": "MUST"
+}

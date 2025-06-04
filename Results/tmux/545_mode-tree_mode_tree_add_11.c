@@ -1,0 +1,41 @@
+mode_tree_add(struct mode_tree_data *mtd, struct mode_tree_item *parent,
+    void *itemdata, uint64_t tag, const char *name, const char *text,
+    int expanded)
+{
+	struct mode_tree_item	*mti, *saved;
+
+	log_debug("%s: %llu, %s %s", __func__, (unsigned long long)tag,
+	    name, (text == NULL ? "" : text));
+
+	mti = xcalloc(1, sizeof *mti);
+	mti->parent = parent;
+	mti->itemdata = itemdata;
+
+	mti->tag = tag;
+	mti->name = xstrdup(name);
+	if (text != NULL)
+		mti->text = xstrdup(text);
+
+	saved = mode_tree_find_item(&mtd->saved, tag);
+	if (saved != NULL) {
+		if (parent == NULL || parent->expanded)
+			mti->tagged = saved->tagged;
+		mti->expanded = saved->expanded;
+	} else if (expanded == -1)
+		mti->expanded = 1;
+	else
+		mti->expanded = expanded;
+
+	TAILQ_INIT(&mti->children);
+
+	if (parent != NULL)
+		TAILQ_INSERT_TAIL(&parent->children, mti, entry);
+	else
+		TAILQ_INSERT_TAIL(&mtd->children, mti, entry);
+
+	return (mti);
+}
+
+
+// Source: mode-tree.c
+// Lines 553-589

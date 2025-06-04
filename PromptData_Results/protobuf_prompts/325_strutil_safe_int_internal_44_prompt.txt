@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'value_p' at line 1
+2. Pointer 'negative' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool safe_int_internal(std::string text, IntType *value_p) {
+  *value_p = 0;
+  bool negative;
+  if (!safe_parse_sign(&text, &negative)) {
+    return false;
+  }
+  if (!negative) {
+    return safe_parse_positive_int(text, value_p);
+  } else {
+    return safe_parse_negative_int(text, value_p);
+  }
+}
+
+
+// Source: strutil.cc
+// Lines 768-779
+
+
+[ANSWER]
+MAY

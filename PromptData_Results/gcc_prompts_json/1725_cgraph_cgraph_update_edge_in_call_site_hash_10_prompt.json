@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'call' at line 3\n2. Pointer 'e' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ncgraph_update_edge_in_call_site_hash (cgraph_edge *e)\n{\n  gimple *call = e->call_stmt;\n  *e->caller->call_site_hash->find_slot_with_hash\n      (call, cgraph_edge_hasher::hash (call), INSERT) = e;\n}\n\n\n// Source: cgraph.c\n// Lines 697-702\n",
+  "ANSWER": "MUST"
+}

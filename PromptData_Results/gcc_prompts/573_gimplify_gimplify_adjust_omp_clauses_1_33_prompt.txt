@@ -1,0 +1,281 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ctx' at line 64
+2. Pointer 'ctx' at line 64
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+gimplify_adjust_omp_clauses_1 (splay_tree_node n, void *data)
+{
+  tree *list_p = ((struct gimplify_adjust_omp_clauses_data *) data)->list_p;
+  gimple_seq *pre_p
+    = ((struct gimplify_adjust_omp_clauses_data *) data)->pre_p;
+  tree decl = (tree) n->key;
+  unsigned flags = n->value;
+  enum omp_clause_code code;
+  tree clause;
+  bool private_debug;
+
+  if (gimplify_omp_ctxp->region_type == ORT_COMBINED_PARALLEL
+      && (flags & GOVD_LASTPRIVATE_CONDITIONAL) != 0)
+    flags = GOVD_SHARED | GOVD_SEEN | GOVD_WRITTEN;
+  if (flags & (GOVD_EXPLICIT | GOVD_LOCAL))
+    return 0;
+  if ((flags & GOVD_SEEN) == 0)
+    return 0;
+  if ((flags & GOVD_MAP_HAS_ATTACHMENTS) != 0)
+    return 0;
+  if (flags & GOVD_DEBUG_PRIVATE)
+    {
+      gcc_assert ((flags & GOVD_DATA_SHARE_CLASS) == GOVD_SHARED);
+      private_debug = true;
+    }
+  else if (flags & GOVD_MAP)
+    private_debug = false;
+  else
+    private_debug
+      = lang_hooks.decls.omp_private_debug_clause (decl,
+						   !!(flags & GOVD_SHARED));
+  if (private_debug)
+    code = OMP_CLAUSE_PRIVATE;
+  else if (flags & GOVD_MAP)
+    {
+      code = OMP_CLAUSE_MAP;
+      if ((gimplify_omp_ctxp->region_type & ORT_ACC) == 0
+	  && TYPE_ATOMIC (strip_array_types (TREE_TYPE (decl))))
+	{
+	  error ("%<_Atomic%> %qD in implicit %<map%> clause", decl);
+	  return 0;
+	}
+      if (VAR_P (decl)
+	  && DECL_IN_CONSTANT_POOL (decl)
+          && !lookup_attribute ("omp declare target",
+				DECL_ATTRIBUTES (decl)))
+	{
+	  tree id = get_identifier ("omp declare target");
+	  DECL_ATTRIBUTES (decl)
+	    = tree_cons (id, NULL_TREE, DECL_ATTRIBUTES (decl));
+	  varpool_node *node = varpool_node::get (decl);
+	  if (node)
+	    {
+	      node->offloadable = 1;
+	      if (ENABLE_OFFLOADING)
+		g->have_offload = true;
+	    }
+	}
+    }
+  else if (flags & GOVD_SHARED)
+    {
+      if (is_global_var (decl))
+	{
+	  struct gimplify_omp_ctx *ctx = gimplify_omp_ctxp->outer_context;
+	  while (ctx != NULL)
+	    {
+	      splay_tree_node on
+		= splay_tree_lookup (ctx->variables, (splay_tree_key) decl);
+	      if (on && (on->value & (GOVD_FIRSTPRIVATE | GOVD_LASTPRIVATE
+				      | GOVD_PRIVATE | GOVD_REDUCTION
+				      | GOVD_LINEAR | GOVD_MAP)) != 0)
+		break;
+	      ctx = ctx->outer_context;
+	    }
+	  if (ctx == NULL)
+	    return 0;
+	}
+      code = OMP_CLAUSE_SHARED;
+      /* Don't optimize shared into firstprivate for read-only vars
+	 on tasks with depend clause, we shouldn't try to copy them
+	 until the dependencies are satisfied.  */
+      if (gimplify_omp_ctxp->has_depend)
+	flags |= GOVD_WRITTEN;
+    }
+  else if (flags & GOVD_PRIVATE)
+    code = OMP_CLAUSE_PRIVATE;
+  else if (flags & GOVD_FIRSTPRIVATE)
+    {
+      code = OMP_CLAUSE_FIRSTPRIVATE;
+      if ((gimplify_omp_ctxp->region_type & ORT_TARGET)
+	  && (gimplify_omp_ctxp->region_type & ORT_ACC) == 0
+	  && TYPE_ATOMIC (strip_array_types (TREE_TYPE (decl))))
+	{
+	  error ("%<_Atomic%> %qD in implicit %<firstprivate%> clause on "
+		 "%<target%> construct", decl);
+	  return 0;
+	}
+    }
+  else if (flags & GOVD_LASTPRIVATE)
+    code = OMP_CLAUSE_LASTPRIVATE;
+  else if (flags & (GOVD_ALIGNED | GOVD_NONTEMPORAL))
+    return 0;
+  else if (flags & GOVD_CONDTEMP)
+    {
+      code = OMP_CLAUSE__CONDTEMP_;
+      gimple_add_tmp_var (decl);
+    }
+  else
+    gcc_unreachable ();
+
+  if (((flags & GOVD_LASTPRIVATE)
+       || (code == OMP_CLAUSE_SHARED && (flags & GOVD_WRITTEN)))
+      && omp_shared_to_firstprivate_optimizable_decl_p (decl))
+    omp_mark_stores (gimplify_omp_ctxp->outer_context, decl);
+
+  tree chain = *list_p;
+  clause = build_omp_clause (input_location, code);
+  OMP_CLAUSE_DECL (clause) = decl;
+  OMP_CLAUSE_CHAIN (clause) = chain;
+  if (private_debug)
+    OMP_CLAUSE_PRIVATE_DEBUG (clause) = 1;
+  else if (code == OMP_CLAUSE_PRIVATE && (flags & GOVD_PRIVATE_OUTER_REF))
+    OMP_CLAUSE_PRIVATE_OUTER_REF (clause) = 1;
+  else if (code == OMP_CLAUSE_SHARED
+	   && (flags & GOVD_WRITTEN) == 0
+	   && omp_shared_to_firstprivate_optimizable_decl_p (decl))
+    OMP_CLAUSE_SHARED_READONLY (clause) = 1;
+  else if (code == OMP_CLAUSE_FIRSTPRIVATE && (flags & GOVD_EXPLICIT) == 0)
+    OMP_CLAUSE_FIRSTPRIVATE_IMPLICIT (clause) = 1;
+  else if (code == OMP_CLAUSE_MAP && (flags & GOVD_MAP_0LEN_ARRAY) != 0)
+    {
+      tree nc = build_omp_clause (input_location, OMP_CLAUSE_MAP);
+      OMP_CLAUSE_DECL (nc) = decl;
+      if (TREE_CODE (TREE_TYPE (decl)) == REFERENCE_TYPE
+	  && TREE_CODE (TREE_TYPE (TREE_TYPE (decl))) == POINTER_TYPE)
+	OMP_CLAUSE_DECL (clause)
+	  = build_simple_mem_ref_loc (input_location, decl);
+      OMP_CLAUSE_DECL (clause)
+	= build2 (MEM_REF, char_type_node, OMP_CLAUSE_DECL (clause),
+		  build_int_cst (build_pointer_type (char_type_node), 0));
+      OMP_CLAUSE_SIZE (clause) = size_zero_node;
+      OMP_CLAUSE_SIZE (nc) = size_zero_node;
+      OMP_CLAUSE_SET_MAP_KIND (clause, GOMP_MAP_ALLOC);
+      OMP_CLAUSE_MAP_MAYBE_ZERO_LENGTH_ARRAY_SECTION (clause) = 1;
+      OMP_CLAUSE_SET_MAP_KIND (nc, GOMP_MAP_FIRSTPRIVATE_POINTER);
+      OMP_CLAUSE_CHAIN (nc) = chain;
+      OMP_CLAUSE_CHAIN (clause) = nc;
+      struct gimplify_omp_ctx *ctx = gimplify_omp_ctxp;
+      gimplify_omp_ctxp = ctx->outer_context;
+      gimplify_expr (&TREE_OPERAND (OMP_CLAUSE_DECL (clause), 0),
+		     pre_p, NULL, is_gimple_val, fb_rvalue);
+      gimplify_omp_ctxp = ctx;
+    }
+  else if (code == OMP_CLAUSE_MAP)
+    {
+      int kind;
+      /* Not all combinations of these GOVD_MAP flags are actually valid.  */
+      switch (flags & (GOVD_MAP_TO_ONLY
+		       | GOVD_MAP_FORCE
+		       | GOVD_MAP_FORCE_PRESENT
+		       | GOVD_MAP_ALLOC_ONLY
+		       | GOVD_MAP_FROM_ONLY))
+	{
+	case 0:
+	  kind = GOMP_MAP_TOFROM;
+	  break;
+	case GOVD_MAP_FORCE:
+	  kind = GOMP_MAP_TOFROM | GOMP_MAP_FLAG_FORCE;
+	  break;
+	case GOVD_MAP_TO_ONLY:
+	  kind = GOMP_MAP_TO;
+	  break;
+	case GOVD_MAP_FROM_ONLY:
+	  kind = GOMP_MAP_FROM;
+	  break;
+	case GOVD_MAP_ALLOC_ONLY:
+	  kind = GOMP_MAP_ALLOC;
+	  break;
+	case GOVD_MAP_TO_ONLY | GOVD_MAP_FORCE:
+	  kind = GOMP_MAP_TO | GOMP_MAP_FLAG_FORCE;
+	  break;
+	case GOVD_MAP_FORCE_PRESENT:
+	  kind = GOMP_MAP_FORCE_PRESENT;
+	  break;
+	default:
+	  gcc_unreachable ();
+	}
+      OMP_CLAUSE_SET_MAP_KIND (clause, kind);
+      if (DECL_SIZE (decl)
+	  && TREE_CODE (DECL_SIZE (decl)) != INTEGER_CST)
+	{
+	  tree decl2 = DECL_VALUE_EXPR (decl);
+	  gcc_assert (TREE_CODE (decl2) == INDIRECT_REF);
+	  decl2 = TREE_OPERAND (decl2, 0);
+	  gcc_assert (DECL_P (decl2));
+	  tree mem = build_simple_mem_ref (decl2);
+	  OMP_CLAUSE_DECL (clause) = mem;
+	  OMP_CLAUSE_SIZE (clause) = TYPE_SIZE_UNIT (TREE_TYPE (decl));
+	  if (gimplify_omp_ctxp->outer_context)
+	    {
+	      struct gimplify_omp_ctx *ctx = gimplify_omp_ctxp->outer_context;
+	      omp_notice_variable (ctx, decl2, true);
+	      omp_notice_variable (ctx, OMP_CLAUSE_SIZE (clause), true);
+	    }
+	  tree nc = build_omp_clause (OMP_CLAUSE_LOCATION (clause),
+				      OMP_CLAUSE_MAP);
+	  OMP_CLAUSE_DECL (nc) = decl;
+	  OMP_CLAUSE_SIZE (nc) = size_zero_node;
+	  if (gimplify_omp_ctxp->target_firstprivatize_array_bases)
+	    OMP_CLAUSE_SET_MAP_KIND (nc, GOMP_MAP_FIRSTPRIVATE_POINTER);
+	  else
+	    OMP_CLAUSE_SET_MAP_KIND (nc, GOMP_MAP_POINTER);
+	  OMP_CLAUSE_CHAIN (nc) = OMP_CLAUSE_CHAIN (clause);
+	  OMP_CLAUSE_CHAIN (clause) = nc;
+	}
+      else if (gimplify_omp_ctxp->target_firstprivatize_array_bases
+	       && lang_hooks.decls.omp_privatize_by_reference (decl))
+	{
+	  OMP_CLAUSE_DECL (clause) = build_simple_mem_ref (decl);
+	  OMP_CLAUSE_SIZE (clause)
+	    = unshare_expr (TYPE_SIZE_UNIT (TREE_TYPE (TREE_TYPE (decl))));
+	  struct gimplify_omp_ctx *ctx = gimplify_omp_ctxp;
+	  gimplify_omp_ctxp = ctx->outer_context;
+	  gimplify_expr (&OMP_CLAUSE_SIZE (clause),
+			 pre_p, NULL, is_gimple_val, fb_rvalue);
+	  gimplify_omp_ctxp = ctx;
+	  tree nc = build_omp_clause (OMP_CLAUSE_LOCATION (clause),
+				      OMP_CLAUSE_MAP);
+	  OMP_CLAUSE_DECL (nc) = decl;
+	  OMP_CLAUSE_SIZE (nc) = size_zero_node;
+	  OMP_CLAUSE_SET_MAP_KIND (nc, GOMP_MAP_FIRSTPRIVATE_REFERENCE);
+	  OMP_CLAUSE_CHAIN (nc) = OMP_CLAUSE_CHAIN (clause);
+	  OMP_CLAUSE_CHAIN (clause) = nc;
+	}
+      else
+	OMP_CLAUSE_SIZE (clause) = DECL_SIZE_UNIT (decl);
+    }
+  if (code == OMP_CLAUSE_FIRSTPRIVATE && (flags & GOVD_LASTPRIVATE) != 0)
+    {
+      tree nc = build_omp_clause (input_location, OMP_CLAUSE_LASTPRIVATE);
+      OMP_CLAUSE_DECL (nc) = decl;
+      OMP_CLAUSE_LASTPRIVATE_FIRSTPRIVATE (nc) = 1;
+      OMP_CLAUSE_CHAIN (nc) = chain;
+      OMP_CLAUSE_CHAIN (clause) = nc;
+      struct gimplify_omp_ctx *ctx = gimplify_omp_ctxp;
+      gimplify_omp_ctxp = ctx->outer_context;
+      lang_hooks.decls.omp_finish_clause (nc, pre_p);
+      gimplify_omp_ctxp = ctx;
+    }
+  *list_p = clause;
+  struct gimplify_omp_ctx *ctx = gimplify_omp_ctxp;
+  gimplify_omp_ctxp = ctx->outer_context;
+  lang_hooks.decls.omp_finish_clause (clause, pre_p);
+  if (gimplify_omp_ctxp)
+    for (; clause != chain; clause = OMP_CLAUSE_CHAIN (clause))
+      if (OMP_CLAUSE_CODE (clause) == OMP_CLAUSE_MAP
+	  && DECL_P (OMP_CLAUSE_SIZE (clause)))
+	omp_notice_variable (gimplify_omp_ctxp, OMP_CLAUSE_SIZE (clause),
+			     true);
+  gimplify_omp_ctxp = ctx;
+  return 0;
+}
+
+
+// Source: gimplify.c
+// Lines 9902-10163
+
+
+[ANSWER]
+MUST

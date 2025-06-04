@@ -1,0 +1,53 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'conn' at line 3
+2. Pointer 'stream' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void destroy_stream(quicly_stream_t *stream, int err)
+{
+    quicly_conn_t *conn = stream->conn;
+
+    QUICLY_PROBE(STREAM_ON_DESTROY, conn, conn->stash.now, stream, err);
+
+    if (stream->callbacks != NULL)
+        stream->callbacks->on_destroy(stream, err);
+
+    khiter_t iter = kh_get(quicly_stream_t, conn->streams, stream->stream_id);
+    assert(iter != kh_end(conn->streams));
+    kh_del(quicly_stream_t, conn->streams, iter);
+
+    if (stream->stream_id < 0) {
+        size_t epoch = -(1 + stream->stream_id);
+        stream->conn->egress.pending_flows &= ~(uint8_t)(1 << epoch);
+    } else {
+        struct st_quicly_conn_streamgroup_state_t *group = get_streamgroup_state(conn, stream->stream_id);
+        --group->num_streams;
+    }
+
+    dispose_stream_properties(stream);
+
+    if (conn->application != NULL) {
+        /* The function is normally invoked when receiving a packet, therefore just setting send_ack_at to zero is sufficient to
+         * trigger the emission of the MAX_STREAMS frame. FWIW, the only case the function is invoked when not receiving a packet is
+         * when the connection is being closed. In such case, the change will not have any bad side effects.
+         */
+        if (should_send_max_streams(conn, quicly_stream_is_unidirectional(stream->stream_id)))
+            conn->egress.send_ack_at = 0;
+    }
+
+    free(stream);
+}
+
+
+// Source: quicly.c
+// Lines 1124-1157
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'delta' at line 3\n2. Pointer 'd' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int hdr_sz(\n\tsize_t *size,\n\tconst unsigned char **delta,\n\tconst unsigned char *end)\n{\n\tconst unsigned char *d = *delta;\n\tsize_t r = 0;\n\tunsigned int c, shift = 0;\n\n\tdo {\n\t\tif (d == end) {\n\t\t\tgit_error_set(GIT_ERROR_INVALID, \"truncated delta\");\n\t\t\treturn -1;\n\t\t}\n\n\t\tc = *d++;\n\t\tr |= (c & 0x7f) << shift;\n\t\tshift += 7;\n\t} while (c & 0x80);\n\t*delta = d;\n\t*size = r;\n\treturn 0;\n}\n\n\n// Source: delta.c\n// Lines 465-487\n",
+  "ANSWER": "MUST"
+}

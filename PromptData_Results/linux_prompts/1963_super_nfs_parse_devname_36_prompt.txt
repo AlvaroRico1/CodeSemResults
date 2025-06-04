@@ -1,0 +1,86 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'end' at line 6
+2. Pointer 'dev_name' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int nfs_parse_devname(const char *dev_name,
+			     char **hostname, size_t maxnamlen,
+			     char **export_path, size_t maxpathlen)
+{
+	size_t len;
+	char *end;
+
+	if (unlikely(!dev_name || !*dev_name)) {
+		dfprintk(MOUNT, "NFS: device name not specified\n");
+		return -EINVAL;
+	}
+
+	/* Is the host name protected with square brakcets? */
+	if (*dev_name == '[') {
+		end = strchr(++dev_name, ']');
+		if (end == NULL || end[1] != ':')
+			goto out_bad_devname;
+
+		len = end - dev_name;
+		end++;
+	} else {
+		char *comma;
+
+		end = strchr(dev_name, ':');
+		if (end == NULL)
+			goto out_bad_devname;
+		len = end - dev_name;
+
+		/* kill possible hostname list: not supported */
+		comma = strchr(dev_name, ',');
+		if (comma != NULL && comma < end)
+			len = comma - dev_name;
+	}
+
+	if (len > maxnamlen)
+		goto out_hostname;
+
+	/* N.B. caller will free nfs_server.hostname in all cases */
+	*hostname = kstrndup(dev_name, len, GFP_KERNEL);
+	if (*hostname == NULL)
+		goto out_nomem;
+	len = strlen(++end);
+	if (len > maxpathlen)
+		goto out_path;
+	*export_path = kstrndup(end, len, GFP_KERNEL);
+	if (!*export_path)
+		goto out_nomem;
+
+	dfprintk(MOUNT, "NFS: MNTPATH: '%s'\n", *export_path);
+	return 0;
+
+out_bad_devname:
+	dfprintk(MOUNT, "NFS: device name not in host:path format\n");
+	return -EINVAL;
+
+out_nomem:
+	dfprintk(MOUNT, "NFS: not enough memory to parse device name\n");
+	return -ENOMEM;
+
+out_hostname:
+	dfprintk(MOUNT, "NFS: server hostname too long\n");
+	return -ENAMETOOLONG;
+
+out_path:
+	dfprintk(MOUNT, "NFS: export pathname too long\n");
+	return -ENAMETOOLONG;
+}
+
+
+// Source: super.c
+// Lines 1922-1988
+
+
+[ANSWER]
+MUST

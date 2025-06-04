@@ -1,0 +1,66 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'name' at line 4
+2. Pointer 'c' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+server_client_check_exit(struct client *c)
+{
+	struct client_file	*cf;
+	const char		*name = c->exit_session;
+	char			*data;
+	size_t			 size, msize;
+
+	if (c->flags & (CLIENT_DEAD|CLIENT_EXITED))
+		return;
+	if (~c->flags & CLIENT_EXIT)
+		return;
+
+	if (c->flags & CLIENT_CONTROL) {
+		control_discard(c);
+		if (!control_all_done(c))
+			return;
+	}
+	RB_FOREACH(cf, client_files, &c->files) {
+		if (EVBUFFER_LENGTH(cf->buffer) != 0)
+			return;
+	}
+	c->flags |= CLIENT_EXITED;
+
+	switch (c->exit_type) {
+	case CLIENT_EXIT_RETURN:
+		if (c->exit_message != NULL)
+			msize = strlen(c->exit_message) + 1;
+		else
+			msize = 0;
+		size = (sizeof c->retval) + msize;
+		data = xmalloc(size);
+		memcpy(data, &c->retval, sizeof c->retval);
+		if (c->exit_message != NULL)
+			memcpy(data + sizeof c->retval, c->exit_message, msize);
+		proc_send(c->peer, MSG_EXIT, -1, data, size);
+		free(data);
+		break;
+	case CLIENT_EXIT_SHUTDOWN:
+		proc_send(c->peer, MSG_SHUTDOWN, -1, NULL, 0);
+		break;
+	case CLIENT_EXIT_DETACH:
+		proc_send(c->peer, c->exit_msgtype, -1, name, strlen(name) + 1);
+		break;
+	}
+	free(c->exit_session);
+	free(c->exit_message);
+}
+
+
+// Source: server-client.c
+// Lines 1820-1866
+
+
+[ANSWER]
+MUST

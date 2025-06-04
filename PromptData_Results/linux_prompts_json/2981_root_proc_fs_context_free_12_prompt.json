@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ctx' at line 3\n2. Pointer 'fc' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void proc_fs_context_free(struct fs_context *fc)\n{\n\tstruct proc_fs_context *ctx = fc->fs_private;\n\n\tput_pid_ns(ctx->pid_ns);\n\tkfree(ctx);\n}\n\n\n// Source: root.c\n// Lines 164-170\n",
+  "ANSWER": "MUST"
+}

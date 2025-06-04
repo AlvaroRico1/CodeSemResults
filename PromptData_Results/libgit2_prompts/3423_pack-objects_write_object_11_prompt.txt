@@ -1,0 +1,111 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'obj' at line 7
+2. Pointer 'hdr_len' at line 11
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int write_object(
+	git_packbuilder *pb,
+	git_pobject *po,
+	int (*write_cb)(void *buf, size_t size, void *cb_data),
+	void *cb_data)
+{
+	git_odb_object *obj = NULL;
+	git_object_t type;
+	unsigned char hdr[10], *zbuf = NULL;
+	void *data = NULL;
+	size_t hdr_len, zbuf_len = COMPRESS_BUFLEN, data_len;
+	int error;
+
+	/*
+	 * If we have a delta base, let's use the delta to save space.
+	 * Otherwise load the whole object. 'data' ends up pointing to
+	 * whatever data we want to put into the packfile.
+	 */
+	if (po->delta) {
+		if (po->delta_data)
+			data = po->delta_data;
+		else if ((error = get_delta(&data, pb->odb, po)) < 0)
+				goto done;
+
+		data_len = po->delta_size;
+		type = GIT_OBJECT_REF_DELTA;
+	} else {
+		if ((error = git_odb_read(&obj, pb->odb, &po->id)) < 0)
+			goto done;
+
+		data = (void *)git_odb_object_data(obj);
+		data_len = git_odb_object_size(obj);
+		type = git_odb_object_type(obj);
+	}
+
+	/* Write header */
+	if ((error = git_packfile__object_header(&hdr_len, hdr, data_len, type)) < 0 ||
+	    (error = write_cb(hdr, hdr_len, cb_data)) < 0 ||
+	    (error = git_hash_update(&pb->ctx, hdr, hdr_len)) < 0)
+		goto done;
+
+	if (type == GIT_OBJECT_REF_DELTA) {
+		if ((error = write_cb(po->delta->id.id, GIT_OID_RAWSZ, cb_data)) < 0 ||
+			(error = git_hash_update(&pb->ctx, po->delta->id.id, GIT_OID_RAWSZ)) < 0)
+			goto done;
+	}
+
+	/* Write data */
+	if (po->z_delta_size) {
+		data_len = po->z_delta_size;
+
+		if ((error = write_cb(data, data_len, cb_data)) < 0 ||
+			(error = git_hash_update(&pb->ctx, data, data_len)) < 0)
+			goto done;
+	} else {
+		zbuf = git__malloc(zbuf_len);
+		GIT_ERROR_CHECK_ALLOC(zbuf);
+
+		git_zstream_reset(&pb->zstream);
+
+		if ((error = git_zstream_set_input(&pb->zstream, data, data_len)) < 0)
+			goto done;
+
+		while (!git_zstream_done(&pb->zstream)) {
+			if ((error = git_zstream_get_output(zbuf, &zbuf_len, &pb->zstream)) < 0 ||
+				(error = write_cb(zbuf, zbuf_len, cb_data)) < 0 ||
+				(error = git_hash_update(&pb->ctx, zbuf, zbuf_len)) < 0)
+				goto done;
+
+			zbuf_len = COMPRESS_BUFLEN; /* reuse buffer */
+		}
+	}
+
+	/*
+	 * If po->delta is true, data is a delta and it is our
+	 * responsibility to free it (otherwise it's a git_object's
+	 * data). We set po->delta_data to NULL in case we got the
+	 * data from there instead of get_delta(). If we didn't,
+	 * there's no harm.
+	 */
+	if (po->delta) {
+		git__free(data);
+		po->delta_data = NULL;
+	}
+
+	pb->nr_written++;
+
+done:
+	git__free(zbuf);
+	git_odb_object_free(obj);
+	return error;
+}
+
+
+// Source: pack-objects.c
+// Lines 308-399
+
+
+[ANSWER]
+MAY

@@ -1,0 +1,33 @@
+char* UTF8CoerceToStructurallyValid(StringPiece src_str, char* idst,
+                                    const char replace_char) {
+  const char* isrc = src_str.data();
+  const int len = src_str.length();
+  int n = UTF8SpnStructurallyValid(src_str);
+  if (n == len) {               // Normal case -- all is cool, return
+    return const_cast<char*>(isrc);
+  } else {                      // Unusual case -- copy w/o bad bytes
+    const char* src = isrc;
+    const char* srclimit = isrc + len;
+    char* dst = idst;
+    memmove(dst, src, n);       // Copy initial good chunk
+    src += n;
+    dst += n;
+    while (src < srclimit) {    // src points to bogus byte or is off the end
+      dst[0] = replace_char;                    // replace one bad byte
+      src++;
+      dst++;
+      StringPiece str2(src, srclimit - src);
+      n = UTF8SpnStructurallyValid(str2);       // scan the remainder
+      memmove(dst, src, n);                     // copy next good chunk
+      src += n;
+      dst += n;
+    }
+  }
+  return idst;
+}
+
+}  // namespace internal
+
+
+// Source: structurally_valid.cc
+// Lines 585-613

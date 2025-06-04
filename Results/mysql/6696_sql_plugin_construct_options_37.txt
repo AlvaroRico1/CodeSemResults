@@ -1,0 +1,1 @@
+plugin_name,mysql/sql/sql_plugin.cc,3,tmp,mysql/sql/sql_plugin.cc,1,1

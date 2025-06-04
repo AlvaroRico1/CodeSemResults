@@ -1,0 +1,109 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'err_desc' at line 28
+2. Pointer 'token_prefix' at line 62
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr,
+                                        quicly_decoded_packet_t *packet)
+{
+    /* adjust number of connections, or drop the incoming packet when handling too many connections */
+    if (num_connections(1) >= conf.max_connections) {
+        num_connections(-1);
+        return NULL;
+    }
+    if (num_quic_connections(1) >= conf.max_quic_connections) {
+        num_connections(-1);
+        num_quic_connections(-1);
+        return NULL;
+    }
+
+    h2o_http3_server_ctx_t *ctx = (void *)_ctx;
+    struct init_ebpf_key_info_t ebpf_key_info = {
+        .local = &destaddr->sa,
+        .remote = &srcaddr->sa,
+    };
+    uint64_t flags = h2o_socket_ebpf_lookup_flags(ctx->super.loop, init_ebpf_key, &ebpf_key_info);
+
+    quicly_address_token_plaintext_t *token = NULL, token_buf;
+    h2o_http3_conn_t *conn = NULL;
+
+    /* handle retry, setting `token` to a non-NULL pointer if contains a valid token */
+    if (packet->token.len != 0) {
+        int ret;
+        const char *err_desc = NULL;
+        if ((ret = quic_decrypt_address_token(&token_buf, packet->token, &err_desc)) == 0) {
+            if (validate_token(ctx, &srcaddr->sa, packet->cid.src, packet->cid.dest.encrypted, &token_buf))
+                token = &token_buf;
+        } else if (ret == QUICLY_TRANSPORT_ERROR_INVALID_TOKEN) {
+            uint8_t payload[QUICLY_MIN_CLIENT_INITIAL_SIZE];
+            size_t payload_size = quicly_send_close_invalid_token(ctx->super.quic, packet->version, packet->cid.src,
+                                                                  packet->cid.dest.encrypted, err_desc, payload);
+            assert(payload_size != SIZE_MAX);
+            struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
+            h2o_quic_send_datagrams(&ctx->super, srcaddr, destaddr, &vec, 1);
+            goto Exit;
+        }
+    }
+
+    /* send retry if necessary */
+    if (token == NULL || token->type != QUICLY_ADDRESS_TOKEN_TYPE_RETRY) {
+        int send_retry = ctx->send_retry;
+        switch (flags & H2O_EBPF_FLAGS_QUIC_SEND_RETRY_MASK) {
+        case H2O_EBPF_FLAGS_QUIC_SEND_RETRY_BITS_ON:
+            send_retry = 1;
+            break;
+        case H2O_EBPF_FLAGS_QUIC_SEND_RETRY_BITS_OFF:
+            send_retry = 0;
+            break;
+        default:
+            break;
+        }
+        if (send_retry) {
+            static __thread struct {
+                ptls_aead_context_t *v1;
+                ptls_aead_context_t *draft29;
+                ptls_aead_context_t *draft27;
+            } retry_integrity_aead_cache;
+            uint8_t scid[16], payload[QUICLY_MIN_CLIENT_INITIAL_SIZE], token_prefix;
+            ptls_openssl_random_bytes(scid, sizeof(scid));
+            ptls_aead_context_t *token_aead = quic_get_address_token_encryptor(&token_prefix), **retry_integrity_aead;
+            switch (packet->version) {
+            case QUICLY_PROTOCOL_VERSION_1:
+                retry_integrity_aead = &retry_integrity_aead_cache.v1;
+                break;
+            case QUICLY_PROTOCOL_VERSION_DRAFT29:
+                retry_integrity_aead = &retry_integrity_aead_cache.draft29;
+                break;
+            case QUICLY_PROTOCOL_VERSION_DRAFT27:
+                retry_integrity_aead = &retry_integrity_aead_cache.draft27;
+                break;
+            default:
+                retry_integrity_aead = NULL;
+                break;
+            }
+            size_t payload_size =
+                quicly_send_retry(ctx->super.quic, token_aead, packet->version, &srcaddr->sa, packet->cid.src, &destaddr->sa,
+                                  ptls_iovec_init(scid, sizeof(scid)), packet->cid.dest.encrypted,
+                                  ptls_iovec_init(&token_prefix, 1), ptls_iovec_init(NULL, 0), retry_integrity_aead, payload);
+            if (ctx->super.quic_stats != NULL) {
+                ++ctx->super.quic_stats->packet_processed;
+            }
+            assert(payload_size != SIZE_MAX);
+            struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
+            h2o_quic_send_datagrams(&ctx->super, srcaddr, destaddr, &vec, 1);
+            goto Exit;
+        }
+
+
+// Source: main.c
+// Lines 2933-3022
+
+
+[ANSWER]
+MAY

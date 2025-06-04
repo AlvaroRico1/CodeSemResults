@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'nl' at line 3\n2. Pointer 'buffer' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nsize_t git__linenlen(const char *buffer, size_t buffer_len)\n{\n\tchar *nl = memchr(buffer, '\\n', buffer_len);\n\treturn nl ? (size_t)(nl - buffer) + 1 : buffer_len;\n}\n\n\n// Source: util.c\n// Lines 324-328\n",
+  "ANSWER": "MUST"
+}

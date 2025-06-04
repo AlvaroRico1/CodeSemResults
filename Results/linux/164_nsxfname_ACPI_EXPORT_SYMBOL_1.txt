@@ -1,0 +1,1 @@
+aml_start,linux/drivers/acpi/acpica/nsxfname.c,22,node,linux/drivers/acpi/acpica/nsxfname.c,24,2

@@ -1,0 +1,36 @@
+static int load_bitmap_header(struct bitmap_index *index)
+{
+	struct bitmap_disk_header *header = (void *)index->map;
+	size_t header_size = sizeof(*header) - GIT_MAX_RAWSZ + the_hash_algo->rawsz;
+
+	if (index->map_size < header_size + the_hash_algo->rawsz)
+		return error("Corrupted bitmap index (too small)");
+
+	if (memcmp(header->magic, BITMAP_IDX_SIGNATURE, sizeof(BITMAP_IDX_SIGNATURE)) != 0)
+		return error("Corrupted bitmap index file (wrong header)");
+
+	index->version = ntohs(header->version);
+	if (index->version != 1)
+		return error("Unsupported version for bitmap index file (%d)", index->version);
+
+	/* Parse known bitmap format options */
+	{
+		uint32_t flags = ntohs(header->options);
+		size_t cache_size = st_mult(bitmap_num_objects(index), sizeof(uint32_t));
+		unsigned char *index_end = index->map + index->map_size - the_hash_algo->rawsz;
+
+		if ((flags & BITMAP_OPT_FULL_DAG) == 0)
+			return error("Unsupported options for bitmap index file "
+				"(Git requires BITMAP_OPT_FULL_DAG)");
+
+		if (flags & BITMAP_OPT_HASH_CACHE) {
+			if (cache_size > index_end - index->map - header_size)
+				return error("corrupted bitmap index file (too short to fit hash cache)");
+			index->hashes = (void *)(index_end - cache_size);
+			index_end -= cache_size;
+		}
+	}
+
+
+// Source: pack-bitmap.c
+// Lines 157-188

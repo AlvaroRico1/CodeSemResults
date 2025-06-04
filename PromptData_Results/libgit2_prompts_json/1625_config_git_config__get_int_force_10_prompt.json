@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'val' at line 4\n2. Pointer 'entry' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint git_config__get_int_force(\n\tconst git_config *cfg, const char *key, int fallback_value)\n{\n\tint32_t val = (int32_t)fallback_value;\n\tgit_config_entry *entry;\n\n\tget_entry(&entry, cfg, key, false, GET_NO_ERRORS);\n\n\tif (entry && git_config_parse_int32(&val, entry->value) < 0)\n\t\tgit_error_clear();\n\n\tgit_config_entry_free(entry);\n\treturn (int)val;\n}\n\n\n// Source: config.c\n// Lines 973-986\n",
+  "ANSWER": "MAY"
+}

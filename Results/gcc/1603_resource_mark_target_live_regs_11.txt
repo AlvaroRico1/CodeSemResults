@@ -1,0 +1,1 @@
+stop_insn,gcc/gcc/resource.c,88,target,gcc/gcc/resource.c,20,1

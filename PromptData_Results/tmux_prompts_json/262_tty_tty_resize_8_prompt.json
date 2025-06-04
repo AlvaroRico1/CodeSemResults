@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'c' at line 3\n2. Pointer 'tty' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ntty_resize(struct tty *tty)\n{\n\tstruct client\t*c = tty->client;\n\tstruct winsize\t ws;\n\tu_int\t\t sx, sy, xpixel, ypixel;\n\n\tif (ioctl(c->fd, TIOCGWINSZ, &ws) != -1) {\n\t\tsx = ws.ws_col;\n\t\tif (sx == 0) {\n\t\t\tsx = 80;\n\t\t\txpixel = 0;\n\t\t} else\n\t\t\txpixel = ws.ws_xpixel / sx;\n\t\tsy = ws.ws_row;\n\t\tif (sy == 0) {\n\t\t\tsy = 24;\n\t\t\typixel = 0;\n\t\t} else\n\t\t\typixel = ws.ws_ypixel / sy;\n\t} else {\n\t\tsx = 80;\n\t\tsy = 24;\n\t\txpixel = 0;\n\t\typixel = 0;\n\t}\n\tlog_debug(\"%s: %s now %ux%u (%ux%u)\", __func__, c->name, sx, sy,\n\t    xpixel, ypixel);\n\ttty_set_size(tty, sx, sy, xpixel, ypixel);\n\ttty_invalidate(tty);\n}\n\n\n// Source: tty.c\n// Lines 116-145\n",
+  "ANSWER": "MUST"
+}

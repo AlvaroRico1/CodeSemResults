@@ -1,0 +1,40 @@
+static void on_read(h2o_socket_t *sock, const char *err)
+{
+    h2o_http2_conn_t *conn = sock->data;
+
+    if (err != NULL) {
+        conn->super.ctx->http2.events.read_closed++;
+        h2o_socket_read_stop(conn->sock);
+        close_connection(conn);
+        return;
+    }
+
+    /* dispatch requests blocked by 425 when TLS handshake is complete */
+    if (!h2o_linklist_is_empty(&conn->early_data.blocked_streams)) {
+        assert(conn->sock->ssl != NULL);
+        if (!h2o_socket_ssl_is_early_data(conn->sock)) {
+            while (conn->early_data.blocked_streams.next != &conn->early_data.blocked_streams) {
+                h2o_http2_stream_t *stream =
+                    H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _link, conn->early_data.blocked_streams.next);
+                h2o_linklist_unlink(&stream->_link);
+                if (!stream->blocked_by_server)
+                    h2o_http2_stream_set_blocked_by_server(conn, stream, 1);
+                h2o_replay_request(&stream->req);
+            }
+        }
+    }
+
+    if (parse_input(conn) != 0)
+        return;
+    update_idle_timeout(conn);
+
+    /* write immediately, if there is no write in flight and if pending write exists */
+    if (h2o_timer_is_linked(&conn->_write.timeout_entry)) {
+        h2o_timer_unlink(&conn->_write.timeout_entry);
+        do_emit_writereq(conn);
+    }
+}
+
+
+// Source: connection.c
+// Lines 1306-1341

@@ -1,0 +1,1 @@
+close_data,h2o/lib/common/socketpool.c,6,pool,h2o/lib/common/socketpool.c,1,1

@@ -1,0 +1,25 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'v1' at line 3
+2. Pointer 'v1_' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+pgcmp (const void *v1_, const void *v2_)
+{
+  const vertex *v1 = (const vertex *)v1_;
+  const vertex *v2 = (const vertex *)v2_;
+  return v2->post - v1->post;
+}
+
+
+// Source: tree-loop-distribution.c
+// Lines 2114-2119
+
+
+[ANSWER]
+MUST

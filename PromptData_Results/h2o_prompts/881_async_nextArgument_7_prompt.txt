@@ -1,0 +1,32 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'str' at line 1
+2. Pointer 'p' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static const char *nextArgument(const char *start, const char **str, size_t *len) {
+    const char *p = start;
+    if (p[0] != '$') {
+        p = strchr(p,'$');
+        if (p == NULL) return NULL;
+    }
+
+    *len = (int)strtol(p+1,NULL,10);
+    p = strchr(p,'\r');
+    assert(p);
+    *str = p+2;
+    return p+2+(*len)+2;
+}
+
+
+// Source: async.c
+// Lines 567-579
+
+
+[ANSWER]
+MUST

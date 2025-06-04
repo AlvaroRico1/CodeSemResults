@@ -1,0 +1,84 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'sy' at line 3
+2. Pointer 'ypixel' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+recalculate_size(struct window *w, int now)
+{
+	u_int	sx, sy, xpixel = 0, ypixel = 0;
+	int	type, current, changed;
+
+	/*
+	 * Do not attempt to resize windows which have no pane, they must be on
+	 * the way to destruction.
+	 */
+	if (w->active == NULL)
+		return;
+	log_debug("%s: @%u is %ux%u", __func__, w->id, w->sx, w->sy);
+
+	/*
+	 * Type is manual, smallest, largest, latest. Current is the
+	 * aggressive-resize option (do not resize based on clients where the
+	 * window is not the current window).
+	 */
+	type = options_get_number(w->options, "window-size");
+	current = options_get_number(w->options, "aggressive-resize");
+
+	/* Look for a suitable client and get the new size. */
+	changed = clients_calculate_size(type, current, NULL, NULL, w,
+	    recalculate_size_skip_client, &sx, &sy, &xpixel, &ypixel);
+
+	/*
+	 * Make sure the size has actually changed. If the window has already
+	 * got a resize scheduled, then use the new size; otherwise the old.
+	 */
+	if (w->flags & WINDOW_RESIZE) {
+		if (!now && changed && w->new_sx == sx && w->new_sy == sy)
+			changed = 0;
+	} else {
+		if (!now && changed && w->sx == sx && w->sy == sy)
+			changed = 0;
+	}
+
+	/*
+	 * If the size hasn't changed, update the window offset but not the
+	 * size.
+	 */
+	if (!changed) {
+		log_debug("%s: @%u no size change", __func__, w->id);
+		tty_update_window_offset(w);
+		return;
+	}
+
+	/*
+	 * If the now flag is set or if the window is sized manually, change
+	 * the size immediately. Otherwise set the flag and it will be done
+	 * later.
+	 */
+	log_debug("%s: @%u new size %ux%u", __func__, w->id, sx, sy);
+	if (now || type == WINDOW_SIZE_MANUAL)
+		resize_window(w, sx, sy, xpixel, ypixel);
+	else {
+		w->new_sx = sx;
+		w->new_sy = sy;
+		w->new_xpixel = xpixel;
+		w->new_ypixel = ypixel;
+
+		w->flags |= WINDOW_RESIZE;
+		tty_update_window_offset(w);
+	}
+}
+
+
+// Source: resize.c
+// Lines 357-421
+
+
+[ANSWER]
+MAY

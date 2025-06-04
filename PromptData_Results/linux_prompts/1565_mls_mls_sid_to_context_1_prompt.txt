@@ -1,0 +1,91 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'scontextp' at line 5
+2. Pointer 'scontext' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void mls_sid_to_context(struct policydb *p,
+			struct context *context,
+			char **scontext)
+{
+	char *scontextp, *nm;
+	int i, l, head, prev;
+	struct ebitmap *e;
+	struct ebitmap_node *node;
+
+	if (!p->mls_enabled)
+		return;
+
+	scontextp = *scontext;
+
+	*scontextp = ':';
+	scontextp++;
+
+	for (l = 0; l < 2; l++) {
+		strcpy(scontextp, sym_name(p, SYM_LEVELS,
+					   context->range.level[l].sens - 1));
+		scontextp += strlen(scontextp);
+
+		/* categories */
+		head = -2;
+		prev = -2;
+		e = &context->range.level[l].cat;
+		ebitmap_for_each_positive_bit(e, node, i) {
+			if (i - prev > 1) {
+				/* one or more negative bits are skipped */
+				if (prev != head) {
+					if (prev - head > 1)
+						*scontextp++ = '.';
+					else
+						*scontextp++ = ',';
+					nm = sym_name(p, SYM_CATS, prev);
+					strcpy(scontextp, nm);
+					scontextp += strlen(nm);
+				}
+				if (prev < 0)
+					*scontextp++ = ':';
+				else
+					*scontextp++ = ',';
+				nm = sym_name(p, SYM_CATS, i);
+				strcpy(scontextp, nm);
+				scontextp += strlen(nm);
+				head = i;
+			}
+			prev = i;
+		}
+
+		if (prev != head) {
+			if (prev - head > 1)
+				*scontextp++ = '.';
+			else
+				*scontextp++ = ',';
+			nm = sym_name(p, SYM_CATS, prev);
+			strcpy(scontextp, nm);
+			scontextp += strlen(nm);
+		}
+
+		if (l == 0) {
+			if (mls_level_eq(&context->range.level[0],
+					 &context->range.level[1]))
+				break;
+			else
+				*scontextp++ = '-';
+		}
+	}
+
+	*scontext = scontextp;
+	return;
+}
+
+
+// Source: mls.c
+// Lines 89-160
+
+
+[ANSWER]
+MAY

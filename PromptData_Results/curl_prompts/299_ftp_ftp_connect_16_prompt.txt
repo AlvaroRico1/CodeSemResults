@@ -1,0 +1,53 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'conn' at line 5
+2. Pointer 'data' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static CURLcode ftp_connect(struct Curl_easy *data,
+                            bool *done) /* see description above */
+{
+  CURLcode result;
+  struct connectdata *conn = data->conn;
+  struct ftp_conn *ftpc = &conn->proto.ftpc;
+  struct pingpong *pp = &ftpc->pp;
+
+  *done = FALSE; /* default to not done yet */
+
+  /* We always support persistent connections on ftp */
+  connkeep(conn, "FTP default");
+
+  PINGPONG_SETUP(pp, ftp_statemachine, ftp_endofresp);
+
+  if(conn->handler->flags & PROTOPT_SSL) {
+    /* BLOCKING */
+    result = Curl_ssl_connect(data, conn, FIRSTSOCKET);
+    if(result)
+      return result;
+    conn->bits.ftp_use_control_ssl = TRUE;
+  }
+
+  Curl_pp_setup(pp); /* once per transfer */
+  Curl_pp_init(data, pp); /* init the generic pingpong data */
+
+  /* When we connect, we start in the state where we await the 220
+     response */
+  state(data, FTP_WAIT220);
+
+  result = ftp_multi_statemach(data, done);
+
+  return result;
+}
+
+
+// Source: ftp.c
+// Lines 3145-3178
+
+
+[ANSWER]
+MUST

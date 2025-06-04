@@ -1,0 +1,43 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'mode' at line 6
+2. Pointer 'dirty_submodule' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void show_new_file(struct rev_info *revs,
+			  const struct cache_entry *new_file,
+			  int cached, int match_missing)
+{
+	const struct object_id *oid;
+	unsigned int mode;
+	unsigned dirty_submodule = 0;
+	struct index_state *istate = revs->diffopt.repo->index;
+
+	if (new_file && S_ISSPARSEDIR(new_file->ce_mode)) {
+		diff_tree_oid(NULL, &new_file->oid, new_file->name, &revs->diffopt);
+		return;
+	}
+
+	/*
+	 * New file in the index: it might actually be different in
+	 * the working tree.
+	 */
+	if (get_stat_data(istate, new_file, &oid, &mode, cached, match_missing,
+	    &dirty_submodule, &revs->diffopt) < 0)
+		return;
+
+	diff_index_show_file(revs, "+", new_file, oid, !is_null_oid(oid), mode, dirty_submodule);
+}
+
+
+// Source: diff-lib.c
+// Lines 323-346
+
+
+[ANSWER]
+MAY

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'seq' at line 3\n2. Pointer 'f' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int seq_release_net(struct inode *ino, struct file *f)\n{\n\tstruct seq_file *seq = f->private_data;\n\n\tput_net(seq_file_net(seq));\n\tseq_release_private(ino, f);\n\treturn 0;\n}\n\n\n// Source: proc_net.c\n// Lines 84-91\n",
+  "ANSWER": "MUST"
+}

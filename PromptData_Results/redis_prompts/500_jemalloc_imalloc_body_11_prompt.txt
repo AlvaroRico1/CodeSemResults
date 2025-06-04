@@ -1,0 +1,214 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'dopts' at line 1
+2. Pointer 'allocation' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+imalloc_body(static_opts_t *sopts, dynamic_opts_t *dopts, tsd_t *tsd) {
+	/* Where the actual allocated memory will live. */
+	void *allocation = NULL;
+	/* Filled in by compute_size_with_overflow below. */
+	size_t size = 0;
+	/*
+	 * For unaligned allocations, we need only ind.  For aligned
+	 * allocations, or in case of stats or profiling we need usize.
+	 *
+	 * These are actually dead stores, in that their values are reset before
+	 * any branch on their value is taken.  Sometimes though, it's
+	 * convenient to pass them as arguments before this point.  To avoid
+	 * undefined behavior then, we initialize them with dummy stores.
+	 */
+	szind_t ind = 0;
+	size_t usize = 0;
+
+	/* Reentrancy is only checked on slow path. */
+	int8_t reentrancy_level;
+
+	/* Compute the amount of memory the user wants. */
+	if (unlikely(compute_size_with_overflow(sopts->may_overflow, dopts,
+	    &size))) {
+		goto label_oom;
+	}
+
+	/* Validate the user input. */
+	if (sopts->bump_empty_alloc) {
+		if (unlikely(size == 0)) {
+			size = 1;
+		}
+	}
+
+	if (sopts->assert_nonempty_alloc) {
+		assert (size != 0);
+	}
+
+	if (unlikely(dopts->alignment < sopts->min_alignment
+	    || (dopts->alignment & (dopts->alignment - 1)) != 0)) {
+		goto label_invalid_alignment;
+	}
+
+	/* This is the beginning of the "core" algorithm. */
+
+	if (dopts->alignment == 0) {
+		ind = sz_size2index(size);
+		if (unlikely(ind >= NSIZES)) {
+			goto label_oom;
+		}
+		if (config_stats || (config_prof && opt_prof)) {
+			usize = sz_index2size(ind);
+			assert(usize > 0 && usize <= LARGE_MAXCLASS);
+		}
+	} else {
+		usize = sz_sa2u(size, dopts->alignment);
+		if (unlikely(usize == 0 || usize > LARGE_MAXCLASS)) {
+			goto label_oom;
+		}
+	}
+
+	check_entry_exit_locking(tsd_tsdn(tsd));
+
+	/*
+	 * If we need to handle reentrancy, we can do it out of a
+	 * known-initialized arena (i.e. arena 0).
+	 */
+	reentrancy_level = tsd_reentrancy_level_get(tsd);
+	if (sopts->slow && unlikely(reentrancy_level > 0)) {
+		/*
+		 * We should never specify particular arenas or tcaches from
+		 * within our internal allocations.
+		 */
+		assert(dopts->tcache_ind == TCACHE_IND_AUTOMATIC ||
+		    dopts->tcache_ind == TCACHE_IND_NONE);
+		assert(dopts->arena_ind == ARENA_IND_AUTOMATIC);
+		dopts->tcache_ind = TCACHE_IND_NONE;
+		/* We know that arena 0 has already been initialized. */
+		dopts->arena_ind = 0;
+	}
+
+	/* If profiling is on, get our profiling context. */
+	if (config_prof && opt_prof) {
+		/*
+		 * Note that if we're going down this path, usize must have been
+		 * initialized in the previous if statement.
+		 */
+		prof_tctx_t *tctx = prof_alloc_prep(
+		    tsd, usize, prof_active_get_unlocked(), true);
+
+		alloc_ctx_t alloc_ctx;
+		if (likely((uintptr_t)tctx == (uintptr_t)1U)) {
+			alloc_ctx.slab = (usize <= SMALL_MAXCLASS);
+			allocation = imalloc_no_sample(
+			    sopts, dopts, tsd, usize, usize, ind);
+		} else if ((uintptr_t)tctx > (uintptr_t)1U) {
+			/*
+			 * Note that ind might still be 0 here.  This is fine;
+			 * imalloc_sample ignores ind if dopts->alignment > 0.
+			 */
+			allocation = imalloc_sample(
+			    sopts, dopts, tsd, usize, ind);
+			alloc_ctx.slab = false;
+		} else {
+			allocation = NULL;
+		}
+
+		if (unlikely(allocation == NULL)) {
+			prof_alloc_rollback(tsd, tctx, true);
+			goto label_oom;
+		}
+		prof_malloc(tsd_tsdn(tsd), allocation, usize, &alloc_ctx, tctx);
+	} else {
+		/*
+		 * If dopts->alignment > 0, then ind is still 0, but usize was
+		 * computed in the previous if statement.  Down the positive
+		 * alignment path, imalloc_no_sample ignores ind and size
+		 * (relying only on usize).
+		 */
+		allocation = imalloc_no_sample(sopts, dopts, tsd, size, usize,
+		    ind);
+		if (unlikely(allocation == NULL)) {
+			goto label_oom;
+		}
+	}
+
+	/*
+	 * Allocation has been done at this point.  We still have some
+	 * post-allocation work to do though.
+	 */
+	assert(dopts->alignment == 0
+	    || ((uintptr_t)allocation & (dopts->alignment - 1)) == ZU(0));
+
+	if (config_stats) {
+		assert(usize == isalloc(tsd_tsdn(tsd), allocation));
+		*tsd_thread_allocatedp_get(tsd) += usize;
+	}
+
+	if (sopts->slow) {
+		UTRACE(0, size, allocation);
+	}
+
+	/* Success! */
+	check_entry_exit_locking(tsd_tsdn(tsd));
+	*dopts->result = allocation;
+	return 0;
+
+label_oom:
+	if (unlikely(sopts->slow) && config_xmalloc && unlikely(opt_xmalloc)) {
+		malloc_write(sopts->oom_string);
+		abort();
+	}
+
+	if (sopts->slow) {
+		UTRACE(NULL, size, NULL);
+	}
+
+	check_entry_exit_locking(tsd_tsdn(tsd));
+
+	if (sopts->set_errno_on_error) {
+		set_errno(ENOMEM);
+	}
+
+	if (sopts->null_out_result_on_error) {
+		*dopts->result = NULL;
+	}
+
+	return ENOMEM;
+
+	/*
+	 * This label is only jumped to by one goto; we move it out of line
+	 * anyways to avoid obscuring the non-error paths, and for symmetry with
+	 * the oom case.
+	 */
+label_invalid_alignment:
+	if (config_xmalloc && unlikely(opt_xmalloc)) {
+		malloc_write(sopts->invalid_alignment_string);
+		abort();
+	}
+
+	if (sopts->set_errno_on_error) {
+		set_errno(EINVAL);
+	}
+
+	if (sopts->slow) {
+		UTRACE(NULL, size, NULL);
+	}
+
+	check_entry_exit_locking(tsd_tsdn(tsd));
+
+	if (sopts->null_out_result_on_error) {
+		*dopts->result = NULL;
+	}
+
+	return EINVAL;
+}
+
+
+// Source: jemalloc.c
+// Lines 1787-1981
+
+
+[ANSWER]
+MUST

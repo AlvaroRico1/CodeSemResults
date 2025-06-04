@@ -1,0 +1,1 @@
+affix_1,mysql/extra/icu/source/i18n/currpinf.cpp,2,val1,mysql/extra/icu/source/i18n/currpinf.cpp,1,1

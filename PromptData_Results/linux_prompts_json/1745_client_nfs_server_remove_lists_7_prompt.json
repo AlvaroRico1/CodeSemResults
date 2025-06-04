@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'clp' at line 3\n2. Pointer 'server' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid nfs_server_remove_lists(struct nfs_server *server)\n{\n\tstruct nfs_client *clp = server->nfs_client;\n\tstruct nfs_net *nn;\n\n\tif (clp == NULL)\n\t\treturn;\n\tnn = net_generic(clp->cl_net, nfs_net_id);\n\tspin_lock(&nn->nfs_client_lock);\n\tlist_del_rcu(&server->client_link);\n\tif (list_empty(&clp->cl_superblocks))\n\t\tset_bit(NFS_CS_STOP_RENEW, &clp->cl_res_state);\n\tlist_del(&server->master_link);\n\tspin_unlock(&nn->nfs_client_lock);\n\n\tsynchronize_rcu();\n}\n\n\n// Source: client.c\n// Lines 856-872\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,25 @@
+static struct nfs4_lock_state *nfs4_alloc_lock_state(struct nfs4_state *state, fl_owner_t fl_owner)
+{
+	struct nfs4_lock_state *lsp;
+	struct nfs_server *server = state->owner->so_server;
+
+	lsp = kzalloc(sizeof(*lsp), GFP_NOFS);
+	if (lsp == NULL)
+		return NULL;
+	nfs4_init_seqid_counter(&lsp->ls_seqid);
+	refcount_set(&lsp->ls_count, 1);
+	lsp->ls_state = state;
+	lsp->ls_owner = fl_owner;
+	lsp->ls_seqid.owner_id = ida_simple_get(&server->lockowner_id, 0, 0, GFP_NOFS);
+	if (lsp->ls_seqid.owner_id < 0)
+		goto out_free;
+	INIT_LIST_HEAD(&lsp->ls_locks);
+	return lsp;
+out_free:
+	kfree(lsp);
+	return NULL;
+}
+
+
+// Source: nfs4state.c
+// Lines 867-887

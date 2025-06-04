@@ -1,0 +1,1 @@
+current,redis/src/adlist.c,4,list,redis/src/adlist.c,1,1

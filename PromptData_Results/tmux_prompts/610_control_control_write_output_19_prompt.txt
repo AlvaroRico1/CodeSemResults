@@ -1,0 +1,70 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'cs' at line 3
+2. Pointer 'c' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+control_write_output(struct client *c, struct window_pane *wp)
+{
+	struct control_state	*cs = c->control_state;
+	struct control_pane	*cp;
+	struct control_block	*cb;
+	size_t			 new_size;
+
+	if (winlink_find_by_window(&c->session->windows, wp->window) == NULL)
+		return;
+
+	if (c->flags & CONTROL_IGNORE_FLAGS) {
+		cp = control_get_pane(c, wp);
+		if (cp != NULL)
+			goto ignore;
+		return;
+	}
+	cp = control_add_pane(c, wp);
+	if (cp->flags & (CONTROL_PANE_OFF|CONTROL_PANE_PAUSED))
+		goto ignore;
+	if (control_check_age(c, wp, cp))
+		return;
+
+	window_pane_get_new_data(wp, &cp->queued, &new_size);
+	if (new_size == 0)
+		return;
+	window_pane_update_used_data(wp, &cp->queued, new_size);
+
+	cb = xcalloc(1, sizeof *cb);
+	cb->size = new_size;
+	TAILQ_INSERT_TAIL(&cs->all_blocks, cb, all_entry);
+	cb->t = get_timer();
+
+	TAILQ_INSERT_TAIL(&cp->blocks, cb, entry);
+	log_debug("%s: %s: new output block of %zu for %%%u", __func__, c->name,
+	    cb->size, wp->id);
+
+	if (!cp->pending_flag) {
+		log_debug("%s: %s: %%%u now pending", __func__, c->name,
+		    wp->id);
+		TAILQ_INSERT_TAIL(&cs->pending_list, cp, pending_entry);
+		cp->pending_flag = 1;
+		cs->pending_count++;
+	}
+	bufferevent_enable(cs->write_event, EV_WRITE);
+	return;
+
+ignore:
+	log_debug("%s: %s: ignoring pane %%%u", __func__, c->name, wp->id);
+	window_pane_update_used_data(wp, &cp->offset, SIZE_MAX);
+	window_pane_update_used_data(wp, &cp->queued, SIZE_MAX);
+}
+
+
+// Source: control.c
+// Lines 468-518
+
+
+[ANSWER]
+MUST

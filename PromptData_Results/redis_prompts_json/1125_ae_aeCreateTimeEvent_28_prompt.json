@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'te' at line 6\n2. Pointer 'eventLoop' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nlong long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,\n        aeTimeProc *proc, void *clientData,\n        aeEventFinalizerProc *finalizerProc)\n{\n    long long id = eventLoop->timeEventNextId++;\n    aeTimeEvent *te;\n\n    te = zmalloc(sizeof(*te));\n    if (te == NULL) return AE_ERR;\n    te->id = id;\n    te->when = getMonotonicUs() + milliseconds * 1000;\n    te->timeProc = proc;\n    te->finalizerProc = finalizerProc;\n    te->clientData = clientData;\n    te->prev = NULL;\n    te->next = eventLoop->timeEventHead;\n    te->refcount = 0;\n    if (te->next)\n        te->next->prev = te;\n    eventLoop->timeEventHead = te;\n    return id;\n}\n\n\n// Source: ae.c\n// Lines 206-227\n",
+  "ANSWER": "MUST"
+}

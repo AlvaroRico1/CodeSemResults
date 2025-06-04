@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'm' at line 4\n2. Pointer 'r' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint find_pack_entry(struct repository *r, const struct object_id *oid, struct pack_entry *e)\n{\n\tstruct list_head *pos;\n\tstruct multi_pack_index *m;\n\n\tprepare_packed_git(r);\n\tif (!r->objects->packed_git && !r->objects->multi_pack_index)\n\t\treturn 0;\n\n\tfor (m = r->objects->multi_pack_index; m; m = m->next) {\n\t\tif (fill_midx_entry(r, oid, e, m))\n\t\t\treturn 1;\n\t}\n\n\tlist_for_each(pos, &r->objects->packed_git_mru) {\n\t\tstruct packed_git *p = list_entry(pos, struct packed_git, mru);\n\t\tif (!p->multi_pack_index && fill_pack_entry(oid, e, p)) {\n\t\t\tlist_move(&p->mru, &r->objects->packed_git_mru);\n\t\t\treturn 1;\n\t\t}\n\t}\n\treturn 0;\n}\n\n\n// Source: packfile.c\n// Lines 2030-2052\n",
+  "ANSWER": "MUST"
+}

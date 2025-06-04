@@ -1,0 +1,46 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'path' at line 2
+2. Pointer 'mode' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static struct cache_entry *read_one_ent(const char *which,
+					struct object_id *ent, const char *path,
+					int namelen, int stage)
+{
+	unsigned short mode;
+	struct object_id oid;
+	struct cache_entry *ce;
+
+	if (get_tree_entry(the_repository, ent, path, &oid, &mode)) {
+		if (which)
+			error("%s: not in %s branch.", path, which);
+		return NULL;
+	}
+	if (mode == S_IFDIR) {
+		if (which)
+			error("%s: not a blob in %s branch.", path, which);
+		return NULL;
+	}
+	ce = make_empty_cache_entry(&the_index, namelen);
+
+	oidcpy(&ce->oid, &oid);
+	memcpy(ce->name, path, namelen);
+	ce->ce_flags = create_ce_flags(stage);
+	ce->ce_namelen = namelen;
+	ce->ce_mode = create_ce_mode(mode);
+	return ce;
+}
+
+
+// Source: update-index.c
+// Lines 596-622
+
+
+[ANSWER]
+MAY

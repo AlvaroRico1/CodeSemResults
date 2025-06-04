@@ -1,0 +1,72 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'fileline_fn' at line 3
+2. Pointer 'found_sym' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+backtrace_initialize (struct backtrace_state *state, const char *filename,
+		      int descriptor, backtrace_error_callback error_callback,
+		      void *data, fileline *fileline_fn)
+{
+  int ret;
+  int found_sym;
+  int found_dwarf;
+  fileline elf_fileline_fn = elf_nodebug;
+  struct phdr_data pd;
+
+  ret = elf_add (state, filename, descriptor, 0, error_callback, data,
+		 &elf_fileline_fn, &found_sym, &found_dwarf, NULL, 1, 0, NULL,
+		 0);
+  if (!ret)
+    return 0;
+
+  pd.state = state;
+  pd.error_callback = error_callback;
+  pd.data = data;
+  pd.fileline_fn = &elf_fileline_fn;
+  pd.found_sym = &found_sym;
+  pd.found_dwarf = &found_dwarf;
+  pd.exe_filename = filename;
+  pd.exe_descriptor = ret < 0 ? descriptor : -1;
+
+  dl_iterate_phdr (phdr_callback, (void *) &pd);
+
+  if (!state->threaded)
+    {
+      if (found_sym)
+	state->syminfo_fn = elf_syminfo;
+      else if (state->syminfo_fn == NULL)
+	state->syminfo_fn = elf_nosyms;
+    }
+  else
+    {
+      if (found_sym)
+	backtrace_atomic_store_pointer (&state->syminfo_fn, elf_syminfo);
+      else
+	(void) __sync_bool_compare_and_swap (&state->syminfo_fn, NULL,
+					     elf_nosyms);
+    }
+
+  if (!state->threaded)
+    *fileline_fn = state->fileline_fn;
+  else
+    *fileline_fn = backtrace_atomic_load_pointer (&state->fileline_fn);
+
+  if (*fileline_fn == NULL || *fileline_fn == elf_nodebug)
+    *fileline_fn = elf_fileline_fn;
+
+  return 1;
+}
+
+
+// Source: elf.c
+// Lines 3383-3435
+
+
+[ANSWER]
+MAY

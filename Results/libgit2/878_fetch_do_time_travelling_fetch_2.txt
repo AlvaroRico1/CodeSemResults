@@ -1,0 +1,1 @@
+empty_tree,libgit2/tests/libgit2/remote/fetch.c,14,ref,libgit2/tests/libgit2/remote/fetch.c,45,2

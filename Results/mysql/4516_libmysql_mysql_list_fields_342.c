@@ -1,0 +1,38 @@
+MYSQL_RES *STDCALL mysql_list_fields(MYSQL *mysql, const char *table,
+                                     const char *wild) {
+  MYSQL_RES *result;
+  MYSQL_FIELD *fields;
+  MEM_ROOT *new_root;
+  char buff[258], *end;
+  DBUG_TRACE;
+  DBUG_PRINT("enter", ("table: '%s'  wild: '%s'", table, wild ? wild : ""));
+
+  end = strmake(strmake(buff, table, 128) + 1, wild ? wild : "", 128);
+  free_old_query(mysql);
+  if (simple_command(mysql, COM_FIELD_LIST, (uchar *)buff, (ulong)(end - buff),
+                     1) ||
+      !(fields = (*mysql->methods->list_fields)(mysql)))
+    return nullptr;
+
+  if (!(new_root = (MEM_ROOT *)my_malloc(PSI_NOT_INSTRUMENTED, sizeof(MEM_ROOT),
+                                         MYF(MY_WME | MY_ZEROFILL))))
+    return nullptr;
+  if (!(result = (MYSQL_RES *)my_malloc(PSI_NOT_INSTRUMENTED, sizeof(MYSQL_RES),
+                                        MYF(MY_WME | MY_ZEROFILL)))) {
+    my_free(new_root);
+    return nullptr;
+  }
+
+  result->methods = mysql->methods;
+  result->field_alloc = mysql->field_alloc;
+  mysql->fields = nullptr;
+  mysql->field_alloc = new_root;
+  result->field_count = mysql->field_count;
+  result->fields = fields;
+  result->eof = true;
+  return result;
+}
+
+
+// Source: libmysql.cc
+// Lines 758-791

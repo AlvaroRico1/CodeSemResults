@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'sin6' at line 16\n2. Pointer 'sap' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void nfs_show_mountd_options(struct seq_file *m, struct nfs_server *nfss,\n\t\t\t\t    int showdefaults)\n{\n\tstruct sockaddr *sap = (struct sockaddr *)&nfss->mountd_address;\n\n\tif (nfss->flags & NFS_MOUNT_LEGACY_INTERFACE)\n\t\treturn;\n\n\tswitch (sap->sa_family) {\n\tcase AF_INET: {\n\t\tstruct sockaddr_in *sin = (struct sockaddr_in *)sap;\n\t\tseq_printf(m, \",mountaddr=%pI4\", &sin->sin_addr.s_addr);\n\t\tbreak;\n\t}\n\tcase AF_INET6: {\n\t\tstruct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)sap;\n\t\tseq_printf(m, \",mountaddr=%pI6c\", &sin6->sin6_addr);\n\t\tbreak;\n\t}\n\n\n// Source: super.c\n// Lines 567-585\n",
+  "ANSWER": "MUST"
+}

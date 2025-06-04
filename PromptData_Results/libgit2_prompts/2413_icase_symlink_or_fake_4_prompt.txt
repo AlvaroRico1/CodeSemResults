@@ -1,0 +1,30 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'b' at line 1
+2. Pointer 'symlinks' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int symlink_or_fake(git_repository *repo, const char *a, const char *b)
+{
+	int symlinks;
+
+	cl_git_pass(git_repository__configmap_lookup(&symlinks, repo, GIT_CONFIGMAP_SYMLINKS));
+
+	if (symlinks)
+		return p_symlink(a, b);
+	else
+		return git_futils_fake_symlink(a, b);
+}
+
+
+// Source: icase.c
+// Lines 95-105
+
+
+[ANSWER]
+MUST-NOT

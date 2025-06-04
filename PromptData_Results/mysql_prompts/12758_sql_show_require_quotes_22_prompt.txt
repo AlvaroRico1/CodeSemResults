@@ -1,0 +1,33 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'end' at line 3
+2. Pointer 'name' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static const char *require_quotes(const char *name, size_t name_length) {
+  bool pure_digit = true;
+  const char *end = name + name_length;
+
+  for (; name < end; name++) {
+    uchar chr = (uchar)*name;
+    uint length = my_mbcharlen(system_charset_info, chr);
+    if (length == 0 || (length == 1 && !system_charset_info->ident_map[chr]))
+      return name;
+    if (length == 1 && (chr < '0' || chr > '9')) pure_digit = false;
+  }
+  if (pure_digit) return name;
+  return nullptr;
+}
+
+
+// Source: sql_show.cc
+// Lines 1422-1435
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,26 @@
+bool error_if_full_join(JOIN *join) {
+  ASSERT_BEST_REF_IN_JOIN_ORDER(join);
+  for (uint i = 0; i < join->primary_tables; i++) {
+    JOIN_TAB *const tab = join->best_ref[i];
+    THD *thd = join->thd;
+
+    /*
+      Safe update error isn't returned if:
+      1) It is  an EXPLAIN statement OR
+      2) Table is not the target.
+
+      Append the first warning (if any) to the error message. Allows the user
+      to understand why index access couldn't be chosen.
+    */
+
+    if (!thd->lex->is_explain() && tab->table()->pos_in_table_list->updating &&
+        tab->type() == JT_ALL) {
+      my_error(ER_UPDATE_WITHOUT_KEY_IN_SAFE_MODE, MYF(0),
+               thd->get_stmt_da()->get_first_condition_message());
+      return true;
+    }
+  }
+
+
+// Source: sql_select.cc
+// Lines 3338-3359

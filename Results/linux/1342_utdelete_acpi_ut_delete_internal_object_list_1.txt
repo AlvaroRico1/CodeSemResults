@@ -1,0 +1,1 @@
+internal_obj,linux/drivers/acpi/acpica/utdelete.c,3,obj_list,linux/drivers/acpi/acpica/utdelete.c,1,2

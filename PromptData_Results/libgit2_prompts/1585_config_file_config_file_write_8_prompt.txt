@@ -1,0 +1,95 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'write_data' at line 8
+2. Pointer 'preg' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int config_file_write(config_file_backend *cfg, const char *orig_key, const char *key, const git_regexp *preg, const char *value)
+
+{
+	char *orig_section = NULL, *section = NULL, *orig_name, *name, *ldot;
+	git_str buf = GIT_STR_INIT, contents = GIT_STR_INIT;
+	git_config_parser parser = GIT_CONFIG_PARSER_INIT;
+	git_filebuf file = GIT_FILEBUF_INIT;
+	struct write_data write_data;
+	int error;
+
+	memset(&write_data, 0, sizeof(write_data));
+
+	if (cfg->locked) {
+		error = git_str_puts(&contents, git_str_cstr(&cfg->locked_content) == NULL ? "" : git_str_cstr(&cfg->locked_content));
+	} else {
+		if ((error = git_filebuf_open(&file, cfg->file.path, GIT_FILEBUF_HASH_CONTENTS,
+					      GIT_CONFIG_FILE_MODE)) < 0)
+			goto done;
+
+		/* We need to read in our own config file */
+		error = git_futils_readbuffer(&contents, cfg->file.path);
+	}
+	if (error < 0 && error != GIT_ENOTFOUND)
+		goto done;
+
+	if ((git_config_parser_init(&parser, cfg->file.path, contents.ptr, contents.size)) < 0)
+		goto done;
+
+	ldot = strrchr(key, '.');
+	name = ldot + 1;
+	section = git__strndup(key, ldot - key);
+	GIT_ERROR_CHECK_ALLOC(section);
+
+	ldot = strrchr(orig_key, '.');
+	orig_name = ldot + 1;
+	orig_section = git__strndup(orig_key, ldot - orig_key);
+	GIT_ERROR_CHECK_ALLOC(orig_section);
+
+	write_data.buf = &buf;
+	write_data.orig_section = orig_section;
+	write_data.section = section;
+	write_data.orig_name = orig_name;
+	write_data.name = name;
+	write_data.preg = preg;
+	write_data.value = value;
+
+	if ((error = git_config_parse(&parser, write_on_section, write_on_variable,
+				      write_on_comment, write_on_eof, &write_data)) < 0)
+		goto done;
+
+	if (cfg->locked) {
+		size_t len = buf.asize;
+		/* Update our copy with the modified contents */
+		git_str_dispose(&cfg->locked_content);
+		git_str_attach(&cfg->locked_content, git_str_detach(&buf), len);
+	} else {
+		git_filebuf_write(&file, git_str_cstr(&buf), git_str_len(&buf));
+
+		if ((error = git_filebuf_commit(&file)) < 0)
+			goto done;
+
+		if ((error = config_file_refresh_from_buffer(&cfg->parent, buf.ptr, buf.size)) < 0)
+			goto done;
+	}
+
+done:
+	git__free(section);
+	git__free(orig_section);
+	git_str_dispose(&write_data.buffered_comment);
+	git_str_dispose(&buf);
+	git_str_dispose(&contents);
+	git_filebuf_cleanup(&file);
+	git_config_parser_dispose(&parser);
+
+	return error;
+}
+
+
+// Source: config_file.c
+// Lines 1119-1194
+
+
+[ANSWER]
+MUST

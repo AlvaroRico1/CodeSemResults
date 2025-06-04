@@ -1,0 +1,43 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'a' at line 3
+2. Pointer 'b' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_diff_blob__can_compare_buffer_to_buffer(void)
+{
+	const char *a = "a\nb\nc\nd\ne\nf\ng\nh\ni\nj\n";
+	const char *b = "a\nB\nc\nd\nE\nF\nh\nj\nk\n";
+
+	opts.interhunk_lines = 0;
+	opts.context_lines = 0;
+
+	memset(&expected, 0, sizeof(expected));
+
+	cl_git_pass(git_diff_buffers(
+		a, strlen(a), NULL, b, strlen(b), NULL, &opts,
+		diff_file_cb, diff_binary_cb, diff_hunk_cb, diff_line_cb, &expected));
+	assert_one_modified(4, 9, 0, 4, 5, &expected);
+
+	opts.flags ^= GIT_DIFF_REVERSE;
+
+	memset(&expected, 0, sizeof(expected));
+
+	cl_git_pass(git_diff_buffers(
+		a, strlen(a), NULL, b, strlen(b), NULL, &opts,
+		diff_file_cb, diff_binary_cb, diff_hunk_cb, diff_line_cb, &expected));
+	assert_one_modified(4, 9, 0, 5, 4, &expected);
+}
+
+
+// Source: blob.c
+// Lines 1040-1063
+
+
+[ANSWER]
+MUST-NOT

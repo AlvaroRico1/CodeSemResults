@@ -1,0 +1,53 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'cdata' at line 4
+2. Pointer 'data' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+cmd_confirm_before_callback(struct client *c, void *data, const char *s,
+    __unused int done)
+{
+	struct cmd_confirm_before_data	*cdata = data;
+	struct cmdq_item		*item = cdata->item, *new_item;
+	int				 retcode = 1;
+
+	if (c->flags & CLIENT_DEAD)
+		goto out;
+
+	if (s == NULL || *s == '\0')
+		goto out;
+	if (tolower((u_char)s[0]) != 'y' || s[1] != '\0')
+		goto out;
+	retcode = 0;
+
+	if (item == NULL) {
+		new_item = cmdq_get_command(cdata->cmdlist, NULL);
+		cmdq_append(c, new_item);
+	} else {
+		new_item = cmdq_get_command(cdata->cmdlist,
+		    cmdq_get_state(item));
+		cmdq_insert_after(item, new_item);
+	}
+
+out:
+        if (item != NULL) {
+                if (cmdq_get_client(item) != NULL &&
+                    cmdq_get_client(item)->session == NULL)
+                        cmdq_get_client(item)->retval = retcode;
+                cmdq_continue(item);
+        }
+	return (0);
+}
+
+
+// Source: cmd-confirm-before.c
+// Lines 100-133
+
+
+[ANSWER]
+MUST

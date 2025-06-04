@@ -1,0 +1,51 @@
+find_reg_offset_for_const (struct table_elt *anchor_elt, HOST_WIDE_INT offs,
+			   unsigned *old)
+{
+  struct table_elt *elt;
+  unsigned idx;
+  struct table_elt *match_elt;
+  rtx match;
+
+  /* Find the cheapest and *oldest* expression to maximize the chance of
+     reusing the same pseudo.  */
+
+  match_elt = NULL;
+  match = NULL_RTX;
+  for (elt = anchor_elt->first_same_value, idx = 0;
+       elt;
+       elt = elt->next_same_value, idx++)
+    {
+      if (match_elt && CHEAPER (match_elt, elt))
+	return match;
+
+      if (REG_P (elt->exp)
+	  || (GET_CODE (elt->exp) == PLUS
+	      && REG_P (XEXP (elt->exp, 0))
+	      && GET_CODE (XEXP (elt->exp, 1)) == CONST_INT))
+	{
+	  rtx x;
+
+	  /* Ignore expressions that are no longer valid.  */
+	  if (!REG_P (elt->exp) && !exp_equiv_p (elt->exp, elt->exp, 1, false))
+	    continue;
+
+	  x = plus_constant (GET_MODE (elt->exp), elt->exp, offs);
+	  if (REG_P (x)
+	      || (GET_CODE (x) == PLUS
+		  && IN_RANGE (INTVAL (XEXP (x, 1)),
+			       -targetm.const_anchor,
+			       targetm.const_anchor - 1)))
+	    {
+	      match = x;
+	      match_elt = elt;
+	      *old = idx;
+	    }
+	}
+    }
+
+  return match;
+}
+
+
+// Source: cse.c
+// Lines 1267-1313

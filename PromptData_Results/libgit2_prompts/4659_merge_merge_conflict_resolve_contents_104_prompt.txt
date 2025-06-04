@@ -1,0 +1,105 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'source' at line 8
+2. Pointer 'diff_list' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int merge_conflict_resolve_contents(
+	int *resolved,
+	git_merge_diff_list *diff_list,
+	const git_merge_diff *conflict,
+	const git_merge_options *merge_opts,
+	const git_merge_file_options *file_opts)
+{
+	git_merge_driver_source source = {0};
+	git_merge_file_result result = {0};
+	git_merge_driver *driver;
+	git_merge_driver__builtin builtin = {{0}};
+	git_index_entry *merge_result;
+	git_odb *odb = NULL;
+	const char *name;
+	bool fallback = false;
+	int error;
+
+	GIT_ASSERT_ARG(resolved);
+	GIT_ASSERT_ARG(diff_list);
+	GIT_ASSERT_ARG(conflict);
+
+	*resolved = 0;
+
+	if (!merge_conflict_can_resolve_contents(conflict))
+		return 0;
+
+	source.repo = diff_list->repo;
+	source.default_driver = merge_opts->default_driver;
+	source.file_opts = file_opts;
+	source.ancestor = GIT_MERGE_INDEX_ENTRY_EXISTS(conflict->ancestor_entry) ?
+		&conflict->ancestor_entry : NULL;
+	source.ours = GIT_MERGE_INDEX_ENTRY_EXISTS(conflict->our_entry) ?
+		&conflict->our_entry : NULL;
+	source.theirs = GIT_MERGE_INDEX_ENTRY_EXISTS(conflict->their_entry) ?
+		&conflict->their_entry : NULL;
+
+	if (file_opts->favor != GIT_MERGE_FILE_FAVOR_NORMAL) {
+		/* if the user requested a particular type of resolution (via the
+		 * favor flag) then let that override the gitattributes and use
+		 * the builtin driver.
+		 */
+		name = "text";
+		builtin.base.apply = git_merge_driver__builtin_apply;
+		builtin.favor = file_opts->favor;
+
+		driver = &builtin.base;
+	} else {
+		/* find the merge driver for this file */
+		if ((error = git_merge_driver_for_source(&name, &driver, &source)) < 0)
+			goto done;
+
+		if (driver == NULL)
+			fallback = true;
+	}
+
+	if (driver) {
+		error = merge_conflict_invoke_driver(&merge_result, name, driver,
+			diff_list, &source);
+
+		if (error == GIT_PASSTHROUGH)
+			fallback = true;
+	}
+
+	if (fallback) {
+		error = merge_conflict_invoke_driver(&merge_result, "text",
+			&git_merge_driver__text.base, diff_list, &source);
+	}
+
+	if (error < 0) {
+		if (error == GIT_EMERGECONFLICT)
+			error = 0;
+
+		goto done;
+	}
+
+	git_vector_insert(&diff_list->staged, merge_result);
+	git_vector_insert(&diff_list->resolved, (git_merge_diff *)conflict);
+
+	*resolved = 1;
+
+done:
+	git_merge_file_result_free(&result);
+	git_odb_free(odb);
+
+	return error;
+}
+
+
+// Source: merge.c
+// Lines 929-1014
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,1 @@
+aml,linux/drivers/acpi/acpica/rslist.c,1,resource_ptr,linux/drivers/acpi/acpica/rslist.c,5,2

@@ -1,0 +1,1 @@
+from_length,mysql/sql-common/sql_string.cc,3,well_formed_error,mysql/sql-common/sql_string.cc,26,2

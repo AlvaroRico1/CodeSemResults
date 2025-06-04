@@ -1,0 +1,38 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'progress' at line 1
+2. Pointer 'expected' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int test_names_expected(const git_diff_delta *delta, float progress, void *p)
+{
+	struct rename_expected *expected = p;
+
+	GIT_UNUSED(progress);
+
+	cl_assert(expected->idx < expected->len);
+
+	cl_assert_equal_i(delta->status, expected->status[expected->idx]);
+
+	cl_assert(git__strcmp(expected->sources[expected->idx],
+		delta->old_file.path) == 0);
+	cl_assert(git__strcmp(expected->targets[expected->idx],
+		delta->new_file.path) == 0);
+
+	expected->idx++;
+
+	return 0;
+}
+
+
+// Source: rename.c
+// Lines 941-959
+
+
+[ANSWER]
+MUST-NOT

@@ -1,0 +1,39 @@
+static int detach(git_repository *repo, const git_oid *id, const char *new)
+{
+	int error;
+	git_str log_message = GIT_STR_INIT;
+	git_object *object = NULL, *peeled = NULL;
+	git_reference *new_head = NULL, *current = NULL;
+
+	GIT_ASSERT_ARG(repo);
+	GIT_ASSERT_ARG(id);
+
+	if ((error = git_reference_lookup(&current, repo, GIT_HEAD_FILE)) < 0)
+		return error;
+
+	if ((error = git_object_lookup(&object, repo, id, GIT_OBJECT_ANY)) < 0)
+		goto cleanup;
+
+	if ((error = git_object_peel(&peeled, object, GIT_OBJECT_COMMIT)) < 0)
+		goto cleanup;
+
+	if (new == NULL)
+		new = git_oid_tostr_s(git_object_id(peeled));
+
+	if ((error = checkout_message(&log_message, current, new)) < 0)
+		goto cleanup;
+
+	error = git_reference_create(&new_head, repo, GIT_HEAD_FILE, git_object_id(peeled), true, git_str_cstr(&log_message));
+
+cleanup:
+	git_str_dispose(&log_message);
+	git_object_free(object);
+	git_object_free(peeled);
+	git_reference_free(current);
+	git_reference_free(new_head);
+	return error;
+}
+
+
+// Source: repository.c
+// Lines 2943-2977

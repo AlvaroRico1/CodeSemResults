@@ -1,0 +1,84 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'allow_sideband_all_value' at line None
+2. Pointer 'allow_ref_in_want' at line None
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int upload_pack_v2(struct repository *r, struct packet_reader *request)
+{
+	enum fetch_state state = FETCH_PROCESS_ARGS;
+	struct upload_pack_data data;
+
+	clear_object_flags(ALL_FLAGS);
+
+	upload_pack_data_init(&data);
+	data.use_sideband = LARGE_PACKET_MAX;
+
+	git_config(upload_pack_config, &data);
+
+	while (state != FETCH_DONE) {
+		switch (state) {
+		case FETCH_PROCESS_ARGS:
+			process_args(request, &data);
+
+			if (!data.want_obj.nr && !data.wait_for_done) {
+				/*
+				 * Request didn't contain any 'want' lines (and
+				 * the request does not contain
+				 * "wait-for-done", in which it is reasonable
+				 * to just send 'have's without 'want's); guess
+				 * they didn't want anything.
+				 */
+				state = FETCH_DONE;
+			} else if (data.haves.nr) {
+				/*
+				 * Request had 'have' lines, so lets ACK them.
+				 */
+				state = FETCH_SEND_ACKS;
+			} else {
+				/*
+				 * Request had 'want's but no 'have's so we can
+				 * immedietly go to construct and send a pack.
+				 */
+				state = FETCH_SEND_PACK;
+			}
+			break;
+		case FETCH_SEND_ACKS:
+			if (process_haves_and_send_acks(&data))
+				state = FETCH_SEND_PACK;
+			else
+				state = FETCH_DONE;
+			break;
+		case FETCH_SEND_PACK:
+			send_wanted_ref_info(&data);
+			send_shallow_info(&data);
+
+			if (data.uri_protocols.nr) {
+				create_pack_file(&data, &data.uri_protocols);
+			} else {
+				packet_writer_write(&data.writer, "packfile\n");
+				create_pack_file(&data, NULL);
+			}
+			state = FETCH_DONE;
+			break;
+		case FETCH_DONE:
+			continue;
+		}
+	}
+
+	upload_pack_data_clear(&data);
+	return 0;
+}
+
+
+// Source: upload-pack.c
+// Lines 1671-1735
+
+
+[ANSWER]
+MAY

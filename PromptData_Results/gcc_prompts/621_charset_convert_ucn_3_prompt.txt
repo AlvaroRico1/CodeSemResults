@@ -1,0 +1,68 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'from' at line 1
+2. Pointer 'bufp' at line 9
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+convert_ucn (cpp_reader *pfile, const uchar *from, const uchar *limit,
+	     struct _cpp_strbuf *tbuf, struct cset_converter cvt,
+	     source_range char_range,
+	     cpp_string_location_reader *loc_reader,
+	     cpp_substring_ranges *ranges)
+{
+  cppchar_t ucn;
+  uchar buf[6];
+  uchar *bufp = buf;
+  size_t bytesleft = 6;
+  int rval;
+  struct normalize_state nst = INITIAL_NORMALIZE_STATE;
+
+  /* loc_reader and ranges must either be both NULL, or both be non-NULL.  */
+  gcc_assert ((loc_reader != NULL) == (ranges != NULL));
+
+  from++;  /* Skip u/U.  */
+
+  if (loc_reader)
+    /* The u/U is part of the spelling of this character.  */
+    char_range.m_finish = loc_reader->get_next ().m_finish;
+
+  _cpp_valid_ucn (pfile, &from, limit, 0, &nst,
+		  &ucn, &char_range, loc_reader);
+
+  rval = one_cppchar_to_utf8 (ucn, &bufp, &bytesleft);
+  if (rval)
+    {
+      errno = rval;
+      cpp_errno (pfile, CPP_DL_ERROR,
+		 "converting UCN to source character set");
+    }
+  else
+    {
+      if (tbuf)
+	if (!APPLY_CONVERSION (cvt, buf, 6 - bytesleft, tbuf))
+	  cpp_errno (pfile, CPP_DL_ERROR,
+		     "converting UCN to execution character set");
+
+      if (loc_reader)
+	{
+	  int num_encoded_bytes = 6 - bytesleft;
+	  for (int i = 0; i < num_encoded_bytes; i++)
+	    ranges->add_range (char_range);
+	}
+    }
+
+  return from;
+}
+
+
+// Source: charset.c
+// Lines 1164-1212
+
+
+[ANSWER]
+MAY

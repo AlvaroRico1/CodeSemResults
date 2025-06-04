@@ -1,0 +1,119 @@
+pp_format (pretty_printer *pp, text_info *text)
+{
+  output_buffer *buffer = pp_buffer (pp);
+  const char *p;
+  const char **args;
+  struct chunk_info *new_chunk_array;
+
+  unsigned int curarg = 0, chunk = 0, argno;
+  pp_wrapping_mode_t old_wrapping_mode;
+  bool any_unnumbered = false, any_numbered = false;
+  const char **formatters[PP_NL_ARGMAX];
+
+  /* Allocate a new chunk structure.  */
+  new_chunk_array = XOBNEW (&buffer->chunk_obstack, struct chunk_info);
+  new_chunk_array->prev = buffer->cur_chunk_array;
+  buffer->cur_chunk_array = new_chunk_array;
+  args = new_chunk_array->args;
+
+  /* Formatting phase 1: split up TEXT->format_spec into chunks in
+     pp_buffer (PP)->args[].  Even-numbered chunks are to be output
+     verbatim, odd-numbered chunks are format specifiers.
+     %m, %%, %<, %>, %} and %' are replaced with the appropriate text at
+     this point.  */
+
+  memset (formatters, 0, sizeof formatters);
+
+  for (p = text->format_spec; *p; )
+    {
+      while (*p != '\0' && *p != '%')
+	{
+	  obstack_1grow (&buffer->chunk_obstack, *p);
+	  p++;
+	}
+
+      if (*p == '\0')
+	break;
+
+      switch (*++p)
+	{
+	case '\0':
+	  gcc_unreachable ();
+
+	case '%':
+	  obstack_1grow (&buffer->chunk_obstack, '%');
+	  p++;
+	  continue;
+
+	case '<':
+	  {
+	    obstack_grow (&buffer->chunk_obstack,
+			  open_quote, strlen (open_quote));
+	    const char *colorstr
+	      = colorize_start (pp_show_color (pp), "quote");
+	    obstack_grow (&buffer->chunk_obstack, colorstr, strlen (colorstr));
+	    p++;
+	    continue;
+	  }
+
+	case '>':
+	  {
+	    const char *colorstr = colorize_stop (pp_show_color (pp));
+	    obstack_grow (&buffer->chunk_obstack, colorstr, strlen (colorstr));
+	  }
+	  /* FALLTHRU */
+	case '\'':
+	  obstack_grow (&buffer->chunk_obstack,
+			close_quote, strlen (close_quote));
+	  p++;
+	  continue;
+
+	case '}':
+	  {
+	    const char *endurlstr = get_end_url_string (pp);
+	    obstack_grow (&buffer->chunk_obstack, endurlstr,
+			  strlen (endurlstr));
+	  }
+	  p++;
+	  continue;
+
+	case 'R':
+	  {
+	    const char *colorstr = colorize_stop (pp_show_color (pp));
+	    obstack_grow (&buffer->chunk_obstack, colorstr,
+			  strlen (colorstr));
+	    p++;
+	    continue;
+	  }
+
+	case 'm':
+	  {
+	    const char *errstr = xstrerror (text->err_no);
+	    obstack_grow (&buffer->chunk_obstack, errstr, strlen (errstr));
+	  }
+	  p++;
+	  continue;
+
+	default:
+	  /* Handled in phase 2.  Terminate the plain chunk here.  */
+	  obstack_1grow (&buffer->chunk_obstack, '\0');
+	  gcc_assert (chunk < PP_NL_ARGMAX * 2);
+	  args[chunk++] = XOBFINISH (&buffer->chunk_obstack, const char *);
+	  break;
+	}
+
+      if (ISDIGIT (*p))
+	{
+	  char *end;
+	  argno = strtoul (p, &end, 10) - 1;
+	  p = end;
+	  gcc_assert (*p == '$');
+	  p++;
+
+	  any_numbered = true;
+	  gcc_assert (!any_unnumbered);
+	}
+
+
+// Source: pretty-print.c
+// Lines 1070-1184

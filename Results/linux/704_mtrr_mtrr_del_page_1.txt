@@ -1,0 +1,1 @@
+lsize,linux/arch/x86/kernel/cpu/mtrr/mtrr.c,5,lbase,linux/arch/x86/kernel/cpu/mtrr/mtrr.c,5,2

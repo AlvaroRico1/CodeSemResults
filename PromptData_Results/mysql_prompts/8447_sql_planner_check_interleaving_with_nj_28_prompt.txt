@@ -1,0 +1,49 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'next_emb' at line 9
+2. Pointer 'next_emb' at line 9
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool Optimize_table_order::check_interleaving_with_nj(JOIN_TAB *tab) {
+  if (cur_embedding_map & ~tab->embedding_map) {
+    /*
+      tab is outside of the "pair of brackets" we're currently in.
+      Cannot add it.
+    */
+    return true;
+  }
+  const TABLE_LIST *next_emb = tab->table_ref->embedding;
+  /*
+    Do update counters for "pairs of brackets" that we've left (marked as
+    X,Y,Z in the above picture)
+  */
+  for (; next_emb != emb_sjm_nest; next_emb = next_emb->embedding) {
+    // Ignore join nests that are not outer joins.
+    if (!next_emb->join_cond_optim()) continue;
+
+    next_emb->nested_join->nj_counter++;
+    cur_embedding_map |= next_emb->nested_join->nj_map;
+    if (next_emb->nested_join->nj_total != next_emb->nested_join->nj_counter)
+      break;
+
+    /*
+      We're currently at Y or Z-bracket as depicted in the above picture.
+      Mark that we've left it and continue walking up the brackets hierarchy.
+    */
+    cur_embedding_map &= ~next_emb->nested_join->nj_map;
+  }
+  return false;
+}
+
+
+// Source: sql_planner.cc
+// Lines 3557-3586
+
+
+[ANSWER]
+MUST

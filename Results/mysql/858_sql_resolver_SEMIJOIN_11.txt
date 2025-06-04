@@ -1,0 +1,1 @@
+nested_join,mysql/sql/sql_resolver.cc,7,table,mysql/sql/sql_resolver.cc,36,1

@@ -1,0 +1,53 @@
+static int fill_bitmap_commit(struct bb_commit *ent,
+			      struct commit *commit,
+			      struct prio_queue *queue,
+			      struct prio_queue *tree_queue,
+			      struct bitmap_index *old_bitmap,
+			      const uint32_t *mapping)
+{
+	int found;
+	uint32_t pos;
+	if (!ent->bitmap)
+		ent->bitmap = bitmap_new();
+
+	prio_queue_put(queue, commit);
+
+	while (queue->nr) {
+		struct commit_list *p;
+		struct commit *c = prio_queue_get(queue);
+
+		if (old_bitmap && mapping) {
+			struct ewah_bitmap *old = bitmap_for_commit(old_bitmap, c);
+			/*
+			 * If this commit has an old bitmap, then translate that
+			 * bitmap and add its bits to this one. No need to walk
+			 * parents or the tree for this commit.
+			 */
+			if (old && !rebuild_bitmap(mapping, old, ent->bitmap))
+				continue;
+		}
+
+		/*
+		 * Mark ourselves and queue our tree. The commit
+		 * walk ensures we cover all parents.
+		 */
+		pos = find_object_pos(&c->object.oid, &found);
+		if (!found)
+			return -1;
+		bitmap_set(ent->bitmap, pos);
+		prio_queue_put(tree_queue, get_commit_tree(c));
+
+		for (p = c->parents; p; p = p->next) {
+			pos = find_object_pos(&p->item->object.oid, &found);
+			if (!found)
+				return -1;
+			if (!bitmap_get(ent->bitmap, pos)) {
+				bitmap_set(ent->bitmap, pos);
+				prio_queue_put(queue, p->item);
+			}
+		}
+	}
+
+
+// Source: pack-bitmap-write.c
+// Lines 386-434

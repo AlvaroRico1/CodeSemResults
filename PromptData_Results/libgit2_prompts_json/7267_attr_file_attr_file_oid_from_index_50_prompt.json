@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'idx' at line 5\n2. Pointer 'pos' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int attr_file_oid_from_index(\n\tgit_oid *oid, git_repository *repo, const char *path)\n{\n\tint error;\n\tgit_index *idx;\n\tsize_t pos;\n\tconst git_index_entry *entry;\n\n\tif ((error = git_repository_index__weakptr(&idx, repo)) < 0 ||\n\t\t(error = git_index__find_pos(&pos, idx, path, 0, 0)) < 0)\n\t\treturn error;\n\n\tif (!(entry = git_index_get_byindex(idx, pos)))\n\t\treturn GIT_ENOTFOUND;\n\n\t*oid = entry->id;\n\treturn 0;\n}\n\n\n// Source: attr_file.c\n// Lines 87-104\n",
+  "ANSWER": "MAY"
+}

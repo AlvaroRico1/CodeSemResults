@@ -1,0 +1,116 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'old_row' at line 26
+2. Pointer 'prev_ti' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+connect_traces (void)
+{
+  unsigned i, n;
+  dw_trace_info *prev_ti, *ti;
+
+  /* ??? Ideally, we should have both queued and processed every trace.
+     However the current representation of constant pools on various targets
+     is indistinguishable from unreachable code.  Assume for the moment that
+     we can simply skip over such traces.  */
+  /* ??? Consider creating a DATA_INSN rtx code to indicate that
+     these are not "real" instructions, and should not be considered.
+     This could be generically useful for tablejump data as well.  */
+  /* Remove all unprocessed traces from the list.  */
+  unsigned ix, ix2;
+  VEC_ORDERED_REMOVE_IF_FROM_TO (trace_info, ix, ix2, ti, 1,
+				 trace_info.length (), ti->beg_row == NULL);
+  FOR_EACH_VEC_ELT (trace_info, ix, ti)
+    gcc_assert (ti->end_row != NULL);
+
+  /* Work from the end back to the beginning.  This lets us easily insert
+     remember/restore_state notes in the correct order wrt other notes.  */
+  n = trace_info.length ();
+  prev_ti = &trace_info[n - 1];
+  for (i = n - 1; i > 0; --i)
+    {
+      dw_cfi_row *old_row;
+
+      ti = prev_ti;
+      prev_ti = &trace_info[i - 1];
+
+      add_cfi_insn = ti->head;
+
+      /* In dwarf2out_switch_text_section, we'll begin a new FDE
+	 for the portion of the function in the alternate text
+	 section.  The row state at the very beginning of that
+	 new FDE will be exactly the row state from the CIE.  */
+      if (ti->switch_sections)
+	old_row = cie_cfi_row;
+      else
+	{
+	  old_row = prev_ti->end_row;
+	  /* If there's no change from the previous end state, fine.  */
+	  if (cfi_row_equal_p (old_row, ti->beg_row))
+	    ;
+	  /* Otherwise check for the common case of sharing state with
+	     the beginning of an epilogue, but not the end.  Insert
+	     remember/restore opcodes in that case.  */
+	  else if (cfi_row_equal_p (prev_ti->beg_row, ti->beg_row))
+	    {
+	      dw_cfi_ref cfi;
+
+	      /* Note that if we blindly insert the remember at the
+		 start of the trace, we can wind up increasing the
+		 size of the unwind info due to extra advance opcodes.
+		 Instead, put the remember immediately before the next
+		 state change.  We know there must be one, because the 
+		 state at the beginning and head of the trace differ.  */
+	      add_cfi_insn = before_next_cfi_note (prev_ti->head);
+	      cfi = new_cfi ();
+	      cfi->dw_cfi_opc = DW_CFA_remember_state;
+	      add_cfi (cfi);
+
+	      add_cfi_insn = ti->head;
+	      cfi = new_cfi ();
+	      cfi->dw_cfi_opc = DW_CFA_restore_state;
+	      add_cfi (cfi);
+
+	      /* If the target unwinder does not save the CFA as part of the
+		 register state, we need to restore it separately.  */
+	      if (targetm.asm_out.should_restore_cfa_state ()
+		  && (cfi = def_cfa_0 (&old_row->cfa, &ti->beg_row->cfa)))
+		add_cfi (cfi);
+
+	      old_row = prev_ti->beg_row;
+	    }
+	  /* Otherwise, we'll simply change state from the previous end.  */
+	}
+
+      change_cfi_row (old_row, ti->beg_row);
+
+      if (dump_file && add_cfi_insn != ti->head)
+	{
+	  rtx_insn *note;
+
+	  fprintf (dump_file, "Fixup between trace %u and %u:\n",
+		   prev_ti->id, ti->id);
+
+	  note = ti->head;
+	  do
+	    {
+	      note = NEXT_INSN (note);
+	      gcc_assert (NOTE_P (note) && NOTE_KIND (note) == NOTE_INSN_CFI);
+	      output_cfi_directive (dump_file, NOTE_CFI (note));
+	    }
+	  while (note != add_cfi_insn);
+	}
+    }
+
+
+// Source: dwarf2cfi.c
+// Lines 2806-2902
+
+
+[ANSWER]
+MUST

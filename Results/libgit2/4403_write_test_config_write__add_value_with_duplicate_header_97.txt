@@ -1,0 +1,1 @@
+file_content,libgit2/tests/libgit2/config/write.c,13,snapshot,libgit2/tests/libgit2/config/write.c,8,0

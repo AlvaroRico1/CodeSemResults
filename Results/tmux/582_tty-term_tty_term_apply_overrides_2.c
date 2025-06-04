@@ -1,0 +1,85 @@
+tty_term_apply_overrides(struct tty_term *term)
+{
+	struct options_entry		*o;
+	struct options_array_item	*a;
+	union options_value		*ov;
+	const char			*s, *acs;
+	size_t				 offset;
+	char				*first;
+
+	/* Update capabilities from the option. */
+	o = options_get_only(global_options, "terminal-overrides");
+	a = options_array_first(o);
+	while (a != NULL) {
+		ov = options_array_item_value(a);
+		s = ov->string;
+
+		offset = 0;
+		first = tty_term_override_next(s, &offset);
+		if (first != NULL && fnmatch(first, term->name, 0) == 0)
+			tty_term_apply(term, s + offset, 0);
+		a = options_array_next(a);
+	}
+
+	/* Update the RGB flag if the terminal has RGB colours. */
+	if (tty_term_has(term, TTYC_SETRGBF) &&
+	    tty_term_has(term, TTYC_SETRGBB))
+		term->flags |= TERM_RGBCOLOURS;
+	else
+		term->flags &= ~TERM_RGBCOLOURS;
+	log_debug("RGBCOLOURS flag is %d", !!(term->flags & TERM_RGBCOLOURS));
+
+	/*
+	 * Set or clear the DECSLRM flag if the terminal has the margin
+	 * capabilities.
+	 */
+	if (tty_term_has(term, TTYC_CMG) && tty_term_has(term, TTYC_CLMG))
+		term->flags |= TERM_DECSLRM;
+	else
+		term->flags &= ~TERM_DECSLRM;
+	log_debug("DECSLRM flag is %d", !!(term->flags & TERM_DECSLRM));
+
+	/*
+	 * Set or clear the DECFRA flag if the terminal has the rectangle
+	 * capability.
+	 */
+	if (tty_term_has(term, TTYC_RECT))
+		term->flags |= TERM_DECFRA;
+	else
+		term->flags &= ~TERM_DECFRA;
+	log_debug("DECFRA flag is %d", !!(term->flags & TERM_DECFRA));
+
+	/*
+	 * Terminals without am (auto right margin) wrap at at $COLUMNS - 1
+	 * rather than $COLUMNS (the cursor can never be beyond $COLUMNS - 1).
+	 *
+	 * Terminals without xenl (eat newline glitch) ignore a newline beyond
+	 * the right edge of the terminal, but tmux doesn't care about this -
+	 * it always uses absolute only moves the cursor with a newline when
+	 * also sending a linefeed.
+	 *
+	 * This is irritating, most notably because it is painful to write to
+	 * the very bottom-right of the screen without scrolling.
+	 *
+	 * Flag the terminal here and apply some workarounds in other places to
+	 * do the best possible.
+	 */
+	if (!tty_term_flag(term, TTYC_AM))
+		term->flags |= TERM_NOAM;
+	else
+		term->flags &= ~TERM_NOAM;
+	log_debug("NOAM flag is %d", !!(term->flags & TERM_NOAM));
+
+	/* Generate ACS table. If none is present, use nearest ASCII. */
+	memset(term->acs, 0, sizeof term->acs);
+	if (tty_term_has(term, TTYC_ACSC))
+		acs = tty_term_string(term, TTYC_ACSC);
+	else
+		acs = "a#j+k+l+m+n+o-p-q-r-s-t+u+v+w+x|y<z>~.";
+	for (; acs[0] != '\0' && acs[1] != '\0'; acs += 2)
+		term->acs[(u_char) acs[0]][0] = acs[1];
+}
+
+
+// Source: tty-term.c
+// Lines 433-513

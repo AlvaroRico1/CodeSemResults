@@ -1,0 +1,1 @@
+filter,linux/kernel/trace/trace_events_trigger.c,6,filter_str,linux/kernel/trace/trace_events_trigger.c,1,2

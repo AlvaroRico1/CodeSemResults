@@ -1,0 +1,41 @@
+void git_indexer_free(git_indexer *idx)
+{
+	const git_oid *key;
+	git_oid *value;
+	size_t iter;
+
+	if (idx == NULL)
+		return;
+
+	if (idx->have_stream)
+		git_packfile_stream_dispose(&idx->stream);
+
+	git_vector_free_deep(&idx->objects);
+
+	if (idx->pack->idx_cache) {
+		struct git_pack_entry *pentry;
+		git_oidmap_foreach_value(idx->pack->idx_cache, pentry, {
+			git__free(pentry);
+		});
+
+		git_oidmap_free(idx->pack->idx_cache);
+	}
+
+	git_vector_free_deep(&idx->deltas);
+
+	git_packfile_free(idx->pack, !idx->pack_committed);
+
+	iter = 0;
+	while (git_oidmap_iterate((void **) &value, idx->expected_oids, &iter, &key) == 0)
+		git__free(value);
+
+	git_hash_ctx_cleanup(&idx->trailer);
+	git_hash_ctx_cleanup(&idx->hash_ctx);
+	git_str_dispose(&idx->entry_data);
+	git_oidmap_free(idx->expected_oids);
+	git__free(idx);
+}
+
+
+// Source: indexer.c
+// Lines 1377-1413

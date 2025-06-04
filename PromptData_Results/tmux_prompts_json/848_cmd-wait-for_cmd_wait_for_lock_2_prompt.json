@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'wi' at line 4\n2. Pointer 'item' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ncmd_wait_for_lock(struct cmdq_item *item, const char *name,\n    struct wait_channel *wc)\n{\n\tstruct wait_item\t*wi;\n\n\tif (cmdq_get_client(item) == NULL) {\n\t\tcmdq_error(item, \"not able to lock\");\n\t\treturn (CMD_RETURN_ERROR);\n\t}\n\n\tif (wc == NULL)\n\t\twc = cmd_wait_for_add(name);\n\n\tif (wc->locked) {\n\t\twi = xcalloc(1, sizeof *wi);\n\t\twi->item = item;\n\t\tTAILQ_INSERT_TAIL(&wc->lockers, wi, entry);\n\t\treturn (CMD_RETURN_WAIT);\n\t}\n\twc->locked = 1;\n\n\treturn (CMD_RETURN_NORMAL);\n}\n\n\n// Source: cmd-wait-for.c\n// Lines 196-218\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,1 @@
+handler_file,mysql/sql/sql_reload.cc,40,table_list,mysql/sql/sql_reload.cc,29,1

@@ -1,0 +1,64 @@
+const Message* DynamicMessageFactory::GetPrototypeNoLock(
+    const Descriptor* type) {
+  if (delegate_to_generated_factory_ &&
+      type->file()->pool() == DescriptorPool::generated_pool()) {
+    return MessageFactory::generated_factory()->GetPrototype(type);
+  }
+
+  const TypeInfo** target = &prototypes_[type];
+  if (*target != nullptr) {
+    // Already exists.
+    return (*target)->prototype;
+  }
+
+  TypeInfo* type_info = new TypeInfo;
+  *target = type_info;
+
+  type_info->type = type;
+  type_info->pool = (pool_ == nullptr) ? type->file()->pool() : pool_;
+  type_info->factory = this;
+
+  // We need to construct all the structures passed to Reflection's constructor.
+  // This includes:
+  // - A block of memory that contains space for all the message's fields.
+  // - An array of integers indicating the byte offset of each field within
+  //   this block.
+  // - A big bitfield containing a bit for each field indicating whether
+  //   or not that field is set.
+  int real_oneof_count = 0;
+  for (int i = 0; i < type->oneof_decl_count(); i++) {
+    if (!type->oneof_decl(i)->is_synthetic()) {
+      real_oneof_count++;
+    }
+  }
+
+  // Compute size and offsets.
+  uint32_t* offsets = new uint32_t[type->field_count() + real_oneof_count];
+  type_info->offsets.reset(offsets);
+
+  // Decide all field offsets by packing in order.
+  // We place the DynamicMessage object itself at the beginning of the allocated
+  // space.
+  int size = sizeof(DynamicMessage);
+  size = AlignOffset(size);
+
+  // Next the has_bits, which is an array of uint32s.
+  type_info->has_bits_offset = -1;
+  int max_hasbit = 0;
+  for (int i = 0; i < type->field_count(); i++) {
+    if (HasHasbit(type->field(i))) {
+      if (type_info->has_bits_offset == -1) {
+        // At least one field in the message requires a hasbit, so allocate
+        // hasbits.
+        type_info->has_bits_offset = size;
+        uint32_t* has_bits_indices = new uint32_t[type->field_count()];
+        for (int j = 0; j < type->field_count(); j++) {
+          // Initialize to -1, fields that need a hasbit will overwrite.
+          has_bits_indices[j] = static_cast<uint32_t>(-1);
+        }
+        type_info->has_bits_indices.reset(has_bits_indices);
+      }
+
+
+// Source: dynamic_message.cc
+// Lines 660-719

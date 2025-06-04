@@ -1,0 +1,75 @@
+void clusterBuildMessageHdr(clusterMsg *hdr, int type) {
+    int totlen = 0;
+    uint64_t offset;
+    clusterNode *master;
+
+    /* If this node is a master, we send its slots bitmap and configEpoch.
+     * If this node is a slave we send the master's information instead (the
+     * node is flagged as slave so the receiver knows that it is NOT really
+     * in charge for this slots. */
+    master = (nodeIsSlave(myself) && myself->slaveof) ?
+              myself->slaveof : myself;
+
+    memset(hdr,0,sizeof(*hdr));
+    hdr->ver = htons(CLUSTER_PROTO_VER);
+    hdr->sig[0] = 'R';
+    hdr->sig[1] = 'C';
+    hdr->sig[2] = 'm';
+    hdr->sig[3] = 'b';
+    hdr->type = htons(type);
+    memcpy(hdr->sender,myself->name,CLUSTER_NAMELEN);
+
+    /* If cluster-announce-ip option is enabled, force the receivers of our
+     * packets to use the specified address for this node. Otherwise if the
+     * first byte is zero, they'll do auto discovery. */
+    memset(hdr->myip,0,NET_IP_STR_LEN);
+    if (server.cluster_announce_ip) {
+        strncpy(hdr->myip,server.cluster_announce_ip,NET_IP_STR_LEN);
+        hdr->myip[NET_IP_STR_LEN-1] = '\0';
+    }
+
+    /* Handle cluster-announce-[tls-|bus-]port. */
+    int announced_port, announced_pport, announced_cport;
+    deriveAnnouncedPorts(&announced_port, &announced_pport, &announced_cport);
+
+    memcpy(hdr->myslots,master->slots,sizeof(hdr->myslots));
+    memset(hdr->slaveof,0,CLUSTER_NAMELEN);
+    if (myself->slaveof != NULL)
+        memcpy(hdr->slaveof,myself->slaveof->name, CLUSTER_NAMELEN);
+    hdr->port = htons(announced_port);
+    hdr->pport = htons(announced_pport);
+    hdr->cport = htons(announced_cport);
+    hdr->flags = htons(myself->flags);
+    hdr->state = server.cluster->state;
+
+    /* Set the currentEpoch and configEpochs. */
+    hdr->currentEpoch = htonu64(server.cluster->currentEpoch);
+    hdr->configEpoch = htonu64(master->configEpoch);
+
+    /* Set the replication offset. */
+    if (nodeIsSlave(myself))
+        offset = replicationGetSlaveOffset();
+    else
+        offset = server.master_repl_offset;
+    hdr->offset = htonu64(offset);
+
+    /* Set the message flags. */
+    if (nodeIsMaster(myself) && server.cluster->mf_end)
+        hdr->mflags[0] |= CLUSTERMSG_FLAG0_PAUSED;
+
+    /* Compute the message length for certain messages. For other messages
+     * this is up to the caller. */
+    if (type == CLUSTERMSG_TYPE_FAIL) {
+        totlen = sizeof(clusterMsg)-sizeof(union clusterMsgData);
+        totlen += sizeof(clusterMsgDataFail);
+    } else if (type == CLUSTERMSG_TYPE_UPDATE) {
+        totlen = sizeof(clusterMsg)-sizeof(union clusterMsgData);
+        totlen += sizeof(clusterMsgDataUpdate);
+    }
+    hdr->totlen = htonl(totlen);
+    /* For PING, PONG, and MEET, fixing the totlen field is up to the caller. */
+}
+
+
+// Source: cluster.c
+// Lines 2434-2504

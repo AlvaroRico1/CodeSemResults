@@ -1,0 +1,47 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'out' at line 2
+2. Pointer 'buffered_stream' at line 10
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_filter_buffered_stream_new(
+	git_writestream **out,
+	git_filter *filter,
+	int (*write_fn)(git_filter *, void **, git_str *, const git_str *, const git_filter_source *),
+	git_str *temp_buf,
+	void **payload,
+	const git_filter_source *source,
+	git_writestream *target)
+{
+	struct buffered_stream *buffered_stream = git__calloc(1, sizeof(struct buffered_stream));
+	GIT_ERROR_CHECK_ALLOC(buffered_stream);
+
+	buffered_stream->parent.write = buffered_stream_write;
+	buffered_stream->parent.close = buffered_stream_close;
+	buffered_stream->parent.free = buffered_stream_free;
+	buffered_stream->filter = filter;
+	buffered_stream->write_fn = write_fn;
+	buffered_stream->output = temp_buf ? temp_buf : &buffered_stream->temp_buf;
+	buffered_stream->payload = payload;
+	buffered_stream->source = source;
+	buffered_stream->target = target;
+
+	if (temp_buf)
+		git_str_clear(temp_buf);
+
+	*out = (git_writestream *)buffered_stream;
+	return 0;
+}
+
+
+// Source: filter.c
+// Lines 943-970
+
+
+[ANSWER]
+MUST

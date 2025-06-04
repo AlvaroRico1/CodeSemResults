@@ -1,0 +1,110 @@
+ulong cli_safe_read_with_ok_complete(MYSQL *mysql, bool parse_ok,
+                                     bool *is_data_packet, ulong len) {
+  NET *net = &mysql->net;
+  DBUG_TRACE;
+
+  if (len == packet_error || len == 0) {
+#ifndef NDEBUG
+    char desc[VIO_DESCRIPTION_SIZE];
+    vio_description(net->vio, desc);
+    DBUG_PRINT("error",
+               ("Wrong connection or packet. fd: %s  len: %lu", desc, len));
+#endif  // NDEBUG
+#ifdef MYSQL_SERVER
+    if (net->vio && (net->last_errno == ER_NET_READ_INTERRUPTED))
+      return packet_error;
+#endif /*MYSQL_SERVER*/
+    end_server(mysql);
+    set_mysql_error(mysql,
+                    net->last_errno == ER_NET_PACKET_TOO_LARGE
+                        ? CR_NET_PACKET_TOO_LARGE
+                        : CR_SERVER_LOST,
+                    unknown_sqlstate);
+    return packet_error;
+  }
+
+  MYSQL_TRACE(PACKET_RECEIVED, mysql, (len, net->read_pos));
+
+  if (net->read_pos[0] == 255) {
+    /*
+      After server reprts an error, usually it is ready to accept new commands
+      and we set stage to READY_FOR_COMMAND. This can be modified by the caller
+      of cli_safe_read().
+    */
+    MYSQL_TRACE_STAGE(mysql, READY_FOR_COMMAND);
+
+    if (len > 3) {
+      uchar *pos = net->read_pos + 1;
+      net->last_errno = uint2korr(pos);
+      pos += 2;
+      len -= 2;
+      if (protocol_41(mysql) && pos[0] == '#') {
+        strmake(net->sqlstate, (char *)pos + 1, SQLSTATE_LENGTH);
+        pos += SQLSTATE_LENGTH + 1;
+      } else {
+        /*
+          The SQL state hasn't been received -- it should be reset to HY000
+          (unknown error sql state).
+        */
+
+        my_stpcpy(net->sqlstate, unknown_sqlstate);
+      }
+
+      (void)strmake(net->last_error, (char *)pos,
+                    std::min<ulong>(len, sizeof(net->last_error) - 1));
+    } else
+      set_mysql_error(mysql, CR_UNKNOWN_ERROR, unknown_sqlstate);
+    /*
+      Cover a protocol design error: error packet does not
+      contain the server status. Therefore, the client has no way
+      to find out whether there are more result sets of
+      a multiple-result-set statement pending. Luckily, in 5.0 an
+      error always aborts execution of a statement, wherever it is
+      a multi-statement or a stored procedure, so it should be
+      safe to unconditionally turn off the flag here.
+    */
+    mysql->server_status &= ~SERVER_MORE_RESULTS_EXISTS;
+
+    DBUG_PRINT("error", ("Got error: %d/%s (%s)", net->last_errno,
+                         net->sqlstate, net->last_error));
+    return packet_error;
+  } else {
+    /* if it is OK packet irrespective of new/old server */
+    if (net->read_pos[0] == 0) {
+      if (parse_ok) {
+        read_ok_ex(mysql, len);
+        return len;
+      }
+    }
+    /*
+      Now we have a data packet, unless it is OK packet starting with
+      0xFE - we detect that case below.
+    */
+    if (is_data_packet) *is_data_packet = true;
+    /*
+       For a packet starting with 0xFE detect if it is OK packet or a
+       huge data packet. Note that old servers do not send OK packets
+       starting with 0xFE.
+    */
+    if ((mysql->server_capabilities & CLIENT_DEPRECATE_EOF) &&
+        (net->read_pos[0] == 254)) {
+      /* detect huge data packet */
+      if (len > MAX_PACKET_LENGTH) return len;
+      /* otherwise we have OK packet starting with 0xFE */
+      if (is_data_packet) *is_data_packet = false;
+      /* parse it if requested */
+      if (parse_ok) read_ok_ex(mysql, len);
+      return len;
+    }
+    /* for old client detect EOF packet */
+    if (!(mysql->server_capabilities & CLIENT_DEPRECATE_EOF) &&
+        (net->read_pos[0] == 254) && (len < 8)) {
+      if (is_data_packet) *is_data_packet = false;
+    }
+  }
+  return len;
+}
+
+
+// Source: client.cc
+// Lines 1146-1251

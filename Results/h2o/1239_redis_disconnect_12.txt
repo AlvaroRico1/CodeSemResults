@@ -1,0 +1,1 @@
+redis,h2o/lib/common/redis.c,6,client,h2o/lib/common/redis.c,1,1

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'list' at line 1\n2. Pointer 'cb' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int __redisPushCallback(redisCallbackList *list, redisCallback *source) {\n    redisCallback *cb;\n\n    /* Copy callback from stack to heap */\n    cb = malloc(sizeof(*cb));\n    if (cb == NULL)\n        return REDIS_ERR_OOM;\n\n    if (source != NULL) {\n        memcpy(cb,source,sizeof(*cb));\n        cb->next = NULL;\n    }\n\n    /* Store callback in list */\n    if (list->head == NULL)\n        list->head = cb;\n    if (list->tail != NULL)\n        list->tail->next = cb;\n    list->tail = cb;\n    return REDIS_OK;\n}\n\n\n// Source: async.c\n// Lines 227-247\n",
+  "ANSWER": "MUST"
+}

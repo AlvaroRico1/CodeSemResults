@@ -1,0 +1,1 @@
+is_charset,mysql/sql-common/client.cc,9,element,mysql/sql-common/client.cc,13,0

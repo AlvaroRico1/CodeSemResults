@@ -1,0 +1,103 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'scriptName' at line 60
+2. Pointer 'limit' at line 66
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void setAttributesFromKeywords(const Locale &loc, Collator &coll, UErrorCode &errorCode) {
+    if (U_FAILURE(errorCode)) {
+        return;
+    }
+    if (uprv_strcmp(loc.getName(), loc.getBaseName()) == 0) {
+        // No keywords.
+        return;
+    }
+    char value[1024];  // The reordering value could be long.
+    // Check for collation keywords that were already deprecated
+    // before any were supported in createInstance() (except for "collation").
+    int32_t length = loc.getKeywordValue("colHiraganaQuaternary", value, UPRV_LENGTHOF(value), errorCode);
+    if (U_FAILURE(errorCode)) {
+        errorCode = U_ILLEGAL_ARGUMENT_ERROR;
+        return;
+    }
+    if (length != 0) {
+        errorCode = U_UNSUPPORTED_ERROR;
+        return;
+    }
+    length = loc.getKeywordValue("variableTop", value, UPRV_LENGTHOF(value), errorCode);
+    if (U_FAILURE(errorCode)) {
+        errorCode = U_ILLEGAL_ARGUMENT_ERROR;
+        return;
+    }
+    if (length != 0) {
+        errorCode = U_UNSUPPORTED_ERROR;
+        return;
+    }
+    // Parse known collation keywords, ignore others.
+    if (errorCode == U_STRING_NOT_TERMINATED_WARNING) {
+        errorCode = U_ZERO_ERROR;
+    }
+    for (int32_t i = 0; i < UPRV_LENGTHOF(collAttributes); ++i) {
+        length = loc.getKeywordValue(collAttributes[i].name, value, UPRV_LENGTHOF(value), errorCode);
+        if (U_FAILURE(errorCode) || errorCode == U_STRING_NOT_TERMINATED_WARNING) {
+            errorCode = U_ILLEGAL_ARGUMENT_ERROR;
+            return;
+        }
+        if (length == 0) { continue; }
+        for (int32_t j = 0;; ++j) {
+            if (j == UPRV_LENGTHOF(collAttributeValues)) {
+                errorCode = U_ILLEGAL_ARGUMENT_ERROR;
+                return;
+            }
+            if (uprv_stricmp(value, collAttributeValues[j].name) == 0) {
+                coll.setAttribute(collAttributes[i].attr, collAttributeValues[j].value, errorCode);
+                break;
+            }
+        }
+    }
+    length = loc.getKeywordValue("colReorder", value, UPRV_LENGTHOF(value), errorCode);
+    if (U_FAILURE(errorCode) || errorCode == U_STRING_NOT_TERMINATED_WARNING) {
+        errorCode = U_ILLEGAL_ARGUMENT_ERROR;
+        return;
+    }
+    if (length != 0) {
+        int32_t codes[USCRIPT_CODE_LIMIT + UCOL_REORDER_CODE_LIMIT - UCOL_REORDER_CODE_FIRST];
+        int32_t codesLength = 0;
+        char *scriptName = value;
+        for (;;) {
+            if (codesLength == UPRV_LENGTHOF(codes)) {
+                errorCode = U_ILLEGAL_ARGUMENT_ERROR;
+                return;
+            }
+            char *limit = scriptName;
+            char c;
+            while ((c = *limit) != 0 && c != '-') { ++limit; }
+            *limit = 0;
+            int32_t code;
+            if ((limit - scriptName) == 4) {
+                // Strict parsing, accept only 4-letter script codes, not long names.
+                code = u_getPropertyValueEnum(UCHAR_SCRIPT, scriptName);
+            } else {
+                code = getReorderCode(scriptName);
+            }
+            if (code < 0) {
+                errorCode = U_ILLEGAL_ARGUMENT_ERROR;
+                return;
+            }
+            codes[codesLength++] = code;
+            if (c == 0) { break; }
+            scriptName = limit + 1;
+        }
+
+
+// Source: coll.cpp
+// Lines 318-401
+
+
+[ANSWER]
+MUST

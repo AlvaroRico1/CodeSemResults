@@ -1,0 +1,147 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 's' at line 11
+2. Pointer 'ov' at line 9
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+tty_term_create(struct tty *tty, char *name, char **caps, u_int ncaps,
+    int *feat, char **cause)
+{
+	struct tty_term				*term;
+	const struct tty_term_code_entry	*ent;
+	struct tty_code				*code;
+	struct options_entry			*o;
+	struct options_array_item		*a;
+	union options_value			*ov;
+	u_int					 i, j;
+	const char				*s, *value;
+	size_t					 offset, namelen;
+	char					*first;
+
+	log_debug("adding term %s", name);
+
+	term = xcalloc(1, sizeof *term);
+	term->tty = tty;
+	term->name = xstrdup(name);
+	term->codes = xcalloc(tty_term_ncodes(), sizeof *term->codes);
+	LIST_INSERT_HEAD(&tty_terms, term, entry);
+
+	/* Fill in codes. */
+	for (i = 0; i < ncaps; i++) {
+		namelen = strcspn(caps[i], "=");
+		if (namelen == 0)
+			continue;
+		value = caps[i] + namelen + 1;
+
+		for (j = 0; j < tty_term_ncodes(); j++) {
+			ent = &tty_term_codes[j];
+			if (strncmp(ent->name, caps[i], namelen) != 0)
+				continue;
+			if (ent->name[namelen] != '\0')
+				continue;
+
+			code = &term->codes[j];
+			code->type = TTYCODE_NONE;
+			switch (ent->type) {
+			case TTYCODE_NONE:
+				break;
+			case TTYCODE_STRING:
+				code->type = TTYCODE_STRING;
+				code->value.string = tty_term_strip(value);
+				break;
+			case TTYCODE_NUMBER:
+				code->type = TTYCODE_NUMBER;
+				code->value.number = atoi(value);
+				break;
+			case TTYCODE_FLAG:
+				code->type = TTYCODE_FLAG;
+				code->value.flag = (*value == '1');
+				break;
+			}
+		}
+	}
+
+	/* Apply terminal features. */
+	o = options_get_only(global_options, "terminal-features");
+	a = options_array_first(o);
+	while (a != NULL) {
+		ov = options_array_item_value(a);
+		s = ov->string;
+
+		offset = 0;
+		first = tty_term_override_next(s, &offset);
+		if (first != NULL && fnmatch(first, term->name, 0) == 0)
+			tty_add_features(feat, s + offset, ":");
+		a = options_array_next(a);
+	}
+
+	/* Delete curses data. */
+#if !defined(NCURSES_VERSION_MAJOR) || NCURSES_VERSION_MAJOR > 5 || \
+    (NCURSES_VERSION_MAJOR == 5 && NCURSES_VERSION_MINOR > 6)
+	del_curterm(cur_term);
+#endif
+
+	/* Apply overrides so any capabilities used for features are changed. */
+	tty_term_apply_overrides(term);
+
+	/* These are always required. */
+	if (!tty_term_has(term, TTYC_CLEAR)) {
+		xasprintf(cause, "terminal does not support clear");
+		goto error;
+	}
+	if (!tty_term_has(term, TTYC_CUP)) {
+		xasprintf(cause, "terminal does not support cup");
+		goto error;
+	}
+
+	/*
+	 * If TERM has XT or clear starts with CSI then it is safe to assume
+	 * the terminal is derived from the VT100. This controls whether device
+	 * attributes requests are sent to get more information.
+	 *
+	 * This is a bit of a hack but there aren't that many alternatives.
+	 * Worst case tmux will just fall back to using whatever terminfo(5)
+	 * says without trying to correct anything that is missing.
+	 *
+	 * Also add few features that VT100-like terminals should either
+	 * support or safely ignore.
+	 */
+	s = tty_term_string(term, TTYC_CLEAR);
+	if (tty_term_flag(term, TTYC_XT) || strncmp(s, "\033[", 2) == 0) {
+		term->flags |= TERM_VT100LIKE;
+		tty_add_features(feat, "bpaste,focus,title", ",");
+	}
+
+	/* Add RGB feature if terminal has RGB colours. */
+	if ((tty_term_flag(term, TTYC_TC) || tty_term_has(term, TTYC_RGB)) &&
+	    (!tty_term_has(term, TTYC_SETRGBF) ||
+	    !tty_term_has(term, TTYC_SETRGBB)))
+		tty_add_features(feat, "RGB", ",");
+
+	/* Apply the features and overrides again. */
+	if (tty_apply_features(term, *feat))
+		tty_term_apply_overrides(term);
+
+	/* Log the capabilities. */
+	for (i = 0; i < tty_term_ncodes(); i++)
+		log_debug("%s%s", name, tty_term_describe(term, i));
+
+	return (term);
+
+error:
+	tty_term_free(term);
+	return (NULL);
+}
+
+
+// Source: tty-term.c
+// Lines 516-643
+
+
+[ANSWER]
+MUST

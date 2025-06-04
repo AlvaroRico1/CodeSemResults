@@ -1,0 +1,1 @@
+wp,tmux/window-clock.c,4,wme,tmux/window-clock.c,1,1

@@ -1,0 +1,1 @@
+argv0,tmux/spawn.c,11,argvp,tmux/spawn.c,11,2

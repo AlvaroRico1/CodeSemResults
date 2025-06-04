@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'tl' at line 8\n2. Pointer 'tab' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid JOIN::set_semijoin_embedding() {\n  assert(!query_block->sj_nests.empty());\n\n  JOIN_TAB *const tab_end = join_tab + primary_tables;\n\n  for (JOIN_TAB *tab = join_tab; tab < tab_end; tab++) {\n    tab->emb_sj_nest = nullptr;\n    for (TABLE_LIST *tl = tab->table_ref; tl->embedding; tl = tl->embedding) {\n      if (tl->embedding->is_sj_or_aj_nest()) {\n        assert(!tab->emb_sj_nest);\n        tab->emb_sj_nest = tl->embedding;\n        // Let the up-walk continue, to assert there's no AJ/SJ nest above.\n      }\n    }\n  }\n\n\n// Source: sql_optimizer.cc\n// Lines 5694-5708\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,80 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'next_pp' at line 48
+2. Pointer 'next_pp' at line 48
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+grid_expand_target_grid_body (struct omp_region *target)
+{
+  if (!hsa_gen_requested_p ())
+    return;
+
+  gomp_target *tgt_stmt = as_a <gomp_target *> (last_stmt (target->entry));
+  struct omp_region **pp;
+
+  for (pp = &target->inner; *pp; pp = &(*pp)->next)
+    if ((*pp)->type == GIMPLE_OMP_GRID_BODY)
+      break;
+
+  struct omp_region *gpukernel = *pp;
+
+  tree orig_child_fndecl = gimple_omp_target_child_fn (tgt_stmt);
+  if (!gpukernel)
+    {
+      /* HSA cannot handle OACC stuff.  */
+      if (gimple_omp_target_kind (tgt_stmt) != GF_OMP_TARGET_KIND_REGION)
+	return;
+      gcc_checking_assert (orig_child_fndecl);
+      gcc_assert (!omp_find_clause (gimple_omp_target_clauses (tgt_stmt),
+				    OMP_CLAUSE__GRIDDIM_));
+      cgraph_node *n = cgraph_node::get (orig_child_fndecl);
+
+      hsa_register_kernel (n);
+      return;
+    }
+
+  gcc_assert (omp_find_clause (gimple_omp_target_clauses (tgt_stmt),
+			       OMP_CLAUSE__GRIDDIM_));
+  tree inside_block
+    = gimple_block (first_stmt (single_succ (gpukernel->entry)));
+  *pp = gpukernel->next;
+  for (pp = &gpukernel->inner; *pp; pp = &(*pp)->next)
+    if ((*pp)->type == GIMPLE_OMP_FOR)
+      break;
+
+  struct omp_region *kfor = *pp;
+  gcc_assert (kfor);
+  gomp_for *for_stmt = as_a <gomp_for *> (last_stmt (kfor->entry));
+  gcc_assert (gimple_omp_for_kind (for_stmt) == GF_OMP_FOR_KIND_GRID_LOOP);
+  *pp = kfor->next;
+  if (kfor->inner)
+    {
+      if (gimple_omp_for_grid_group_iter (for_stmt))
+	{
+	  struct omp_region **next_pp;
+	  for (pp = &kfor->inner; *pp; pp = next_pp)
+	    {
+	      next_pp = &(*pp)->next;
+	      if ((*pp)->type != GIMPLE_OMP_FOR)
+		continue;
+	      gomp_for *inner = as_a <gomp_for *> (last_stmt ((*pp)->entry));
+	      gcc_assert (gimple_omp_for_kind (inner)
+			  == GF_OMP_FOR_KIND_GRID_LOOP);
+	      grid_expand_omp_for_loop (*pp, true);
+	      *pp = (*pp)->next;
+	      next_pp = pp;
+	    }
+	}
+
+
+// Source: omp-expand.c
+// Lines 8629-8689
+
+
+[ANSWER]
+MUST

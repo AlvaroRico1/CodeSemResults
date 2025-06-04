@@ -1,0 +1,38 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'p' at line 8
+2. Pointer 'data' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int on_async_resumption_new(SSL *ssl, SSL_SESSION *session)
+{
+    h2o_socket_t *sock = BIO_get_data(SSL_get_rbio(ssl));
+
+    h2o_iovec_t data;
+    const unsigned char *id;
+    unsigned id_len;
+    unsigned char *p;
+
+    /* build data */
+    data.len = i2d_SSL_SESSION(session, NULL);
+    data.base = alloca(data.len);
+    p = (void *)data.base;
+    i2d_SSL_SESSION(session, &p);
+
+    id = SSL_SESSION_get_id(session, &id_len);
+    resumption_new(sock, h2o_iovec_init(id, id_len), data);
+    return 0;
+}
+
+
+// Source: socket.c
+// Lines 1230-1248
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,37 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'self' at line 3
+2. Pointer '_self' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct expires_configurator_t *self = (void *)_self;
+
+    if (*self->args != NULL) {
+        /* setup */
+        if (ctx->pathconf != NULL) {
+            h2o_expires_register(ctx->pathconf, *self->args);
+        }
+        /* destruct */
+        assert((*self->args)->mode == H2O_EXPIRES_MODE_MAX_AGE);
+        free(*self->args);
+        *self->args = NULL;
+    }
+
+    --self->args;
+    return 0;
+}
+
+
+// Source: expires.c
+// Lines 92-109
+
+
+[ANSWER]
+MUST

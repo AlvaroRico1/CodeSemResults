@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'output' at line 4\n2. Pointer '_output' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic size_t aead_do_encrypt_final(ptls_aead_context_t *_ctx, void *_output)\n{\n    struct aead_crypto_context_t *ctx = (struct aead_crypto_context_t *)_ctx;\n    uint8_t *output = _output;\n    size_t off = 0, tag_size = ctx->super.algo->tag_size;\n    int blocklen, ret;\n\n    ret = EVP_EncryptFinal_ex(ctx->evp_ctx, output + off, &blocklen);\n    assert(ret);\n    off += blocklen;\n    ret = EVP_CIPHER_CTX_ctrl(ctx->evp_ctx, EVP_CTRL_GCM_GET_TAG, (int)tag_size, output + off);\n    assert(ret);\n    off += tag_size;\n\n    return off;\n}\n\n\n// Source: openssl.c\n// Lines 920-935\n",
+  "ANSWER": "MUST"
+}

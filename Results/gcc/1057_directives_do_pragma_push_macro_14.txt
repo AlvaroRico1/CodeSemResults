@@ -1,0 +1,1 @@
+defn,gcc/libcpp/directives.c,5,macroname,gcc/libcpp/directives.c,6,2

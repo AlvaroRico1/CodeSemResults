@@ -1,0 +1,1 @@
+s,tmux/cmd-select-pane.c,10,target,tmux/cmd-select-pane.c,6,1

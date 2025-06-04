@@ -1,0 +1,72 @@
+int git_attr_file__out_of_date(
+	git_repository *repo,
+	git_attr_session *attr_session,
+	git_attr_file *file,
+	git_attr_file_source *source)
+{
+	if (!file)
+		return 1;
+
+	/* we are never out of date if we just created this data in the same
+	 * attr_session; otherwise, nonexistent files must be invalidated
+	 */
+	if (attr_session && attr_session->key == file->session_key)
+		return 0;
+	else if (file->nonexistent)
+		return 1;
+
+	switch (file->source.type) {
+	case GIT_ATTR_FILE_SOURCE_MEMORY:
+		return 0;
+
+	case GIT_ATTR_FILE_SOURCE_FILE:
+		return git_futils_filestamp_check(
+			&file->cache_data.stamp, file->entry->fullpath);
+
+	case GIT_ATTR_FILE_SOURCE_INDEX: {
+		int error;
+		git_oid id;
+
+		if ((error = attr_file_oid_from_index(
+				&id, repo, file->entry->path)) < 0)
+			return error;
+
+		return (git_oid__cmp(&file->cache_data.oid, &id) != 0);
+	}
+
+	case GIT_ATTR_FILE_SOURCE_HEAD: {
+		git_tree *tree = NULL;
+		int error = git_repository_head_tree(&tree, repo);
+
+		if (error < 0)
+			return error;
+
+		error = (git_oid__cmp(&file->cache_data.oid, git_tree_id(tree)) != 0);
+
+		git_tree_free(tree);
+		return error;
+	}
+
+	case GIT_ATTR_FILE_SOURCE_COMMIT: {
+		git_commit *commit = NULL;
+		git_tree *tree = NULL;
+		int error;
+
+		if ((error = git_commit_lookup(&commit, repo, source->commit_id)) < 0)
+			return error;
+
+		error = git_commit_tree(&tree, commit);
+		git_commit_free(commit);
+
+		if (error < 0)
+			return error;
+
+		error = (git_oid__cmp(&file->cache_data.oid, git_tree_id(tree)) != 0);
+
+		git_tree_free(tree);
+		return error;
+	}
+
+
+// Source: attr_file.c
+// Lines 258-325

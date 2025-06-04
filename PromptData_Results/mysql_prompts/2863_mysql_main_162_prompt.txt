@@ -1,0 +1,223 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'argv' at line 1
+2. Pointer 'ssl_mode' at line 190
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int main(int argc, char *argv[]) {
+  char buff[80];
+
+  MY_INIT(argv[0]);
+  DBUG_TRACE;
+  DBUG_PROCESS(argv[0]);
+
+  charset_index = get_command_index('C');
+  delimiter_index = get_command_index('d');
+  delimiter_str = delimiter;
+  default_prompt = my_strdup(
+      PSI_NOT_INSTRUMENTED,
+      getenv("MYSQL_PS1") ? getenv("MYSQL_PS1") : "mysql> ", MYF(MY_WME));
+  current_prompt = my_strdup(PSI_NOT_INSTRUMENTED, default_prompt, MYF(MY_WME));
+  prompt_counter = 0;
+
+  outfile[0] = 0;              // no (default) outfile
+  my_stpcpy(pager, "stdout");  // the default, if --pager wasn't given
+  {
+    char *tmp = getenv("PAGER");
+    if (tmp && strlen(tmp)) {
+      default_pager_set = true;
+      my_stpcpy(default_pager, tmp);
+    }
+  }
+  if (!isatty(0) || !isatty(1)) {
+    status.batch = true;
+    opt_silent = 1;
+    ignore_errors = false;
+  } else
+    status.add_to_history = true;
+  status.exit_status = 1;
+
+  {
+    /*
+     The file descriptor-layer may be out-of-sync with the file-number layer,
+     so we make sure that "stdout" is really open.  If its file is closed then
+     explicitly close the FD layer.
+    */
+    int stdout_fileno_copy;
+    stdout_fileno_copy = dup(fileno(stdout)); /* Okay if fileno fails. */
+    if (stdout_fileno_copy == -1) {
+      fclose(stdout);
+#ifdef LINUX_ALPINE
+      // On Alpine linux we need to open a dummy file, so that the first
+      // call to socket() does not get file number 1
+      // If socket gets file number 1, then everything printed to stdout
+      // will be sent back to the server over the socket connection.
+      fopen("/dev/null", "r");
+#endif
+    } else
+      close(stdout_fileno_copy); /* Clean up dup(). */
+  }
+
+#ifdef _WIN32
+  /* Convert command line parameters from UTF16LE to UTF8MB4. */
+  my_win_translate_command_line_args(&my_charset_utf8mb4_bin, &argc, &argv);
+#endif
+
+  my_getopt_use_args_separator = true;
+  if (load_defaults("my", load_default_groups, &argc, &argv, &argv_alloc)) {
+    my_end(0);
+    return EXIT_FAILURE;
+  }
+  my_getopt_use_args_separator = false;
+
+  get_current_os_user();
+  get_current_os_sudouser();
+  if (get_options(argc, (char **)argv)) {
+    my_end(0);
+    return EXIT_FAILURE;
+  }
+  if (status.batch && !status.line_buff &&
+      !(status.line_buff = batch_readline_init(MAX_BATCH_BUFFER_SIZE, stdin))) {
+    put_info(
+        "Can't initialize batch_readline - may be the input source is "
+        "a directory or a block device.",
+        INFO_ERROR, 0);
+    my_end(0);
+    return EXIT_FAILURE;
+  }
+  if (!opt_binary_as_hex_set_explicitly && isatty(0) && isatty(1))
+    opt_binhex = true;
+  if (mysql_server_init(0, nullptr, nullptr)) {
+    put_error(nullptr);
+    my_end(0);
+    return EXIT_FAILURE;
+  }
+  glob_buffer.mem_realloc((status.batch) ? batch_io_size : 512);
+  completion_hash_init(&ht, 128);
+  init_alloc_root(PSI_NOT_INSTRUMENTED, &hash_mem_root, 16384, 0);
+  memset(&mysql, 0, sizeof(mysql));
+  global_attrs = new client_query_attributes();
+  if (sql_connect(current_host, current_db, current_user, opt_password,
+                  opt_silent)) {
+    quick = true;  // Avoid history
+    status.exit_status = 1;
+    mysql_end(-1);
+  }
+  if (!status.batch) ignore_errors = true;  // Don't abort monitor
+
+#ifndef _WIN32
+  signal(SIGINT, handle_ctrlc_signal);  // Catch SIGINT to clean up
+  signal(SIGQUIT, mysql_end);           // Catch SIGQUIT to clean up
+  signal(SIGHUP, handle_quit_signal);   // Catch SIGHUP to clean up
+#else
+  SetConsoleCtrlHandler((PHANDLER_ROUTINE)windows_ctrl_handler, true);
+#endif
+
+#if defined(HAVE_TERMIOS_H) && defined(GWINSZ_IN_SYS_IOCTL)
+  /* Readline will call this if it installs a handler */
+  signal(SIGWINCH, window_resize);
+  /* call the SIGWINCH handler to get the default term width */
+  window_resize(0);
+#endif
+
+  put_info("Welcome to the MySQL monitor.  Commands end with ; or \\g.",
+           INFO_INFO);
+  snprintf(glob_buffer.ptr(), glob_buffer.alloced_length(),
+           "Your MySQL connection id is %lu\nServer version: %s\n",
+           mysql_thread_id(&mysql), server_version_string(&mysql));
+  put_info(glob_buffer.ptr(), INFO_INFO);
+
+  put_info(ORACLE_WELCOME_COPYRIGHT_NOTICE("2000"), INFO_INFO);
+
+  if (!status.batch) {
+    // history ignore patterns are initialized to default values
+    ignore_matcher.add_patterns(HI_DEFAULTS);
+
+    /*
+      Additional patterns may be supplied using either --histignore option or
+      MYSQL_HISTIGNORE environment variable. If supplied, they'll get appended
+      to the default patterns. In case both are specified, pattern(s) supplied
+      using --histignore option will be used.
+    */
+    if (opt_histignore)
+      ignore_matcher.add_patterns(opt_histignore);
+    else if (getenv("MYSQL_HISTIGNORE"))
+      ignore_matcher.add_patterns(getenv("MYSQL_HISTIGNORE"));
+
+#ifdef HAVE_READLINE
+    if (!quick) {
+      initialize_readline(const_cast<char *>(my_progname));
+
+      /* read-history from file, default ~/.mysql_history*/
+      if (getenv("MYSQL_HISTFILE"))
+        histfile = my_strdup(PSI_NOT_INSTRUMENTED, getenv("MYSQL_HISTFILE"),
+                             MYF(MY_WME));
+      else if (getenv("HOME")) {
+        histfile = (char *)my_malloc(
+            PSI_NOT_INSTRUMENTED,
+            (uint)strlen(getenv("HOME")) + (uint)strlen("/.mysql_history") + 2,
+            MYF(MY_WME));
+        if (histfile) sprintf(histfile, "%s/.mysql_history", getenv("HOME"));
+        char link_name[FN_REFLEN];
+        if (my_readlink(link_name, histfile, 0) == 0 &&
+            strncmp(link_name, "/dev/null", 10) == 0) {
+          /* The .mysql_history file is a symlink to /dev/null, don't use it */
+          my_free(histfile);
+          histfile = nullptr;
+        }
+      }
+
+      /* We used to suggest setting MYSQL_HISTFILE=/dev/null. */
+      if (histfile && strncmp(histfile, "/dev/null", 10) == 0)
+        histfile = nullptr;
+
+      if (histfile && histfile[0]) {
+        if (verbose) tee_fprintf(stdout, "Reading history-file %s\n", histfile);
+        read_history(histfile);
+        if (!(histfile_tmp =
+                  (char *)my_malloc(PSI_NOT_INSTRUMENTED,
+                                    (uint)strlen(histfile) + 5, MYF(MY_WME)))) {
+          fprintf(stderr, "Couldn't allocate memory for temp histfile!\n");
+          return EXIT_FAILURE;
+        }
+        sprintf(histfile_tmp, "%s.TMP", histfile);
+      }
+    }
+#endif
+  }
+
+  sprintf(
+      buff, "%s",
+      "Type 'help;' or '\\h' for help. Type '\\c' to clear the current input "
+      "statement.\n");
+  put_info(buff, INFO_INFO);
+
+  uint protocol = MYSQL_PROTOCOL_DEFAULT;
+  uint ssl_mode = 0;
+  if (!mysql_get_option(&mysql, MYSQL_OPT_PROTOCOL, &protocol) &&
+      !mysql_get_option(&mysql, MYSQL_OPT_SSL_MODE, &ssl_mode)) {
+    if (protocol == MYSQL_PROTOCOL_SOCKET && ssl_mode >= SSL_MODE_REQUIRED)
+      put_info(
+          "You are enforcing ssl connection via unix socket. Please consider\n"
+          "switching ssl off as it does not make connection via unix socket\n"
+          "any more secure.",
+          INFO_INFO);
+  }
+  status.exit_status = read_and_execute(!status.batch);
+  if (opt_outfile) end_tee();
+  mysql_end(0);
+  return 0;  // Keep compiler happy
+}
+
+
+// Source: mysql.cc
+// Lines 1241-1444
+
+
+[ANSWER]
+MAY

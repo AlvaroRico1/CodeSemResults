@@ -1,0 +1,106 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'qin' at line 5
+2. Pointer 'worklist' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+compute_available (sbitmap *avloc, sbitmap *kill, sbitmap *avout,
+		   sbitmap *avin)
+{
+  edge e;
+  basic_block *worklist, *qin, *qout, *qend, bb;
+  unsigned int qlen;
+  edge_iterator ei;
+
+  /* Allocate a worklist array/queue.  Entries are only added to the
+     list if they were not already on the list.  So the size is
+     bounded by the number of basic blocks.  */
+  qin = qout = worklist =
+    XNEWVEC (basic_block, n_basic_blocks_for_fn (cfun) - NUM_FIXED_BLOCKS);
+
+  /* We want a maximal solution.  */
+  bitmap_vector_ones (avout, last_basic_block_for_fn (cfun));
+
+  /* Put every block on the worklist; this is necessary because of the
+     optimistic initialization of AVOUT above.  Use inverted postorder
+     to make the dataflow problem require less iterations.  */
+  auto_vec<int, 20> postorder;
+  inverted_post_order_compute (&postorder);
+  for (unsigned int i = 0; i < postorder.length (); ++i)
+    {
+      bb = BASIC_BLOCK_FOR_FN (cfun, postorder[i]);
+      if (bb == EXIT_BLOCK_PTR_FOR_FN (cfun)
+	  || bb == ENTRY_BLOCK_PTR_FOR_FN (cfun))
+	continue;
+      *qin++ = bb;
+      bb->aux = bb;
+    }
+
+  qin = worklist;
+  qend = &worklist[n_basic_blocks_for_fn (cfun) - NUM_FIXED_BLOCKS];
+  qlen = n_basic_blocks_for_fn (cfun) - NUM_FIXED_BLOCKS;
+
+  /* Mark blocks which are successors of the entry block so that we
+     can easily identify them below.  */
+  FOR_EACH_EDGE (e, ei, ENTRY_BLOCK_PTR_FOR_FN (cfun)->succs)
+    e->dest->aux = ENTRY_BLOCK_PTR_FOR_FN (cfun);
+
+  /* Iterate until the worklist is empty.  */
+  while (qlen)
+    {
+      /* Take the first entry off the worklist.  */
+      bb = *qout++;
+      qlen--;
+
+      if (qout >= qend)
+	qout = worklist;
+
+      /* If one of the predecessor blocks is the ENTRY block, then the
+	 intersection of avouts is the null set.  We can identify such blocks
+	 by the special value in the AUX field in the block structure.  */
+      if (bb->aux == ENTRY_BLOCK_PTR_FOR_FN (cfun))
+	/* Do not clear the aux field for blocks which are successors of the
+	   ENTRY block.  That way we never add then to the worklist again.  */
+	bitmap_clear (avin[bb->index]);
+      else
+	{
+	  /* Clear the aux field of this block so that it can be added to
+	     the worklist again if necessary.  */
+	  bb->aux = NULL;
+	  bitmap_intersection_of_preds (avin[bb->index], avout, bb);
+	}
+
+      if (bitmap_ior_and_compl (avout[bb->index], avloc[bb->index],
+				    avin[bb->index], kill[bb->index]))
+	/* If the out state of this block changed, then we need
+	   to add the successors of this block to the worklist
+	   if they are not already on the worklist.  */
+	FOR_EACH_EDGE (e, ei, bb->succs)
+	  if (!e->dest->aux && e->dest != EXIT_BLOCK_PTR_FOR_FN (cfun))
+	    {
+	      *qin++ = e->dest;
+	      e->dest->aux = e;
+	      qlen++;
+
+	      if (qin >= qend)
+		qin = worklist;
+	    }
+    }
+
+  clear_aux_for_edges ();
+  clear_aux_for_blocks ();
+  free (worklist);
+}
+
+
+// Source: lcm.c
+// Lines 494-580
+
+
+[ANSWER]
+MUST

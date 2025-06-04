@@ -1,0 +1,71 @@
+bool vio_socket_connect(Vio *vio, struct sockaddr *addr, socklen_t len,
+                        bool nonblocking, int timeout, bool *connect_done) {
+  int ret, wait;
+  int retry_count = 0;
+  DBUG_TRACE;
+
+  /* Only for socket-based transport types. */
+  assert(vio->type == VIO_TYPE_SOCKET || vio->type == VIO_TYPE_TCPIP);
+
+  /* If timeout is not infinite, set socket to non-blocking mode. */
+  if (((timeout > -1) || nonblocking) && vio_set_blocking(vio, false))
+    return true;
+
+  /* Initiate the connection. */
+  do {
+    ret = mysql_socket_connect(vio->mysql_socket, addr, len);
+  } while (ret < 0 && vio_should_retry(vio) &&
+           (retry_count++ < vio->retry_count));
+
+  if (connect_done) *connect_done = (ret == 0);
+
+#ifdef _WIN32
+  wait = (ret == SOCKET_ERROR) && (WSAGetLastError() == WSAEINPROGRESS ||
+                                   WSAGetLastError() == WSAEWOULDBLOCK);
+#else
+  wait = (ret == -1) && (errno == EINPROGRESS || errno == EALREADY);
+#endif
+
+  /*
+    The connection is in progress. The vio_io_wait() call can be used
+    to wait up to a specified period of time for the connection to
+    succeed.
+
+    If vio_io_wait() returns 0 (after waiting however many seconds),
+    the socket never became writable (host is probably unreachable.)
+    Otherwise, if vio_io_wait() returns 1, then one of two conditions
+    exist:
+
+    1. An error occurred. Use getsockopt() to check for this.
+    2. The connection was set up successfully: getsockopt() will
+       return 0 as an error.
+  */
+  if (!nonblocking && wait &&
+      (vio_io_wait(vio, VIO_IO_EVENT_CONNECT, timeout) == 1)) {
+    int error;
+    IF_WIN(int, socklen_t) optlen = sizeof(error);
+    IF_WIN(char, void) *optval = (IF_WIN(char, void) *)&error;
+
+    /*
+      At this point, we know that something happened on the socket.
+      But this does not means that everything is alright. The connect
+      might have failed. We need to retrieve the error code from the
+      socket layer. We must return success only if we are sure that
+      it was really a success. Otherwise we might prevent the caller
+      from trying another address to connect to.
+    */
+    if (connect_done) *connect_done = true;
+    if (!(ret = mysql_socket_getsockopt(vio->mysql_socket, SOL_SOCKET, SO_ERROR,
+                                        optval, &optlen))) {
+#ifdef _WIN32
+      WSASetLastError(error);
+#else
+      errno = error;
+#endif
+      ret = (error != 0);
+    }
+  }
+
+
+// Source: viosocket.cc
+// Lines 1043-1109

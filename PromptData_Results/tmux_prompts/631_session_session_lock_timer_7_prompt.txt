@@ -1,0 +1,32 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 's' at line 3
+2. Pointer 'arg' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+session_lock_timer(__unused int fd, __unused short events, void *arg)
+{
+	struct session	*s = arg;
+
+	if (s->attached == 0)
+		return;
+
+	log_debug("session %s locked, activity time %lld", s->name,
+	    (long long)s->activity_time.tv_sec);
+
+	server_lock_session(s);
+	recalculate_sizes();
+}
+
+
+// Source: session.c
+// Lines 255-267
+
+
+[ANSWER]
+MUST

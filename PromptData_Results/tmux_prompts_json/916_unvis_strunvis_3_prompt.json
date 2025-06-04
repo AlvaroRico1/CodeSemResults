@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'src' at line 1\n2. Pointer 'state' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstrunvis(char *dst, const char *src)\n{\n\tchar c;\n\tchar *start = dst;\n\tint state = 0;\n\n\twhile ((c = *src++)) {\n\tagain:\n\t\tswitch (unvis(dst, c, &state, 0)) {\n\t\tcase UNVIS_VALID:\n\t\t\tdst++;\n\t\t\tbreak;\n\t\tcase UNVIS_VALIDPUSH:\n\t\t\tdst++;\n\t\t\tgoto again;\n\t\tcase 0:\n\t\tcase UNVIS_NOCHAR:\n\t\t\tbreak;\n\t\tdefault:\n\t\t\t*dst = '\\0';\n\t\t\treturn (-1);\n\t\t}\n\t}\n\tif (unvis(dst, c, &state, UNVIS_END) == UNVIS_VALID)\n\t\tdst++;\n\t*dst = '\\0';\n\treturn (dst - start);\n}\n\n\n// Source: unvis.c\n// Lines 212-239\n",
+  "ANSWER": "MAY"
+}

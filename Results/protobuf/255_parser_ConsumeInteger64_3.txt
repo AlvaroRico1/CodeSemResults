@@ -1,0 +1,1 @@
+output,protobuf/src/google/protobuf/compiler/parser.cc,1,error,protobuf/src/google/protobuf/compiler/parser.cc,2,2

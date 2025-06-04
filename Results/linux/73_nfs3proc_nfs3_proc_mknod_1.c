@@ -1,0 +1,61 @@
+nfs3_proc_mknod(struct inode *dir, struct dentry *dentry, struct iattr *sattr,
+		dev_t rdev)
+{
+	struct posix_acl *default_acl, *acl;
+	struct nfs3_createdata *data;
+	int status = -ENOMEM;
+
+	dprintk("NFS call  mknod %pd %u:%u\n", dentry,
+			MAJOR(rdev), MINOR(rdev));
+
+	data = nfs3_alloc_createdata();
+	if (data == NULL)
+		goto out;
+
+	status = posix_acl_create(dir, &sattr->ia_mode, &default_acl, &acl);
+	if (status)
+		goto out;
+
+	data->msg.rpc_proc = &nfs3_procedures[NFS3PROC_MKNOD];
+	data->arg.mknod.fh = NFS_FH(dir);
+	data->arg.mknod.name = dentry->d_name.name;
+	data->arg.mknod.len = dentry->d_name.len;
+	data->arg.mknod.sattr = sattr;
+	data->arg.mknod.rdev = rdev;
+
+	switch (sattr->ia_mode & S_IFMT) {
+	case S_IFBLK:
+		data->arg.mknod.type = NF3BLK;
+		break;
+	case S_IFCHR:
+		data->arg.mknod.type = NF3CHR;
+		break;
+	case S_IFIFO:
+		data->arg.mknod.type = NF3FIFO;
+		break;
+	case S_IFSOCK:
+		data->arg.mknod.type = NF3SOCK;
+		break;
+	default:
+		status = -EINVAL;
+		goto out;
+	}
+
+	status = nfs3_do_create(dir, dentry, data);
+	if (status != 0)
+		goto out_release_acls;
+
+	status = nfs3_proc_setacls(d_inode(dentry), acl, default_acl);
+
+out_release_acls:
+	posix_acl_release(acl);
+	posix_acl_release(default_acl);
+out:
+	nfs3_free_createdata(data);
+	dprintk("NFS reply mknod: %d\n", status);
+	return status;
+}
+
+
+// Source: nfs3proc.c
+// Lines 658-714

@@ -1,0 +1,37 @@
+int git_regexp_search(const git_regexp *r, const char *string, size_t nmatches, git_regmatch *matches)
+{
+	int static_ovec[9] = {0}, *ovec;
+	int error;
+	size_t i;
+
+	/* The ovec array always needs to be a multiple of three */
+	if (nmatches <= ARRAY_SIZE(static_ovec) / 3)
+		ovec = static_ovec;
+	else
+		ovec = git__calloc(nmatches * 3, sizeof(*ovec));
+	GIT_ERROR_CHECK_ALLOC(ovec);
+
+	if ((error = pcre_exec(*r, NULL, string, (int) strlen(string), 0, 0, ovec, (int) nmatches * 3)) < 0)
+		goto out;
+
+	if (error == 0)
+		error = (int) nmatches;
+
+	for (i = 0; i < (unsigned int) error; i++) {
+		matches[i].start = (ovec[i * 2] < 0) ? -1 : ovec[i * 2];
+		matches[i].end = (ovec[i * 2 + 1] < 0) ? -1 : ovec[i * 2 + 1];
+	}
+	for (i = (unsigned int) error; i < nmatches; i++)
+		matches[i].start = matches[i].end = -1;
+
+out:
+	if (nmatches > ARRAY_SIZE(static_ovec) / 3)
+		git__free(ovec);
+	if (error < 0)
+		return (error == PCRE_ERROR_NOMATCH) ? GIT_ENOTFOUND : GIT_EINVALIDSPEC;
+	return 0;
+}
+
+
+// Source: regexp.c
+// Lines 42-74

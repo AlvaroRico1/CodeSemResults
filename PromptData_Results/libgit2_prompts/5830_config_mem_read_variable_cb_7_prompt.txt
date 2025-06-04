@@ -1,0 +1,65 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'c' at line 13
+2. Pointer 'var_name' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int read_variable_cb(
+	git_config_parser *reader,
+	const char *current_section,
+	const char *var_name,
+	const char *var_value,
+	const char *line,
+	size_t line_len,
+	void *payload)
+{
+	config_memory_parse_data *parse_data = (config_memory_parse_data *) payload;
+	git_str buf = GIT_STR_INIT;
+	git_config_entry *entry;
+	const char *c;
+	int result;
+
+	GIT_UNUSED(reader);
+	GIT_UNUSED(line);
+	GIT_UNUSED(line_len);
+
+	if (current_section) {
+		/* TODO: Once warnings land, we should likely warn
+		 * here. Git appears to warn in most cases if it sees
+		 * un-namespaced config options.
+		 */
+		git_str_puts(&buf, current_section);
+		git_str_putc(&buf, '.');
+	}
+
+	for (c = var_name; *c; c++)
+		git_str_putc(&buf, git__tolower(*c));
+
+	if (git_str_oom(&buf))
+		return -1;
+
+	entry = git__calloc(1, sizeof(git_config_entry));
+	GIT_ERROR_CHECK_ALLOC(entry);
+	entry->name = git_str_detach(&buf);
+	entry->value = var_value ? git__strdup(var_value) : NULL;
+	entry->level = parse_data->level;
+	entry->include_depth = 0;
+
+	if ((result = git_config_entries_append(parse_data->entries, entry)) < 0)
+		return result;
+
+	return result;
+}
+
+
+// Source: config_mem.c
+// Lines 31-76
+
+
+[ANSWER]
+MUST

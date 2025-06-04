@@ -1,0 +1,30 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'opt' at line 3
+2. Pointer 'indent' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+print_plugins_help (FILE *file, const char *indent)
+{
+  struct print_options opt;
+  opt.file = file;
+  opt.indent = indent;
+  if (!plugin_name_args_tab || htab_elements (plugin_name_args_tab) == 0)
+    return;
+
+  fprintf (file, "%sHelp for the loaded plugins:\n", indent);
+  htab_traverse_noresize (plugin_name_args_tab, print_help_one_plugin, &opt);
+}
+
+
+// Source: plugin.c
+// Lines 885-895
+
+
+[ANSWER]
+MUST

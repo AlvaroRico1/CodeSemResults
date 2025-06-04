@@ -1,0 +1,64 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'i_tree' at line 8
+2. Pointer 'diff' at line 9
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int build_untracked_tree(
+	git_tree **tree_out,
+	git_repository *repo,
+	git_commit *i_commit,
+	uint32_t flags)
+{
+	git_index *i_index = NULL;
+	git_tree *i_tree = NULL;
+	git_diff *diff = NULL;
+	git_diff_options opts = GIT_DIFF_OPTIONS_INIT;
+	struct stash_update_rules data = {0};
+	int error;
+
+	if ((error = git_index_new(&i_index)) < 0)
+		goto cleanup;
+
+	if (flags & GIT_STASH_INCLUDE_UNTRACKED) {
+		opts.flags |= GIT_DIFF_INCLUDE_UNTRACKED |
+			GIT_DIFF_RECURSE_UNTRACKED_DIRS;
+		data.include_untracked = true;
+	}
+
+	if (flags & GIT_STASH_INCLUDE_IGNORED) {
+		opts.flags |= GIT_DIFF_INCLUDE_IGNORED |
+			GIT_DIFF_RECURSE_IGNORED_DIRS;
+		data.include_ignored = true;
+	}
+
+	if ((error = git_commit_tree(&i_tree, i_commit)) < 0)
+		goto cleanup;
+
+	if ((error = git_diff_tree_to_workdir(&diff, repo, i_tree, &opts)) < 0)
+		goto cleanup;
+
+	if ((error = stash_update_index_from_diff(repo, i_index, diff, &data)) < 0)
+		goto cleanup;
+
+	error = build_tree_from_index(tree_out, repo, i_index);
+
+cleanup:
+	git_diff_free(diff);
+	git_tree_free(i_tree);
+	git_index_free(i_index);
+	return error;
+}
+
+
+// Source: stash.c
+// Lines 249-293
+
+
+[ANSWER]
+MAY

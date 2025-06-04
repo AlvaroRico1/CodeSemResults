@@ -1,0 +1,48 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ptr' at line 3
+2. Pointer 's' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+tty_term_strip(const char *s)
+{
+	const char     *ptr;
+	static char	buf[8192];
+	size_t		len;
+
+	/* Ignore strings with no padding. */
+	if (strchr(s, '$') == NULL)
+		return (xstrdup(s));
+
+	len = 0;
+	for (ptr = s; *ptr != '\0'; ptr++) {
+		if (*ptr == '$' && *(ptr + 1) == '<') {
+			while (*ptr != '\0' && *ptr != '>')
+				ptr++;
+			if (*ptr == '>')
+				ptr++;
+			if (*ptr == '\0')
+				break;
+		}
+
+		buf[len++] = *ptr;
+		if (len == (sizeof buf) - 1)
+			break;
+	}
+	buf[len] = '\0';
+
+	return (xstrdup(buf));
+}
+
+
+// Source: tty-term.c
+// Lines 295-323
+
+
+[ANSWER]
+MUST

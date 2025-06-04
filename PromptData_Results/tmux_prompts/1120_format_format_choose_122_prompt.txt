@@ -1,0 +1,42 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'left' at line 1
+2. Pointer 'left0' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+format_choose(struct format_expand_state *es, const char *s, char **left,
+    char **right, int expand)
+{
+	const char	*cp;
+	char		*left0, *right0;
+
+	cp = format_skip(s, ",");
+	if (cp == NULL)
+		return (-1);
+	left0 = xstrndup(s, cp - s);
+	right0 = xstrdup(cp + 1);
+
+	if (expand) {
+		*left = format_expand1(es, left0);
+		free(left0);
+		*right = format_expand1(es, right0);
+		free(right0);
+	} else {
+		*left = left0;
+		*right = right0;
+	}
+	return (0);
+}
+
+
+// Source: format.c
+// Lines 3477-3499
+
+
+[ANSWER]
+MUST

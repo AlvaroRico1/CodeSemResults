@@ -1,0 +1,91 @@
+acpi_status acpi_ds_evaluate_name_path(struct acpi_walk_state *walk_state)
+{
+	acpi_status status = AE_OK;
+	union acpi_parse_object *op = walk_state->op;
+	union acpi_operand_object **operand = &walk_state->operands[0];
+	union acpi_operand_object *new_obj_desc;
+	u8 type;
+
+	ACPI_FUNCTION_TRACE_PTR(ds_evaluate_name_path, walk_state);
+
+	if (!op->common.parent) {
+
+		/* This happens after certain exception processing */
+
+		goto exit;
+	}
+
+	if ((op->common.parent->common.aml_opcode == AML_PACKAGE_OP) ||
+	    (op->common.parent->common.aml_opcode == AML_VARIABLE_PACKAGE_OP) ||
+	    (op->common.parent->common.aml_opcode == AML_REF_OF_OP)) {
+
+		/* TBD: Should we specify this feature as a bit of op_info->Flags of these opcodes? */
+
+		goto exit;
+	}
+
+	status = acpi_ds_create_operand(walk_state, op, 0);
+	if (ACPI_FAILURE(status)) {
+		goto exit;
+	}
+
+	if (op->common.flags & ACPI_PARSEOP_TARGET) {
+		new_obj_desc = *operand;
+		goto push_result;
+	}
+
+	type = (*operand)->common.type;
+
+	status = acpi_ex_resolve_to_value(operand, walk_state);
+	if (ACPI_FAILURE(status)) {
+		goto exit;
+	}
+
+	if (type == ACPI_TYPE_INTEGER) {
+
+		/* It was incremented by acpi_ex_resolve_to_value */
+
+		acpi_ut_remove_reference(*operand);
+
+		status =
+		    acpi_ut_copy_iobject_to_iobject(*operand, &new_obj_desc,
+						    walk_state);
+		if (ACPI_FAILURE(status)) {
+			goto exit;
+		}
+	} else {
+		/*
+		 * The object either was anew created or is
+		 * a Namespace node - don't decrement it.
+		 */
+		new_obj_desc = *operand;
+	}
+
+	/* Cleanup for name-path operand */
+
+	status = acpi_ds_obj_stack_pop(1, walk_state);
+	if (ACPI_FAILURE(status)) {
+		walk_state->result_obj = new_obj_desc;
+		goto exit;
+	}
+
+push_result:
+
+	walk_state->result_obj = new_obj_desc;
+
+	status = acpi_ds_result_push(walk_state->result_obj, walk_state);
+	if (ACPI_SUCCESS(status)) {
+
+		/* Force to take it from stack */
+
+		op->common.flags |= ACPI_PARSEOP_IN_STACK;
+	}
+
+exit:
+
+	return_ACPI_STATUS(status);
+}
+
+
+// Source: dsutils.c
+// Lines 745-831

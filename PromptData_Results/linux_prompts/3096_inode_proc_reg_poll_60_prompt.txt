@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'poll' at line 6
+2. Pointer 'pde' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static __poll_t proc_reg_poll(struct file *file, struct poll_table_struct *pts)
+{
+	struct proc_dir_entry *pde = PDE(file_inode(file));
+	__poll_t rv = DEFAULT_POLLMASK;
+	if (use_pde(pde)) {
+		typeof_member(struct file_operations, poll) poll;
+
+		poll = pde->proc_fops->poll;
+		if (poll)
+			rv = poll(file, pts);
+		unuse_pde(pde);
+	}
+
+
+// Source: inode.c
+// Lines 244-255
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,1 @@
+element,gcc/gcc/bitmap.c,1,ptr,gcc/gcc/bitmap.c,4,1

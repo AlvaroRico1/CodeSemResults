@@ -1,0 +1,46 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'iter' at line 8
+2. Pointer 'entry' at line 9
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_config_foreach_match(
+	const git_config *cfg,
+	const char *regexp,
+	git_config_foreach_cb cb,
+	void *payload)
+{
+	int error;
+	git_config_iterator *iter;
+	git_config_entry *entry;
+
+	if ((error = git_config_iterator_glob_new(&iter, cfg, regexp)) < 0)
+		return error;
+
+	while (!(error = git_config_next(&entry, iter))) {
+		if ((error = cb(entry, payload)) != 0) {
+			git_error_set_after_callback(error);
+			break;
+		}
+	}
+
+	git_config_iterator_free(iter);
+
+	if (error == GIT_ITEROVER)
+		error = 0;
+
+	return error;
+}
+
+
+// Source: config.c
+// Lines 550-576
+
+
+[ANSWER]
+MAY

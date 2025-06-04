@@ -1,0 +1,36 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'length' at line 13
+2. Pointer 'dec' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int my_time_to_str(const MYSQL_TIME &my_time, char *to, uint dec) {
+  const char *const start = to;
+  if (my_time.neg) *to++ = '-';
+
+  // Hours should be zero-padded up to two digits. It might have more digits.
+  to = write_digits(my_time.hour, std::max(2, count_digits(my_time.hour)), to);
+
+  *to++ = ':';
+  to = format_two_digits(my_time.minute, to);
+  *to++ = ':';
+  to = format_two_digits(my_time.second, to);
+
+  const int length = to - start;
+  if (dec) return length + my_useconds_to_str(to, my_time.second_part, dec);
+  *to = '\0';
+  return length;
+}
+
+
+// Source: my_time.cc
+// Lines 1293-1309
+
+
+[ANSWER]
+MUST-NOT

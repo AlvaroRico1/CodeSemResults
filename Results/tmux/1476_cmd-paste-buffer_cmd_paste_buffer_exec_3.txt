@@ -1,0 +1,1 @@
+line,tmux/cmd-paste-buffer.c,7,bufdata,tmux/cmd-paste-buffer.c,7,1

@@ -1,0 +1,1 @@
+window,tmux/cmd-find.c,7,pane,tmux/cmd-find.c,7,1

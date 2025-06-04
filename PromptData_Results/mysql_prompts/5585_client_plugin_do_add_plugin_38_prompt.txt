@@ -1,0 +1,98 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'errmsg' at line 4
+2. Pointer 'args' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static struct st_mysql_client_plugin *do_add_plugin(
+    MYSQL *mysql, struct st_mysql_client_plugin *plugin, void *dlhandle,
+    int argc, va_list args) {
+  const char *errmsg;
+  struct st_client_plugin_int plugin_int, *p;
+  char errbuf[1024];
+
+  assert(initialized);
+
+  plugin_int.plugin = plugin;
+  plugin_int.dlhandle = dlhandle;
+
+  if (plugin->type >= MYSQL_CLIENT_MAX_PLUGINS) {
+    errmsg = "Unknown client plugin type";
+    goto err1;
+  }
+
+  if (plugin->interface_version < plugin_version[plugin->type] ||
+      (plugin->interface_version >> 8) > (plugin_version[plugin->type] >> 8)) {
+    errmsg = "Incompatible client plugin interface";
+    goto err1;
+  }
+
+#if defined(CLIENT_PROTOCOL_TRACING) && !defined(MYSQL_SERVER)
+  /*
+    If we try to load a protocol trace plugin but one is already
+    loaded (global trace_plugin pointer is not NULL) then we ignore
+    the new trace plugin and give error. This is done before the
+    new plugin gets initialized.
+  */
+  if (plugin->type == MYSQL_CLIENT_TRACE_PLUGIN && nullptr != trace_plugin) {
+    errmsg = "Can not load another trace plugin while one is already loaded";
+    goto err1;
+  }
+#endif
+
+  /* Call the plugin initialization function, if any */
+  if (plugin->init && plugin->init(errbuf, sizeof(errbuf), argc, args)) {
+    errmsg = errbuf;
+    goto err1;
+  }
+
+  p = (struct st_client_plugin_int *)memdup_root(&mem_root, &plugin_int,
+                                                 sizeof(plugin_int));
+
+  if (!p) {
+    errmsg = "Out of memory";
+    goto err2;
+  }
+
+  mysql_mutex_assert_owner(&LOCK_load_client_plugin);
+
+  p->next = plugin_list[plugin->type];
+  plugin_list[plugin->type] = p;
+  net_clear_error(&mysql->net);
+
+#if defined(CLIENT_PROTOCOL_TRACING) && !defined(MYSQL_SERVER)
+  /*
+    If loaded plugin is a protocol trace one, then set the global
+    trace_plugin pointer to point at it. When trace_plugin is not NULL,
+    each new connection will be traced using the plugin pointed by it
+    (see MYSQL_TRACE_STAGE() macro in libmysql/mysql_trace.h).
+  */
+  if (plugin->type == MYSQL_CLIENT_TRACE_PLUGIN) {
+    trace_plugin = (struct st_mysql_client_plugin_TRACE *)plugin;
+  }
+#endif
+
+  return plugin;
+
+err2:
+  if (plugin->deinit) plugin->deinit();
+err1:
+  set_mysql_extended_error(mysql, CR_AUTH_PLUGIN_CANNOT_LOAD, unknown_sqlstate,
+                           ER_CLIENT(CR_AUTH_PLUGIN_CANNOT_LOAD), plugin->name,
+                           errmsg);
+  if (dlhandle) dlclose(dlhandle);
+  return nullptr;
+}
+
+
+// Source: client_plugin.cc
+// Lines 175-253
+
+
+[ANSWER]
+MUST-NOT

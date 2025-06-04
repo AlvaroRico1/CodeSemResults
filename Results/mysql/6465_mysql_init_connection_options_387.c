@@ -1,0 +1,83 @@
+static bool init_connection_options(MYSQL *mysql) {
+  bool handle_expired = (opt_connect_expired_password || !status.batch);
+
+  if (opt_init_command)
+    mysql_options(mysql, MYSQL_INIT_COMMAND, opt_init_command);
+
+  if (opt_connect_timeout) {
+    uint timeout = opt_connect_timeout;
+    mysql_options(mysql, MYSQL_OPT_CONNECT_TIMEOUT, (char *)&timeout);
+  }
+
+  if (opt_bind_addr) mysql_options(mysql, MYSQL_OPT_BIND, opt_bind_addr);
+
+  if (opt_compress) mysql_options(mysql, MYSQL_OPT_COMPRESS, NullS);
+  if (opt_compress_algorithm)
+    mysql_options(mysql, MYSQL_OPT_COMPRESSION_ALGORITHMS,
+                  opt_compress_algorithm);
+
+  mysql_options(mysql, MYSQL_OPT_ZSTD_COMPRESSION_LEVEL,
+                &opt_zstd_compress_level);
+
+  if (using_opt_local_infile)
+    mysql_options(mysql, MYSQL_OPT_LOCAL_INFILE, (char *)&opt_local_infile);
+
+  if (SSL_SET_OPTIONS(mysql)) {
+    tee_fprintf(stdout, "%s", SSL_SET_OPTIONS_ERROR);
+    return true;
+  }
+  if (opt_protocol)
+    mysql_options(mysql, MYSQL_OPT_PROTOCOL, (char *)&opt_protocol);
+
+#if defined(_WIN32)
+  if (shared_memory_base_name)
+    mysql_options(mysql, MYSQL_SHARED_MEMORY_BASE_NAME,
+                  shared_memory_base_name);
+#endif
+
+  if (safe_updates) {
+    char init_command[100];
+    sprintf(init_command,
+            "SET SQL_SAFE_UPDATES=1,SQL_SELECT_LIMIT=%lu,MAX_JOIN_SIZE=%lu",
+            select_limit, max_join_size);
+    mysql_options(mysql, MYSQL_INIT_COMMAND, init_command);
+  }
+
+  mysql_set_character_set(mysql, default_charset);
+
+  if (opt_plugin_dir && *opt_plugin_dir)
+    mysql_options(mysql, MYSQL_PLUGIN_DIR, opt_plugin_dir);
+
+  if (opt_load_data_local_dir &&
+      mysql_options(mysql, MYSQL_OPT_LOAD_DATA_LOCAL_DIR,
+                    opt_load_data_local_dir))
+    return true;
+
+  if (opt_default_auth && *opt_default_auth)
+    mysql_options(mysql, MYSQL_DEFAULT_AUTH, opt_default_auth);
+
+  set_server_public_key(mysql);
+
+  set_get_server_public_key_option(mysql);
+
+  if (using_opt_enable_cleartext_plugin)
+    mysql_options(mysql, MYSQL_ENABLE_CLEARTEXT_PLUGIN,
+                  (char *)&opt_enable_cleartext_plugin);
+
+  mysql_options(mysql, MYSQL_OPT_CONNECT_ATTR_RESET, nullptr);
+  mysql_options4(mysql, MYSQL_OPT_CONNECT_ATTR_ADD, "program_name", "mysql");
+  if (current_os_user)
+    mysql_options4(mysql, MYSQL_OPT_CONNECT_ATTR_ADD, "os_user",
+                   current_os_user);
+  if (current_os_sudouser)
+    mysql_options4(mysql, MYSQL_OPT_CONNECT_ATTR_ADD, "os_sudouser",
+                   current_os_sudouser);
+
+  mysql_options(mysql, MYSQL_OPT_CAN_HANDLE_EXPIRED_PASSWORDS, &handle_expired);
+
+  return false;
+}
+
+
+// Source: mysql.cc
+// Lines 4622-4700

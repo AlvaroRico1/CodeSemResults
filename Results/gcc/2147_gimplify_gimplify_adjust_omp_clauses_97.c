@@ -1,0 +1,504 @@
+gimplify_adjust_omp_clauses (gimple_seq *pre_p, gimple_seq body, tree *list_p,
+			     enum tree_code code)
+{
+  struct gimplify_omp_ctx *ctx = gimplify_omp_ctxp;
+  tree *orig_list_p = list_p;
+  tree c, decl;
+  bool has_inscan_reductions = false;
+
+  if (body)
+    {
+      struct gimplify_omp_ctx *octx;
+      for (octx = ctx; octx; octx = octx->outer_context)
+	if ((octx->region_type & (ORT_PARALLEL | ORT_TASK | ORT_TEAMS)) != 0)
+	  break;
+      if (octx)
+	{
+	  struct walk_stmt_info wi;
+	  memset (&wi, 0, sizeof (wi));
+	  walk_gimple_seq (body, omp_find_stores_stmt,
+			   omp_find_stores_op, &wi);
+	}
+    }
+
+  if (ctx->add_safelen1)
+    {
+      /* If there are VLAs in the body of simd loop, prevent
+	 vectorization.  */
+      gcc_assert (ctx->region_type == ORT_SIMD);
+      c = build_omp_clause (UNKNOWN_LOCATION, OMP_CLAUSE_SAFELEN);
+      OMP_CLAUSE_SAFELEN_EXPR (c) = integer_one_node;
+      OMP_CLAUSE_CHAIN (c) = *list_p;
+      *list_p = c;
+      list_p = &OMP_CLAUSE_CHAIN (c);
+    }
+
+  if (ctx->region_type == ORT_WORKSHARE
+      && ctx->outer_context
+      && ctx->outer_context->region_type == ORT_COMBINED_PARALLEL)
+    {
+      for (c = ctx->outer_context->clauses; c; c = OMP_CLAUSE_CHAIN (c))
+	if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_LASTPRIVATE
+	    && OMP_CLAUSE_LASTPRIVATE_CONDITIONAL (c))
+	  {
+	    decl = OMP_CLAUSE_DECL (c);
+	    splay_tree_node n
+	      = splay_tree_lookup (ctx->outer_context->variables,
+				   (splay_tree_key) decl);
+	    gcc_checking_assert (!splay_tree_lookup (ctx->variables,
+						     (splay_tree_key) decl));
+	    omp_add_variable (ctx, decl, n->value);
+	    tree c2 = copy_node (c);
+	    OMP_CLAUSE_CHAIN (c2) = *list_p;
+	    *list_p = c2;
+	    if ((n->value & GOVD_FIRSTPRIVATE) == 0)
+	      continue;
+	    c2 = build_omp_clause (OMP_CLAUSE_LOCATION (c),
+				   OMP_CLAUSE_FIRSTPRIVATE);
+	    OMP_CLAUSE_DECL (c2) = decl;
+	    OMP_CLAUSE_CHAIN (c2) = *list_p;
+	    *list_p = c2;
+	  }
+    }
+  while ((c = *list_p) != NULL)
+    {
+      splay_tree_node n;
+      bool remove = false;
+
+      switch (OMP_CLAUSE_CODE (c))
+	{
+	case OMP_CLAUSE_FIRSTPRIVATE:
+	  if ((ctx->region_type & ORT_TARGET)
+	      && (ctx->region_type & ORT_ACC) == 0
+	      && TYPE_ATOMIC (strip_array_types
+					(TREE_TYPE (OMP_CLAUSE_DECL (c)))))
+	    {
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%<_Atomic%> %qD in %<firstprivate%> clause on "
+			"%<target%> construct", OMP_CLAUSE_DECL (c));
+	      remove = true;
+	      break;
+	    }
+	  /* FALLTHRU */
+	case OMP_CLAUSE_PRIVATE:
+	case OMP_CLAUSE_SHARED:
+	case OMP_CLAUSE_LINEAR:
+	  decl = OMP_CLAUSE_DECL (c);
+	  n = splay_tree_lookup (ctx->variables, (splay_tree_key) decl);
+	  remove = !(n->value & GOVD_SEEN);
+	  if ((n->value & GOVD_LASTPRIVATE_CONDITIONAL) != 0
+	      && code == OMP_PARALLEL
+	      && OMP_CLAUSE_CODE (c) == OMP_CLAUSE_FIRSTPRIVATE)
+	    remove = true;
+	  if (! remove)
+	    {
+	      bool shared = OMP_CLAUSE_CODE (c) == OMP_CLAUSE_SHARED;
+	      if ((n->value & GOVD_DEBUG_PRIVATE)
+		  || lang_hooks.decls.omp_private_debug_clause (decl, shared))
+		{
+		  gcc_assert ((n->value & GOVD_DEBUG_PRIVATE) == 0
+			      || ((n->value & GOVD_DATA_SHARE_CLASS)
+				  == GOVD_SHARED));
+		  OMP_CLAUSE_SET_CODE (c, OMP_CLAUSE_PRIVATE);
+		  OMP_CLAUSE_PRIVATE_DEBUG (c) = 1;
+		}
+              if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_SHARED
+		  && ctx->has_depend
+		  && DECL_P (decl))
+		n->value |= GOVD_WRITTEN;
+	      if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_SHARED
+		  && (n->value & GOVD_WRITTEN) == 0
+		  && DECL_P (decl)
+		  && omp_shared_to_firstprivate_optimizable_decl_p (decl))
+		OMP_CLAUSE_SHARED_READONLY (c) = 1;
+	      else if (DECL_P (decl)
+		       && ((OMP_CLAUSE_CODE (c) == OMP_CLAUSE_SHARED
+			    && (n->value & GOVD_WRITTEN) != 0)
+			   || (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_LINEAR
+			       && !OMP_CLAUSE_LINEAR_NO_COPYOUT (c)))
+		       && omp_shared_to_firstprivate_optimizable_decl_p (decl))
+		omp_mark_stores (gimplify_omp_ctxp->outer_context, decl);
+	    }
+	  break;
+
+	case OMP_CLAUSE_LASTPRIVATE:
+	  /* Make sure OMP_CLAUSE_LASTPRIVATE_FIRSTPRIVATE is set to
+	     accurately reflect the presence of a FIRSTPRIVATE clause.  */
+	  decl = OMP_CLAUSE_DECL (c);
+	  n = splay_tree_lookup (ctx->variables, (splay_tree_key) decl);
+	  OMP_CLAUSE_LASTPRIVATE_FIRSTPRIVATE (c)
+	    = (n->value & GOVD_FIRSTPRIVATE) != 0;
+	  if (code == OMP_DISTRIBUTE
+	      && OMP_CLAUSE_LASTPRIVATE_FIRSTPRIVATE (c))
+	    {
+	      remove = true;
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"same variable used in %<firstprivate%> and "
+			"%<lastprivate%> clauses on %<distribute%> "
+			"construct");
+	    }
+	  if (!remove
+	      && OMP_CLAUSE_CODE (c) == OMP_CLAUSE_LASTPRIVATE
+	      && DECL_P (decl)
+	      && omp_shared_to_firstprivate_optimizable_decl_p (decl))
+	    omp_mark_stores (gimplify_omp_ctxp->outer_context, decl);
+	  if (OMP_CLAUSE_LASTPRIVATE_CONDITIONAL (c) && code == OMP_PARALLEL)
+	    remove = true;
+	  break;
+
+	case OMP_CLAUSE_ALIGNED:
+	  decl = OMP_CLAUSE_DECL (c);
+	  if (!is_global_var (decl))
+	    {
+	      n = splay_tree_lookup (ctx->variables, (splay_tree_key) decl);
+	      remove = n == NULL || !(n->value & GOVD_SEEN);
+	      if (!remove && TREE_CODE (TREE_TYPE (decl)) == POINTER_TYPE)
+		{
+		  struct gimplify_omp_ctx *octx;
+		  if (n != NULL
+		      && (n->value & (GOVD_DATA_SHARE_CLASS
+				      & ~GOVD_FIRSTPRIVATE)))
+		    remove = true;
+		  else
+		    for (octx = ctx->outer_context; octx;
+			 octx = octx->outer_context)
+		      {
+			n = splay_tree_lookup (octx->variables,
+					       (splay_tree_key) decl);
+			if (n == NULL)
+			  continue;
+			if (n->value & GOVD_LOCAL)
+			  break;
+			/* We have to avoid assigning a shared variable
+			   to itself when trying to add
+			   __builtin_assume_aligned.  */
+			if (n->value & GOVD_SHARED)
+			  {
+			    remove = true;
+			    break;
+			  }
+		      }
+		}
+	    }
+	  else if (TREE_CODE (TREE_TYPE (decl)) == ARRAY_TYPE)
+	    {
+	      n = splay_tree_lookup (ctx->variables, (splay_tree_key) decl);
+	      if (n != NULL && (n->value & GOVD_DATA_SHARE_CLASS) != 0)
+		remove = true;
+	    }
+	  break;
+
+	case OMP_CLAUSE_NONTEMPORAL:
+	  decl = OMP_CLAUSE_DECL (c);
+	  n = splay_tree_lookup (ctx->variables, (splay_tree_key) decl);
+	  remove = n == NULL || !(n->value & GOVD_SEEN);
+	  break;
+
+	case OMP_CLAUSE_MAP:
+	  if (code == OMP_TARGET_EXIT_DATA
+	      && OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_ALWAYS_POINTER)
+	    {
+	      remove = true;
+	      break;
+	    }
+	  decl = OMP_CLAUSE_DECL (c);
+	  /* Data clauses associated with reductions must be
+	     compatible with present_or_copy.  Warn and adjust the clause
+	     if that is not the case.  */
+	  if (ctx->region_type == ORT_ACC_PARALLEL
+	      || ctx->region_type == ORT_ACC_SERIAL)
+	    {
+	      tree t = DECL_P (decl) ? decl : TREE_OPERAND (decl, 0);
+	      n = NULL;
+
+	      if (DECL_P (t))
+		n = splay_tree_lookup (ctx->variables, (splay_tree_key) t);
+
+	      if (n && (n->value & GOVD_REDUCTION))
+		{
+		  enum gomp_map_kind kind = OMP_CLAUSE_MAP_KIND (c);
+
+		  OMP_CLAUSE_MAP_IN_REDUCTION (c) = 1;
+		  if ((kind & GOMP_MAP_TOFROM) != GOMP_MAP_TOFROM
+		      && kind != GOMP_MAP_FORCE_PRESENT
+		      && kind != GOMP_MAP_POINTER)
+		    {
+		      warning_at (OMP_CLAUSE_LOCATION (c), 0,
+				  "incompatible data clause with reduction "
+				  "on %qE; promoting to %<present_or_copy%>",
+				  DECL_NAME (t));
+		      OMP_CLAUSE_SET_MAP_KIND (c, GOMP_MAP_TOFROM);
+		    }
+		}
+	    }
+	  if (!DECL_P (decl))
+	    {
+	      if ((ctx->region_type & ORT_TARGET) != 0
+		  && OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_FIRSTPRIVATE_POINTER)
+		{
+		  if (TREE_CODE (decl) == INDIRECT_REF
+		      && TREE_CODE (TREE_OPERAND (decl, 0)) == COMPONENT_REF
+		      && (TREE_CODE (TREE_TYPE (TREE_OPERAND (decl, 0)))
+			  == REFERENCE_TYPE))
+		    decl = TREE_OPERAND (decl, 0);
+		  if (TREE_CODE (decl) == COMPONENT_REF)
+		    {
+		      while (TREE_CODE (decl) == COMPONENT_REF)
+			decl = TREE_OPERAND (decl, 0);
+		      if (DECL_P (decl))
+			{
+			  n = splay_tree_lookup (ctx->variables,
+						 (splay_tree_key) decl);
+			  if (!(n->value & GOVD_SEEN))
+			    remove = true;
+			}
+		    }
+		}
+	      break;
+	    }
+	  n = splay_tree_lookup (ctx->variables, (splay_tree_key) decl);
+	  if ((ctx->region_type & ORT_TARGET) != 0
+	      && !(n->value & GOVD_SEEN)
+	      && GOMP_MAP_ALWAYS_P (OMP_CLAUSE_MAP_KIND (c)) == 0
+	      && (!is_global_var (decl)
+		  || !lookup_attribute ("omp declare target link",
+					DECL_ATTRIBUTES (decl))))
+	    {
+	      remove = true;
+	      /* For struct element mapping, if struct is never referenced
+		 in target block and none of the mapping has always modifier,
+		 remove all the struct element mappings, which immediately
+		 follow the GOMP_MAP_STRUCT map clause.  */
+	      if (OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_STRUCT)
+		{
+		  HOST_WIDE_INT cnt = tree_to_shwi (OMP_CLAUSE_SIZE (c));
+		  while (cnt--)
+		    OMP_CLAUSE_CHAIN (c)
+		      = OMP_CLAUSE_CHAIN (OMP_CLAUSE_CHAIN (c));
+		}
+	    }
+	  else if (OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_STRUCT
+		   && (code == OMP_TARGET_EXIT_DATA
+		       || code == OACC_EXIT_DATA))
+	    remove = true;
+	  else if (DECL_SIZE (decl)
+		   && TREE_CODE (DECL_SIZE (decl)) != INTEGER_CST
+		   && OMP_CLAUSE_MAP_KIND (c) != GOMP_MAP_POINTER
+		   && OMP_CLAUSE_MAP_KIND (c) != GOMP_MAP_FIRSTPRIVATE_POINTER
+		   && (OMP_CLAUSE_MAP_KIND (c)
+		       != GOMP_MAP_FIRSTPRIVATE_REFERENCE))
+	    {
+	      /* For GOMP_MAP_FORCE_DEVICEPTR, we'll never enter here, because
+		 for these, TREE_CODE (DECL_SIZE (decl)) will always be
+		 INTEGER_CST.  */
+	      gcc_assert (OMP_CLAUSE_MAP_KIND (c) != GOMP_MAP_FORCE_DEVICEPTR);
+
+	      tree decl2 = DECL_VALUE_EXPR (decl);
+	      gcc_assert (TREE_CODE (decl2) == INDIRECT_REF);
+	      decl2 = TREE_OPERAND (decl2, 0);
+	      gcc_assert (DECL_P (decl2));
+	      tree mem = build_simple_mem_ref (decl2);
+	      OMP_CLAUSE_DECL (c) = mem;
+	      OMP_CLAUSE_SIZE (c) = TYPE_SIZE_UNIT (TREE_TYPE (decl));
+	      if (ctx->outer_context)
+		{
+		  omp_notice_variable (ctx->outer_context, decl2, true);
+		  omp_notice_variable (ctx->outer_context,
+				       OMP_CLAUSE_SIZE (c), true);
+		}
+	      if (((ctx->region_type & ORT_TARGET) != 0
+		   || !ctx->target_firstprivatize_array_bases)
+		  && ((n->value & GOVD_SEEN) == 0
+		      || (n->value & (GOVD_PRIVATE | GOVD_FIRSTPRIVATE)) == 0))
+		{
+		  tree nc = build_omp_clause (OMP_CLAUSE_LOCATION (c),
+					      OMP_CLAUSE_MAP);
+		  OMP_CLAUSE_DECL (nc) = decl;
+		  OMP_CLAUSE_SIZE (nc) = size_zero_node;
+		  if (ctx->target_firstprivatize_array_bases)
+		    OMP_CLAUSE_SET_MAP_KIND (nc,
+					     GOMP_MAP_FIRSTPRIVATE_POINTER);
+		  else
+		    OMP_CLAUSE_SET_MAP_KIND (nc, GOMP_MAP_POINTER);
+		  OMP_CLAUSE_CHAIN (nc) = OMP_CLAUSE_CHAIN (c);
+		  OMP_CLAUSE_CHAIN (c) = nc;
+		  c = nc;
+		}
+	    }
+	  else
+	    {
+	      if (OMP_CLAUSE_SIZE (c) == NULL_TREE)
+		OMP_CLAUSE_SIZE (c) = DECL_SIZE_UNIT (decl);
+	      gcc_assert ((n->value & GOVD_SEEN) == 0
+			  || ((n->value & (GOVD_PRIVATE | GOVD_FIRSTPRIVATE))
+			      == 0));
+	    }
+	  break;
+
+	case OMP_CLAUSE_TO:
+	case OMP_CLAUSE_FROM:
+	case OMP_CLAUSE__CACHE_:
+	  decl = OMP_CLAUSE_DECL (c);
+	  if (!DECL_P (decl))
+	    break;
+	  if (DECL_SIZE (decl)
+	      && TREE_CODE (DECL_SIZE (decl)) != INTEGER_CST)
+	    {
+	      tree decl2 = DECL_VALUE_EXPR (decl);
+	      gcc_assert (TREE_CODE (decl2) == INDIRECT_REF);
+	      decl2 = TREE_OPERAND (decl2, 0);
+	      gcc_assert (DECL_P (decl2));
+	      tree mem = build_simple_mem_ref (decl2);
+	      OMP_CLAUSE_DECL (c) = mem;
+	      OMP_CLAUSE_SIZE (c) = TYPE_SIZE_UNIT (TREE_TYPE (decl));
+	      if (ctx->outer_context)
+		{
+		  omp_notice_variable (ctx->outer_context, decl2, true);
+		  omp_notice_variable (ctx->outer_context,
+				       OMP_CLAUSE_SIZE (c), true);
+		}
+	    }
+	  else if (OMP_CLAUSE_SIZE (c) == NULL_TREE)
+	    OMP_CLAUSE_SIZE (c) = DECL_SIZE_UNIT (decl);
+	  break;
+
+	case OMP_CLAUSE_REDUCTION:
+	  if (OMP_CLAUSE_REDUCTION_INSCAN (c))
+	    {
+	      decl = OMP_CLAUSE_DECL (c);
+	      n = splay_tree_lookup (ctx->variables, (splay_tree_key) decl);
+	      if ((n->value & GOVD_REDUCTION_INSCAN) == 0)
+		{
+		  remove = true;
+		  error_at (OMP_CLAUSE_LOCATION (c),
+			    "%qD specified in %<inscan%> %<reduction%> clause "
+			    "but not in %<scan%> directive clause", decl);
+		  break;
+		}
+	      has_inscan_reductions = true;
+	    }
+	  /* FALLTHRU */
+	case OMP_CLAUSE_IN_REDUCTION:
+	case OMP_CLAUSE_TASK_REDUCTION:
+	  decl = OMP_CLAUSE_DECL (c);
+	  /* OpenACC reductions need a present_or_copy data clause.
+	     Add one if necessary.  Emit error when the reduction is private.  */
+	  if (ctx->region_type == ORT_ACC_PARALLEL
+	      || ctx->region_type == ORT_ACC_SERIAL)
+	    {
+	      n = splay_tree_lookup (ctx->variables, (splay_tree_key) decl);
+	      if (n->value & (GOVD_PRIVATE | GOVD_FIRSTPRIVATE))
+		{
+		  remove = true;
+		  error_at (OMP_CLAUSE_LOCATION (c), "invalid private "
+			    "reduction on %qE", DECL_NAME (decl));
+		}
+	      else if ((n->value & GOVD_MAP) == 0)
+		{
+		  tree next = OMP_CLAUSE_CHAIN (c);
+		  tree nc = build_omp_clause (UNKNOWN_LOCATION, OMP_CLAUSE_MAP);
+		  OMP_CLAUSE_SET_MAP_KIND (nc, GOMP_MAP_TOFROM);
+		  OMP_CLAUSE_DECL (nc) = decl;
+		  OMP_CLAUSE_CHAIN (c) = nc;
+		  lang_hooks.decls.omp_finish_clause (nc, pre_p);
+		  while (1)
+		    {
+		      OMP_CLAUSE_MAP_IN_REDUCTION (nc) = 1;
+		      if (OMP_CLAUSE_CHAIN (nc) == NULL)
+			break;
+		      nc = OMP_CLAUSE_CHAIN (nc);
+		    }
+		  OMP_CLAUSE_CHAIN (nc) = next;
+		  n->value |= GOVD_MAP;
+		}
+	    }
+	  if (DECL_P (decl)
+	      && omp_shared_to_firstprivate_optimizable_decl_p (decl))
+	    omp_mark_stores (gimplify_omp_ctxp->outer_context, decl);
+	  break;
+	case OMP_CLAUSE_COPYIN:
+	case OMP_CLAUSE_COPYPRIVATE:
+	case OMP_CLAUSE_IF:
+	case OMP_CLAUSE_NUM_THREADS:
+	case OMP_CLAUSE_NUM_TEAMS:
+	case OMP_CLAUSE_THREAD_LIMIT:
+	case OMP_CLAUSE_DIST_SCHEDULE:
+	case OMP_CLAUSE_DEVICE:
+	case OMP_CLAUSE_SCHEDULE:
+	case OMP_CLAUSE_NOWAIT:
+	case OMP_CLAUSE_ORDERED:
+	case OMP_CLAUSE_DEFAULT:
+	case OMP_CLAUSE_UNTIED:
+	case OMP_CLAUSE_COLLAPSE:
+	case OMP_CLAUSE_FINAL:
+	case OMP_CLAUSE_MERGEABLE:
+	case OMP_CLAUSE_PROC_BIND:
+	case OMP_CLAUSE_SAFELEN:
+	case OMP_CLAUSE_SIMDLEN:
+	case OMP_CLAUSE_DEPEND:
+	case OMP_CLAUSE_PRIORITY:
+	case OMP_CLAUSE_GRAINSIZE:
+	case OMP_CLAUSE_NUM_TASKS:
+	case OMP_CLAUSE_NOGROUP:
+	case OMP_CLAUSE_THREADS:
+	case OMP_CLAUSE_SIMD:
+	case OMP_CLAUSE_HINT:
+	case OMP_CLAUSE_DEFAULTMAP:
+	case OMP_CLAUSE_ORDER:
+	case OMP_CLAUSE_BIND:
+	case OMP_CLAUSE_USE_DEVICE_PTR:
+	case OMP_CLAUSE_USE_DEVICE_ADDR:
+	case OMP_CLAUSE_IS_DEVICE_PTR:
+	case OMP_CLAUSE_ASYNC:
+	case OMP_CLAUSE_WAIT:
+	case OMP_CLAUSE_INDEPENDENT:
+	case OMP_CLAUSE_NUM_GANGS:
+	case OMP_CLAUSE_NUM_WORKERS:
+	case OMP_CLAUSE_VECTOR_LENGTH:
+	case OMP_CLAUSE_GANG:
+	case OMP_CLAUSE_WORKER:
+	case OMP_CLAUSE_VECTOR:
+	case OMP_CLAUSE_AUTO:
+	case OMP_CLAUSE_SEQ:
+	case OMP_CLAUSE_TILE:
+	case OMP_CLAUSE_IF_PRESENT:
+	case OMP_CLAUSE_FINALIZE:
+	case OMP_CLAUSE_INCLUSIVE:
+	case OMP_CLAUSE_EXCLUSIVE:
+	  break;
+
+	default:
+	  gcc_unreachable ();
+	}
+
+      if (remove)
+	*list_p = OMP_CLAUSE_CHAIN (c);
+      else
+	list_p = &OMP_CLAUSE_CHAIN (c);
+    }
+
+  /* Add in any implicit data sharing.  */
+  struct gimplify_adjust_omp_clauses_data data;
+  data.list_p = list_p;
+  data.pre_p = pre_p;
+  splay_tree_foreach (ctx->variables, gimplify_adjust_omp_clauses_1, &data);
+
+  if (has_inscan_reductions)
+    for (c = *orig_list_p; c; c = OMP_CLAUSE_CHAIN (c))
+      if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_LINEAR
+	  && !OMP_CLAUSE_LINEAR_NO_COPYIN (c))
+	{
+	  error_at (OMP_CLAUSE_LOCATION (c),
+		    "%<inscan%> %<reduction%> clause used together with "
+		    "%<linear%> clause for a variable other than loop "
+		    "iterator");
+	  break;
+	}
+
+  gimplify_omp_ctxp = ctx->outer_context;
+  delete_omp_context (ctx);
+}
+
+
+// Source: gimplify.c
+// Lines 10166-10665

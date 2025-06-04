@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'nw' at line 3
+2. Pointer 'data' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+et_new_tree (void *data)
+{
+  et_node *nw = et_nodes.allocate ();
+
+  nw->data = data;
+  nw->father = NULL;
+  nw->left = NULL;
+  nw->right = NULL;
+  nw->son = NULL;
+
+  nw->rightmost_occ = et_new_occ (nw);
+  nw->parent_occ = NULL;
+
+  return nw;
+}
+
+
+// Source: et-forest.c
+// Lines 463-477
+
+
+[ANSWER]
+MUST

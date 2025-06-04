@@ -1,0 +1,278 @@
+int quicly_receive(quicly_conn_t *conn, struct sockaddr *dest_addr, struct sockaddr *src_addr, quicly_decoded_packet_t *packet)
+{
+    ptls_cipher_context_t *header_protection;
+    struct {
+        int (*cb)(void *, uint64_t, quicly_decoded_packet_t *, size_t, size_t *);
+        void *ctx;
+    } aead;
+    struct st_quicly_pn_space_t **space;
+    size_t epoch;
+    ptls_iovec_t payload;
+    uint64_t pn, offending_frame_type = QUICLY_FRAME_TYPE_PADDING;
+    int is_ack_only, ret;
+
+    assert(src_addr->sa_family == AF_INET || src_addr->sa_family == AF_INET6);
+
+    lock_now(conn, 0);
+
+    QUICLY_PROBE(RECEIVE, conn, conn->stash.now,
+                 QUICLY_PROBE_HEXDUMP(packet->cid.dest.encrypted.base, packet->cid.dest.encrypted.len), packet->octets.base,
+                 packet->octets.len);
+
+    if (is_stateless_reset(conn, packet)) {
+        ret = handle_stateless_reset(conn);
+        goto Exit;
+    }
+
+    /* FIXME check peer address */
+
+    /* add unconditionally, as packet->datagram_size is set only for the first packet within the UDP datagram */
+    conn->super.stats.num_bytes.received += packet->datagram_size;
+
+    switch (conn->super.state) {
+    case QUICLY_STATE_CLOSING:
+        ++conn->egress.connection_close.num_packets_received;
+        /* respond with a CONNECTION_CLOSE frame using exponential back-off */
+        if (__builtin_popcountl(conn->egress.connection_close.num_packets_received) == 1)
+            conn->egress.send_ack_at = 0;
+        ret = 0;
+        goto Exit;
+    case QUICLY_STATE_DRAINING:
+        ret = 0;
+        goto Exit;
+    default:
+        break;
+    }
+
+    if (QUICLY_PACKET_IS_LONG_HEADER(packet->octets.base[0])) {
+        if (conn->super.state == QUICLY_STATE_FIRSTFLIGHT) {
+            if (packet->version == 0) {
+                ret = handle_version_negotiation_packet(conn, packet);
+                goto Exit;
+            }
+        }
+        if (packet->version != conn->super.version) {
+            ret = QUICLY_ERROR_PACKET_IGNORED;
+            goto Exit;
+        }
+        switch (packet->octets.base[0] & QUICLY_PACKET_TYPE_BITMASK) {
+        case QUICLY_PACKET_TYPE_RETRY: {
+            assert(packet->encrypted_off + PTLS_AESGCM_TAG_SIZE == packet->octets.len);
+            /* handle only if the connection is the client */
+            if (!quicly_is_client(conn)) {
+                ret = QUICLY_ERROR_PACKET_IGNORED;
+                goto Exit;
+            }
+            /* server CID has to change */
+            if (quicly_cid_is_equal(&conn->super.remote.cid_set.cids[0].cid, packet->cid.src)) {
+                ret = QUICLY_ERROR_PACKET_IGNORED;
+                goto Exit;
+            }
+            /* do not accept a second Retry */
+            if (is_retry(conn)) {
+                ret = QUICLY_ERROR_PACKET_IGNORED;
+                goto Exit;
+            }
+            ptls_aead_context_t *retry_aead = create_retry_aead(conn->super.ctx, conn->super.version, 0);
+            int retry_ok = validate_retry_tag(packet, &conn->super.remote.cid_set.cids[0].cid, retry_aead);
+            ptls_aead_free(retry_aead);
+            if (!retry_ok) {
+                ret = QUICLY_ERROR_PACKET_IGNORED;
+                goto Exit;
+            }
+            /* check size of the Retry packet */
+            if (packet->token.len > QUICLY_MAX_TOKEN_LEN) {
+                ret = QUICLY_ERROR_PACKET_IGNORED; /* TODO this is a immediate fatal error, chose a better error code */
+                goto Exit;
+            }
+            /* store token and ODCID */
+            free(conn->token.base);
+            if ((conn->token.base = malloc(packet->token.len)) == NULL) {
+                ret = PTLS_ERROR_NO_MEMORY;
+                goto Exit;
+            }
+            memcpy(conn->token.base, packet->token.base, packet->token.len);
+            conn->token.len = packet->token.len;
+            /* update DCID */
+            quicly_set_cid(&conn->super.remote.cid_set.cids[0].cid, packet->cid.src);
+            conn->retry_scid = conn->super.remote.cid_set.cids[0].cid;
+            /* replace initial keys, or drop the keys if this is a response packet to a greased version */
+            if ((ret = reinstall_initial_encryption(conn, QUICLY_ERROR_PACKET_IGNORED)) != 0)
+                goto Exit;
+            /* schedule retransmit */
+            ret = discard_sentmap_by_epoch(conn, ~0u);
+            goto Exit;
+        } break;
+        case QUICLY_PACKET_TYPE_INITIAL:
+            if (conn->initial == NULL || (header_protection = conn->initial->cipher.ingress.header_protection) == NULL) {
+                ret = QUICLY_ERROR_PACKET_IGNORED;
+                goto Exit;
+            }
+            if (quicly_is_client(conn)) {
+                /* client: update cid if this is the first Initial packet that's being received */
+                if (conn->super.state == QUICLY_STATE_FIRSTFLIGHT)
+                    quicly_set_cid(&conn->super.remote.cid_set.cids[0].cid, packet->cid.src);
+            } else {
+                /* server: ignore packets that are too small */
+                if (packet->datagram_size < QUICLY_MIN_CLIENT_INITIAL_SIZE) {
+                    ret = QUICLY_ERROR_PACKET_IGNORED;
+                    goto Exit;
+                }
+            }
+            aead.cb = aead_decrypt_fixed_key;
+            aead.ctx = conn->initial->cipher.ingress.aead;
+            space = (void *)&conn->initial;
+            epoch = QUICLY_EPOCH_INITIAL;
+            break;
+        case QUICLY_PACKET_TYPE_HANDSHAKE:
+            if (conn->handshake == NULL || (header_protection = conn->handshake->cipher.ingress.header_protection) == NULL) {
+                ret = QUICLY_ERROR_PACKET_IGNORED;
+                goto Exit;
+            }
+            aead.cb = aead_decrypt_fixed_key;
+            aead.ctx = conn->handshake->cipher.ingress.aead;
+            space = (void *)&conn->handshake;
+            epoch = QUICLY_EPOCH_HANDSHAKE;
+            break;
+        case QUICLY_PACKET_TYPE_0RTT:
+            if (quicly_is_client(conn)) {
+                ret = QUICLY_ERROR_PACKET_IGNORED;
+                goto Exit;
+            }
+            if (conn->application == NULL ||
+                (header_protection = conn->application->cipher.ingress.header_protection.zero_rtt) == NULL) {
+                ret = QUICLY_ERROR_PACKET_IGNORED;
+                goto Exit;
+            }
+            aead.cb = aead_decrypt_fixed_key;
+            aead.ctx = conn->application->cipher.ingress.aead[1];
+            space = (void *)&conn->application;
+            epoch = QUICLY_EPOCH_0RTT;
+            break;
+        default:
+            ret = QUICLY_ERROR_PACKET_IGNORED;
+            goto Exit;
+        }
+    } else {
+        /* short header packet */
+        if (conn->application == NULL ||
+            (header_protection = conn->application->cipher.ingress.header_protection.one_rtt) == NULL) {
+            ret = QUICLY_ERROR_PACKET_IGNORED;
+            goto Exit;
+        }
+        aead.cb = aead_decrypt_1rtt;
+        aead.ctx = conn;
+        space = (void *)&conn->application;
+        epoch = QUICLY_EPOCH_1RTT;
+    }
+
+    /* decrypt */
+    if ((ret = decrypt_packet(header_protection, aead.cb, aead.ctx, &(*space)->next_expected_packet_number, packet, &pn,
+                              &payload)) != 0) {
+        ++conn->super.stats.num_packets.decryption_failed;
+        QUICLY_PROBE(PACKET_DECRYPTION_FAILED, conn, conn->stash.now, pn);
+        goto Exit;
+    }
+
+    QUICLY_PROBE(PACKET_RECEIVED, conn, conn->stash.now, pn, payload.base, payload.len, get_epoch(packet->octets.base[0]));
+
+    /* update states */
+    if (conn->super.state == QUICLY_STATE_FIRSTFLIGHT)
+        conn->super.state = QUICLY_STATE_CONNECTED;
+    conn->super.stats.num_packets.received += 1;
+
+    /* state updates, that are triggered by the receipt of a packet */
+    switch (epoch) {
+    case QUICLY_EPOCH_INITIAL:
+        /* update max_ingress_udp_payload_size if necessary */
+        if (conn->initial->largest_ingress_udp_payload_size < packet->datagram_size)
+            conn->initial->largest_ingress_udp_payload_size = packet->datagram_size;
+        break;
+    case QUICLY_EPOCH_HANDSHAKE:
+        /* Discard Initial space before processing the payload of the Handshake packet to avoid the chance of an ACK frame included
+         * in the Handshake packet setting a loss timer for the Initial packet. */
+        if (conn->initial != NULL) {
+            if ((ret = discard_handshake_context(conn, QUICLY_EPOCH_INITIAL)) != 0)
+                goto Exit;
+            setup_next_send(conn);
+            conn->super.remote.address_validation.validated = 1;
+        }
+        break;
+    default:
+        break;
+    }
+
+    /* handle the payload */
+    if ((ret = handle_payload(conn, epoch, payload.base, payload.len, &offending_frame_type, &is_ack_only)) != 0)
+        goto Exit;
+    if (*space != NULL && conn->super.state < QUICLY_STATE_CLOSING) {
+        if ((ret = record_receipt(*space, pn, is_ack_only, conn->stash.now, &conn->egress.send_ack_at)) != 0)
+            goto Exit;
+    }
+
+    /* state updates post payload processing */
+    switch (epoch) {
+    case QUICLY_EPOCH_INITIAL:
+        assert(conn->initial != NULL);
+        if (quicly_is_client(conn) && conn->handshake != NULL && conn->handshake->cipher.egress.aead != NULL) {
+            if ((ret = discard_handshake_context(conn, QUICLY_EPOCH_INITIAL)) != 0)
+                goto Exit;
+            setup_next_send(conn);
+        }
+        break;
+    case QUICLY_EPOCH_HANDSHAKE:
+        if (quicly_is_client(conn)) {
+            /* Running as a client.
+             * Respect "disable_migration" TP sent by the remote peer at the end of the TLS handshake. */
+            if (conn->super.local.address.sa.sa_family == AF_UNSPEC && dest_addr != NULL && dest_addr->sa_family != AF_UNSPEC &&
+                ptls_handshake_is_complete(conn->crypto.tls) && conn->super.remote.transport_params.disable_active_migration)
+                set_address(&conn->super.local.address, dest_addr);
+        } else {
+            /* Running as a server.
+             * If handshake was just completed, drop handshake context, schedule the first emission of HANDSHAKE_DONE frame. */
+            if (ptls_handshake_is_complete(conn->crypto.tls)) {
+                if ((ret = discard_handshake_context(conn, QUICLY_EPOCH_HANDSHAKE)) != 0)
+                    goto Exit;
+                assert(conn->handshake == NULL);
+                conn->egress.pending_flows |= QUICLY_PENDING_FLOW_HANDSHAKE_DONE_BIT;
+                setup_next_send(conn);
+            }
+        }
+        break;
+    case QUICLY_EPOCH_1RTT:
+        if (!is_ack_only && should_send_max_data(conn))
+            conn->egress.send_ack_at = 0;
+        break;
+    default:
+        break;
+    }
+
+    update_idle_timeout(conn, 1);
+
+Exit:
+    switch (ret) {
+    case 0:
+        /* Avoid time in the past being emitted by quicly_get_first_timeout. We hit the condition below when retransmission is
+         * suspended by the 3x limit (in which case we have loss.alarm_at set but return INT64_MAX from quicly_get_first_timeout
+         * until we receive something from the client).
+         */
+        if (conn->egress.loss.alarm_at < conn->stash.now)
+            conn->egress.loss.alarm_at = conn->stash.now;
+        assert_consistency(conn, 0);
+        break;
+    case PTLS_ERROR_NO_MEMORY:
+    case QUICLY_ERROR_STATE_EXHAUSTION:
+    case QUICLY_ERROR_PACKET_IGNORED:
+        break;
+    default: /* close connection */
+        initiate_close(conn, ret, offending_frame_type, "");
+        ret = 0;
+        break;
+    }
+    unlock_now(conn);
+    return ret;
+}
+
+
+// Source: quicly.c
+// Lines 5792-6065

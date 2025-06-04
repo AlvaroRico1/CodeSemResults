@@ -1,0 +1,92 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'nr_m_spare' at line 9
+2. Pointer 'mpt' at line 10
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int  __init replace_intsrc_all(struct mpc_table *mpc,
+					unsigned long mpc_new_phys,
+					unsigned long mpc_new_length)
+{
+#ifdef CONFIG_X86_IO_APIC
+	int i;
+#endif
+	int count = sizeof(*mpc);
+	int nr_m_spare = 0;
+	unsigned char *mpt = ((unsigned char *)mpc) + count;
+
+	pr_info("mpc_length %x\n", mpc->length);
+	while (count < mpc->length) {
+		switch (*mpt) {
+		case MP_PROCESSOR:
+			skip_entry(&mpt, &count, sizeof(struct mpc_cpu));
+			break;
+		case MP_BUS:
+			skip_entry(&mpt, &count, sizeof(struct mpc_bus));
+			break;
+		case MP_IOAPIC:
+			skip_entry(&mpt, &count, sizeof(struct mpc_ioapic));
+			break;
+		case MP_INTSRC:
+			check_irq_src((struct mpc_intsrc *)mpt, &nr_m_spare);
+			skip_entry(&mpt, &count, sizeof(struct mpc_intsrc));
+			break;
+		case MP_LINTSRC:
+			skip_entry(&mpt, &count, sizeof(struct mpc_lintsrc));
+			break;
+		default:
+			/* wrong mptable */
+			smp_dump_mptable(mpc, mpt);
+			goto out;
+		}
+	}
+
+#ifdef CONFIG_X86_IO_APIC
+	for (i = 0; i < mp_irq_entries; i++) {
+		if (irq_used[i])
+			continue;
+
+		if (mp_irqs[i].irqtype != mp_INT)
+			continue;
+
+		if (mp_irqs[i].irqflag != (MP_IRQTRIG_LEVEL |
+					   MP_IRQPOL_ACTIVE_LOW))
+			continue;
+
+		if (nr_m_spare > 0) {
+			apic_printk(APIC_VERBOSE, "*NEW* found\n");
+			nr_m_spare--;
+			memcpy(m_spare[nr_m_spare], &mp_irqs[i], sizeof(mp_irqs[i]));
+			m_spare[nr_m_spare] = NULL;
+		} else {
+			struct mpc_intsrc *m = (struct mpc_intsrc *)mpt;
+			count += sizeof(struct mpc_intsrc);
+			if (check_slot(mpc_new_phys, mpc_new_length, count) < 0)
+				goto out;
+			memcpy(m, &mp_irqs[i], sizeof(*m));
+			mpc->length = count;
+			mpt += sizeof(struct mpc_intsrc);
+		}
+		print_mp_irq_info(&mp_irqs[i]);
+	}
+#endif
+out:
+	/* update checksum */
+	mpc->checksum = 0;
+	mpc->checksum -= mpf_checksum((unsigned char *)mpc, mpc->length);
+
+	return 0;
+}
+
+
+// Source: mpparse.c
+// Lines 743-815
+
+
+[ANSWER]
+MUST-NOT

@@ -1,0 +1,52 @@
+collect_fallthrough_labels (gimple_stmt_iterator *gsi_p,
+			    auto_vec <struct label_entry> *labels,
+			    location_t *prevloc)
+{
+  gimple *prev = NULL;
+
+  *prevloc = UNKNOWN_LOCATION;
+  do
+    {
+      if (gimple_code (gsi_stmt (*gsi_p)) == GIMPLE_BIND)
+	{
+	  /* Recognize the special GIMPLE_BIND added by gimplify_switch_expr,
+	     which starts on a GIMPLE_SWITCH and ends with a break label.
+	     Handle that as a single statement that can fall through.  */
+	  gbind *bind = as_a <gbind *> (gsi_stmt (*gsi_p));
+	  gimple *first = gimple_seq_first_stmt (gimple_bind_body (bind));
+	  gimple *last = gimple_seq_last_stmt (gimple_bind_body (bind));
+	  if (last
+	      && gimple_code (first) == GIMPLE_SWITCH
+	      && gimple_code (last) == GIMPLE_LABEL)
+	    {
+	      tree label = gimple_label_label (as_a <glabel *> (last));
+	      if (SWITCH_BREAK_LABEL_P (label))
+		{
+		  prev = bind;
+		  gsi_next (gsi_p);
+		  continue;
+		}
+	    }
+	}
+      if (gimple_code (gsi_stmt (*gsi_p)) == GIMPLE_BIND
+	  || gimple_code (gsi_stmt (*gsi_p)) == GIMPLE_TRY)
+	{
+	  /* Nested scope.  Only look at the last statement of
+	     the innermost scope.  */
+	  location_t bind_loc = gimple_location (gsi_stmt (*gsi_p));
+	  gimple *last = last_stmt_in_scope (gsi_stmt (*gsi_p));
+	  if (last)
+	    {
+	      prev = last;
+	      /* It might be a label without a location.  Use the
+		 location of the scope then.  */
+	      if (!gimple_has_location (prev))
+		*prevloc = bind_loc;
+	    }
+	  gsi_next (gsi_p);
+	  continue;
+	}
+
+
+// Source: gimplify.c
+// Lines 2052-2099

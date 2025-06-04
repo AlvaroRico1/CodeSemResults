@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ranges' at line 1
+2. Pointer 'new_ranges' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int insert_at(quicly_ranges_t *ranges, uint64_t start, uint64_t end, size_t slot)
+{
+    if (ranges->num_ranges == ranges->capacity) {
+        size_t new_capacity = ranges->capacity < 4 ? 4 : ranges->capacity * 2;
+        quicly_range_t *new_ranges = malloc(new_capacity * sizeof(*new_ranges));
+        if (new_ranges == NULL)
+            return PTLS_ERROR_NO_MEMORY;
+        COPY(new_ranges, ranges->ranges, slot);
+        COPY(new_ranges + slot + 1, ranges->ranges + slot, ranges->num_ranges - slot);
+        if (ranges->ranges != &ranges->_initial)
+            free(ranges->ranges);
+        ranges->ranges = new_ranges;
+        ranges->capacity = new_capacity;
+    } else {
+        MOVE(ranges->ranges + slot + 1, ranges->ranges + slot, ranges->num_ranges - slot);
+    }
+
+
+// Source: ranges.c
+// Lines 42-57
+
+
+[ANSWER]
+MUST

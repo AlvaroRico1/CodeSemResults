@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'state' at line 4\n2. Pointer 'lsp' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic bool nfs4_update_lock_stateid(struct nfs4_lock_state *lsp,\n\t\tconst nfs4_stateid *stateid)\n{\n\tstruct nfs4_state *state = lsp->ls_state;\n\tbool ret = false;\n\n\tspin_lock(&state->state_lock);\n\tif (!nfs4_stateid_match_other(stateid, &lsp->ls_stateid))\n\t\tgoto out_noupdate;\n\tif (!nfs4_stateid_is_newer(stateid, &lsp->ls_stateid))\n\t\tgoto out_noupdate;\n\tnfs4_stateid_copy(&lsp->ls_stateid, stateid);\n\tret = true;\nout_noupdate:\n\tspin_unlock(&state->state_lock);\n\treturn ret;\n}\n\n\n// Source: nfs4proc.c\n// Lines 1772-1788\n",
+  "ANSWER": "MUST"
+}

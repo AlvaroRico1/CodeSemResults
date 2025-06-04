@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'hend' at line 3\n2. Pointer 'hp' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int envname_is_headername(const h2o_iovec_t *env, const h2o_iovec_t *header)\n{\n    const char *ep, *hp, *hend;\n\n    if (env->len != 5 + header->len)\n        return 0;\n    if (memcmp(env->base, \"HTTP_\", 5) != 0)\n        return 0;\n    for (ep = env->base + 5, hp = header->base, hend = hp + header->len; hp < hend; ++ep, ++hp)\n        if (*ep != h2o_toupper(*hp))\n            return 0;\n    return 1;\n}\n\n\n// Source: fastcgi.c\n// Lines 202-214\n",
+  "ANSWER": "MUST"
+}

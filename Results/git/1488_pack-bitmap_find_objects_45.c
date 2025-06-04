@@ -1,0 +1,35 @@
+static struct bitmap *find_objects(struct bitmap_index *bitmap_git,
+				   struct rev_info *revs,
+				   struct object_list *roots,
+				   struct bitmap *seen,
+				   struct list_objects_filter_options *filter)
+{
+	struct bitmap *base = NULL;
+	int needs_walk = 0;
+
+	struct object_list *not_mapped = NULL;
+
+	/*
+	 * Go through all the roots for the walk. The ones that have bitmaps
+	 * on the bitmap index will be `or`ed together to form an initial
+	 * global reachability analysis.
+	 *
+	 * The ones without bitmaps in the index will be stored in the
+	 * `not_mapped_list` for further processing.
+	 */
+	while (roots) {
+		struct object *object = roots->item;
+		roots = roots->next;
+
+		if (object->type == OBJ_COMMIT &&
+		    add_commit_to_bitmap(bitmap_git, &base, (struct commit *)object)) {
+			object->flags |= SEEN;
+			continue;
+		}
+
+		object_list_insert(object, &not_mapped);
+	}
+
+
+// Source: pack-bitmap.c
+// Lines 730-760

@@ -1,0 +1,75 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'host_info' at line 47
+2. Pointer 't' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static const char *construct_prompt() {
+  processed_prompt.mem_free();    // Erase the old prompt
+  time_t lclock = time(nullptr);  // Get the date struct
+  struct tm *t = localtime(&lclock);
+
+  /* parse thru the settings for the prompt */
+  for (char *c = current_prompt; *c; c++) {
+    if (*c != PROMPT_CHAR)
+      processed_prompt.append(*c);
+    else {
+      switch (*++c) {
+        case '\0':
+          c--;  // stop it from going beyond if ends with %
+          break;
+        case 'c':
+          add_int_to_prompt(++prompt_counter);
+          break;
+        case 'C':
+          add_int_to_prompt(mysql_thread_id(&mysql));
+          break;
+        case 'v':
+          if (connected)
+            processed_prompt.append(mysql_get_server_info(&mysql));
+          else
+            processed_prompt.append("not_connected");
+          break;
+        case 'd':
+          processed_prompt.append(current_db ? current_db : "(none)");
+          break;
+        case 'h': {
+          const char *prompt;
+          prompt = connected ? mysql_get_host_info(&mysql) : "not_connected";
+          if (strstr(prompt, "Localhost"))
+            processed_prompt.append("localhost");
+          else {
+            const char *end = strcend(prompt, ' ');
+            processed_prompt.append(prompt, (uint)(end - prompt));
+          }
+          break;
+        }
+        case 'p': {
+          if (!connected) {
+            processed_prompt.append("not_connected");
+            break;
+          }
+
+          const char *host_info = mysql_get_host_info(&mysql);
+          if (strstr(host_info, "memory")) {
+            processed_prompt.append(mysql.host);
+          } else if (strstr(host_info, "TCP/IP") || !mysql.unix_socket)
+            add_int_to_prompt(mysql.port);
+          else {
+            char *pos = strrchr(mysql.unix_socket, '/');
+            processed_prompt.append(pos ? pos + 1 : mysql.unix_socket);
+          }
+        } break;
+
+
+// Source: mysql.cc
+// Lines 5108-5163
+
+
+[ANSWER]
+MUST-NOT

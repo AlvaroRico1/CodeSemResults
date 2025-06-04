@@ -1,0 +1,1 @@
+curr_bind_ai,mysql/sql-common/client.cc,268,saved_error,mysql/sql-common/client.cc,187,0

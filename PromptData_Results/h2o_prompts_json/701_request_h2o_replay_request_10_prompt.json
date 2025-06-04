@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'end' at line 7\n2. Pointer 'handler' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid h2o_replay_request(h2o_req_t *req)\n{\n    close_generator_and_filters(req);\n    reset_response(req);\n\n    if (req->handler != NULL) {\n        h2o_handler_t **handler = req->pathconf->handlers.entries, **end = handler + req->pathconf->handlers.size;\n        for (;; ++handler) {\n            assert(handler != end);\n            if (*handler == req->handler)\n                break;\n        }\n        call_handlers(req, handler);\n    } else {\n        process_resolved_request(req, req->conn->hosts);\n    }\n\n\n// Source: request.c\n// Lines 476-491\n",
+  "ANSWER": "MUST"
+}

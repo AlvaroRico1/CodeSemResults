@@ -1,0 +1,1 @@
+names_ptr,mysql/sql-common/bind_params.cc,10,send_parameter_set_count,mysql/sql-common/bind_params.cc,7,0

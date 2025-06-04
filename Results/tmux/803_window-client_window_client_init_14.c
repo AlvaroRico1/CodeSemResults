@@ -1,0 +1,38 @@
+window_client_init(struct window_mode_entry *wme,
+    __unused struct cmd_find_state *fs, struct args *args)
+{
+	struct window_pane		*wp = wme->wp;
+	struct window_client_modedata	*data;
+	struct screen			*s;
+
+	wme->data = data = xcalloc(1, sizeof *data);
+	data->wp = wp;
+
+	if (args == NULL || !args_has(args, 'F'))
+		data->format = xstrdup(WINDOW_CLIENT_DEFAULT_FORMAT);
+	else
+		data->format = xstrdup(args_get(args, 'F'));
+	if (args == NULL || !args_has(args, 'K'))
+		data->key_format = xstrdup(WINDOW_CLIENT_DEFAULT_KEY_FORMAT);
+	else
+		data->key_format = xstrdup(args_get(args, 'K'));
+	if (args == NULL || args_count(args) == 0)
+		data->command = xstrdup(WINDOW_CLIENT_DEFAULT_COMMAND);
+	else
+		data->command = xstrdup(args_string(args, 0));
+
+	data->data = mode_tree_start(wp, args, window_client_build,
+	    window_client_draw, NULL, window_client_menu, NULL,
+	    window_client_get_key, data, window_client_menu_items,
+	    window_client_sort_list, nitems(window_client_sort_list), &s);
+	mode_tree_zoom(data->data, args);
+
+	mode_tree_build(data->data);
+	mode_tree_draw(data->data);
+
+	return (s);
+}
+
+
+// Source: window-client.c
+// Lines 288-321

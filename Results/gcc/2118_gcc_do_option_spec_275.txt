@@ -1,0 +1,1 @@
+spec,gcc/gcc/gcc.c,1,name,gcc/gcc/gcc.c,1,2

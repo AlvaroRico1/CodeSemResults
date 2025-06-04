@@ -1,0 +1,1 @@
+label,tmux/window-tree.c,11,pane_idx,tmux/window-tree.c,10,2

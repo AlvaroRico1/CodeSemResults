@@ -1,0 +1,1 @@
+linenr,git/range-diff.c,92,eol,git/range-diff.c,48,2

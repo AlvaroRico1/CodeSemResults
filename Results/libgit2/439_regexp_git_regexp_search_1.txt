@@ -1,0 +1,1 @@
+ovec,libgit2/src/util/regexp.c,3,static_ovec,libgit2/src/util/regexp.c,3,1

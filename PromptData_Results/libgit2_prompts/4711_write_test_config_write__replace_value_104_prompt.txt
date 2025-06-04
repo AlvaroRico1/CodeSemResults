@@ -1,0 +1,56 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'expected' at line 5
+2. Pointer 'i' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_config_write__replace_value(void)
+{
+	git_config *cfg;
+	int i;
+	int64_t l, expected = +9223372036854775803;
+
+	/* By freeing the config, we make sure we flush the values  */
+	cl_git_pass(git_config_open_ondisk(&cfg, "config9"));
+	cl_git_pass(git_config_set_int32(cfg, "core.dummy", 5));
+	git_config_free(cfg);
+
+	cl_git_pass(git_config_open_ondisk(&cfg, "config9"));
+	cl_git_pass(git_config_get_int32(&i, cfg, "core.dummy"));
+	cl_assert(i == 5);
+	git_config_free(cfg);
+
+	cl_git_pass(git_config_open_ondisk(&cfg, "config9"));
+	cl_git_pass(git_config_set_int32(cfg, "core.dummy", 1));
+	git_config_free(cfg);
+
+	cl_git_pass(git_config_open_ondisk(&cfg, "config9"));
+	cl_git_pass(git_config_set_int64(cfg, "core.verylong", expected));
+	git_config_free(cfg);
+
+	cl_git_pass(git_config_open_ondisk(&cfg, "config9"));
+	cl_git_pass(git_config_get_int64(&l, cfg, "core.verylong"));
+	cl_assert(l == expected);
+	git_config_free(cfg);
+
+	cl_git_pass(git_config_open_ondisk(&cfg, "config9"));
+	cl_must_fail(git_config_get_int32(&i, cfg, "core.verylong"));
+	git_config_free(cfg);
+
+	cl_git_pass(git_config_open_ondisk(&cfg, "config9"));
+	cl_git_pass(git_config_set_int64(cfg, "core.verylong", 1));
+	git_config_free(cfg);
+}
+
+
+// Source: write.c
+// Lines 22-58
+
+
+[ANSWER]
+MUST-NOT

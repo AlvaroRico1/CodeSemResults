@@ -1,0 +1,86 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'p' at line 3
+2. Pointer 'h64' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+FORCE_INLINE_TEMPLATE U64 XXH64_endian_align(const void* input, size_t len, U64 seed, XXH_endianess endian, XXH_alignment align)
+{
+    const BYTE* p = (const BYTE*)input;
+    const BYTE* const bEnd = p + len;
+    U64 h64;
+#define XXH_get64bits(p) XXH_readLE64_align(p, endian, align)
+
+#ifdef XXH_ACCEPT_NULL_INPUT_POINTER
+    if (p==NULL) {
+        len=0;
+        bEnd=p=(const BYTE*)(size_t)32;
+    }
+#endif
+
+    if (len>=32) {
+        const BYTE* const limit = bEnd - 32;
+        U64 v1 = seed + PRIME64_1 + PRIME64_2;
+        U64 v2 = seed + PRIME64_2;
+        U64 v3 = seed + 0;
+        U64 v4 = seed - PRIME64_1;
+
+        do {
+            v1 = XXH64_round(v1, XXH_get64bits(p)); p+=8;
+            v2 = XXH64_round(v2, XXH_get64bits(p)); p+=8;
+            v3 = XXH64_round(v3, XXH_get64bits(p)); p+=8;
+            v4 = XXH64_round(v4, XXH_get64bits(p)); p+=8;
+        } while (p<=limit);
+
+        h64 = XXH_rotl64(v1, 1) + XXH_rotl64(v2, 7) + XXH_rotl64(v3, 12) + XXH_rotl64(v4, 18);
+        h64 = XXH64_mergeRound(h64, v1);
+        h64 = XXH64_mergeRound(h64, v2);
+        h64 = XXH64_mergeRound(h64, v3);
+        h64 = XXH64_mergeRound(h64, v4);
+
+    } else {
+        h64  = seed + PRIME64_5;
+    }
+
+    h64 += (U64) len;
+
+    while (p+8<=bEnd) {
+        U64 const k1 = XXH64_round(0, XXH_get64bits(p));
+        h64 ^= k1;
+        h64  = XXH_rotl64(h64,27) * PRIME64_1 + PRIME64_4;
+        p+=8;
+    }
+
+    if (p+4<=bEnd) {
+        h64 ^= (U64)(XXH_get32bits(p)) * PRIME64_1;
+        h64 = XXH_rotl64(h64, 23) * PRIME64_2 + PRIME64_3;
+        p+=4;
+    }
+
+    while (p<bEnd) {
+        h64 ^= (*p) * PRIME64_5;
+        h64 = XXH_rotl64(h64, 11) * PRIME64_1;
+        p++;
+    }
+
+    h64 ^= h64 >> 33;
+    h64 *= PRIME64_2;
+    h64 ^= h64 >> 29;
+    h64 *= PRIME64_3;
+    h64 ^= h64 >> 32;
+
+    return h64;
+}
+
+
+// Source: xxhash.c
+// Lines 451-517
+
+
+[ANSWER]
+MAY

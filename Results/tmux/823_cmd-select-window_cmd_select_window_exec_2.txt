@@ -1,0 +1,1 @@
+s,tmux/cmd-select-window.c,8,target,tmux/cmd-select-window.c,6,1

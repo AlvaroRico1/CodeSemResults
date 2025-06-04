@@ -1,0 +1,924 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'new_part_info' at line 5
+2. Pointer 'tab_part_info' at line 28
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+uint prep_alter_part_table(THD *thd, TABLE *table, Alter_info *alter_info,
+                           HA_CREATE_INFO *create_info,
+                           Alter_table_ctx *alter_ctx MY_ATTRIBUTE((unused)),
+                           bool *partition_changed,
+                           partition_info **new_part_info) {
+  DBUG_TRACE;
+  assert(new_part_info);
+
+  /* Remove partitioning on a not partitioned table is not possible */
+  if (!table->part_info &&
+      (alter_info->flags & Alter_info::ALTER_REMOVE_PARTITIONING)) {
+    my_error(ER_PARTITION_MGMT_ON_NONPARTITIONED, MYF(0));
+    return true;
+  }
+
+  if (thd->work_part_info &&
+      !(thd->work_part_info = thd->lex->part_info->get_clone(thd, true)))
+    return true;
+
+  /* ALTER_ADMIN_PARTITION is handled in mysql_admin_table */
+  assert(!(alter_info->flags & Alter_info::ALTER_ADMIN_PARTITION));
+
+  if (alter_info->flags &
+      (Alter_info::ALTER_ADD_PARTITION | Alter_info::ALTER_DROP_PARTITION |
+       Alter_info::ALTER_COALESCE_PARTITION |
+       Alter_info::ALTER_REORGANIZE_PARTITION | Alter_info::ALTER_TABLE_REORG |
+       Alter_info::ALTER_REBUILD_PARTITION)) {
+    partition_info *tab_part_info;
+    partition_info *alt_part_info = thd->work_part_info;
+    uint flags = 0;
+    bool is_last_partition_reorged = false;
+    part_elem_value *tab_max_elem_val = nullptr;
+    part_elem_value *alt_max_elem_val = nullptr;
+    longlong tab_max_range = 0, alt_max_range = 0;
+    Partition_handler *part_handler = table->file->get_partition_handler();
+
+    if (!table->part_info) {
+      my_error(ER_PARTITION_MGMT_ON_NONPARTITIONED, MYF(0));
+      return true;
+    }
+    if (!part_handler) {
+      assert(0);
+      my_error(ER_PARTITION_MGMT_ON_NONPARTITIONED, MYF(0));
+      return true;
+    }
+
+    /*
+      Open our intermediate table, we will operate on a temporary instance
+      of the original table, to be able to skip copying all partitions.
+      Open it as a copy of the original table, and modify its partition_info
+      object to allow in-place ALTER implementation to perform the changes.
+    */
+    assert(thd->mdl_context.owns_equal_or_stronger_lock(
+        MDL_key::TABLE, alter_ctx->db, alter_ctx->table_name,
+        MDL_INTENTION_EXCLUSIVE));
+
+    /*
+      We will operate on a cached instance of the original table,
+      to be able to skip copying all non-changed partitions
+      while allowing concurrent access.
+
+      We create a new partition_info object which will carry
+      the new state of the partitions. It will only be temporary
+      attached to the handler when needed and then detached afterwards
+      (through handler::set_part_info()). That way it will not get reused
+      by next statement, even if the table object is reused due to LOCK TABLE.
+    */
+    tab_part_info = table->part_info->get_full_clone(thd);
+    if (!tab_part_info) {
+      mem_alloc_error(sizeof(partition_info));
+      return true;
+    }
+
+    if (alter_info->flags & Alter_info::ALTER_TABLE_REORG) {
+      uint new_part_no, curr_part_no;
+      /*
+        'ALTER TABLE t REORG PARTITION' only allowed with auto partition
+         if default partitioning is used.
+      */
+
+      if (tab_part_info->part_type != partition_type::HASH ||
+          ((table->s->db_type()->partition_flags() & HA_USE_AUTO_PARTITION) &&
+           !tab_part_info->use_default_num_partitions) ||
+          ((!(table->s->db_type()->partition_flags() &
+              HA_USE_AUTO_PARTITION)) &&
+           tab_part_info->use_default_num_partitions)) {
+        my_error(ER_REORG_NO_PARAM_ERROR, MYF(0));
+        goto err;
+      }
+      new_part_no = part_handler->get_default_num_partitions(create_info);
+      curr_part_no = tab_part_info->num_parts;
+      if (new_part_no == curr_part_no) {
+        /*
+          No change is needed, we will have the same number of partitions
+          after the change as before. Thus we can reply ok immediately
+          without any changes at all.
+        */
+        flags = part_handler->alter_flags(alter_info->flags);
+        if (flags & HA_INPLACE_CHANGE_PARTITION) {
+          *new_part_info = tab_part_info;
+          /* Force table re-open for consistency with the main case. */
+          table->invalidate_dict();
+        }
+
+        thd->work_part_info = tab_part_info;
+        return false;
+      } else if (new_part_no > curr_part_no) {
+        /*
+          We will add more partitions, we use the ADD PARTITION without
+          setting the flag for no default number of partitions
+        */
+        alter_info->flags |= Alter_info::ALTER_ADD_PARTITION;
+        thd->work_part_info->num_parts = new_part_no - curr_part_no;
+      } else {
+        /*
+          We will remove hash partitions, we use the COALESCE PARTITION
+          without setting the flag for no default number of partitions
+        */
+        alter_info->flags |= Alter_info::ALTER_COALESCE_PARTITION;
+        alter_info->num_parts = curr_part_no - new_part_no;
+      }
+    }
+    if (!(flags = part_handler->alter_flags(alter_info->flags))) {
+      my_error(ER_PARTITION_FUNCTION_FAILURE, MYF(0));
+      goto err;
+    }
+    if (flags & HA_INPLACE_CHANGE_PARTITION) {
+      /*
+        "Inplace" change of partitioning is supported in this
+        case. We will change TABLE::part_info (as this is how we pass
+        information to storage engine in this case), so the table
+        must be reopened.
+      */
+      *new_part_info = tab_part_info;
+      table->invalidate_dict();
+    }
+    DBUG_PRINT("info", ("*fast_alter_table flags: 0x%x", flags));
+    if ((alter_info->flags & Alter_info::ALTER_ADD_PARTITION) ||
+        (alter_info->flags & Alter_info::ALTER_REORGANIZE_PARTITION)) {
+      if (thd->work_part_info->part_type != tab_part_info->part_type) {
+        if (thd->work_part_info->part_type == partition_type::NONE) {
+          if (tab_part_info->part_type == partition_type::RANGE) {
+            my_error(ER_PARTITIONS_MUST_BE_DEFINED_ERROR, MYF(0), "RANGE");
+            goto err;
+          } else if (tab_part_info->part_type == partition_type::LIST) {
+            my_error(ER_PARTITIONS_MUST_BE_DEFINED_ERROR, MYF(0), "LIST");
+            goto err;
+          }
+          /*
+            Hash partitions can be altered without parser finds out about
+            that it is HASH partitioned. So no error here.
+          */
+        } else {
+          if (thd->work_part_info->part_type == partition_type::RANGE) {
+            my_error(ER_PARTITION_WRONG_VALUES_ERROR, MYF(0), "RANGE",
+                     "LESS THAN");
+          } else if (thd->work_part_info->part_type == partition_type::LIST) {
+            assert(thd->work_part_info->part_type == partition_type::LIST);
+            my_error(ER_PARTITION_WRONG_VALUES_ERROR, MYF(0), "LIST", "IN");
+          } else if (tab_part_info->part_type == partition_type::RANGE) {
+            my_error(ER_PARTITION_REQUIRES_VALUES_ERROR, MYF(0), "RANGE",
+                     "LESS THAN");
+          } else {
+            assert(tab_part_info->part_type == partition_type::LIST);
+            my_error(ER_PARTITION_REQUIRES_VALUES_ERROR, MYF(0), "LIST", "IN");
+          }
+          goto err;
+        }
+      }
+      if ((tab_part_info->column_list &&
+           alt_part_info->num_columns != tab_part_info->num_columns) ||
+          (!tab_part_info->column_list &&
+           (tab_part_info->part_type == partition_type::RANGE ||
+            tab_part_info->part_type == partition_type::LIST) &&
+           alt_part_info->num_columns != 1U) ||
+          (!tab_part_info->column_list &&
+           tab_part_info->part_type == partition_type::HASH &&
+           alt_part_info->num_columns != 0)) {
+        my_error(ER_PARTITION_COLUMN_LIST_ERROR, MYF(0));
+        goto err;
+      }
+      alt_part_info->column_list = tab_part_info->column_list;
+      if (alt_part_info->fix_parser_data(thd)) {
+        goto err;
+      }
+    }
+    if (alter_info->flags & Alter_info::ALTER_ADD_PARTITION) {
+      /*
+        We start by moving the new partitions to the list of temporary
+        partitions. We will then check that the new partitions fit in the
+        partitioning scheme as currently set-up.
+        Partitions are always added at the end in ADD PARTITION.
+      */
+      uint num_new_partitions = alt_part_info->num_parts;
+      uint num_orig_partitions = tab_part_info->num_parts;
+      uint check_total_partitions = num_new_partitions + num_orig_partitions;
+      uint new_total_partitions = check_total_partitions;
+      /*
+        We allow quite a lot of values to be supplied by defaults, however we
+        must know the number of new partitions in this case.
+      */
+      if (thd->lex->no_write_to_binlog &&
+          tab_part_info->part_type != partition_type::HASH) {
+        my_error(ER_NO_BINLOG_ERROR, MYF(0));
+        goto err;
+      }
+      if (tab_part_info->defined_max_value) {
+        my_error(ER_PARTITION_MAXVALUE_ERROR, MYF(0));
+        goto err;
+      }
+      if (num_new_partitions == 0) {
+        my_error(ER_ADD_PARTITION_NO_NEW_PARTITION, MYF(0));
+        goto err;
+      }
+      if (tab_part_info->is_sub_partitioned()) {
+        if (alt_part_info->num_subparts == 0)
+          alt_part_info->num_subparts = tab_part_info->num_subparts;
+        else if (alt_part_info->num_subparts != tab_part_info->num_subparts) {
+          my_error(ER_ADD_PARTITION_SUBPART_ERROR, MYF(0));
+          goto err;
+        }
+        check_total_partitions =
+            new_total_partitions * alt_part_info->num_subparts;
+      }
+      if (check_total_partitions > MAX_PARTITIONS) {
+        my_error(ER_TOO_MANY_PARTITIONS_ERROR, MYF(0));
+        goto err;
+      }
+      alt_part_info->part_type = tab_part_info->part_type;
+      alt_part_info->subpart_type = tab_part_info->subpart_type;
+      if (alt_part_info->set_up_defaults_for_partitioning(
+              part_handler, nullptr, tab_part_info->num_parts)) {
+        goto err;
+      }
+      /*
+      Handling of on-line cases:
+
+      ADD PARTITION for RANGE/LIST PARTITIONING:
+      ------------------------------------------
+      For range and list partitions add partition is simply adding a
+      new empty partition to the table. If the handler support this we
+      will use the simple method of doing this. The figure below shows
+      an example of this and the states involved in making this change.
+
+      Existing partitions                                     New added
+      partitions
+      ------       ------        ------        ------      |  ------    ------
+      |    |       |    |        |    |        |    |      |  |    |    |    |
+      | p0 |       | p1 |        | p2 |        | p3 |      |  | p4 |    | p5 |
+      ------       ------        ------        ------      |  ------    ------
+      PART_NORMAL  PART_NORMAL   PART_NORMAL   PART_NORMAL    PART_TO_BE_ADDED*2
+      PART_NORMAL  PART_NORMAL   PART_NORMAL   PART_NORMAL    PART_IS_ADDED*2
+
+      The first line is the states before adding the new partitions and the
+      second line is after the new partitions are added. All the partitions are
+      in the partitions list, no partitions are placed in the temp_partitions
+      list.
+
+      ADD PARTITION for HASH PARTITIONING
+      -----------------------------------
+      This little figure tries to show the various partitions involved when
+      adding two new partitions to a linear hash based partitioned table with
+      four partitions to start with, which lists are used and the states they
+      pass through. Adding partitions to a normal hash based is similar except
+      that it is always all the existing partitions that are reorganised not
+      only a subset of them.
+
+      Existing partitions                                     New added
+      partitions
+      ------       ------        ------        ------      |  ------    ------
+      |    |       |    |        |    |        |    |      |  |    |    |    |
+      | p0 |       | p1 |        | p2 |        | p3 |      |  | p4 |    | p5 |
+      ------       ------        ------        ------      |  ------    ------
+      PART_CHANGED PART_CHANGED  PART_NORMAL   PART_NORMAL    PART_TO_BE_ADDED
+      PART_IS_CHANGED*2          PART_NORMAL   PART_NORMAL    PART_IS_ADDED
+      PART_NORMAL  PART_NORMAL   PART_NORMAL   PART_NORMAL    PART_IS_ADDED
+
+      Reorganised existing partitions
+      ------      ------
+      |    |      |    |
+      | p0'|      | p1'|
+      ------      ------
+
+      p0 - p5 will be in the partitions list of partitions.
+      p0' and p1' will actually not exist as separate objects, there presence
+      can be deduced from the state of the partition and also the names of those
+      partitions can be deduced this way.
+
+      After adding the partitions and copying the partition data to p0', p1',
+      p4 and p5 from p0 and p1 the states change to adapt for the new situation
+      where p0 and p1 is dropped and replaced by p0' and p1' and the new p4 and
+      p5 are in the table again.
+
+      The first line above shows the states of the partitions before we start
+      adding and copying partitions, the second after completing the adding
+      and copying and finally the third line after also dropping the partitions
+      that are reorganised.
+      */
+      if (*new_part_info && tab_part_info->part_type == partition_type::HASH) {
+        uint part_no = 0, start_part = 1, start_sec_part = 1;
+        uint end_part = 0, end_sec_part = 0;
+        uint upper_2n = tab_part_info->linear_hash_mask + 1;
+        uint lower_2n = upper_2n >> 1;
+        bool all_parts = true;
+        if (tab_part_info->linear_hash_ind && num_new_partitions < upper_2n) {
+          /*
+            An analysis of which parts needs reorganisation shows that it is
+            divided into two intervals. The first interval is those parts
+            that are reorganised up until upper_2n - 1. From upper_2n and
+            onwards it starts again from partition 0 and goes on until
+            it reaches p(upper_2n - 1). If the last new partition reaches
+            beyond upper_2n - 1 then the first interval will end with
+            p(lower_2n - 1) and start with p(num_orig_partitions - lower_2n).
+            If lower_2n partitions are added then p0 to p(lower_2n - 1) will
+            be reorganised which means that the two interval becomes one
+            interval at this point. Thus only when adding less than
+            lower_2n partitions and going beyond a total of upper_2n we
+            actually get two intervals.
+
+            To exemplify this assume we have 6 partitions to start with and
+            add 1, 2, 3, 5, 6, 7, 8, 9 partitions.
+            The first to add after p5 is p6 = 110 in bit numbers. Thus we
+            can see that 10 = p2 will be partition to reorganise if only one
+            partition.
+            If 2 partitions are added we reorganise [p2, p3]. Those two
+            cases are covered by the second if part below.
+            If 3 partitions are added we reorganise [p2, p3] U [p0,p0]. This
+            part is covered by the else part below.
+            If 5 partitions are added we get [p2,p3] U [p0, p2] = [p0, p3].
+            This is covered by the first if part where we need the max check
+            to here use lower_2n - 1.
+            If 7 partitions are added we get [p2,p3] U [p0, p4] = [p0, p4].
+            This is covered by the first if part but here we use the first
+            calculated end_part.
+            Finally with 9 new partitions we would also reorganise p6 if we
+            used the method below but we cannot reorganise more partitions
+            than what we had from the start and thus we simply set all_parts
+            to true. In this case we don't get into this if-part at all.
+          */
+          all_parts = false;
+          if (num_new_partitions >= lower_2n) {
+            /*
+              In this case there is only one interval since the two intervals
+              overlap and this starts from zero to last_part_no - upper_2n
+            */
+            start_part = 0;
+            end_part = new_total_partitions - (upper_2n + 1);
+            end_part = max(lower_2n - 1, end_part);
+          } else if (new_total_partitions <= upper_2n) {
+            /*
+              Also in this case there is only one interval since we are not
+              going over a 2**n boundary
+            */
+            start_part = num_orig_partitions - lower_2n;
+            end_part = start_part + (num_new_partitions - 1);
+          } else {
+            /* We have two non-overlapping intervals since we are not
+               passing a 2**n border and we have not at least lower_2n
+               new parts that would ensure that the intervals become
+               overlapping.
+            */
+            start_part = num_orig_partitions - lower_2n;
+            end_part = upper_2n - 1;
+            start_sec_part = 0;
+            end_sec_part = new_total_partitions - (upper_2n + 1);
+          }
+        }
+        List_iterator<partition_element> tab_it(tab_part_info->partitions);
+        part_no = 0;
+        do {
+          partition_element *p_elem = tab_it++;
+          if (all_parts || (part_no >= start_part && part_no <= end_part) ||
+              (part_no >= start_sec_part && part_no <= end_sec_part)) {
+            p_elem->part_state = PART_CHANGED;
+          }
+        } while (++part_no < num_orig_partitions);
+      }
+      /*
+        Need to concatenate the lists here to make it possible to check the
+        partition info for correctness using check_partition_info.
+        For on-line add partition we set the state of this partition to
+        PART_TO_BE_ADDED to ensure that it is known that it is not yet
+        usable (becomes usable when partition is created and the switch of
+        partition configuration is made.
+      */
+      {
+        List_iterator<partition_element> alt_it(alt_part_info->partitions);
+        uint part_count = 0;
+        do {
+          partition_element *part_elem = alt_it++;
+          if (*new_part_info) part_elem->part_state = PART_TO_BE_ADDED;
+          if (tab_part_info->partitions.push_back(part_elem)) {
+            mem_alloc_error(1);
+            goto err;
+          }
+        } while (++part_count < num_new_partitions);
+        tab_part_info->num_parts += num_new_partitions;
+      }
+      /*
+        If we specify partitions explicitly we don't use defaults anymore.
+        Using ADD PARTITION also means that we don't have the default number
+        of partitions anymore. We use this code also for Table reorganisations
+        and here we don't set any default flags to false.
+      */
+      if (!(alter_info->flags & Alter_info::ALTER_TABLE_REORG)) {
+        if (!alt_part_info->use_default_partitions) {
+          DBUG_PRINT("info", ("part_info: %p", tab_part_info));
+          tab_part_info->use_default_partitions = false;
+        }
+        tab_part_info->use_default_num_partitions = false;
+        tab_part_info->is_auto_partitioned = false;
+      }
+    } else if (alter_info->flags & Alter_info::ALTER_DROP_PARTITION) {
+      /*
+        Drop a partition from a range partition and list partitioning is
+        always safe and can be made more or less immediate. It is necessary
+        however to ensure that the partition to be removed is safely removed
+        and that REPAIR TABLE can remove the partition if for some reason the
+        command to drop the partition failed in the middle.
+      */
+      uint part_count = 0;
+      uint num_parts_dropped = alter_info->partition_names.elements;
+      uint num_parts_found = 0;
+      List_iterator<partition_element> part_it(tab_part_info->partitions);
+
+      tab_part_info->is_auto_partitioned = false;
+      if (!(tab_part_info->part_type == partition_type::RANGE ||
+            tab_part_info->part_type == partition_type::LIST)) {
+        my_error(ER_ONLY_ON_RANGE_LIST_PARTITION, MYF(0), "DROP");
+        goto err;
+      }
+      if (num_parts_dropped >= tab_part_info->num_parts) {
+        my_error(ER_DROP_LAST_PARTITION, MYF(0));
+        goto err;
+      }
+      do {
+        partition_element *part_elem = part_it++;
+        if (is_name_in_list(part_elem->partition_name,
+                            alter_info->partition_names)) {
+          /*
+            Set state to indicate that the partition is to be dropped.
+          */
+          num_parts_found++;
+          part_elem->part_state = PART_TO_BE_DROPPED;
+        }
+      } while (++part_count < tab_part_info->num_parts);
+      if (num_parts_found != num_parts_dropped) {
+        my_error(ER_DROP_PARTITION_NON_EXISTENT, MYF(0), "DROP");
+        goto err;
+      }
+      tab_part_info->num_parts -= num_parts_dropped;
+    } else if (alter_info->flags & Alter_info::ALTER_REBUILD_PARTITION) {
+      set_engine_all_partitions(tab_part_info,
+                                tab_part_info->default_engine_type);
+      if (set_part_state(alter_info, tab_part_info, PART_CHANGED, false)) {
+        my_error(ER_DROP_PARTITION_NON_EXISTENT, MYF(0), "REBUILD");
+        goto err;
+      }
+      if (!(*new_part_info)) {
+        table->file->print_error(HA_ERR_WRONG_COMMAND, MYF(0));
+        goto err;
+      }
+    } else if (alter_info->flags & Alter_info::ALTER_COALESCE_PARTITION) {
+      uint num_parts_coalesced = alter_info->num_parts;
+      uint num_parts_remain = tab_part_info->num_parts - num_parts_coalesced;
+      List_iterator<partition_element> part_it(tab_part_info->partitions);
+      if (tab_part_info->part_type != partition_type::HASH) {
+        my_error(ER_COALESCE_ONLY_ON_HASH_PARTITION, MYF(0));
+        goto err;
+      }
+      if (num_parts_coalesced == 0) {
+        my_error(ER_COALESCE_PARTITION_NO_PARTITION, MYF(0));
+        goto err;
+      }
+      if (num_parts_coalesced >= tab_part_info->num_parts) {
+        my_error(ER_DROP_LAST_PARTITION, MYF(0));
+        goto err;
+      }
+      /*
+      Online handling:
+      COALESCE PARTITION:
+      -------------------
+      The figure below shows the manner in which partitions are handled when
+      performing an on-line coalesce partition and which states they go through
+      at start, after adding and copying partitions and finally after dropping
+      the partitions to drop. The figure shows an example using four partitions
+      to start with, using linear hash and coalescing one partition (always the
+      last partition).
+
+      Using linear hash then all remaining partitions will have a new
+      reorganised part.
+
+      Existing partitions                     Coalesced partition
+      ------       ------              ------   |      ------
+      |    |       |    |              |    |   |      |    |
+      | p0 |       | p1 |              | p2 |   |      | p3 |
+      ------       ------              ------   |      ------
+      PART_NORMAL  PART_CHANGED        PART_NORMAL     PART_REORGED_DROPPED
+      PART_NORMAL  PART_IS_CHANGED     PART_NORMAL     PART_TO_BE_DROPPED
+      PART_NORMAL  PART_NORMAL         PART_NORMAL     PART_IS_DROPPED
+
+      Reorganised existing partitions
+                  ------
+                  |    |
+                  | p1'|
+                  ------
+
+      p0 - p3 is in the partitions list.
+      The p1' partition will actually not be in any list it is deduced from the
+      state of p1.
+      */
+      {
+        uint part_count = 0, start_part = 1, start_sec_part = 1;
+        uint end_part = 0, end_sec_part = 0;
+        bool all_parts = true;
+        if (*new_part_info && tab_part_info->linear_hash_ind) {
+          uint upper_2n = tab_part_info->linear_hash_mask + 1;
+          uint lower_2n = upper_2n >> 1;
+          all_parts = false;
+          if (num_parts_coalesced >= lower_2n) {
+            all_parts = true;
+          } else if (num_parts_remain >= lower_2n) {
+            end_part = tab_part_info->num_parts - (lower_2n + 1);
+            start_part = num_parts_remain - lower_2n;
+          } else {
+            start_part = 0;
+            end_part = tab_part_info->num_parts - (lower_2n + 1);
+            end_sec_part = (lower_2n >> 1) - 1;
+            start_sec_part = end_sec_part - (lower_2n - (num_parts_remain + 1));
+          }
+        }
+        do {
+          partition_element *p_elem = part_it++;
+          if (*new_part_info &&
+              (all_parts ||
+               (part_count >= start_part && part_count <= end_part) ||
+               (part_count >= start_sec_part && part_count <= end_sec_part)))
+            p_elem->part_state = PART_CHANGED;
+          if (++part_count > num_parts_remain) {
+            if (*new_part_info)
+              p_elem->part_state = PART_REORGED_DROPPED;
+            else
+              part_it.remove();
+          }
+        } while (part_count < tab_part_info->num_parts);
+        tab_part_info->num_parts = num_parts_remain;
+      }
+      if (!(alter_info->flags & Alter_info::ALTER_TABLE_REORG)) {
+        tab_part_info->use_default_num_partitions = false;
+        tab_part_info->is_auto_partitioned = false;
+      }
+    } else if (alter_info->flags & Alter_info::ALTER_REORGANIZE_PARTITION) {
+      /*
+        Reorganise partitions takes a number of partitions that are next
+        to each other (at least for RANGE PARTITIONS) and then uses those
+        to create a set of new partitions. So data is copied from those
+        partitions into the new set of partitions. Those new partitions
+        can have more values in the LIST value specifications or less both
+        are allowed. The ranges can be different but since they are
+        changing a set of consecutive partitions they must cover the same
+        range as those changed from.
+        This command can be used on RANGE and LIST partitions.
+      */
+      uint num_parts_reorged = alter_info->partition_names.elements;
+      uint num_parts_new = thd->work_part_info->partitions.elements;
+      uint check_total_partitions;
+
+      tab_part_info->is_auto_partitioned = false;
+      if (num_parts_reorged > tab_part_info->num_parts) {
+        my_error(ER_REORG_PARTITION_NOT_EXIST, MYF(0));
+        goto err;
+      }
+      if (!(tab_part_info->part_type == partition_type::RANGE ||
+            tab_part_info->part_type == partition_type::LIST) &&
+          (num_parts_new != num_parts_reorged)) {
+        my_error(ER_REORG_HASH_ONLY_ON_SAME_NO, MYF(0));
+        goto err;
+      }
+      if (tab_part_info->is_sub_partitioned() && alt_part_info->num_subparts &&
+          alt_part_info->num_subparts != tab_part_info->num_subparts) {
+        my_error(ER_PARTITION_WRONG_NO_SUBPART_ERROR, MYF(0));
+        goto err;
+      }
+      check_total_partitions = tab_part_info->num_parts + num_parts_new;
+      check_total_partitions -= num_parts_reorged;
+      if (check_total_partitions > MAX_PARTITIONS) {
+        my_error(ER_TOO_MANY_PARTITIONS_ERROR, MYF(0));
+        goto err;
+      }
+      alt_part_info->part_type = tab_part_info->part_type;
+      alt_part_info->subpart_type = tab_part_info->subpart_type;
+      alt_part_info->num_subparts = tab_part_info->num_subparts;
+      assert(!alt_part_info->use_default_partitions);
+      /* We specified partitions explicitly so don't use defaults anymore. */
+      tab_part_info->use_default_partitions = false;
+      if (alt_part_info->set_up_defaults_for_partitioning(part_handler, nullptr,
+                                                          0)) {
+        goto err;
+      }
+      /*
+      Online handling:
+      REORGANIZE PARTITION:
+      ---------------------
+      The figure exemplifies the handling of partitions, their state changes and
+      how they are organised. It exemplifies four partitions where two of the
+      partitions are reorganised (p1 and p2) into two new partitions (p4 and
+      p5). The reason of this change could be to change range limits, change
+      list values or for hash partitions simply reorganise the partition which
+      could also involve moving them to new disks or new node groups (MySQL
+      Cluster).
+
+      Existing partitions
+      ------       ------        ------        ------
+      |    |       |    |        |    |        |    |
+      | p0 |       | p1 |        | p2 |        | p3 |
+      ------       ------        ------        ------
+      PART_NORMAL  PART_TO_BE_REORGED          PART_NORMAL
+      PART_NORMAL  PART_TO_BE_DROPPED          PART_NORMAL
+      PART_NORMAL  PART_IS_DROPPED             PART_NORMAL
+
+      Reorganised new partitions (replacing p1 and p2)
+      ------      ------
+      |    |      |    |
+      | p4 |      | p5 |
+      ------      ------
+      PART_TO_BE_ADDED
+      PART_IS_ADDED
+      PART_IS_ADDED
+
+      All unchanged partitions and the new partitions are in the partitions list
+      in the order they will have when the change is completed. The reorganised
+      partitions are placed in the temp_partitions list. PART_IS_ADDED is only a
+      temporary state not written in the frm file. It is used to ensure we write
+      the generated partition syntax in a correct manner.
+      */
+      {
+        List_iterator<partition_element> tab_it(tab_part_info->partitions);
+        uint part_count = 0;
+        bool found_first = false;
+        bool found_last = false;
+        uint drop_count = 0;
+        do {
+          partition_element *part_elem = tab_it++;
+          is_last_partition_reorged = false;
+          if (is_name_in_list(part_elem->partition_name,
+                              alter_info->partition_names)) {
+            is_last_partition_reorged = true;
+            drop_count++;
+            if (tab_part_info->column_list) {
+              List_iterator<part_elem_value> p(part_elem->list_val_list);
+              tab_max_elem_val = p++;
+            } else
+              tab_max_range = part_elem->range_value;
+            if (*new_part_info &&
+                tab_part_info->temp_partitions.push_back(part_elem)) {
+              mem_alloc_error(1);
+              goto err;
+            }
+            if (*new_part_info) part_elem->part_state = PART_TO_BE_REORGED;
+            if (!found_first) {
+              uint alt_part_count = 0;
+              partition_element *alt_part_elem;
+              List_iterator<partition_element> alt_it(
+                  alt_part_info->partitions);
+              found_first = true;
+              do {
+                alt_part_elem = alt_it++;
+                if (tab_part_info->column_list) {
+                  List_iterator<part_elem_value> p(
+                      alt_part_elem->list_val_list);
+                  alt_max_elem_val = p++;
+                } else
+                  alt_max_range = alt_part_elem->range_value;
+
+                if (*new_part_info)
+                  alt_part_elem->part_state = PART_TO_BE_ADDED;
+                if (alt_part_count == 0)
+                  tab_it.replace(alt_part_elem);
+                else
+                  tab_it.after(alt_part_elem);
+              } while (++alt_part_count < num_parts_new);
+            } else if (found_last) {
+              my_error(ER_CONSECUTIVE_REORG_PARTITIONS, MYF(0));
+              goto err;
+            } else
+              tab_it.remove();
+          } else {
+            if (found_first) found_last = true;
+          }
+        } while (++part_count < tab_part_info->num_parts);
+        if (drop_count != num_parts_reorged) {
+          my_error(ER_DROP_PARTITION_NON_EXISTENT, MYF(0), "REORGANIZE");
+          goto err;
+        }
+        tab_part_info->num_parts = check_total_partitions;
+      }
+    } else {
+      assert(false);
+    }
+    *partition_changed = true;
+    thd->work_part_info = tab_part_info;
+    if (alter_info->flags & Alter_info::ALTER_ADD_PARTITION ||
+        alter_info->flags & Alter_info::ALTER_REORGANIZE_PARTITION) {
+      if (tab_part_info->use_default_subpartitions &&
+          !alt_part_info->use_default_subpartitions) {
+        tab_part_info->use_default_subpartitions = false;
+        tab_part_info->use_default_num_subpartitions = false;
+      }
+      if (tab_part_info->check_partition_info(thd, (handlerton **)nullptr,
+                                              table->file, nullptr, true)) {
+        goto err;
+      }
+      /*
+        The check below needs to be performed after check_partition_info
+        since this function "fixes" the item trees of the new partitions
+        to reorganize into
+      */
+      if (alter_info->flags == Alter_info::ALTER_REORGANIZE_PARTITION &&
+          tab_part_info->part_type == partition_type::RANGE) {
+        bool is_error;
+        if (is_last_partition_reorged) {
+          if (tab_part_info->column_list) {
+            is_error = tab_part_info->compare_column_values(
+                alt_max_elem_val->col_val_array,
+                tab_max_elem_val->col_val_array);  // a < b.
+          } else {
+            is_error = alt_max_range < tab_max_range;
+          }
+        } else {
+          if (tab_part_info->column_list) {
+            is_error = tab_part_info->compare_column_values(
+                           alt_max_elem_val->col_val_array,
+                           tab_max_elem_val->col_val_array) ||
+                       tab_part_info->compare_column_values(
+                           tab_max_elem_val->col_val_array,
+                           alt_max_elem_val->col_val_array);  // a != b.
+          } else {
+            is_error = alt_max_range != tab_max_range;
+          }
+        }
+        if (is_error) {
+          /*
+            For range partitioning the total resulting range before and
+            after the change must be the same except in one case. This is
+            when the last partition is reorganised, in this case it is
+            acceptable to increase the total range.
+            The reason is that it is not allowed to have "holes" in the
+            middle of the ranges and thus we should not allow to reorganise
+            to create "holes".
+          */
+          my_error(ER_REORG_OUTSIDE_RANGE, MYF(0));
+          goto err;
+        }
+      }
+    }
+  } else {
+    /*
+     When thd->lex->part_info has a reference to a partition_info the
+     ALTER TABLE contained a definition of a partitioning.
+
+     Case I:
+       If there was a partition before and there is a new one defined.
+       We use the new partitioning. The new partitioning is already
+       defined in the correct variable so no work is needed to
+       accomplish this.
+       We do however need to update partition_changed to ensure that not
+       only the frm file is changed in the ALTER TABLE command.
+
+     Case IIa:
+       There was a partitioning before and there is no new one defined.
+       Also the user has not specified to remove partitioning explicitly.
+
+       We use the old partitioning also for the new table. We do this
+       by assigning the partition_info from the table loaded in
+       open_table to the partition_info struct used by mysql_create_table
+       later in this method.
+
+     Case IIb:
+       There was a partitioning before and there is no new one defined.
+       The user has specified explicitly to remove partitioning
+
+       Since the user has specified explicitly to remove partitioning
+       we override the old partitioning info and create a new table using
+       the specified engine.
+       In this case the partition also is changed.
+
+     Case III:
+       There was no partitioning before altering the table, there is
+       partitioning defined in the altered table. Use the new partitioning.
+       No work needed since the partitioning info is already in the
+       correct variable.
+
+       In this case we discover one case where the new partitioning is using
+       the same partition function as the default (PARTITION BY KEY or
+       PARTITION BY LINEAR KEY with the list of fields equal to the primary
+       key fields OR PARTITION BY [LINEAR] KEY() for tables without primary
+       key)
+       Also here partition has changed and thus a new table must be
+       created.
+
+     Case IV:
+       There was no partitioning before and no partitioning defined.
+       Obviously no work needed.
+    */
+    partition_info *tab_part_info = table->part_info;
+
+    if (tab_part_info) {
+      /*
+        The table must be reopened, this is necessary to avoid situations
+        where a failing ALTER leaves behind a TABLE object which has its
+        partitioning information updated by the SE, as InnoDB is doing in
+        update_create_info().
+      */
+      table->invalidate_dict();
+      if (alter_info->flags & Alter_info::ALTER_REMOVE_PARTITIONING) {
+        DBUG_PRINT("info", ("Remove partitioning"));
+        if (!(create_info->used_fields & HA_CREATE_USED_ENGINE)) {
+          DBUG_PRINT("info", ("No explicit engine used"));
+          create_info->db_type = tab_part_info->default_engine_type;
+        }
+        DBUG_PRINT("info",
+                   ("New engine type: %s",
+                    ha_resolve_storage_engine_name(create_info->db_type)));
+        thd->work_part_info = nullptr;
+        *partition_changed = true;
+      } else if (!thd->work_part_info) {
+        /*
+          Retain partitioning but possibly with a new storage engine
+          beneath.
+
+          Create a copy of TABLE::part_info to be able to modify it freely.
+        */
+        if (!(tab_part_info = tab_part_info->get_clone(thd))) return true;
+        thd->work_part_info = tab_part_info;
+        if (create_info->used_fields & HA_CREATE_USED_ENGINE &&
+            create_info->db_type != tab_part_info->default_engine_type) {
+          /*
+            Make sure change of engine happens to all partitions.
+          */
+          DBUG_PRINT("info", ("partition changed"));
+          if (tab_part_info->is_auto_partitioned) {
+            /*
+              If the user originally didn't specify partitioning to be
+              used we can remove it now.
+            */
+            thd->work_part_info = nullptr;
+          } else {
+            /*
+              Ensure that all partitions have the proper engine set-up
+            */
+            set_engine_all_partitions(thd->work_part_info,
+                                      create_info->db_type);
+          }
+          *partition_changed = true;
+        }
+      }
+    }
+    if (thd->work_part_info) {
+      partition_info *part_info = thd->work_part_info;
+      bool is_native_partitioned = false;
+      /*
+        Need to cater for engine types that can handle partition without
+        using the partition handler.
+      */
+      if (part_info != tab_part_info) {
+        if (part_info->fix_parser_data(thd)) {
+          goto err;
+        }
+        /*
+          Compare the old and new part_info. If only key_algorithm
+          change is done, don't consider it as changed partitioning (to avoid
+          rebuild). This is to handle KEY (numeric_cols) partitioned tables
+          created in 5.1. For more info, see bug#14521864.
+        */
+        if (alter_info->flags != Alter_info::ALTER_PARTITION ||
+            !table->part_info ||
+            alter_info->requested_algorithm !=
+                Alter_info::ALTER_TABLE_ALGORITHM_INPLACE ||
+            !table->part_info->has_same_partitioning(part_info)) {
+          DBUG_PRINT("info", ("partition changed"));
+          *partition_changed = true;
+        }
+      }
+      /*
+        Set up partition default_engine_type either from the create_info
+        or from the previus table
+      */
+      if (create_info->used_fields & HA_CREATE_USED_ENGINE)
+        part_info->default_engine_type = create_info->db_type;
+      else {
+        if (tab_part_info)
+          part_info->default_engine_type = tab_part_info->default_engine_type;
+        else
+          part_info->default_engine_type = create_info->db_type;
+      }
+      if (check_native_partitioned(create_info, &is_native_partitioned,
+                                   part_info, thd)) {
+        goto err;
+      }
+      if (!is_native_partitioned) {
+        my_error(ER_CHECK_NOT_IMPLEMENTED, MYF(0), "native partitioning");
+        goto err;
+      }
+    }
+  }
+
+
+// Source: sql_partition.cc
+// Lines 4266-5170
+
+
+[ANSWER]
+MUST

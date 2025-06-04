@@ -1,0 +1,29 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'end' at line 3
+2. Pointer 'from' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+unsigned long hex_string(char *to, const char *from, unsigned long length) {
+  char *to0 = to;
+  const char *end;
+
+  for (end = from + length; from < end; from++) {
+    *to++ = _dig_vec_upper[((unsigned char)*from) >> 4];
+    *to++ = _dig_vec_upper[((unsigned char)*from) & 0x0F];
+  }
+  return (unsigned long)(to - to0);
+}
+
+
+// Source: my_hex_tools.cc
+// Lines 111-120
+
+
+[ANSWER]
+MUST

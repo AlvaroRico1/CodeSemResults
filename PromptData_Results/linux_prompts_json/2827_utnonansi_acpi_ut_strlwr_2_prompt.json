@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'string' at line 3\n2. Pointer 'src_string' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid acpi_ut_strlwr(char *src_string)\n{\n\tchar *string;\n\n\tACPI_FUNCTION_ENTRY();\n\n\tif (!src_string) {\n\t\treturn;\n\t}\n\n\t/* Walk entire string, lowercasing the letters */\n\n\tfor (string = src_string; *string; string++) {\n\t\t*string = (char)tolower((int)*string);\n\t}\n}\n\n\n// Source: utnonansi.c\n// Lines 29-44\n",
+  "ANSWER": "MAY"
+}

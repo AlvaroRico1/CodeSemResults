@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'val' at line 20\n2. Pointer 'ppos' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nssize_t simple_attr_read(struct file *file, char __user *buf,\n\t\t\t size_t len, loff_t *ppos)\n{\n\tstruct simple_attr *attr;\n\tsize_t size;\n\tssize_t ret;\n\n\tattr = file->private_data;\n\n\tif (!attr->get)\n\t\treturn -EACCES;\n\n\tret = mutex_lock_interruptible(&attr->mutex);\n\tif (ret)\n\t\treturn ret;\n\n\tif (*ppos) {\t\t/* continued read */\n\t\tsize = strlen(attr->get_buf);\n\t} else {\t\t/* first read */\n\t\tu64 val;\n\t\tret = attr->get(attr->data, &val);\n\t\tif (ret)\n\t\t\tgoto out;\n\n\t\tsize = scnprintf(attr->get_buf, sizeof(attr->get_buf),\n\t\t\t\t attr->fmt, (unsigned long long)val);\n\t}\n\n\n// Source: libfs.c\n// Lines 844-870\n",
+  "ANSWER": "MAY"
+}

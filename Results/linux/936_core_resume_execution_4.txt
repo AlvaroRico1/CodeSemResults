@@ -1,0 +1,1 @@
+tos,linux/arch/x86/kernel/kprobes/core.c,4,insn,linux/arch/x86/kernel/kprobes/core.c,5,2

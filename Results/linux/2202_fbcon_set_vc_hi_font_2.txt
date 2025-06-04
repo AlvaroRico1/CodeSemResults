@@ -1,0 +1,1 @@
+cp,linux/drivers/video/fbdev/core/fbcon.c,12,cp,linux/drivers/video/fbdev/core/fbcon.c,12,2

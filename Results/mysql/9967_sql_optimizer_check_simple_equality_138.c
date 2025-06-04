@@ -1,0 +1,179 @@
+static bool check_simple_equality(THD *thd, Item *left_item, Item *right_item,
+                                  Item *item, COND_EQUAL *cond_equal,
+                                  bool *simple_equality) {
+  if (thd->lex->using_hypergraph_optimizer) {
+    // We cannot handle loops in the query graph yet.
+    *simple_equality = false;
+    return false;
+  }
+
+  *simple_equality = false;
+
+  if (left_item->type() == Item::REF_ITEM &&
+      down_cast<Item_ref *>(left_item)->ref_type() == Item_ref::VIEW_REF) {
+    if (down_cast<Item_ref *>(left_item)->depended_from) return false;
+    left_item = left_item->real_item();
+  }
+  if (right_item->type() == Item::REF_ITEM &&
+      down_cast<Item_ref *>(right_item)->ref_type() == Item_ref::VIEW_REF) {
+    if (down_cast<Item_ref *>(right_item)->depended_from) return false;
+    right_item = right_item->real_item();
+  }
+  const Item_field *left_item_field, *right_item_field;
+
+  if (left_item->type() == Item::FIELD_ITEM &&
+      right_item->type() == Item::FIELD_ITEM &&
+      (left_item_field = down_cast<const Item_field *>(left_item)) &&
+      (right_item_field = down_cast<const Item_field *>(right_item)) &&
+      !left_item_field->depended_from && !right_item_field->depended_from) {
+    /* The predicate the form field1=field2 is processed */
+
+    const Field *const left_field = left_item_field->field;
+    const Field *const right_field = right_item_field->field;
+
+    if (!left_field->eq_def(right_field)) return false;
+
+    /* Search for multiple equalities containing field1 and/or field2 */
+    bool left_copyfl, right_copyfl;
+    Item_equal *left_item_equal =
+        find_item_equal(cond_equal, left_item_field, &left_copyfl);
+    Item_equal *right_item_equal =
+        find_item_equal(cond_equal, right_item_field, &right_copyfl);
+
+    /* As (NULL=NULL) != TRUE we can't just remove the predicate f=f */
+    if (left_field->eq(right_field)) /* f = f */
+    {
+      *simple_equality =
+          !((left_field->is_nullable() || left_field->table->is_nullable()) &&
+            !left_item_equal);
+      return false;
+    }
+
+    if (left_item_equal && left_item_equal == right_item_equal) {
+      /*
+        The equality predicate is inference of one of the existing
+        multiple equalities, i.e the condition is already covered
+        by upper level equalities
+      */
+      *simple_equality = true;
+      return false;
+    }
+
+    /* Copy the found multiple equalities at the current level if needed */
+    if (left_copyfl) {
+      /* left_item_equal of an upper level contains left_item */
+      left_item_equal = new Item_equal(left_item_equal);
+      if (left_item_equal == nullptr) return true;
+      cond_equal->current_level.push_back(left_item_equal);
+    }
+    if (right_copyfl) {
+      /* right_item_equal of an upper level contains right_item */
+      right_item_equal = new Item_equal(right_item_equal);
+      if (right_item_equal == nullptr) return true;
+      cond_equal->current_level.push_back(right_item_equal);
+    }
+
+    if (left_item_equal) {
+      /* left item was found in the current or one of the upper levels */
+      if (!right_item_equal)
+        left_item_equal->add(down_cast<Item_field *>(right_item));
+      else {
+        /* Merge two multiple equalities forming a new one */
+        if (left_item_equal->merge(thd, right_item_equal)) return true;
+        /* Remove the merged multiple equality from the list */
+        List_iterator<Item_equal> li(cond_equal->current_level);
+        while ((li++) != right_item_equal)
+          ;
+        li.remove();
+      }
+    } else {
+      /* left item was not found neither the current nor in upper levels  */
+      if (right_item_equal) {
+        right_item_equal->add(down_cast<Item_field *>(left_item));
+      } else {
+        /* None of the fields was found in multiple equalities */
+        Item_equal *item_equal =
+            new Item_equal(down_cast<Item_field *>(left_item),
+                           down_cast<Item_field *>(right_item));
+        if (item_equal == nullptr) return true;
+        cond_equal->current_level.push_back(item_equal);
+      }
+    }
+    *simple_equality = true;
+    return false;
+  }
+
+  {
+    /* The predicate of the form field=const/const=field is processed */
+    Item *const_item = nullptr;
+    Item_field *field_item = nullptr;
+    if (left_item->type() == Item::FIELD_ITEM &&
+        (field_item = down_cast<Item_field *>(left_item)) &&
+        field_item->depended_from == nullptr &&
+        right_item->const_for_execution()) {
+      const_item = right_item;
+    } else if (right_item->type() == Item::FIELD_ITEM &&
+               (field_item = down_cast<Item_field *>(right_item)) &&
+               field_item->depended_from == nullptr &&
+               left_item->const_for_execution()) {
+      const_item = left_item;
+    }
+
+    // Don't evaluate subqueries if they are disabled during optimization.
+    if (const_item != nullptr &&
+        !evaluate_during_optimization(const_item,
+                                      thd->lex->current_query_block()))
+      return false;
+
+    /*
+      If the constant expression contains a reference to the field
+      (for example, a = (a IS NULL)), we don't want to replace the
+      field with the constant expression as it makes the predicates
+      more complex and may introduce cycles in the Item tree.
+    */
+    if (const_item != nullptr &&
+        const_item->walk(&Item::find_field_processor, enum_walk::POSTFIX,
+                         pointer_cast<uchar *>(field_item->field)))
+      return false;
+
+    if (const_item && field_item->result_type() == const_item->result_type()) {
+      if (field_item->result_type() == STRING_RESULT) {
+        const CHARSET_INFO *cs = field_item->field->charset();
+        if (!item) {
+          Item_func_eq *const eq_item = new Item_func_eq(left_item, right_item);
+          if (eq_item == nullptr || eq_item->set_cmp_func()) return true;
+          eq_item->quick_fix_field();
+          item = eq_item;
+        }
+        if ((cs != down_cast<Item_func *>(item)->compare_collation()) ||
+            !cs->coll->propagate(cs, nullptr, 0))
+          return false;
+      }
+
+      bool copyfl;
+      Item_equal *item_equal = find_item_equal(cond_equal, field_item, &copyfl);
+      if (copyfl) {
+        item_equal = new Item_equal(item_equal);
+        if (item_equal == nullptr) return true;
+        cond_equal->current_level.push_back(item_equal);
+      }
+      if (item_equal) {
+        /*
+          The flag cond_false will be set to 1 after this, if item_equal
+          already contains a constant and its value is  not equal to
+          the value of const_item.
+        */
+        if (item_equal->add(thd, const_item, field_item)) return true;
+      } else {
+        item_equal = new Item_equal(const_item, field_item);
+        if (item_equal == nullptr) return true;
+        cond_equal->current_level.push_back(item_equal);
+      }
+      *simple_equality = true;
+      return false;
+    }
+  }
+
+
+// Source: sql_optimizer.cc
+// Lines 3532-3706

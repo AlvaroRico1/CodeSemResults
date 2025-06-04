@@ -1,0 +1,90 @@
+nfs3_proc_create(struct inode *dir, struct dentry *dentry, struct iattr *sattr,
+		 int flags)
+{
+	struct posix_acl *default_acl, *acl;
+	struct nfs3_createdata *data;
+	int status = -ENOMEM;
+
+	dprintk("NFS call  create %pd\n", dentry);
+
+	data = nfs3_alloc_createdata();
+	if (data == NULL)
+		goto out;
+
+	data->msg.rpc_proc = &nfs3_procedures[NFS3PROC_CREATE];
+	data->arg.create.fh = NFS_FH(dir);
+	data->arg.create.name = dentry->d_name.name;
+	data->arg.create.len = dentry->d_name.len;
+	data->arg.create.sattr = sattr;
+
+	data->arg.create.createmode = NFS3_CREATE_UNCHECKED;
+	if (flags & O_EXCL) {
+		data->arg.create.createmode  = NFS3_CREATE_EXCLUSIVE;
+		data->arg.create.verifier[0] = cpu_to_be32(jiffies);
+		data->arg.create.verifier[1] = cpu_to_be32(current->pid);
+	}
+
+	status = posix_acl_create(dir, &sattr->ia_mode, &default_acl, &acl);
+	if (status)
+		goto out;
+
+	for (;;) {
+		status = nfs3_do_create(dir, dentry, data);
+
+		if (status != -ENOTSUPP)
+			break;
+		/* If the server doesn't support the exclusive creation
+		 * semantics, try again with simple 'guarded' mode. */
+		switch (data->arg.create.createmode) {
+			case NFS3_CREATE_EXCLUSIVE:
+				data->arg.create.createmode = NFS3_CREATE_GUARDED;
+				break;
+
+			case NFS3_CREATE_GUARDED:
+				data->arg.create.createmode = NFS3_CREATE_UNCHECKED;
+				break;
+
+			case NFS3_CREATE_UNCHECKED:
+				goto out;
+		}
+		nfs_fattr_init(data->res.dir_attr);
+		nfs_fattr_init(data->res.fattr);
+	}
+
+	if (status != 0)
+		goto out_release_acls;
+
+	/* When we created the file with exclusive semantics, make
+	 * sure we set the attributes afterwards. */
+	if (data->arg.create.createmode == NFS3_CREATE_EXCLUSIVE) {
+		dprintk("NFS call  setattr (post-create)\n");
+
+		if (!(sattr->ia_valid & ATTR_ATIME_SET))
+			sattr->ia_valid |= ATTR_ATIME;
+		if (!(sattr->ia_valid & ATTR_MTIME_SET))
+			sattr->ia_valid |= ATTR_MTIME;
+
+		/* Note: we could use a guarded setattr here, but I'm
+		 * not sure this buys us anything (and I'd have
+		 * to revamp the NFSv3 XDR code) */
+		status = nfs3_proc_setattr(dentry, data->res.fattr, sattr);
+		nfs_post_op_update_inode(d_inode(dentry), data->res.fattr);
+		dprintk("NFS reply setattr (post-create): %d\n", status);
+		if (status != 0)
+			goto out_release_acls;
+	}
+
+	status = nfs3_proc_setacls(d_inode(dentry), acl, default_acl);
+
+out_release_acls:
+	posix_acl_release(acl);
+	posix_acl_release(default_acl);
+out:
+	nfs3_free_createdata(data);
+	dprintk("NFS reply create: %d\n", status);
+	return status;
+}
+
+
+// Source: nfs3proc.c
+// Lines 302-387

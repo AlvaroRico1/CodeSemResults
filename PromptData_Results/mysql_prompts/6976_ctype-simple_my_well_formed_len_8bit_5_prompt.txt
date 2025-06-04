@@ -1,0 +1,26 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'nchars' at line 3
+2. Pointer 'nbytes' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+size_t my_well_formed_len_8bit(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
+                               const char *start, const char *end,
+                               size_t nchars, int *error) {
+  size_t nbytes = (size_t)(end - start);
+  *error = 0;
+  return std::min(nbytes, nchars);
+}
+
+
+// Source: ctype-simple.cc
+// Lines 919-925
+
+
+[ANSWER]
+MAY

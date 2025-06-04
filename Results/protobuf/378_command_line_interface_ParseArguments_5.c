@@ -1,0 +1,194 @@
+CommandLineInterface::ParseArgumentStatus CommandLineInterface::ParseArguments(
+    int argc, const char* const argv[]) {
+  executable_name_ = argv[0];
+
+  std::vector<std::string> arguments;
+  for (int i = 1; i < argc; ++i) {
+    if (argv[i][0] == '@') {
+      if (!ExpandArgumentFile(argv[i] + 1, &arguments)) {
+        std::cerr << "Failed to open argument file: " << (argv[i] + 1)
+                  << std::endl;
+        return PARSE_ARGUMENT_FAIL;
+      }
+      continue;
+    }
+    arguments.push_back(argv[i]);
+  }
+
+  // if no arguments are given, show help
+  if (arguments.empty()) {
+    PrintHelpText();
+    return PARSE_ARGUMENT_DONE_AND_EXIT;  // Exit without running compiler.
+  }
+
+  // Iterate through all arguments and parse them.
+  for (int i = 0; i < arguments.size(); ++i) {
+    std::string name, value;
+
+    if (ParseArgument(arguments[i].c_str(), &name, &value)) {
+      // Returned true => Use the next argument as the flag value.
+      if (i + 1 == arguments.size() || arguments[i + 1][0] == '-') {
+        std::cerr << "Missing value for flag: " << name << std::endl;
+        if (name == "--decode") {
+          std::cerr << "To decode an unknown message, use --decode_raw."
+                    << std::endl;
+        }
+        return PARSE_ARGUMENT_FAIL;
+      } else {
+        ++i;
+        value = arguments[i];
+      }
+    }
+
+    ParseArgumentStatus status = InterpretArgument(name, value);
+    if (status != PARSE_ARGUMENT_DONE_AND_CONTINUE) return status;
+  }
+
+  // Make sure each plugin option has a matching plugin output.
+  bool foundUnknownPluginOption = false;
+  for (std::map<std::string, std::string>::const_iterator i =
+           plugin_parameters_.begin();
+       i != plugin_parameters_.end(); ++i) {
+    if (plugins_.find(i->first) != plugins_.end()) {
+      continue;
+    }
+    bool foundImplicitPlugin = false;
+    for (std::vector<OutputDirective>::const_iterator j =
+             output_directives_.begin();
+         j != output_directives_.end(); ++j) {
+      if (j->generator == nullptr) {
+        std::string plugin_name = PluginName(plugin_prefix_, j->name);
+        if (plugin_name == i->first) {
+          foundImplicitPlugin = true;
+          break;
+        }
+      }
+    }
+    if (!foundImplicitPlugin) {
+      std::cerr << "Unknown flag: "
+                // strip prefix + "gen-" and add back "_opt"
+                << "--" + i->first.substr(plugin_prefix_.size() + 4) + "_opt"
+                << std::endl;
+      foundUnknownPluginOption = true;
+    }
+  }
+  if (foundUnknownPluginOption) {
+    return PARSE_ARGUMENT_FAIL;
+  }
+
+  // The --proto_path & --descriptor_set_in flags both specify places to look
+  // for proto files. If neither were given, use the current working directory.
+  if (proto_path_.empty() && descriptor_set_in_names_.empty()) {
+    // Don't use make_pair as the old/default standard library on Solaris
+    // doesn't support it without explicit template parameters, which are
+    // incompatible with C++0x's make_pair.
+    proto_path_.push_back(std::pair<std::string, std::string>("", "."));
+  }
+
+  // Check error cases that span multiple flag values.
+  bool missing_proto_definitions = false;
+  switch (mode_) {
+    case MODE_COMPILE:
+      missing_proto_definitions = input_files_.empty();
+      break;
+    case MODE_DECODE:
+      // Handle --decode_raw separately, since it requires that no proto
+      // definitions are specified.
+      if (codec_type_.empty()) {
+        if (!input_files_.empty() || !descriptor_set_in_names_.empty()) {
+          std::cerr
+              << "When using --decode_raw, no input files should be given."
+              << std::endl;
+          return PARSE_ARGUMENT_FAIL;
+        }
+        missing_proto_definitions = false;
+        break;  // only for --decode_raw
+      }
+      // --decode (not raw) is handled the same way as the rest of the modes.
+      PROTOBUF_FALLTHROUGH_INTENDED;
+    case MODE_ENCODE:
+    case MODE_PRINT:
+      missing_proto_definitions =
+          input_files_.empty() && descriptor_set_in_names_.empty();
+      break;
+    default:
+      GOOGLE_LOG(FATAL) << "Unexpected mode: " << mode_;
+  }
+  if (missing_proto_definitions) {
+    std::cerr << "Missing input file." << std::endl;
+    return PARSE_ARGUMENT_FAIL;
+  }
+  if (mode_ == MODE_COMPILE && output_directives_.empty() &&
+      descriptor_set_out_name_.empty()) {
+    std::cerr << "Missing output directives." << std::endl;
+    return PARSE_ARGUMENT_FAIL;
+  }
+  if (mode_ != MODE_COMPILE && !dependency_out_name_.empty()) {
+    std::cerr << "Can only use --dependency_out=FILE when generating code."
+              << std::endl;
+    return PARSE_ARGUMENT_FAIL;
+  }
+  if (mode_ != MODE_ENCODE && deterministic_output_) {
+    std::cerr << "Can only use --deterministic_output with --encode."
+              << std::endl;
+    return PARSE_ARGUMENT_FAIL;
+  }
+  if (!dependency_out_name_.empty() && input_files_.size() > 1) {
+    std::cerr
+        << "Can only process one input file when using --dependency_out=FILE."
+        << std::endl;
+    return PARSE_ARGUMENT_FAIL;
+  }
+  if (imports_in_descriptor_set_ && descriptor_set_out_name_.empty()) {
+    std::cerr << "--include_imports only makes sense when combined with "
+                 "--descriptor_set_out."
+              << std::endl;
+  }
+  if (source_info_in_descriptor_set_ && descriptor_set_out_name_.empty()) {
+    std::cerr << "--include_source_info only makes sense when combined with "
+                 "--descriptor_set_out."
+              << std::endl;
+  }
+
+  return PARSE_ARGUMENT_DONE_AND_CONTINUE;
+}
+
+bool CommandLineInterface::ParseArgument(const char* arg, std::string* name,
+                                         std::string* value) {
+  bool parsed_value = false;
+
+  if (arg[0] != '-') {
+    // Not a flag.
+    name->clear();
+    parsed_value = true;
+    *value = arg;
+  } else if (arg[1] == '-') {
+    // Two dashes:  Multi-character name, with '=' separating name and
+    //   value.
+    const char* equals_pos = strchr(arg, '=');
+    if (equals_pos != nullptr) {
+      *name = std::string(arg, equals_pos - arg);
+      *value = equals_pos + 1;
+      parsed_value = true;
+    } else {
+      *name = arg;
+    }
+  } else {
+    // One dash:  One-character name, all subsequent characters are the
+    //   value.
+    if (arg[1] == '\0') {
+      // arg is just "-".  We treat this as an input file, except that at
+      // present this will just lead to a "file not found" error.
+      name->clear();
+      *value = arg;
+      parsed_value = true;
+    } else {
+      *name = std::string(arg, 2);
+      *value = arg + 2;
+      parsed_value = !value->empty();
+    }
+  }
+
+
+// Source: command_line_interface.cc
+// Lines 1443-1632

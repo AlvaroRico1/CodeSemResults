@@ -1,0 +1,35 @@
+struct st_h2o_httpclient__h3_conn_t *create_connection(h2o_httpclient_ctx_t *ctx, h2o_httpclient_connection_pool_t *pool,
+                                                       h2o_url_t *origin)
+{
+    /* FIXME When using a non-global socket pool, let the socket pool load balance H3 connections among the list of targets being
+     * available. But until then, we use the first entry. */
+    if (!h2o_socketpool_is_global(pool->socketpool))
+        origin = &pool->socketpool->targets.entries[0]->url;
+
+    static const h2o_http3_conn_callbacks_t callbacks = {{destroy_connection_on_transport_close}, handle_control_stream_frame};
+    static const h2o_http3_qpack_context_t qpack_ctx = {0 /* TODO */};
+
+    struct st_h2o_httpclient__h3_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
+
+    h2o_http3_init_conn(&conn->super, &ctx->http3->h3, &callbacks, &qpack_ctx);
+    memset((char *)conn + sizeof(conn->super), 0, sizeof(*conn) - sizeof(conn->super));
+    conn->ctx = ctx;
+    h2o_url_copy(NULL, &conn->server.origin_url, origin);
+    sprintf(conn->server.named_serv, "%" PRIu16, h2o_url_get_port(origin));
+    conn->handshake_properties.client.negotiated_protocols.list = h2o_http3_alpn;
+    conn->handshake_properties.client.negotiated_protocols.count = sizeof(h2o_http3_alpn) / sizeof(h2o_http3_alpn[0]);
+    h2o_linklist_insert(&pool->http3.conns, &conn->link);
+    h2o_linklist_init_anchor(&conn->pending_requests);
+
+    conn->getaddr_req = h2o_hostinfo_getaddr(conn->ctx->getaddr_receiver, conn->server.origin_url.host,
+                                             h2o_iovec_init(conn->server.named_serv, strlen(conn->server.named_serv)), AF_UNSPEC,
+                                             SOCK_DGRAM, IPPROTO_UDP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, conn);
+    h2o_timer_link(conn->ctx->loop, conn->ctx->connect_timeout, &conn->timeout);
+    conn->timeout.cb = on_connect_timeout;
+
+    return conn;
+}
+
+
+// Source: http3client.c
+// Lines 348-378

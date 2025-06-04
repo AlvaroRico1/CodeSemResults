@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ptr' at line 3\n2. Pointer 'data' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nunsigned long xdl_hash_record(char const **data, char const *top, long flags) {\n\tunsigned long ha = 5381;\n\tchar const *ptr = *data;\n\n\tif (flags & XDF_WHITESPACE_FLAGS)\n\t\treturn xdl_hash_record_with_whitespace(data, top, flags);\n\n\tfor (; ptr < top && *ptr != '\\n'; ptr++) {\n\t\tha += (ha << 5);\n\t\tha ^= (unsigned long) *ptr;\n\t}\n\t*data = ptr < top ? ptr + 1: ptr;\n\n\treturn ha;\n}\n\n\n// Source: xutils.c\n// Lines 297-311\n",
+  "ANSWER": "MAY"
+}

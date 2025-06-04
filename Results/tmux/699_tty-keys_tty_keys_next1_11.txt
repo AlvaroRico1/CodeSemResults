@@ -1,0 +1,1 @@
+tk1,tmux/tty-keys.c,5,tk,tmux/tty-keys.c,5,1

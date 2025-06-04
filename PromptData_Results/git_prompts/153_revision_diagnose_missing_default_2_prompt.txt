@@ -1,0 +1,63 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'arg' at line 34
+2. Pointer 'left' at line 19
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void NORETURN diagnose_missing_default(const char *def)
+{
+	int flags;
+	const char *refname;
+
+	refname = resolve_ref_unsafe(def, 0, NULL, &flags);
+	if (!refname || !(flags & REF_ISSYMREF) || (flags & REF_ISBROKEN))
+		die(_("your current branch appears to be broken"));
+
+	skip_prefix(refname, "refs/heads/", &refname);
+	die(_("your current branch '%s' does not have any commits yet"),
+	    refname);
+}
+
+/*
+ * Parse revision information, filling in the "rev_info" structure,
+ * and removing the used arguments from the argument list.
+ *
+ * Returns the number of arguments left that weren't recognized
+ * (which are also moved to the head of the argument list)
+ */
+int setup_revisions(int argc, const char **argv, struct rev_info *revs, struct setup_revision_opt *opt)
+{
+	int i, flags, left, seen_dashdash, revarg_opt;
+	struct strvec prune_data = STRVEC_INIT;
+	int seen_end_of_options = 0;
+
+	/* First, search for "--" */
+	if (opt && opt->assume_dashdash) {
+		seen_dashdash = 1;
+	} else {
+		seen_dashdash = 0;
+		for (i = 1; i < argc; i++) {
+			const char *arg = argv[i];
+			if (strcmp(arg, "--"))
+				continue;
+			argv[i] = NULL;
+			argc = i;
+			if (argv[i + 1])
+				strvec_pushv(&prune_data, argv + i + 1);
+			seen_dashdash = 1;
+			break;
+		}
+	}
+
+
+// Source: revision.c
+// Lines 2683-2726
+
+
+[ANSWER]
+MAY

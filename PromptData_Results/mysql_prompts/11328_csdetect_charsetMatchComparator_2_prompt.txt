@@ -1,0 +1,29 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'csm_l' at line 5
+2. Pointer 'left' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+charsetMatchComparator(const void * /*context*/, const void *left, const void *right)
+{
+    U_NAMESPACE_USE
+
+    const CharsetMatch **csm_l = (const CharsetMatch **) left;
+    const CharsetMatch **csm_r = (const CharsetMatch **) right;
+
+    // NOTE: compare is backwards to sort from highest to lowest.
+    return (*csm_r)->getConfidence() - (*csm_l)->getConfidence();
+}
+
+
+// Source: csdetect.cpp
+// Lines 73-82
+
+
+[ANSWER]
+MUST

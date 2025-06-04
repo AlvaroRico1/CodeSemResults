@@ -1,0 +1,28 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'data' at line 4
+2. Pointer 'modedata' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+window_buffer_do_paste(void *modedata, void *itemdata, struct client *c,
+    __unused key_code key)
+{
+	struct window_buffer_modedata	*data = modedata;
+	struct window_buffer_itemdata	*item = itemdata;
+
+	if (paste_get_name(item->name) != NULL)
+		mode_tree_run_command(c, NULL, data->command, item->name);
+}
+
+
+// Source: window-buffer.c
+// Lines 418-426
+
+
+[ANSWER]
+MUST

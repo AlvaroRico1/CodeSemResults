@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'p' at line 5\n2. Pointer 'data' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nnfs3_list_one_acl(struct inode *inode, int type, const char *name, void *data,\n\t\tsize_t size, ssize_t *result)\n{\n\tstruct posix_acl *acl;\n\tchar *p = data + *result;\n\n\tacl = get_acl(inode, type);\n\tif (IS_ERR_OR_NULL(acl))\n\t\treturn 0;\n\n\tposix_acl_release(acl);\n\n\t*result += strlen(name);\n\t*result += 1;\n\tif (!size)\n\t\treturn 0;\n\tif (*result > size)\n\t\treturn -ERANGE;\n\n\tstrcpy(p, name);\n\treturn 0;\n}\n\n\n// Source: nfs3acl.c\n// Lines 296-317\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,28 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'authkey' at line 3
+2. Pointer 'idmap' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+nfs_idmap_complete_pipe_upcall_locked(struct idmap *idmap, int ret)
+{
+	struct key *authkey = idmap->idmap_upcall_data->authkey;
+
+	kfree(idmap->idmap_upcall_data);
+	idmap->idmap_upcall_data = NULL;
+	complete_request_key(authkey, ret);
+	key_put(authkey);
+}
+
+
+// Source: nfs4idmap.c
+// Lines 564-572
+
+
+[ANSWER]
+MUST

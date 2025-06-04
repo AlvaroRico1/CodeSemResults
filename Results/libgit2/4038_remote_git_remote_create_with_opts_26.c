@@ -1,0 +1,114 @@
+int git_remote_create_with_opts(git_remote **out, const char *url, const git_remote_create_options *opts)
+{
+	git_remote *remote = NULL;
+	git_config *config_ro = NULL, *config_rw;
+	git_str canonical_url = GIT_STR_INIT;
+	git_str var = GIT_STR_INIT;
+	git_str specbuf = GIT_STR_INIT;
+	const git_remote_create_options dummy_opts = GIT_REMOTE_CREATE_OPTIONS_INIT;
+	int error = -1;
+
+	GIT_ASSERT_ARG(out);
+	GIT_ASSERT_ARG(url);
+
+	if (!opts) {
+		opts = &dummy_opts;
+	}
+
+	GIT_ERROR_CHECK_VERSION(opts, GIT_REMOTE_CREATE_OPTIONS_VERSION, "git_remote_create_options");
+
+	if (opts->name != NULL) {
+		if ((error = ensure_remote_name_is_valid(opts->name)) < 0)
+			return error;
+
+		if (opts->repository &&
+		    (error = ensure_remote_doesnot_exist(opts->repository, opts->name)) < 0)
+			return error;
+	}
+
+	if (opts->repository) {
+		if ((error = git_repository_config_snapshot(&config_ro, opts->repository)) < 0)
+			goto on_error;
+	}
+
+	remote = git__calloc(1, sizeof(git_remote));
+	GIT_ERROR_CHECK_ALLOC(remote);
+
+	remote->repo = opts->repository;
+
+	if ((error = git_vector_init(&remote->refs, 8, NULL)) < 0 ||
+		(error = canonicalize_url(&canonical_url, url)) < 0)
+		goto on_error;
+
+	if (opts->repository && !(opts->flags & GIT_REMOTE_CREATE_SKIP_INSTEADOF)) {
+		if ((error = apply_insteadof(&remote->url, config_ro, canonical_url.ptr, GIT_DIRECTION_FETCH, true)) < 0 ||
+		    (error = apply_insteadof(&remote->pushurl, config_ro, canonical_url.ptr, GIT_DIRECTION_PUSH, false)) < 0)
+			goto on_error;
+	} else {
+		remote->url = git__strdup(canonical_url.ptr);
+		GIT_ERROR_CHECK_ALLOC(remote->url);
+	}
+
+	if (opts->name != NULL) {
+		remote->name = git__strdup(opts->name);
+		GIT_ERROR_CHECK_ALLOC(remote->name);
+
+		if (opts->repository &&
+		    ((error = git_str_printf(&var, CONFIG_URL_FMT, opts->name)) < 0 ||
+		    (error = git_repository_config__weakptr(&config_rw, opts->repository)) < 0 ||
+		    (error = git_config_set_string(config_rw, var.ptr, canonical_url.ptr)) < 0))
+			goto on_error;
+	}
+
+	if (opts->fetchspec != NULL ||
+	    (opts->name && !(opts->flags & GIT_REMOTE_CREATE_SKIP_DEFAULT_FETCHSPEC))) {
+		const char *fetch = NULL;
+		if (opts->fetchspec) {
+			fetch = opts->fetchspec;
+		} else {
+			if ((error = default_fetchspec_for_name(&specbuf, opts->name)) < 0)
+				goto on_error;
+
+			fetch = git_str_cstr(&specbuf);
+		}
+
+		if ((error = add_refspec(remote, fetch, true)) < 0)
+			goto on_error;
+
+		/* only write for named remotes with a repository */
+		if (opts->repository && opts->name &&
+		    ((error = write_add_refspec(opts->repository, opts->name, fetch, true)) < 0 ||
+		    (error = lookup_remote_prune_config(remote, config_ro, opts->name)) < 0))
+			goto on_error;
+
+		/* Move the data over to where the matching functions can find them */
+		if ((error = dwim_refspecs(&remote->active_refspecs, &remote->refspecs, &remote->refs)) < 0)
+			goto on_error;
+	}
+
+	/* A remote without a name doesn't download tags */
+	if (!opts->name)
+		remote->download_tags = GIT_REMOTE_DOWNLOAD_TAGS_NONE;
+	else
+		remote->download_tags = GIT_REMOTE_DOWNLOAD_TAGS_AUTO;
+
+
+	git_str_dispose(&var);
+
+	*out = remote;
+	error = 0;
+
+on_error:
+	if (error)
+		git_remote_free(remote);
+
+	git_config_free(config_ro);
+	git_str_dispose(&specbuf);
+	git_str_dispose(&canonical_url);
+	git_str_dispose(&var);
+	return error;
+}
+
+
+// Source: remote.c
+// Lines 206-315

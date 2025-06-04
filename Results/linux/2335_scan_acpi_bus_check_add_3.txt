@@ -1,0 +1,1 @@
+return_value,linux/drivers/acpi/scan.c,2,sta,linux/drivers/acpi/scan.c,6,2

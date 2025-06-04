@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'wy' at line 3\n2. Pointer 'wx' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nscreen_reflow(struct screen *s, u_int new_x, u_int *cx, u_int *cy, int cursor)\n{\n\tu_int\twx, wy;\n\n\tif (cursor) {\n\t\tgrid_wrap_position(s->grid, *cx, *cy, &wx, &wy);\n\t\tlog_debug(\"%s: cursor %u,%u is %u,%u\", __func__, *cx, *cy, wx,\n\t\t    wy);\n\t}\n\n\tgrid_reflow(s->grid, new_x);\n\n\tif (cursor) {\n\t\tgrid_unwrap_position(s->grid, cx, cy, wx, wy);\n\t\tlog_debug(\"%s: new cursor is %u,%u\", __func__, *cx, *cy);\n\t}\n\telse {\n\t\t*cx = 0;\n\t\t*cy = s->grid->hsize;\n\t}\n}\n\n\n// Source: screen.c\n// Lines 552-572\n",
+  "ANSWER": "MAY"
+}

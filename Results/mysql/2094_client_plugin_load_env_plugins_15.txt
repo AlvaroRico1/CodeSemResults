@@ -1,0 +1,1 @@
+free_env,mysql/sql-common/client_plugin.cc,2,enable_cleartext_plugin,mysql/sql-common/client_plugin.cc,3,0

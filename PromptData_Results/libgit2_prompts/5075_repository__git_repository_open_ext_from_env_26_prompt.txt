@@ -1,0 +1,74 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'odb' at line 7
+2. Pointer 'across_fs' at line 49
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int _git_repository_open_ext_from_env(
+	git_repository **out,
+	const char *start_path)
+{
+	git_repository *repo = NULL;
+	git_index *index = NULL;
+	git_odb *odb = NULL;
+	git_str dir_buf = GIT_STR_INIT;
+	git_str ceiling_dirs_buf = GIT_STR_INIT;
+	git_str across_fs_buf = GIT_STR_INIT;
+	git_str index_file_buf = GIT_STR_INIT;
+	git_str namespace_buf = GIT_STR_INIT;
+	git_str object_dir_buf = GIT_STR_INIT;
+	git_str alts_buf = GIT_STR_INIT;
+	git_str work_tree_buf = GIT_STR_INIT;
+	git_str common_dir_buf = GIT_STR_INIT;
+	const char *ceiling_dirs = NULL;
+	unsigned flags = 0;
+	int error;
+
+	if (!start_path) {
+		error = git__getenv(&dir_buf, "GIT_DIR");
+		if (error == GIT_ENOTFOUND) {
+			git_error_clear();
+			start_path = ".";
+		} else if (error < 0)
+			goto error;
+		else {
+			start_path = git_str_cstr(&dir_buf);
+			flags |= GIT_REPOSITORY_OPEN_NO_SEARCH;
+			flags |= GIT_REPOSITORY_OPEN_NO_DOTGIT;
+		}
+	}
+
+	error = git__getenv(&ceiling_dirs_buf, "GIT_CEILING_DIRECTORIES");
+	if (error == GIT_ENOTFOUND)
+		git_error_clear();
+	else if (error < 0)
+		goto error;
+	else
+		ceiling_dirs = git_str_cstr(&ceiling_dirs_buf);
+
+	error = git__getenv(&across_fs_buf, "GIT_DISCOVERY_ACROSS_FILESYSTEM");
+	if (error == GIT_ENOTFOUND)
+		git_error_clear();
+	else if (error < 0)
+		goto error;
+	else {
+		int across_fs = 0;
+		error = git_config_parse_bool(&across_fs, git_str_cstr(&across_fs_buf));
+		if (error < 0)
+			goto error;
+		if (across_fs)
+			flags |= GIT_REPOSITORY_OPEN_CROSS_FS;
+	}
+
+
+// Source: repository.c
+// Lines 655-709
+
+
+[ANSWER]
+MAY

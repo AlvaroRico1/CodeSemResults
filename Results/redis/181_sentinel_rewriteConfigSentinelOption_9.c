@@ -1,0 +1,176 @@
+void rewriteConfigSentinelOption(struct rewriteConfigState *state) {
+    dictIterator *di, *di2;
+    dictEntry *de;
+    sds line;
+
+    /* sentinel unique ID. */
+    line = sdscatprintf(sdsempty(), "sentinel myid %s", sentinel.myid);
+    rewriteConfigRewriteLine(state,"sentinel myid",line,1);
+
+    /* sentinel deny-scripts-reconfig. */
+    line = sdscatprintf(sdsempty(), "sentinel deny-scripts-reconfig %s",
+        sentinel.deny_scripts_reconfig ? "yes" : "no");
+    rewriteConfigRewriteLine(state,"sentinel deny-scripts-reconfig",line,
+        sentinel.deny_scripts_reconfig != SENTINEL_DEFAULT_DENY_SCRIPTS_RECONFIG);
+
+    /* sentinel resolve-hostnames.
+     * This must be included early in the file so it is already in effect
+     * when reading the file.
+     */
+    line = sdscatprintf(sdsempty(), "sentinel resolve-hostnames %s",
+                        sentinel.resolve_hostnames ? "yes" : "no");
+    rewriteConfigRewriteLine(state,"sentinel resolve-hostnames",line,
+                             sentinel.resolve_hostnames != SENTINEL_DEFAULT_RESOLVE_HOSTNAMES);
+
+    /* sentinel announce-hostnames. */
+    line = sdscatprintf(sdsempty(), "sentinel announce-hostnames %s",
+                        sentinel.announce_hostnames ? "yes" : "no");
+    rewriteConfigRewriteLine(state,"sentinel announce-hostnames",line,
+                             sentinel.announce_hostnames != SENTINEL_DEFAULT_ANNOUNCE_HOSTNAMES);
+
+    /* For every master emit a "sentinel monitor" config entry. */
+    di = dictGetIterator(sentinel.masters);
+    while((de = dictNext(di)) != NULL) {
+        sentinelRedisInstance *master, *ri;
+        sentinelAddr *master_addr;
+
+        /* sentinel monitor */
+        master = dictGetVal(de);
+        master_addr = sentinelGetCurrentMasterAddress(master);
+        line = sdscatprintf(sdsempty(),"sentinel monitor %s %s %d %d",
+            master->name, announceSentinelAddr(master_addr), master_addr->port,
+            master->quorum);
+        rewriteConfigRewriteLine(state,"sentinel monitor",line,1);
+        /* rewriteConfigMarkAsProcessed is handled after the loop */
+
+        /* sentinel down-after-milliseconds */
+        if (master->down_after_period != SENTINEL_DEFAULT_DOWN_AFTER) {
+            line = sdscatprintf(sdsempty(),
+                "sentinel down-after-milliseconds %s %ld",
+                master->name, (long) master->down_after_period);
+            rewriteConfigRewriteLine(state,"sentinel down-after-milliseconds",line,1);
+            /* rewriteConfigMarkAsProcessed is handled after the loop */
+        }
+
+        /* sentinel failover-timeout */
+        if (master->failover_timeout != SENTINEL_DEFAULT_FAILOVER_TIMEOUT) {
+            line = sdscatprintf(sdsempty(),
+                "sentinel failover-timeout %s %ld",
+                master->name, (long) master->failover_timeout);
+            rewriteConfigRewriteLine(state,"sentinel failover-timeout",line,1);
+            /* rewriteConfigMarkAsProcessed is handled after the loop */
+
+        }
+
+        /* sentinel parallel-syncs */
+        if (master->parallel_syncs != SENTINEL_DEFAULT_PARALLEL_SYNCS) {
+            line = sdscatprintf(sdsempty(),
+                "sentinel parallel-syncs %s %d",
+                master->name, master->parallel_syncs);
+            rewriteConfigRewriteLine(state,"sentinel parallel-syncs",line,1);
+            /* rewriteConfigMarkAsProcessed is handled after the loop */
+        }
+
+        /* sentinel notification-script */
+        if (master->notification_script) {
+            line = sdscatprintf(sdsempty(),
+                "sentinel notification-script %s %s",
+                master->name, master->notification_script);
+            rewriteConfigRewriteLine(state,"sentinel notification-script",line,1);
+            /* rewriteConfigMarkAsProcessed is handled after the loop */
+        }
+
+        /* sentinel client-reconfig-script */
+        if (master->client_reconfig_script) {
+            line = sdscatprintf(sdsempty(),
+                "sentinel client-reconfig-script %s %s",
+                master->name, master->client_reconfig_script);
+            rewriteConfigRewriteLine(state,"sentinel client-reconfig-script",line,1);
+            /* rewriteConfigMarkAsProcessed is handled after the loop */
+        }
+
+        /* sentinel auth-pass & auth-user */
+        if (master->auth_pass) {
+            line = sdscatprintf(sdsempty(),
+                "sentinel auth-pass %s %s",
+                master->name, master->auth_pass);
+            rewriteConfigRewriteLine(state,"sentinel auth-pass",line,1);
+            /* rewriteConfigMarkAsProcessed is handled after the loop */
+        }
+
+        if (master->auth_user) {
+            line = sdscatprintf(sdsempty(),
+                "sentinel auth-user %s %s",
+                master->name, master->auth_user);
+            rewriteConfigRewriteLine(state,"sentinel auth-user",line,1);
+            /* rewriteConfigMarkAsProcessed is handled after the loop */
+        }
+
+        /* sentinel config-epoch */
+        line = sdscatprintf(sdsempty(),
+            "sentinel config-epoch %s %llu",
+            master->name, (unsigned long long) master->config_epoch);
+        rewriteConfigRewriteLine(state,"sentinel config-epoch",line,1);
+        /* rewriteConfigMarkAsProcessed is handled after the loop */
+
+
+        /* sentinel leader-epoch */
+        line = sdscatprintf(sdsempty(),
+            "sentinel leader-epoch %s %llu",
+            master->name, (unsigned long long) master->leader_epoch);
+        rewriteConfigRewriteLine(state,"sentinel leader-epoch",line,1);
+        /* rewriteConfigMarkAsProcessed is handled after the loop */
+
+        /* sentinel known-slave */
+        di2 = dictGetIterator(master->slaves);
+        while((de = dictNext(di2)) != NULL) {
+            sentinelAddr *slave_addr;
+
+            ri = dictGetVal(de);
+            slave_addr = ri->addr;
+
+            /* If master_addr (obtained using sentinelGetCurrentMasterAddress()
+             * so it may be the address of the promoted slave) is equal to this
+             * slave's address, a failover is in progress and the slave was
+             * already successfully promoted. So as the address of this slave
+             * we use the old master address instead. */
+            if (sentinelAddrIsEqual(slave_addr,master_addr))
+                slave_addr = master->addr;
+            line = sdscatprintf(sdsempty(),
+                "sentinel known-replica %s %s %d",
+                master->name, announceSentinelAddr(slave_addr), slave_addr->port);
+            rewriteConfigRewriteLine(state,"sentinel known-replica",line,1);
+            /* rewriteConfigMarkAsProcessed is handled after the loop */
+        }
+        dictReleaseIterator(di2);
+
+        /* sentinel known-sentinel */
+        di2 = dictGetIterator(master->sentinels);
+        while((de = dictNext(di2)) != NULL) {
+            ri = dictGetVal(de);
+            if (ri->runid == NULL) continue;
+            line = sdscatprintf(sdsempty(),
+                "sentinel known-sentinel %s %s %d %s",
+                master->name, announceSentinelAddr(ri->addr), ri->addr->port, ri->runid);
+            rewriteConfigRewriteLine(state,"sentinel known-sentinel",line,1);
+            /* rewriteConfigMarkAsProcessed is handled after the loop */
+        }
+        dictReleaseIterator(di2);
+
+        /* sentinel rename-command */
+        di2 = dictGetIterator(master->renamed_commands);
+        while((de = dictNext(di2)) != NULL) {
+            sds oldname = dictGetKey(de);
+            sds newname = dictGetVal(de);
+            line = sdscatprintf(sdsempty(),
+                "sentinel rename-command %s %s %s",
+                master->name, oldname, newname);
+            rewriteConfigRewriteLine(state,"sentinel rename-command",line,1);
+            /* rewriteConfigMarkAsProcessed is handled after the loop */
+        }
+        dictReleaseIterator(di2);
+    }
+
+
+// Source: sentinel.c
+// Lines 2066-2237

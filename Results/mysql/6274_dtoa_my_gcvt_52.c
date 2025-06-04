@@ -1,0 +1,198 @@
+size_t my_gcvt(double x, my_gcvt_arg_type type, int width, char *to,
+               bool *error) {
+  int decpt, sign, len, exp_len;
+  char *res, *src, *end, *dst = to, *dend = dst + width;
+  char buf[DTOA_BUFF_SIZE];
+  bool have_space, force_e_format;
+  assert(width > 0 && to != nullptr);
+
+  /* We want to remove '-' from equations early */
+  if (x < 0.) width--;
+
+  res =
+      dtoa(x, 4, type == MY_GCVT_ARG_DOUBLE ? width : std::min(width, FLT_DIG),
+           &decpt, &sign, &end, buf, sizeof(buf));
+  if (decpt == DTOA_OVERFLOW) {
+    dtoa_free(res, buf, sizeof(buf));
+    *to++ = '0';
+    *to = '\0';
+    if (error != nullptr) *error = true;
+    return 1;
+  }
+
+  if (error != nullptr) *error = false;
+
+  src = res;
+  len = (int)(end - res);
+
+  /*
+    Number of digits in the exponent from the 'e' conversion.
+     The sign of the exponent is taken into account separetely, we don't need
+     to count it here.
+   */
+  exp_len = 1 + (decpt >= 101 || decpt <= -99) + (decpt >= 11 || decpt <= -9);
+
+  /*
+     Do we have enough space for all digits in the 'f' format?
+     Let 'len' be the number of significant digits returned by dtoa,
+     and F be the length of the resulting decimal representation.
+     Consider the following cases:
+     1. decpt <= 0, i.e. we have "0.NNN" => F = len - decpt + 2
+     2. 0 < decpt < len, i.e. we have "NNN.NNN" => F = len + 1
+     3. len <= decpt, i.e. we have "NNN00" => F = decpt
+  */
+  have_space =
+      (decpt <= 0 ? len - decpt + 2
+                  : decpt > 0 && decpt < len ? len + 1 : decpt) <= width;
+  /*
+    The following is true when no significant digits can be placed with the
+    specified field width using the 'f' format, and the 'e' format
+    will not be truncated.
+  */
+  force_e_format = (decpt <= 0 && width <= 2 - decpt && width >= 3 + exp_len);
+  /*
+    Assume that we don't have enough space to place all significant digits in
+    the 'f' format. We have to choose between the 'e' format and the 'f' one
+    to keep as many significant digits as possible.
+    Let E and F be the lengths of decimal representaion in the 'e' and 'f'
+    formats, respectively. We want to use the 'f' format if, and only if F <= E.
+    Consider the following cases:
+    1. decpt <= 0.
+       F = len - decpt + 2 (see above)
+       E = len + (len > 1) + 1 + 1 (decpt <= -99) + (decpt <= -9) + 1
+       ("N.NNe-MMM")
+       (F <= E) <=> (len == 1 && decpt >= -1) || (len > 1 && decpt >= -2)
+       We also need to ensure that if the 'f' format is chosen,
+       the field width allows us to place at least one significant digit
+       (i.e. width > 2 - decpt). If not, we prefer the 'e' format.
+    2. 0 < decpt < len
+       F = len + 1 (see above)
+       E = len + 1 + 1 + ... ("N.NNeMMM")
+       F is always less than E.
+    3. len <= decpt <= width
+       In this case we have enough space to represent the number in the 'f'
+       format, so we prefer it with some exceptions.
+    4. width < decpt
+       The number cannot be represented in the 'f' format at all, always use
+       the 'e' 'one.
+  */
+  if ((have_space ||
+       /*
+         Not enough space, let's see if the 'f' format provides the most number
+         of significant digits.
+       */
+       ((decpt <= width &&
+         (decpt >= -1 || (decpt == -2 && (len > 1 || !force_e_format)))) &&
+        !force_e_format)) &&
+
+      /*
+        Use the 'e' format in some cases even if we have enough space for the
+        'f' one. See comment for MAX_DECPT_FOR_F_FORMAT.
+      */
+      (!have_space || (decpt >= -MAX_DECPT_FOR_F_FORMAT + 1 &&
+                       (decpt <= MAX_DECPT_FOR_F_FORMAT || len > decpt)))) {
+    /* 'f' format */
+    int i;
+
+    width -= (decpt < len) + (decpt <= 0 ? 1 - decpt : 0);
+
+    /* Do we have to truncate any digits? */
+    if (width < len) {
+      if (width < decpt) {
+        if (error != nullptr) *error = true;
+        width = decpt;
+      }
+
+      /*
+        We want to truncate (len - width) least significant digits after the
+        decimal point. For this we are calling dtoa with mode=5, passing the
+        number of significant digits = (len-decpt) - (len-width) = width-decpt
+      */
+      dtoa_free(res, buf, sizeof(buf));
+      res = dtoa(x, 5, width - decpt, &decpt, &sign, &end, buf, sizeof(buf));
+      src = res;
+      len = (int)(end - res);
+    }
+
+    if (len == 0) {
+      /* Underflow. Just print '0' and exit */
+      *dst++ = '0';
+      goto end;
+    }
+
+    /*
+      At this point we are sure we have enough space to put all digits
+      returned by dtoa
+    */
+    if (sign && dst < dend) *dst++ = '-';
+    if (decpt <= 0) {
+      if (dst < dend) *dst++ = '0';
+      if (len > 0 && dst < dend) *dst++ = '.';
+      for (; decpt < 0 && dst < dend; decpt++) *dst++ = '0';
+    }
+
+    for (i = 1; i <= len && dst < dend; i++) {
+      *dst++ = *src++;
+      if (i == decpt && i < len && dst < dend) *dst++ = '.';
+    }
+    while (i++ <= decpt && dst < dend) *dst++ = '0';
+  } else {
+    /* 'e' format */
+    int decpt_sign = 0;
+
+    if (--decpt < 0) {
+      decpt = -decpt;
+      width--;
+      decpt_sign = 1;
+    }
+    width -= 1 + exp_len; /* eNNN */
+
+    if (len > 1) width--;
+
+    if (width <= 0) {
+      /* Overflow */
+      if (error != nullptr) *error = true;
+      width = 0;
+    }
+
+    /* Do we have to truncate any digits? */
+    if (width < len) {
+      /* Yes, re-convert with a smaller width */
+      dtoa_free(res, buf, sizeof(buf));
+      res = dtoa(x, 4, width, &decpt, &sign, &end, buf, sizeof(buf));
+      src = res;
+      len = (int)(end - res);
+      if (--decpt < 0) decpt = -decpt;
+    }
+    /*
+      At this point we are sure we have enough space to put all digits
+      returned by dtoa
+    */
+    if (sign && dst < dend) *dst++ = '-';
+    if (dst < dend) *dst++ = *src++;
+    if (len > 1 && dst < dend) {
+      *dst++ = '.';
+      while (src < end && dst < dend) *dst++ = *src++;
+    }
+    if (dst < dend) *dst++ = 'e';
+    if (decpt_sign && dst < dend) *dst++ = '-';
+
+    if (decpt >= 100 && dst < dend) {
+      *dst++ = decpt / 100 + '0';
+      decpt %= 100;
+      if (dst < dend) *dst++ = decpt / 10 + '0';
+    } else if (decpt >= 10 && dst < dend)
+      *dst++ = decpt / 10 + '0';
+    if (dst < dend) *dst++ = decpt % 10 + '0';
+  }
+
+end:
+  dtoa_free(res, buf, sizeof(buf));
+  *dst = '\0';
+
+  return dst - to;
+}
+
+
+// Source: dtoa.cc
+// Lines 302-495

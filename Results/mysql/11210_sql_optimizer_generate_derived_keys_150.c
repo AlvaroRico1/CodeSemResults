@@ -1,0 +1,17 @@
+bool JOIN::generate_derived_keys() {
+  assert(query_block->materialized_derived_table_count);
+
+  for (TABLE_LIST *table = query_block->leaf_tables; table;
+       table = table->next_leaf) {
+    table->derived_keys_ready = true;
+    /* Process tables that aren't materialized yet. */
+    if (table->uses_materialization() && !table->table->is_created() &&
+        table->generate_keys())
+      return true;
+  }
+  return false;
+}
+
+
+// Source: sql_optimizer.cc
+// Lines 8825-8837

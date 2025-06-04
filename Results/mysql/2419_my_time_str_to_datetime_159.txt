@@ -1,0 +1,1 @@
+allow_space,mysql/mysys/my_time.cc,13,l_time,mysql/mysys/my_time.cc,1,0

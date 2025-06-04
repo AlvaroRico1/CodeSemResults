@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'path' at line 2\n2. Pointer 'fd' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid cl_git_write2file(\n\tconst char *path, const char *content, size_t content_len,\n\tint flags, unsigned int mode)\n{\n\tint fd;\n\tcl_assert(path && content);\n\tcl_assert((fd = p_open(path, flags, mode)) >= 0);\n\tif (!content_len)\n\t\tcontent_len = strlen(content);\n\tcl_must_pass(p_write(fd, content, content_len));\n\tcl_must_pass(p_close(fd));\n}\n\n\n// Source: clar_libgit2.c\n// Lines 41-52\n",
+  "ANSWER": "MUST-NOT"
+}

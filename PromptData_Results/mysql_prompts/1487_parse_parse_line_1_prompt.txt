@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'argv' at line 3
+2. Pointer 'argc' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+parse_line(EditLine *el, const wchar_t *line)
+{
+	const wchar_t **argv = NULL;
+	int argc = 0;
+	TokenizerW *tok;
+
+	tok = tok_winit(NULL);
+	tok_wstr(tok, line, &argc, &argv);
+	argc = el_wparse(el, argc, argv);
+	tok_wend(tok);
+	return argc;
+}
+
+
+// Source: parse.c
+// Lines 82-93
+
+
+[ANSWER]
+MAY

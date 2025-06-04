@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'out' at line 1\n2. Pointer 'iter' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint git_config_iterator_new(git_config_iterator **out, const git_config *cfg)\n{\n\tall_iter *iter;\n\n\titer = git__calloc(1, sizeof(all_iter));\n\tGIT_ERROR_CHECK_ALLOC(iter);\n\n\titer->parent.free = all_iter_free;\n\titer->parent.next = all_iter_next;\n\n\titer->i = cfg->backends.length;\n\titer->cfg = cfg;\n\n\t*out = (git_config_iterator *) iter;\n\n\treturn 0;\n}\n\n\n// Source: config.c\n// Lines 458-474\n",
+  "ANSWER": "MUST"
+}

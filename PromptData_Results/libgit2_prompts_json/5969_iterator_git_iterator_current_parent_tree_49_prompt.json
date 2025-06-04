@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'parent_tree' at line 2\n2. Pointer 'frame' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint git_iterator_current_parent_tree(\n\tconst git_tree **parent_tree, git_iterator *i, size_t depth)\n{\n\ttree_iterator *iter;\n\ttree_iterator_frame *frame;\n\n\tGIT_ASSERT(i->type == GIT_ITERATOR_TREE);\n\n\titer = (tree_iterator *)i;\n\n\tGIT_ASSERT(depth < iter->frames.size);\n\tframe = &iter->frames.ptr[iter->frames.size-depth-1];\n\n\t*parent_tree = frame->tree;\n\treturn 0;\n}\n\n\n// Source: iterator.c\n// Lines 992-1007\n",
+  "ANSWER": "MUST"
+}

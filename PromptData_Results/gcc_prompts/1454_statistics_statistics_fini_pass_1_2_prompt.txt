@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'counter' at line 4
+2. Pointer 'slot' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+statistics_fini_pass_1 (statistics_counter **slot,
+			void *data ATTRIBUTE_UNUSED)
+{
+  statistics_counter *counter = *slot;
+  unsigned HOST_WIDE_INT count = counter->count - counter->prev_dumped_count;
+  if (count == 0)
+    return 1;
+  if (counter->histogram_p)
+    fprintf (dump_file, "%s == %d: " HOST_WIDE_INT_PRINT_DEC "\n",
+	     counter->id, counter->val, count);
+  else
+    fprintf (dump_file, "%s: " HOST_WIDE_INT_PRINT_DEC "\n",
+	     counter->id, count);
+  counter->prev_dumped_count = counter->count;
+  return 1;
+}
+
+
+// Source: statistics.c
+// Lines 120-135
+
+
+[ANSWER]
+MUST

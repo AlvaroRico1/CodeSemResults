@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ts' at line 5\n2. Pointer 'context' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nenumTailoredRange(const void *context, UChar32 start, UChar32 end, uint32_t ce32) {\n    if(ce32 == Collation::FALLBACK_CE32) {\n        return TRUE;  // fallback to base, not tailored\n    }\n    TailoredSet *ts = (TailoredSet *)context;\n    return ts->handleCE32(start, end, ce32);\n}\n\n\n// Source: collationsets.cpp\n// Lines 35-41\n",
+  "ANSWER": "MUST"
+}

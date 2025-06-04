@@ -1,0 +1,140 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'src_end' at line 4
+2. Pointer 'datagram' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+size_t quicly_decode_packet(quicly_context_t *ctx, quicly_decoded_packet_t *packet, const uint8_t *datagram, size_t datagram_size,
+                            size_t *off)
+{
+    const uint8_t *src = datagram, *src_end = datagram + datagram_size;
+
+    assert(*off <= datagram_size);
+
+    packet->octets = ptls_iovec_init(src + *off, datagram_size - *off);
+    if (packet->octets.len < 2)
+        goto Error;
+    packet->datagram_size = *off == 0 ? datagram_size : 0;
+    packet->token = ptls_iovec_init(NULL, 0);
+    packet->decrypted.pn = UINT64_MAX;
+
+    /* move the cursor to the second byte */
+    src += *off + 1;
+
+    if (QUICLY_PACKET_IS_LONG_HEADER(packet->octets.base[0])) {
+        /* long header */
+        uint64_t rest_length;
+        if (src_end - src < 5)
+            goto Error;
+        packet->version = quicly_decode32(&src);
+        packet->cid.dest.encrypted.len = *src++;
+        if (src_end - src < packet->cid.dest.encrypted.len + 1)
+            goto Error;
+        packet->cid.dest.encrypted.base = (uint8_t *)src;
+        src += packet->cid.dest.encrypted.len;
+        packet->cid.src.len = *src++;
+        if (src_end - src < packet->cid.src.len)
+            goto Error;
+        packet->cid.src.base = (uint8_t *)src;
+        src += packet->cid.src.len;
+        switch (packet->octets.base[0] & QUICLY_PACKET_TYPE_BITMASK) {
+        case QUICLY_PACKET_TYPE_INITIAL:
+        case QUICLY_PACKET_TYPE_0RTT:
+            if (ctx->cid_encryptor == NULL || packet->cid.dest.encrypted.len == 0 ||
+                ctx->cid_encryptor->decrypt_cid(ctx->cid_encryptor, &packet->cid.dest.plaintext, packet->cid.dest.encrypted.base,
+                                                packet->cid.dest.encrypted.len) == SIZE_MAX)
+                packet->cid.dest.plaintext = quicly_cid_plaintext_invalid;
+            packet->cid.dest.might_be_client_generated = 1;
+            break;
+        default:
+            if (ctx->cid_encryptor != NULL) {
+                if (packet->cid.dest.encrypted.len == 0)
+                    goto Error;
+                if (ctx->cid_encryptor->decrypt_cid(ctx->cid_encryptor, &packet->cid.dest.plaintext,
+                                                    packet->cid.dest.encrypted.base, packet->cid.dest.encrypted.len) == SIZE_MAX)
+                    goto Error;
+            } else {
+                packet->cid.dest.plaintext = quicly_cid_plaintext_invalid;
+            }
+            packet->cid.dest.might_be_client_generated = 0;
+            break;
+        }
+        switch (packet->version) {
+        case QUICLY_PROTOCOL_VERSION_1:
+        case QUICLY_PROTOCOL_VERSION_DRAFT29:
+        case QUICLY_PROTOCOL_VERSION_DRAFT27:
+            /* these are the recognized versions, and they share the same packet header format */
+            if ((packet->octets.base[0] & QUICLY_PACKET_TYPE_BITMASK) == QUICLY_PACKET_TYPE_RETRY) {
+                /* retry */
+                if (src_end - src <= PTLS_AESGCM_TAG_SIZE)
+                    goto Error;
+                packet->token = ptls_iovec_init(src, src_end - src - PTLS_AESGCM_TAG_SIZE);
+                src += packet->token.len;
+                packet->encrypted_off = src - packet->octets.base;
+            } else {
+                /* coalescible long header packet */
+                if ((packet->octets.base[0] & QUICLY_PACKET_TYPE_BITMASK) == QUICLY_PACKET_TYPE_INITIAL) {
+                    /* initial has a token */
+                    uint64_t token_len;
+                    if ((token_len = quicly_decodev(&src, src_end)) == UINT64_MAX)
+                        goto Error;
+                    if (src_end - src < token_len)
+                        goto Error;
+                    packet->token = ptls_iovec_init(src, token_len);
+                    src += token_len;
+                }
+                if ((rest_length = quicly_decodev(&src, src_end)) == UINT64_MAX)
+                    goto Error;
+                if (rest_length < 1)
+                    goto Error;
+                if (src_end - src < rest_length)
+                    goto Error;
+                packet->encrypted_off = src - packet->octets.base;
+                packet->octets.len = packet->encrypted_off + rest_length;
+            }
+            break;
+        default:
+            /* VN packet or packets of unknown version cannot be parsed. `encrypted_off` is set to the first byte after SCID. */
+            packet->encrypted_off = src - packet->octets.base;
+        }
+        packet->_is_stateless_reset_cached = QUICLY__DECODED_PACKET_CACHED_NOT_STATELESS_RESET;
+    } else {
+        /* short header */
+        if (ctx->cid_encryptor != NULL) {
+            if (src_end - src < QUICLY_MAX_CID_LEN_V1)
+                goto Error;
+            size_t local_cidl = ctx->cid_encryptor->decrypt_cid(ctx->cid_encryptor, &packet->cid.dest.plaintext, src, 0);
+            if (local_cidl == SIZE_MAX)
+                goto Error;
+            packet->cid.dest.encrypted = ptls_iovec_init(src, local_cidl);
+            src += local_cidl;
+        } else {
+            packet->cid.dest.encrypted = ptls_iovec_init(NULL, 0);
+            packet->cid.dest.plaintext = quicly_cid_plaintext_invalid;
+        }
+        packet->cid.dest.might_be_client_generated = 0;
+        packet->cid.src = ptls_iovec_init(NULL, 0);
+        packet->version = 0;
+        packet->encrypted_off = src - packet->octets.base;
+        packet->_is_stateless_reset_cached = QUICLY__DECODED_PACKET_CACHED_MAYBE_STATELESS_RESET;
+    }
+
+    *off += packet->octets.len;
+    return packet->octets.len;
+
+Error:
+    return SIZE_MAX;
+}
+
+
+// Source: quicly.c
+// Lines 615-735
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,46 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'inode' at line 3
+2. Pointer 'filp' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+do_getlk(struct file *filp, int cmd, struct file_lock *fl, int is_local)
+{
+	struct inode *inode = filp->f_mapping->host;
+	int status = 0;
+	unsigned int saved_type = fl->fl_type;
+
+	/* Try local locking first */
+	posix_test_lock(filp, fl);
+	if (fl->fl_type != F_UNLCK) {
+		/* found a conflict */
+		goto out;
+	}
+	fl->fl_type = saved_type;
+
+	if (NFS_PROTO(inode)->have_delegation(inode, FMODE_READ))
+		goto out_noconflict;
+
+	if (is_local)
+		goto out_noconflict;
+
+	status = NFS_PROTO(inode)->lock(filp, cmd, fl);
+out:
+	return status;
+out_noconflict:
+	fl->fl_type = F_UNLCK;
+	goto out;
+}
+
+
+// Source: file.c
+// Lines 657-683
+
+
+[ANSWER]
+MUST

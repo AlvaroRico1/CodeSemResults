@@ -1,0 +1,27 @@
+longlong my_datetime_packed_from_binary(const uchar *ptr, uint dec) {
+  longlong intpart = mi_uint5korr(ptr) - DATETIMEF_INT_OFS;
+  int frac;
+  assert(dec <= DATETIME_MAX_DECIMALS);
+  switch (dec) {
+    case 0:
+    default:
+      return my_packed_time_make_int(intpart);
+    case 1:
+    case 2:
+      frac = (static_cast<int>(static_cast<signed char>(ptr[5]))) * 10000;
+      break;
+    case 3:
+    case 4:
+      frac = mi_sint2korr(ptr + 5) * 100;
+      break;
+    case 5:
+    case 6:
+      frac = mi_sint3korr(ptr + 5);
+      break;
+  }
+  return my_packed_time_make(intpart, frac);
+}
+
+
+// Source: my_time.cc
+// Lines 1960-1982

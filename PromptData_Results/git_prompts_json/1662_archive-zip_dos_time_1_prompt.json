@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'time' at line 3\n2. Pointer 'timestamp' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void dos_time(timestamp_t *timestamp, int *dos_date, int *dos_time)\n{\n\ttime_t time;\n\tstruct tm tm;\n\n\tif (date_overflows(*timestamp))\n\t\tdie(_(\"timestamp too large for this system: %\"PRItime),\n\t\t    *timestamp);\n\ttime = (time_t)*timestamp;\n\tlocaltime_r(&time, &tm);\n\t*timestamp = time;\n\n\t*dos_date = tm.tm_mday + (tm.tm_mon + 1) * 32 +\n\t\t    (tm.tm_year + 1900 - 1980) * 512;\n\t*dos_time = tm.tm_sec / 2 + tm.tm_min * 32 + tm.tm_hour * 2048;\n}\n\n\n// Source: archive-zip.c\n// Lines 597-612\n",
+  "ANSWER": "MAY"
+}

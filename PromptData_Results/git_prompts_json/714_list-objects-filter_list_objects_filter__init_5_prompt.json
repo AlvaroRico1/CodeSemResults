@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'filter' at line 1\n2. Pointer 'omitted' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstruct filter *list_objects_filter__init(\n\tstruct oidset *omitted,\n\tstruct list_objects_filter_options *filter_options)\n{\n\tstruct filter *filter;\n\tfilter_init_fn init_fn;\n\n\tassert((sizeof(s_filters) / sizeof(s_filters[0])) == LOFC__COUNT);\n\n\tif (!filter_options)\n\t\treturn NULL;\n\n\tif (filter_options->choice >= LOFC__COUNT)\n\t\tBUG(\"invalid list-objects filter choice: %d\",\n\t\t    filter_options->choice);\n\n\tinit_fn = s_filters[filter_options->choice];\n\tif (!init_fn)\n\t\treturn NULL;\n\n\tCALLOC_ARRAY(filter, 1);\n\tfilter->omits = omitted;\n\tinit_fn(filter_options, filter);\n\treturn filter;\n}\n\n\n// Source: list-objects-filter.c\n// Lines 773-797\n",
+  "ANSWER": "MUST"
+}

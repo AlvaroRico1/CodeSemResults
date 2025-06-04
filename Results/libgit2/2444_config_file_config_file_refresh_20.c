@@ -1,0 +1,32 @@
+static int config_file_refresh(git_config_backend *cfg)
+{
+	config_file_backend *b = GIT_CONTAINER_OF(cfg, config_file_backend, parent);
+	git_config_entries *entries = NULL;
+	int error, modified;
+
+	if (cfg->readonly)
+		return 0;
+
+	if ((error = config_file_is_modified(&modified, &b->file)) < 0 && error != GIT_ENOTFOUND)
+		goto out;
+
+	if (!modified)
+		return 0;
+
+	config_file_clear_includes(b);
+
+	if ((error = git_config_entries_new(&entries)) < 0 ||
+	    (error = config_file_read(entries, b->repo, &b->file, b->level, 0)) < 0 ||
+	    (error = config_file_set_entries(cfg, entries)) < 0)
+		goto out;
+
+	entries = NULL;
+out:
+	git_config_entries_free(entries);
+
+	return (error == GIT_ENOTFOUND) ? 0 : error;
+}
+
+
+// Source: config_file.c
+// Lines 224-251

@@ -1,0 +1,1 @@
+command_size,mysql/sql-common/client.cc,8,rpl,mysql/sql-common/client.cc,1,0

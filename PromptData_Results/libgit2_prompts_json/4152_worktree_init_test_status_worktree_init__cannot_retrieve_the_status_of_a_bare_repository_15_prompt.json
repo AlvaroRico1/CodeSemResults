@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'status' at line 4\n2. Pointer 'repo' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid test_status_worktree_init__cannot_retrieve_the_status_of_a_bare_repository(void)\n{\n\tgit_repository *repo;\n\tunsigned int status = 0;\n\n\tcl_git_pass(git_repository_open(&repo, cl_fixture(\"testrepo.git\")));\n\tcl_assert_equal_i(GIT_EBAREREPO, git_status_file(&status, repo, \"dummy\"));\n\tgit_repository_free(repo);\n}\n\n\n// Source: worktree_init.c\n// Lines 16-24\n",
+  "ANSWER": "MAY"
+}

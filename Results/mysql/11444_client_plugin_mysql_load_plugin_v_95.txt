@@ -1,0 +1,1 @@
+sym,mysql/sql-common/client_plugin.cc,6,args,mysql/sql-common/client_plugin.cc,3,0

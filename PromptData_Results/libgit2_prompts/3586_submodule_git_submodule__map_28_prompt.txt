@@ -1,0 +1,86 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'mods' at line 8
+2. Pointer 'sm' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_submodule__map(git_repository *repo, git_strmap *map)
+{
+	int error = 0;
+	git_index *idx = NULL;
+	git_tree *head = NULL;
+	git_str path = GIT_STR_INIT;
+	git_submodule *sm;
+	git_config *mods = NULL;
+	bool has_workdir;
+
+	GIT_ASSERT_ARG(repo);
+	GIT_ASSERT_ARG(map);
+
+	/* get sources that we will need to check */
+	if (git_repository_index(&idx, repo) < 0)
+		git_error_clear();
+	if (git_repository_head_tree(&head, repo) < 0)
+		git_error_clear();
+
+	has_workdir = git_repository_workdir(repo) != NULL;
+
+	if (has_workdir &&
+	    (error = git_repository_workdir_path(&path, repo, GIT_MODULES_FILE)) < 0)
+		goto cleanup;
+
+	/* add submodule information from .gitmodules */
+	if (has_workdir) {
+		lfc_data data = { 0 };
+		data.map = map;
+		data.repo = repo;
+
+		if ((error = gitmodules_snapshot(&mods, repo)) < 0) {
+			if (error == GIT_ENOTFOUND)
+				error = 0;
+			goto cleanup;
+		}
+
+		data.mods = mods;
+		if ((error = git_config_foreach(
+			    mods, submodule_load_each, &data)) < 0)
+			goto cleanup;
+	}
+	/* add back submodule information from index */
+	if (mods && idx) {
+		if ((error = submodules_from_index(map, idx, mods)) < 0)
+			goto cleanup;
+	}
+	/* add submodule information from HEAD */
+	if (mods && head) {
+		if ((error = submodules_from_head(map, head, mods)) < 0)
+			goto cleanup;
+	}
+	/* shallow scan submodules in work tree as needed */
+	if (has_workdir) {
+		git_strmap_foreach_value(map, sm, {
+				submodule_load_from_wd_lite(sm);
+			});
+	}
+
+cleanup:
+	git_config_free(mods);
+	/* TODO: if we got an error, mark submodule config as invalid? */
+	git_index_free(idx);
+	git_tree_free(head);
+	git_str_dispose(&path);
+	return error;
+}
+
+
+// Source: submodule.c
+// Lines 556-622
+
+
+[ANSWER]
+MAY

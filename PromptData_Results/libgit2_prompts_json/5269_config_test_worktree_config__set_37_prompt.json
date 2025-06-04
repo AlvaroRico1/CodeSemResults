@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'cfg' at line 3\n2. Pointer 'val' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid test_worktree_config__set(void)\n{\n\tgit_config *cfg;\n\tint32_t val;\n\n\tcl_git_pass(git_repository_config(&cfg, fixture.worktree));\n\tcl_git_pass(git_config_set_int32(cfg, \"core.dummy\", 5));\n\tgit_config_free(cfg);\n\n\t/*\n\t * reopen to verify configuration has been set in the\n\t * common dir\n\t */\n\tcl_git_pass(git_repository_config(&cfg, fixture.repo));\n\tcl_git_pass(git_config_get_int32(&val, cfg, \"core.dummy\"));\n\tcl_assert_equal_i(val, 5);\n\tgit_config_free(cfg);\n}\n\n\n// Source: config.c\n// Lines 30-47\n",
+  "ANSWER": "MAY"
+}

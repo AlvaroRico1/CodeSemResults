@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'mem' at line 4\n2. Pointer 'userp' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ndoh_write_cb(const void *contents, size_t size, size_t nmemb, void *userp)\n{\n  size_t realsize = size * nmemb;\n  struct dynbuf *mem = (struct dynbuf *)userp;\n\n  if(Curl_dyn_addn(mem, contents, realsize))\n    return 0;\n\n  return realsize;\n}\n\n\n// Source: doh.c\n// Lines 178-187\n",
+  "ANSWER": "MUST"
+}

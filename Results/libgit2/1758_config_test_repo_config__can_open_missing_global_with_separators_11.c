@@ -1,0 +1,32 @@
+void test_repo_config__can_open_missing_global_with_separators(void)
+{
+	git_repository *repo;
+	git_config *config, *global;
+
+	cl_git_pass(git_str_printf(
+		&path, "%c%s", GIT_PATH_LIST_SEPARATOR, "dummy"));
+
+	cl_git_pass(git_libgit2_opts(
+		GIT_OPT_SET_SEARCH_PATH, GIT_CONFIG_LEVEL_GLOBAL, path.ptr));
+	cl_git_pass(git_libgit2_opts(
+		GIT_OPT_SET_SEARCH_PATH, GIT_CONFIG_LEVEL_SYSTEM, path.ptr));
+	cl_git_pass(git_libgit2_opts(
+		GIT_OPT_SET_SEARCH_PATH, GIT_CONFIG_LEVEL_XDG, path.ptr));
+
+	git_str_dispose(&path);
+
+	cl_git_pass(git_repository_open(&repo, "empty_standard_repo"));
+	cl_git_pass(git_repository_config(&config, repo));
+	cl_git_pass(git_config_open_level(
+		&global, config, GIT_CONFIG_LEVEL_GLOBAL));
+
+	cl_git_pass(git_config_set_string(global, "test.set", "42"));
+
+	git_config_free(global);
+	git_config_free(config);
+	git_repository_free(repo);
+}
+
+
+// Source: config.c
+// Lines 58-85

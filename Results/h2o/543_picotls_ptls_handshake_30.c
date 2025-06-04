@@ -1,0 +1,61 @@
+int ptls_handshake(ptls_t *tls, ptls_buffer_t *_sendbuf, const void *input, size_t *inlen, ptls_handshake_properties_t *properties)
+{
+    struct st_ptls_record_message_emitter_t emitter;
+    int ret;
+
+    assert(tls->state < PTLS_STATE_POST_HANDSHAKE_MIN);
+
+    init_record_message_emitter(tls, &emitter, _sendbuf);
+    size_t sendbuf_orig_off = emitter.super.buf->off;
+
+    /* special handlings */
+    switch (tls->state) {
+    case PTLS_STATE_CLIENT_HANDSHAKE_START: {
+        assert(input == NULL || *inlen == 0);
+        assert(tls->ctx->key_exchanges[0] != NULL);
+        return send_client_hello(tls, &emitter.super, properties, NULL);
+    }
+    default:
+        break;
+    }
+
+    const uint8_t *src = input, *const src_end = src + *inlen;
+    ptls_buffer_t decryptbuf;
+
+    ptls_buffer_init(&decryptbuf, "", 0);
+
+    /* perform handhake until completion or until all the input has been swallowed */
+    ret = PTLS_ERROR_IN_PROGRESS;
+    while (ret == PTLS_ERROR_IN_PROGRESS && src != src_end) {
+        size_t consumed = src_end - src;
+        ret = handle_input(tls, &emitter.super, &decryptbuf, src, &consumed, properties);
+        src += consumed;
+        assert(decryptbuf.off == 0);
+    }
+
+    ptls_buffer_dispose(&decryptbuf);
+
+    switch (ret) {
+    case 0:
+    case PTLS_ERROR_IN_PROGRESS:
+    case PTLS_ERROR_STATELESS_RETRY:
+        break;
+    default:
+        /* flush partially written response */
+        ptls_clear_memory(emitter.super.buf->base + sendbuf_orig_off, emitter.super.buf->off - sendbuf_orig_off);
+        emitter.super.buf->off = sendbuf_orig_off;
+        /* send alert immediately */
+        if (PTLS_ERROR_GET_CLASS(ret) != PTLS_ERROR_CLASS_PEER_ALERT)
+            if (ptls_send_alert(tls, emitter.super.buf, PTLS_ALERT_LEVEL_FATAL,
+                                PTLS_ERROR_GET_CLASS(ret) == PTLS_ERROR_CLASS_SELF_ALERT ? ret : PTLS_ALERT_INTERNAL_ERROR) != 0)
+                emitter.super.buf->off = sendbuf_orig_off;
+        break;
+    }
+
+    *inlen -= src_end - src;
+    return ret;
+}
+
+
+// Source: picotls.c
+// Lines 4828-4884

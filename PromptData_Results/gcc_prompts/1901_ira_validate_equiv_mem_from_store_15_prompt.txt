@@ -1,0 +1,30 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'info' at line 4
+2. Pointer 'data' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+validate_equiv_mem_from_store (rtx dest, const_rtx set ATTRIBUTE_UNUSED,
+			       void *data)
+{
+  struct equiv_mem_data *info = (struct equiv_mem_data *) data;
+
+  if ((REG_P (dest)
+       && reg_overlap_mentioned_p (dest, info->equiv_mem))
+      || (MEM_P (dest)
+	  && anti_dependence (info->equiv_mem, dest)))
+    info->equiv_mem_modified = true;
+}
+
+
+// Source: ira.c
+// Lines 2930-2940
+
+
+[ANSWER]
+MUST

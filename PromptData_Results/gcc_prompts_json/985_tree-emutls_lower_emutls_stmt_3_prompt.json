@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'wi' at line 3\n2. Pointer 'd' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nlower_emutls_stmt (gimple *stmt, struct lower_emutls_data *d)\n{\n  struct walk_stmt_info wi;\n\n  d->loc = gimple_location (stmt);\n\n  memset (&wi, 0, sizeof (wi));\n  wi.info = d;\n  wi.val_only = true;\n  walk_gimple_op (stmt, lower_emutls_1, &wi);\n\n  if (wi.changed)\n    update_stmt (stmt);\n}\n\n\n// Source: tree-emutls.c\n// Lines 560-573\n",
+  "ANSWER": "MUST"
+}

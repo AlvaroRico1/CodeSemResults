@@ -1,0 +1,34 @@
+static int send_client_reply_packet(MCPVIO_EXT *mpvio, const uchar *data,
+                                    int data_len) {
+  DBUG_TRACE;
+  MYSQL *mysql = mpvio->mysql;
+  NET *net = &mysql->net;
+  char *buff = nullptr, *end = nullptr;
+  int buff_len;
+  int ret = 0;
+  bool prep_err;
+
+  prep_err = prep_client_reply_packet(mpvio, data, data_len, &buff, &buff_len);
+  if (prep_err) {
+    return 1;
+  }
+
+  end = buff + buff_len;
+  /* Write authentication package */
+  MYSQL_TRACE(SEND_AUTH_RESPONSE, mysql,
+              ((size_t)(end - buff), (const unsigned char *)buff));
+  if (my_net_write(net, (uchar *)buff, (size_t)(end - buff)) ||
+      net_flush(net)) {
+    set_mysql_extended_error(mysql, CR_SERVER_LOST, unknown_sqlstate,
+                             ER_CLIENT(CR_SERVER_LOST_EXTENDED),
+                             "sending authentication information", errno);
+    ret = 1;
+  }
+  MYSQL_TRACE(PACKET_SENT, mysql, ((size_t)(end - buff)));
+  my_free(buff);
+  return ret;
+}
+
+
+// Source: client.cc
+// Lines 4862-4891

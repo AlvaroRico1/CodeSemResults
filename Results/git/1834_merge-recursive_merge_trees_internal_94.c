@@ -1,0 +1,104 @@
+static int merge_trees_internal(struct merge_options *opt,
+				struct tree *head,
+				struct tree *merge,
+				struct tree *merge_base,
+				struct tree **result)
+{
+	struct index_state *istate = opt->repo->index;
+	int code, clean;
+
+	if (opt->subtree_shift) {
+		merge = shift_tree_object(opt->repo, head, merge,
+					  opt->subtree_shift);
+		merge_base = shift_tree_object(opt->repo, head, merge_base,
+					       opt->subtree_shift);
+	}
+
+	if (oideq(&merge_base->object.oid, &merge->object.oid)) {
+		output(opt, 0, _("Already up to date."));
+		*result = head;
+		return 1;
+	}
+
+	code = unpack_trees_start(opt, merge_base, head, merge);
+
+	if (code != 0) {
+		if (show(opt, 4) || opt->priv->call_depth)
+			err(opt, _("merging of trees %s and %s failed"),
+			    oid_to_hex(&head->object.oid),
+			    oid_to_hex(&merge->object.oid));
+		unpack_trees_finish(opt);
+		return -1;
+	}
+
+	if (unmerged_index(istate)) {
+		struct string_list *entries;
+		struct rename_info re_info;
+		int i;
+		/*
+		 * Only need the hashmap while processing entries, so
+		 * initialize it here and free it when we are done running
+		 * through the entries. Keeping it in the merge_options as
+		 * opposed to decaring a local hashmap is for convenience
+		 * so that we don't have to pass it to around.
+		 */
+		hashmap_init(&opt->priv->current_file_dir_set, path_hashmap_cmp,
+			     NULL, 512);
+		get_files_dirs(opt, head);
+		get_files_dirs(opt, merge);
+
+		entries = get_unmerged(opt->repo->index);
+		clean = detect_and_process_renames(opt, merge_base, head, merge,
+						   entries, &re_info);
+		record_df_conflict_files(opt, entries);
+		if (clean < 0)
+			goto cleanup;
+		for (i = entries->nr-1; 0 <= i; i--) {
+			const char *path = entries->items[i].string;
+			struct stage_data *e = entries->items[i].util;
+			if (!e->processed) {
+				int ret = process_entry(opt, path, e);
+				if (!ret)
+					clean = 0;
+				else if (ret < 0) {
+					clean = ret;
+					goto cleanup;
+				}
+			}
+		}
+		for (i = 0; i < entries->nr; i++) {
+			struct stage_data *e = entries->items[i].util;
+			if (!e->processed)
+				BUG("unprocessed path??? %s",
+				    entries->items[i].string);
+		}
+
+	cleanup:
+		final_cleanup_renames(&re_info);
+
+		string_list_clear(entries, 1);
+		free(entries);
+
+		hashmap_clear_and_free(&opt->priv->current_file_dir_set,
+					struct path_hashmap_entry, e);
+
+		if (clean < 0) {
+			unpack_trees_finish(opt);
+			return clean;
+		}
+	}
+	else
+		clean = 1;
+
+	unpack_trees_finish(opt);
+
+	if (opt->priv->call_depth &&
+	    !(*result = write_in_core_index_as_tree(opt->repo)))
+		return -1;
+
+	return clean;
+}
+
+
+// Source: merge-recursive.c
+// Lines 3466-3565

@@ -1,0 +1,82 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ret' at line 6
+2. Pointer 'name' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+struct dentry *nfs_get_root(struct super_block *sb, struct nfs_fh *mntfh,
+			    const char *devname)
+{
+	struct nfs_server *server = NFS_SB(sb);
+	struct nfs_fsinfo fsinfo;
+	struct dentry *ret;
+	struct inode *inode;
+	void *name = kstrdup(devname, GFP_KERNEL);
+	int error;
+
+	if (!name)
+		return ERR_PTR(-ENOMEM);
+
+	/* get the actual root for this mount */
+	fsinfo.fattr = nfs_alloc_fattr();
+	if (fsinfo.fattr == NULL) {
+		kfree(name);
+		return ERR_PTR(-ENOMEM);
+	}
+
+	error = server->nfs_client->rpc_ops->getroot(server, mntfh, &fsinfo);
+	if (error < 0) {
+		dprintk("nfs_get_root: getattr error = %d\n", -error);
+		ret = ERR_PTR(error);
+		goto out;
+	}
+
+	inode = nfs_fhget(sb, mntfh, fsinfo.fattr, NULL);
+	if (IS_ERR(inode)) {
+		dprintk("nfs_get_root: get root inode failed\n");
+		ret = ERR_CAST(inode);
+		goto out;
+	}
+
+	error = nfs_superblock_set_dummy_root(sb, inode);
+	if (error != 0) {
+		ret = ERR_PTR(error);
+		goto out;
+	}
+
+	/* root dentries normally start off anonymous and get spliced in later
+	 * if the dentry tree reaches them; however if the dentry already
+	 * exists, we'll pick it up at this point and use it as the root
+	 */
+	ret = d_obtain_root(inode);
+	if (IS_ERR(ret)) {
+		dprintk("nfs_get_root: get root dentry failed\n");
+		goto out;
+	}
+
+	security_d_instantiate(ret, inode);
+	spin_lock(&ret->d_lock);
+	if (IS_ROOT(ret) && !ret->d_fsdata &&
+	    !(ret->d_flags & DCACHE_NFSFS_RENAMED)) {
+		ret->d_fsdata = name;
+		name = NULL;
+	}
+	spin_unlock(&ret->d_lock);
+out:
+	kfree(name);
+	nfs_free_fattr(fsinfo.fattr);
+	return ret;
+}
+
+
+// Source: getroot.c
+// Lines 67-129
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,87 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'revs' at line 7
+2. Pointer 'ctx' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void process_tree(struct traversal_context *ctx,
+			 struct tree *tree,
+			 struct strbuf *base,
+			 const char *name)
+{
+	struct object *obj = &tree->object;
+	struct rev_info *revs = ctx->revs;
+	int baselen = base->len;
+	enum list_objects_filter_result r;
+	int failed_parse;
+
+	if (!revs->tree_objects)
+		return;
+	if (!obj)
+		die("bad tree object");
+	if (obj->flags & (UNINTERESTING | SEEN))
+		return;
+	if (revs->include_check_obj &&
+	    !revs->include_check_obj(&tree->object, revs->include_check_data))
+		return;
+
+	failed_parse = parse_tree_gently(tree, 1);
+	if (failed_parse) {
+		if (revs->ignore_missing_links)
+			return;
+
+		/*
+		 * Pre-filter known-missing tree objects when explicitly
+		 * requested.  This may cause the actual filter to report
+		 * an incomplete list of missing objects.
+		 */
+		if (revs->exclude_promisor_objects &&
+		    is_promisor_object(&obj->oid))
+			return;
+
+		if (!revs->do_not_die_on_missing_tree)
+			die("bad tree object %s", oid_to_hex(&obj->oid));
+	}
+
+	strbuf_addstr(base, name);
+	r = list_objects_filter__filter_object(ctx->revs->repo,
+					       LOFS_BEGIN_TREE, obj,
+					       base->buf, &base->buf[baselen],
+					       ctx->filter);
+	if (r & LOFR_MARK_SEEN)
+		obj->flags |= SEEN;
+	if (r & LOFR_DO_SHOW)
+		ctx->show_object(obj, base->buf, ctx->show_data);
+	if (base->len)
+		strbuf_addch(base, '/');
+
+	if (r & LOFR_SKIP_TREE)
+		trace_printf("Skipping contents of tree %s...\n", base->buf);
+	else if (!failed_parse)
+		process_tree_contents(ctx, tree, base);
+
+	r = list_objects_filter__filter_object(ctx->revs->repo,
+					       LOFS_END_TREE, obj,
+					       base->buf, &base->buf[baselen],
+					       ctx->filter);
+	if (r & LOFR_MARK_SEEN)
+		obj->flags |= SEEN;
+	if (r & LOFR_DO_SHOW)
+		ctx->show_object(obj, base->buf, ctx->show_data);
+
+	strbuf_setlen(base, baselen);
+	free_tree_buffer(tree);
+}
+
+
+// Source: list-objects.c
+// Lines 150-217
+
+
+[ANSWER]
+MUST

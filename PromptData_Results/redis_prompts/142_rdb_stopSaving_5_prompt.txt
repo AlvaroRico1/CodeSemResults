@@ -1,0 +1,43 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'nack' at line None
+2. Pointer 'ri_cg_pel' at line None
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void stopSaving(int success) {
+    /* Fire the persistence modules end event. */
+    moduleFireServerEvent(REDISMODULE_EVENT_PERSISTENCE,
+                          success?
+                            REDISMODULE_SUBEVENT_PERSISTENCE_ENDED:
+                            REDISMODULE_SUBEVENT_PERSISTENCE_FAILED,
+                          NULL);
+}
+
+/* Track loading progress in order to serve client's from time to time
+   and if needed calculate rdb checksum  */
+void rdbLoadProgressCallback(rio *r, const void *buf, size_t len) {
+    if (server.rdb_checksum)
+        rioGenericUpdateChecksum(r, buf, len);
+    if (server.loading_process_events_interval_bytes &&
+        (r->processed_bytes + len)/server.loading_process_events_interval_bytes > r->processed_bytes/server.loading_process_events_interval_bytes)
+    {
+        if (server.masterhost && server.repl_state == REPL_STATE_TRANSFER)
+            replicationSendNewlineToMaster();
+        loadingProgress(r->processed_bytes);
+        processEventsWhileBlocked();
+        processModuleLoadingProgressEvent(0);
+    }
+}
+
+
+// Source: rdb.c
+// Lines 2395-2418
+
+
+[ANSWER]
+MUST

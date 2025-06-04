@@ -1,0 +1,1 @@
+index,libgit2/tests/libgit2/diff/binary.c,3,expected,libgit2/tests/libgit2/diff/binary.c,5,0

@@ -1,0 +1,158 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'errmsg' at line 4
+2. Pointer 'res' at line 12
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+struct st_mysql_client_plugin *mysql_load_plugin_v(MYSQL *mysql,
+                                                   const char *name, int type,
+                                                   int argc, va_list args) {
+  const char *errmsg;
+  char dlpath[FN_REFLEN + 1];
+  void *sym, *dlhandle;
+  struct st_mysql_client_plugin *plugin;
+  const char *plugindir;
+  const CHARSET_INFO *cs = nullptr;
+  size_t len = (name ? strlen(name) : 0);
+  int well_formed_error;
+  size_t res = 0;
+#ifdef _WIN32
+  char win_errormsg[2048];
+#endif
+
+  DBUG_TRACE;
+  DBUG_PRINT("entry", ("name=%s type=%d int argc=%d", name, type, argc));
+  if (is_not_initialized(mysql, name)) {
+    DBUG_PRINT("leave", ("mysql not initialized"));
+    return nullptr;
+  }
+
+  mysql_mutex_lock(&LOCK_load_client_plugin);
+
+  /* make sure the plugin wasn't loaded meanwhile */
+  if (type >= 0 && find_plugin(name, type)) {
+    errmsg = "it is already loaded";
+    goto err;
+  }
+
+  if (mysql->options.extension && mysql->options.extension->plugin_dir) {
+    plugindir = mysql->options.extension->plugin_dir;
+  } else {
+    plugindir = getenv("LIBMYSQL_PLUGIN_DIR");
+    if (!plugindir) {
+      plugindir = PLUGINDIR;
+    }
+  }
+  if (mysql && mysql->charset)
+    cs = mysql->charset;
+  else
+    cs = &my_charset_utf8mb4_bin;
+  /* check if plugin name does not have any directory separator character */
+  if ((my_strcspn(cs, name, name + len, FN_DIRSEP, strlen(FN_DIRSEP))) < len) {
+    errmsg = "No paths allowed for shared library";
+    goto err;
+  }
+  /* check if plugin name does not exceed its maximum length */
+  res = cs->cset->well_formed_len(cs, name, name + len, NAME_CHAR_LEN,
+                                  &well_formed_error);
+
+  if (well_formed_error || len != res) {
+    errmsg = "Invalid plugin name";
+    goto err;
+  }
+  /*
+    check if length of(plugin_dir + plugin name) does not exceed its maximum
+    length
+  */
+  if ((strlen(plugindir) + len + 1) >= FN_REFLEN) {
+    errmsg = "Invalid path";
+    goto err;
+  }
+
+  /* Compile dll path */
+  strxnmov(dlpath, sizeof(dlpath) - 1, plugindir, "/", name, SO_EXT, NullS);
+
+  DBUG_PRINT("info", ("dlopeninig %s", dlpath));
+  /* Open new dll handle */
+#if defined(HAVE_ASAN) || defined(HAVE_LSAN)
+  // Do not unload the shared object during dlclose().
+  // LeakSanitizer needs this in order to match entries in lsan.supp
+  if (!(dlhandle = dlopen(dlpath, RTLD_NOW | RTLD_NODELETE)))
+#else
+  if (!(dlhandle = dlopen(dlpath, RTLD_NOW)))
+#endif
+  {
+#if defined(__APPLE__)
+    /* Apple supports plugins with .so also, so try this as well */
+    strxnmov(dlpath, sizeof(dlpath) - 1, plugindir, "/", name, ".so", NullS);
+    if ((dlhandle = dlopen(dlpath, RTLD_NOW))) goto have_plugin;
+#endif
+
+#ifdef _WIN32
+    /* There should be no win32 calls between failed dlopen() and GetLastError()
+     */
+    if (FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, 0, GetLastError(), 0,
+                      win_errormsg, 2048, NULL))
+      errmsg = win_errormsg;
+    else
+      errmsg = "";
+#else
+    errmsg = dlerror();
+#endif
+    DBUG_PRINT("info", ("failed to dlopen"));
+    goto err;
+  }
+
+#if defined(__APPLE__)
+have_plugin:
+#endif
+  if (!(sym = dlsym(dlhandle, plugin_declarations_sym))) {
+    errmsg = "not a plugin";
+    dlclose(dlhandle);
+    goto err;
+  }
+
+  plugin = (struct st_mysql_client_plugin *)sym;
+
+  if (type >= 0 && type != plugin->type) {
+    errmsg = "type mismatch";
+    goto err;
+  }
+
+  if (strcmp(name, plugin->name)) {
+    errmsg = "name mismatch";
+    goto err;
+  }
+
+  if (type < 0 && find_plugin(name, plugin->type)) {
+    errmsg = "it is already loaded";
+    goto err;
+  }
+
+  plugin = add_plugin_withargs(mysql, plugin, dlhandle, argc, args);
+
+  mysql_mutex_unlock(&LOCK_load_client_plugin);
+
+  DBUG_PRINT("leave", ("plugin loaded ok"));
+  return plugin;
+
+err:
+  mysql_mutex_unlock(&LOCK_load_client_plugin);
+  DBUG_PRINT("leave", ("plugin load error : %s", errmsg));
+  set_mysql_extended_error(mysql, CR_AUTH_PLUGIN_CANNOT_LOAD, unknown_sqlstate,
+                           ER_CLIENT(CR_AUTH_PLUGIN_CANNOT_LOAD), name, errmsg);
+  return nullptr;
+}
+
+
+// Source: client_plugin.cc
+// Lines 401-539
+
+
+[ANSWER]
+MUST-NOT

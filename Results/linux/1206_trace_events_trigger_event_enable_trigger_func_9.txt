@@ -1,0 +1,1 @@
+glob,linux/kernel/trace/trace_events_trigger.c,3,trigger,linux/kernel/trace/trace_events_trigger.c,13,2

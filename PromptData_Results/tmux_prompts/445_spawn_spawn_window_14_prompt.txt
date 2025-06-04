@@ -1,0 +1,144 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'sc' at line 1
+2. Pointer 's' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+spawn_window(struct spawn_context *sc, char **cause)
+{
+	struct cmdq_item	*item = sc->item;
+	struct client		*c = cmdq_get_client(item);
+	struct session		*s = sc->s;
+	struct window		*w;
+	struct window_pane	*wp;
+	struct winlink		*wl;
+	int			 idx = sc->idx;
+	u_int			 sx, sy, xpixel, ypixel;
+
+	spawn_log(__func__, sc);
+
+	/*
+	 * If the window already exists, we are respawning, so destroy all the
+	 * panes except one.
+	 */
+	if (sc->flags & SPAWN_RESPAWN) {
+		w = sc->wl->window;
+		if (~sc->flags & SPAWN_KILL) {
+			TAILQ_FOREACH(wp, &w->panes, entry) {
+				if (wp->fd != -1)
+					break;
+			}
+			if (wp != NULL) {
+				xasprintf(cause, "window %s:%d still active",
+				    s->name, sc->wl->idx);
+				return (NULL);
+			}
+		}
+
+		sc->wp0 = TAILQ_FIRST(&w->panes);
+		TAILQ_REMOVE(&w->panes, sc->wp0, entry);
+
+		layout_free(w);
+		window_destroy_panes(w);
+
+		TAILQ_INSERT_HEAD(&w->panes, sc->wp0, entry);
+		window_pane_resize(sc->wp0, w->sx, w->sy);
+
+		layout_init(w, sc->wp0);
+		window_set_active_pane(w, sc->wp0, 0);
+	}
+
+	/*
+	 * Otherwise we have no window so we will need to create one. First
+	 * check if the given index already exists and destroy it if so.
+	 */
+	if ((~sc->flags & SPAWN_RESPAWN) && idx != -1) {
+		wl = winlink_find_by_index(&s->windows, idx);
+		if (wl != NULL && (~sc->flags & SPAWN_KILL)) {
+			xasprintf(cause, "index %d in use", idx);
+			return (NULL);
+		}
+		if (wl != NULL) {
+			/*
+			 * Can't use session_detach as it will destroy session
+			 * if this makes it empty.
+			 */
+			wl->flags &= ~WINLINK_ALERTFLAGS;
+			notify_session_window("window-unlinked", s, wl->window);
+			winlink_stack_remove(&s->lastw, wl);
+			winlink_remove(&s->windows, wl);
+
+			if (s->curw == wl) {
+				s->curw = NULL;
+				sc->flags &= ~SPAWN_DETACHED;
+			}
+		}
+	}
+
+	/* Then create a window if needed. */
+	if (~sc->flags & SPAWN_RESPAWN) {
+		if (idx == -1)
+			idx = -1 - options_get_number(s->options, "base-index");
+		if ((sc->wl = winlink_add(&s->windows, idx)) == NULL) {
+			xasprintf(cause, "couldn't add window %d", idx);
+			return (NULL);
+		}
+		default_window_size(sc->tc, s, NULL, &sx, &sy, &xpixel, &ypixel,
+		    -1);
+		if ((w = window_create(sx, sy, xpixel, ypixel)) == NULL) {
+			winlink_remove(&s->windows, sc->wl);
+			xasprintf(cause, "couldn't create window %d", idx);
+			return (NULL);
+		}
+		if (s->curw == NULL)
+			s->curw = sc->wl;
+		sc->wl->session = s;
+		w->latest = sc->tc;
+		winlink_set_window(sc->wl, w);
+	} else
+		w = NULL;
+	sc->flags |= SPAWN_NONOTIFY;
+
+	/* Spawn the pane. */
+	wp = spawn_pane(sc, cause);
+	if (wp == NULL) {
+		if (~sc->flags & SPAWN_RESPAWN)
+			winlink_remove(&s->windows, sc->wl);
+		return (NULL);
+	}
+
+	/* Set the name of the new window. */
+	if (~sc->flags & SPAWN_RESPAWN) {
+		free(w->name);
+		if (sc->name != NULL) {
+			w->name = format_single(item, sc->name, c, s, NULL,
+			    NULL);
+			options_set_number(w->options, "automatic-rename", 0);
+		} else
+			w->name = default_window_name(w);
+	}
+
+	/* Switch to the new window if required. */
+	if (~sc->flags & SPAWN_DETACHED)
+		session_select(s, sc->wl->idx);
+
+	/* Fire notification if new window. */
+	if (~sc->flags & SPAWN_RESPAWN)
+		notify_session_window("window-linked", s, w);
+
+	session_group_synchronize_from(s);
+	return (sc->wl);
+}
+
+
+// Source: spawn.c
+// Lines 75-199
+
+
+[ANSWER]
+MUST

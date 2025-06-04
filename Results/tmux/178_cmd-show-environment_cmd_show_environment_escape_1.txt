@@ -1,0 +1,1 @@
+out,tmux/cmd-show-environment.c,4,ret,tmux/cmd-show-environment.c,4,1

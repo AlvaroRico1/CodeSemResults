@@ -1,0 +1,270 @@
+handle_omp_array_sections (tree c, enum c_omp_region_type ort)
+{
+  bool maybe_zero_len = false;
+  unsigned int first_non_one = 0;
+  auto_vec<tree, 10> types;
+  tree *tp = &OMP_CLAUSE_DECL (c);
+  if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_DEPEND
+      && TREE_CODE (*tp) == TREE_LIST
+      && TREE_PURPOSE (*tp)
+      && TREE_CODE (TREE_PURPOSE (*tp)) == TREE_VEC)
+    tp = &TREE_VALUE (*tp);
+  tree first = handle_omp_array_sections_1 (c, *tp, types,
+					    maybe_zero_len, first_non_one,
+					    ort);
+  if (first == error_mark_node)
+    return true;
+  if (first == NULL_TREE)
+    return false;
+  if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_DEPEND)
+    {
+      tree t = *tp;
+      tree tem = NULL_TREE;
+      /* Need to evaluate side effects in the length expressions
+	 if any.  */
+      while (TREE_CODE (t) == TREE_LIST)
+	{
+	  if (TREE_VALUE (t) && TREE_SIDE_EFFECTS (TREE_VALUE (t)))
+	    {
+	      if (tem == NULL_TREE)
+		tem = TREE_VALUE (t);
+	      else
+		tem = build2 (COMPOUND_EXPR, TREE_TYPE (tem),
+			      TREE_VALUE (t), tem);
+	    }
+	  t = TREE_CHAIN (t);
+	}
+      if (tem)
+	first = build2 (COMPOUND_EXPR, TREE_TYPE (first), tem, first);
+      first = c_fully_fold (first, false, NULL, true);
+      *tp = first;
+    }
+  else
+    {
+      unsigned int num = types.length (), i;
+      tree t, side_effects = NULL_TREE, size = NULL_TREE;
+      tree condition = NULL_TREE;
+
+      if (int_size_in_bytes (TREE_TYPE (first)) <= 0)
+	maybe_zero_len = true;
+
+      for (i = num, t = OMP_CLAUSE_DECL (c); i > 0;
+	   t = TREE_CHAIN (t))
+	{
+	  tree low_bound = TREE_PURPOSE (t);
+	  tree length = TREE_VALUE (t);
+
+	  i--;
+	  if (low_bound
+	      && TREE_CODE (low_bound) == INTEGER_CST
+	      && TYPE_PRECISION (TREE_TYPE (low_bound))
+		 > TYPE_PRECISION (sizetype))
+	    low_bound = fold_convert (sizetype, low_bound);
+	  if (length
+	      && TREE_CODE (length) == INTEGER_CST
+	      && TYPE_PRECISION (TREE_TYPE (length))
+		 > TYPE_PRECISION (sizetype))
+	    length = fold_convert (sizetype, length);
+	  if (low_bound == NULL_TREE)
+	    low_bound = integer_zero_node;
+	  if (!maybe_zero_len && i > first_non_one)
+	    {
+	      if (integer_nonzerop (low_bound))
+		goto do_warn_noncontiguous;
+	      if (length != NULL_TREE
+		  && TREE_CODE (length) == INTEGER_CST
+		  && TYPE_DOMAIN (types[i])
+		  && TYPE_MAX_VALUE (TYPE_DOMAIN (types[i]))
+		  && TREE_CODE (TYPE_MAX_VALUE (TYPE_DOMAIN (types[i])))
+		     == INTEGER_CST)
+		{
+		  tree size;
+		  size = size_binop (PLUS_EXPR,
+				     TYPE_MAX_VALUE (TYPE_DOMAIN (types[i])),
+				     size_one_node);
+		  if (!tree_int_cst_equal (length, size))
+		    {
+		     do_warn_noncontiguous:
+		      error_at (OMP_CLAUSE_LOCATION (c),
+				"array section is not contiguous in %qs "
+				"clause",
+				omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
+		      return true;
+		    }
+		}
+	      if (length != NULL_TREE
+		  && TREE_SIDE_EFFECTS (length))
+		{
+		  if (side_effects == NULL_TREE)
+		    side_effects = length;
+		  else
+		    side_effects = build2 (COMPOUND_EXPR,
+					   TREE_TYPE (side_effects),
+					   length, side_effects);
+		}
+	    }
+	  else
+	    {
+	      tree l;
+
+	      if (i > first_non_one
+		  && ((length && integer_nonzerop (length))
+		      || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_REDUCTION
+		      || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_IN_REDUCTION
+		      || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_TASK_REDUCTION))
+		continue;
+	      if (length)
+		l = fold_convert (sizetype, length);
+	      else
+		{
+		  l = size_binop (PLUS_EXPR,
+				  TYPE_MAX_VALUE (TYPE_DOMAIN (types[i])),
+				  size_one_node);
+		  l = size_binop (MINUS_EXPR, l,
+				  fold_convert (sizetype, low_bound));
+		}
+	      if (i > first_non_one)
+		{
+		  l = fold_build2 (NE_EXPR, boolean_type_node, l,
+				   size_zero_node);
+		  if (condition == NULL_TREE)
+		    condition = l;
+		  else
+		    condition = fold_build2 (BIT_AND_EXPR, boolean_type_node,
+					     l, condition);
+		}
+	      else if (size == NULL_TREE)
+		{
+		  size = size_in_bytes (TREE_TYPE (types[i]));
+		  tree eltype = TREE_TYPE (types[num - 1]);
+		  while (TREE_CODE (eltype) == ARRAY_TYPE)
+		    eltype = TREE_TYPE (eltype);
+		  if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_REDUCTION
+		      || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_IN_REDUCTION
+		      || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_TASK_REDUCTION)
+		    {
+		      if (integer_zerop (size)
+			  || integer_zerop (size_in_bytes (eltype)))
+			{
+			  error_at (OMP_CLAUSE_LOCATION (c),
+				    "zero length array section in %qs clause",
+				    omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
+			  return error_mark_node;
+			}
+		      size = size_binop (EXACT_DIV_EXPR, size,
+					 size_in_bytes (eltype));
+		    }
+		  size = size_binop (MULT_EXPR, size, l);
+		  if (condition)
+		    size = fold_build3 (COND_EXPR, sizetype, condition,
+					size, size_zero_node);
+		}
+	      else
+		size = size_binop (MULT_EXPR, size, l);
+	    }
+	}
+      if (side_effects)
+	size = build2 (COMPOUND_EXPR, sizetype, side_effects, size);
+      if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_REDUCTION
+	  || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_IN_REDUCTION
+	  || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_TASK_REDUCTION)
+	{
+	  size = size_binop (MINUS_EXPR, size, size_one_node);
+	  size = c_fully_fold (size, false, NULL);
+	  size = save_expr (size);
+	  tree index_type = build_index_type (size);
+	  tree eltype = TREE_TYPE (first);
+	  while (TREE_CODE (eltype) == ARRAY_TYPE)
+	    eltype = TREE_TYPE (eltype);
+	  tree type = build_array_type (eltype, index_type);
+	  tree ptype = build_pointer_type (eltype);
+	  if (TREE_CODE (TREE_TYPE (t)) == ARRAY_TYPE)
+	    t = build_fold_addr_expr (t);
+	  tree t2 = build_fold_addr_expr (first);
+	  t2 = fold_convert_loc (OMP_CLAUSE_LOCATION (c),
+				 ptrdiff_type_node, t2);
+	  t2 = fold_build2_loc (OMP_CLAUSE_LOCATION (c), MINUS_EXPR,
+				ptrdiff_type_node, t2,
+				fold_convert_loc (OMP_CLAUSE_LOCATION (c),
+						  ptrdiff_type_node, t));
+	  t2 = c_fully_fold (t2, false, NULL);
+	  if (tree_fits_shwi_p (t2))
+	    t = build2 (MEM_REF, type, t,
+			build_int_cst (ptype, tree_to_shwi (t2)));
+	  else
+	    {
+	      t2 = fold_convert_loc (OMP_CLAUSE_LOCATION (c), sizetype, t2);
+	      t = build2_loc (OMP_CLAUSE_LOCATION (c), POINTER_PLUS_EXPR,
+			      TREE_TYPE (t), t, t2);
+	      t = build2 (MEM_REF, type, t, build_int_cst (ptype, 0));
+	    }
+	  OMP_CLAUSE_DECL (c) = t;
+	  return false;
+	}
+      first = c_fully_fold (first, false, NULL);
+      OMP_CLAUSE_DECL (c) = first;
+      if (size)
+	size = c_fully_fold (size, false, NULL);
+      OMP_CLAUSE_SIZE (c) = size;
+      if (OMP_CLAUSE_CODE (c) != OMP_CLAUSE_MAP
+	  || (TREE_CODE (t) == COMPONENT_REF
+	      && TREE_CODE (TREE_TYPE (t)) == ARRAY_TYPE))
+	return false;
+      gcc_assert (OMP_CLAUSE_MAP_KIND (c) != GOMP_MAP_FORCE_DEVICEPTR);
+      if (ort == C_ORT_OMP || ort == C_ORT_ACC)
+	switch (OMP_CLAUSE_MAP_KIND (c))
+	  {
+	  case GOMP_MAP_ALLOC:
+	  case GOMP_MAP_IF_PRESENT:
+	  case GOMP_MAP_TO:
+	  case GOMP_MAP_FROM:
+	  case GOMP_MAP_TOFROM:
+	  case GOMP_MAP_ALWAYS_TO:
+	  case GOMP_MAP_ALWAYS_FROM:
+	  case GOMP_MAP_ALWAYS_TOFROM:
+	  case GOMP_MAP_RELEASE:
+	  case GOMP_MAP_DELETE:
+	  case GOMP_MAP_FORCE_TO:
+	  case GOMP_MAP_FORCE_FROM:
+	  case GOMP_MAP_FORCE_TOFROM:
+	  case GOMP_MAP_FORCE_PRESENT:
+	    OMP_CLAUSE_MAP_MAYBE_ZERO_LENGTH_ARRAY_SECTION (c) = 1;
+	    break;
+	  default:
+	    break;
+	  }
+      tree c2 = build_omp_clause (OMP_CLAUSE_LOCATION (c), OMP_CLAUSE_MAP);
+      if (ort != C_ORT_OMP && ort != C_ORT_ACC)
+	OMP_CLAUSE_SET_MAP_KIND (c2, GOMP_MAP_POINTER);
+      else if (TREE_CODE (t) == COMPONENT_REF)
+	{
+	  gomp_map_kind k = (ort == C_ORT_ACC) ? GOMP_MAP_ATTACH_DETACH
+					       : GOMP_MAP_ALWAYS_POINTER;
+	  OMP_CLAUSE_SET_MAP_KIND (c2, k);
+	}
+      else
+	OMP_CLAUSE_SET_MAP_KIND (c2, GOMP_MAP_FIRSTPRIVATE_POINTER);
+      if (OMP_CLAUSE_MAP_KIND (c2) != GOMP_MAP_FIRSTPRIVATE_POINTER
+	  && !c_mark_addressable (t))
+	return false;
+      OMP_CLAUSE_DECL (c2) = t;
+      t = build_fold_addr_expr (first);
+      t = fold_convert_loc (OMP_CLAUSE_LOCATION (c), ptrdiff_type_node, t);
+      tree ptr = OMP_CLAUSE_DECL (c2);
+      if (!POINTER_TYPE_P (TREE_TYPE (ptr)))
+	ptr = build_fold_addr_expr (ptr);
+      t = fold_build2_loc (OMP_CLAUSE_LOCATION (c), MINUS_EXPR,
+			   ptrdiff_type_node, t,
+			   fold_convert_loc (OMP_CLAUSE_LOCATION (c),
+					     ptrdiff_type_node, ptr));
+      t = c_fully_fold (t, false, NULL);
+      OMP_CLAUSE_SIZE (c2) = t;
+      OMP_CLAUSE_CHAIN (c2) = OMP_CLAUSE_CHAIN (c);
+      OMP_CLAUSE_CHAIN (c) = c2;
+    }
+  return false;
+}
+
+
+// Source: c-typeck.c
+// Lines 13357-13622

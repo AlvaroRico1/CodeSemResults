@@ -1,0 +1,1 @@
+class,linux/drivers/pci/quirks.c,3,conf5,linux/drivers/pci/quirks.c,3,2

@@ -1,0 +1,141 @@
+static const char *dwim_branch(const char *path, const char **new_branch)
+{
+	int n;
+	int branch_exists;
+	const char *s = worktree_basename(path, &n);
+	const char *branchname = xstrndup(s, n);
+	struct strbuf ref = STRBUF_INIT;
+
+	UNLEAK(branchname);
+
+	branch_exists = !strbuf_check_branch_ref(&ref, branchname) &&
+			ref_exists(ref.buf);
+	strbuf_release(&ref);
+	if (branch_exists)
+		return branchname;
+
+	*new_branch = branchname;
+	if (guess_remote) {
+		struct object_id oid;
+		const char *remote =
+			unique_tracking_name(*new_branch, &oid, NULL);
+		return remote;
+	}
+	return NULL;
+}
+
+static int add(int ac, const char **av, const char *prefix)
+{
+	struct add_opts opts;
+	const char *new_branch_force = NULL;
+	char *path;
+	const char *branch;
+	const char *new_branch = NULL;
+	const char *opt_track = NULL;
+	const char *lock_reason = NULL;
+	int keep_locked = 0;
+	struct option options[] = {
+		OPT__FORCE(&opts.force,
+			   N_("checkout <branch> even if already checked out in other worktree"),
+			   PARSE_OPT_NOCOMPLETE),
+		OPT_STRING('b', NULL, &new_branch, N_("branch"),
+			   N_("create a new branch")),
+		OPT_STRING('B', NULL, &new_branch_force, N_("branch"),
+			   N_("create or reset a branch")),
+		OPT_BOOL('d', "detach", &opts.detach, N_("detach HEAD at named commit")),
+		OPT_BOOL(0, "checkout", &opts.checkout, N_("populate the new working tree")),
+		OPT_BOOL(0, "lock", &keep_locked, N_("keep the new working tree locked")),
+		OPT_STRING(0, "reason", &lock_reason, N_("string"),
+			   N_("reason for locking")),
+		OPT__QUIET(&opts.quiet, N_("suppress progress reporting")),
+		OPT_PASSTHRU(0, "track", &opt_track, NULL,
+			     N_("set up tracking mode (see git-branch(1))"),
+			     PARSE_OPT_NOARG | PARSE_OPT_OPTARG),
+		OPT_BOOL(0, "guess-remote", &guess_remote,
+			 N_("try to match the new branch name with a remote-tracking branch")),
+		OPT_END()
+	};
+
+	memset(&opts, 0, sizeof(opts));
+	opts.checkout = 1;
+	ac = parse_options(ac, av, prefix, options, worktree_usage, 0);
+	if (!!opts.detach + !!new_branch + !!new_branch_force > 1)
+		die(_("-b, -B, and --detach are mutually exclusive"));
+	if (lock_reason && !keep_locked)
+		die(_("--reason requires --lock"));
+	if (lock_reason)
+		opts.keep_locked = lock_reason;
+	else if (keep_locked)
+		opts.keep_locked = _("added with --lock");
+
+	if (ac < 1 || ac > 2)
+		usage_with_options(worktree_usage, options);
+
+	path = prefix_filename(prefix, av[0]);
+	branch = ac < 2 ? "HEAD" : av[1];
+
+	if (!strcmp(branch, "-"))
+		branch = "@{-1}";
+
+	if (new_branch_force) {
+		struct strbuf symref = STRBUF_INIT;
+
+		new_branch = new_branch_force;
+
+		if (!opts.force &&
+		    !strbuf_check_branch_ref(&symref, new_branch) &&
+		    ref_exists(symref.buf))
+			die_if_checked_out(symref.buf, 0);
+		strbuf_release(&symref);
+	}
+
+	if (ac < 2 && !new_branch && !opts.detach) {
+		const char *s = dwim_branch(path, &new_branch);
+		if (s)
+			branch = s;
+	}
+
+	if (ac == 2 && !new_branch && !opts.detach) {
+		struct object_id oid;
+		struct commit *commit;
+		const char *remote;
+
+		commit = lookup_commit_reference_by_name(branch);
+		if (!commit) {
+			remote = unique_tracking_name(branch, &oid, NULL);
+			if (remote) {
+				new_branch = branch;
+				branch = remote;
+			}
+		}
+	}
+	if (!opts.quiet)
+		print_preparing_worktree_line(opts.detach, branch, new_branch, !!new_branch_force);
+
+	if (new_branch) {
+		struct child_process cp = CHILD_PROCESS_INIT;
+		cp.git_cmd = 1;
+		strvec_push(&cp.args, "branch");
+		if (new_branch_force)
+			strvec_push(&cp.args, "--force");
+		if (opts.quiet)
+			strvec_push(&cp.args, "--quiet");
+		strvec_push(&cp.args, new_branch);
+		strvec_push(&cp.args, branch);
+		if (opt_track)
+			strvec_push(&cp.args, opt_track);
+		if (run_command(&cp))
+			return -1;
+		branch = new_branch;
+	} else if (opt_track) {
+		die(_("--[no-]track can only be used if a new branch is created"));
+	}
+
+	UNLEAK(path);
+	UNLEAK(opts);
+	return add_worktree(path, branch, &opts);
+}
+
+
+// Source: worktree.c
+// Lines 445-581

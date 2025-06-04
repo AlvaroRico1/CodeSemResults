@@ -1,0 +1,1 @@
+offset,linux/arch/x86/kernel/kprobes/opt.c,3,size,linux/arch/x86/kernel/kprobes/opt.c,3,2

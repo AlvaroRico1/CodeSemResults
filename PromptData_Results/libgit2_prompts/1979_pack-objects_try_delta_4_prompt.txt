@@ -1,0 +1,162 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'delta_size' at line 8
+2. Pointer 'delta_buf' at line 10
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int try_delta(git_packbuilder *pb, struct unpacked *trg,
+		     struct unpacked *src, size_t max_depth,
+			 size_t *mem_usage, int *ret)
+{
+	git_pobject *trg_object = trg->object;
+	git_pobject *src_object = src->object;
+	git_odb_object *obj;
+	size_t trg_size, src_size, delta_size, sizediff, max_size, sz;
+	size_t ref_depth;
+	void *delta_buf;
+
+	/* Don't bother doing diffs between different types */
+	if (trg_object->type != src_object->type) {
+		*ret = -1;
+		return 0;
+	}
+
+	*ret = 0;
+
+	/* TODO: support reuse-delta */
+
+	/* Let's not bust the allowed depth. */
+	if (src->depth >= max_depth)
+		return 0;
+
+	/* Now some size filtering heuristics. */
+	trg_size = trg_object->size;
+	if (!trg_object->delta) {
+		max_size = trg_size/2 - 20;
+		ref_depth = 1;
+	} else {
+		max_size = trg_object->delta_size;
+		ref_depth = trg->depth;
+	}
+
+	max_size = (uint64_t)max_size * (max_depth - src->depth) /
+					(max_depth - ref_depth + 1);
+	if (max_size == 0)
+		return 0;
+
+	src_size = src_object->size;
+	sizediff = src_size < trg_size ? trg_size - src_size : 0;
+	if (sizediff >= max_size)
+		return 0;
+	if (trg_size < src_size / 32)
+		return 0;
+
+	/* Load data if not already done */
+	if (!trg->data) {
+		if (git_odb_read(&obj, pb->odb, &trg_object->id) < 0)
+			return -1;
+
+		sz = git_odb_object_size(obj);
+		trg->data = git__malloc(sz);
+		GIT_ERROR_CHECK_ALLOC(trg->data);
+		memcpy(trg->data, git_odb_object_data(obj), sz);
+
+		git_odb_object_free(obj);
+
+		if (sz != trg_size) {
+			git_error_set(GIT_ERROR_INVALID,
+				   "inconsistent target object length");
+			return -1;
+		}
+
+		*mem_usage += sz;
+	}
+	if (!src->data) {
+		size_t obj_sz;
+
+		if (git_odb_read(&obj, pb->odb, &src_object->id) < 0 ||
+			!git__is_ulong(obj_sz = git_odb_object_size(obj)))
+			return -1;
+
+		sz = obj_sz;
+		src->data = git__malloc(sz);
+		GIT_ERROR_CHECK_ALLOC(src->data);
+		memcpy(src->data, git_odb_object_data(obj), sz);
+
+		git_odb_object_free(obj);
+
+		if (sz != src_size) {
+			git_error_set(GIT_ERROR_INVALID,
+				   "inconsistent source object length");
+			return -1;
+		}
+
+		*mem_usage += sz;
+	}
+	if (!src->index) {
+		if (git_delta_index_init(&src->index, src->data, src_size) < 0)
+			return 0; /* suboptimal pack - out of memory */
+
+		*mem_usage += git_delta_index_size(src->index);
+	}
+
+	if (git_delta_create_from_index(&delta_buf, &delta_size, src->index, trg->data, trg_size,
+		max_size) < 0)
+		return 0;
+
+	if (trg_object->delta) {
+		/* Prefer only shallower same-sized deltas. */
+		if (delta_size == trg_object->delta_size &&
+		    src->depth + 1 >= trg->depth) {
+			git__free(delta_buf);
+			return 0;
+		}
+	}
+
+	GIT_ASSERT(git_packbuilder__cache_lock(pb) == 0);
+
+	if (trg_object->delta_data) {
+		git__free(trg_object->delta_data);
+		GIT_ASSERT(pb->delta_cache_size >= trg_object->delta_size);
+		pb->delta_cache_size -= trg_object->delta_size;
+		trg_object->delta_data = NULL;
+	}
+	if (delta_cacheable(pb, src_size, trg_size, delta_size)) {
+		bool overflow = git__add_sizet_overflow(
+			&pb->delta_cache_size, pb->delta_cache_size, delta_size);
+
+		GIT_ASSERT(git_packbuilder__cache_unlock(pb) == 0);
+
+		if (overflow) {
+			git__free(delta_buf);
+			return -1;
+		}
+
+		trg_object->delta_data = git__realloc(delta_buf, delta_size);
+		GIT_ERROR_CHECK_ALLOC(trg_object->delta_data);
+	} else {
+		/* create delta when writing the pack */
+		GIT_ASSERT(git_packbuilder__cache_unlock(pb) == 0);
+		git__free(delta_buf);
+	}
+
+	trg_object->delta = src_object;
+	trg_object->delta_size = delta_size;
+	trg->depth = src->depth + 1;
+
+	*ret = 1;
+	return 0;
+}
+
+
+// Source: pack-objects.c
+// Lines 745-887
+
+
+[ANSWER]
+MAY

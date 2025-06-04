@@ -1,0 +1,25 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'sender' at line 3
+2. Pointer '_sender' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void on_sender_dispose(void *_sender)
+{
+    struct st_headers_early_hints_sender_t *sender = (struct st_headers_early_hints_sender_t *)_sender;
+    if (h2o_timer_is_linked(&sender->deferred_timeout_entry))
+        h2o_timer_unlink(&sender->deferred_timeout_entry);
+}
+
+
+// Source: headers.c
+// Lines 81-86
+
+
+[ANSWER]
+MUST

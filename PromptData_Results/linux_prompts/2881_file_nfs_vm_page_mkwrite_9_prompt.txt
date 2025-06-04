@@ -1,0 +1,63 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'page' at line 3
+2. Pointer 'vmf' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static vm_fault_t nfs_vm_page_mkwrite(struct vm_fault *vmf)
+{
+	struct page *page = vmf->page;
+	struct file *filp = vmf->vma->vm_file;
+	struct inode *inode = file_inode(filp);
+	unsigned pagelen;
+	vm_fault_t ret = VM_FAULT_NOPAGE;
+	struct address_space *mapping;
+
+	dfprintk(PAGECACHE, "NFS: vm_page_mkwrite(%pD2(%lu), offset %lld)\n",
+		filp, filp->f_mapping->host->i_ino,
+		(long long)page_offset(page));
+
+	sb_start_pagefault(inode->i_sb);
+
+	/* make sure the cache has finished storing the page */
+	nfs_fscache_wait_on_page_write(NFS_I(inode), page);
+
+	wait_on_bit_action(&NFS_I(inode)->flags, NFS_INO_INVALIDATING,
+			nfs_wait_bit_killable, TASK_KILLABLE);
+
+	lock_page(page);
+	mapping = page_file_mapping(page);
+	if (mapping != inode->i_mapping)
+		goto out_unlock;
+
+	wait_on_page_writeback(page);
+
+	pagelen = nfs_page_length(page);
+	if (pagelen == 0)
+		goto out_unlock;
+
+	ret = VM_FAULT_LOCKED;
+	if (nfs_flush_incompatible(filp, page) == 0 &&
+	    nfs_updatepage(filp, page, 0, pagelen) == 0)
+		goto out;
+
+	ret = VM_FAULT_SIGBUS;
+out_unlock:
+	unlock_page(page);
+out:
+	sb_end_pagefault(inode->i_sb);
+	return ret;
+}
+
+
+// Source: file.c
+// Lines 532-575
+
+
+[ANSWER]
+MUST

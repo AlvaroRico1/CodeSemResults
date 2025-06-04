@@ -1,0 +1,1 @@
+value,tmux/cmd-show-environment.c,3,envent,tmux/cmd-show-environment.c,1,1

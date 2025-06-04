@@ -1,0 +1,26 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 's_len' at line 2
+2. Pointer 't_len' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int stringcmp(const String *s, const String *t) {
+  size_t s_len = s->length();
+  size_t t_len = t->length();
+  size_t len = min(s_len, t_len);
+  int cmp = (len == 0) ? 0 : memcmp(s->ptr(), t->ptr(), len);
+  return (cmp) ? cmp : static_cast<int>(s_len) - static_cast<int>(t_len);
+}
+
+
+// Source: sql_string.cc
+// Lines 743-749
+
+
+[ANSWER]
+MAY

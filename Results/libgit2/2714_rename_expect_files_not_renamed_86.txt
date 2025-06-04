@@ -1,0 +1,1 @@
+one,libgit2/tests/libgit2/diff/rename.c,1,diff,libgit2/tests/libgit2/diff/rename.c,4,0

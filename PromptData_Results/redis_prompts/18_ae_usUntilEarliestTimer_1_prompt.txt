@@ -1,0 +1,33 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'te' at line 2
+2. Pointer 'eventLoop' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int64_t usUntilEarliestTimer(aeEventLoop *eventLoop) {
+    aeTimeEvent *te = eventLoop->timeEventHead;
+    if (te == NULL) return -1;
+
+    aeTimeEvent *earliest = NULL;
+    while (te) {
+        if (!earliest || te->when < earliest->when)
+            earliest = te;
+        te = te->next;
+    }
+
+    monotime now = getMonotonicUs();
+    return (now >= earliest->when) ? 0 : earliest->when - now;
+}
+
+
+// Source: ae.c
+// Lines 251-264
+
+
+[ANSWER]
+MUST

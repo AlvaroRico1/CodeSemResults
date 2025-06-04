@@ -1,0 +1,45 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'head' at line 5
+2. Pointer 'parent_reflog' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_worktree_reflog__append_then_read(void)
+{
+	git_reflog *reflog, *parent_reflog;
+	const git_reflog_entry *entry;
+	git_reference *head;
+	git_signature *sig;
+	const git_oid *oid;
+
+	cl_git_pass(git_repository_head(&head, fixture.worktree));
+	cl_assert((oid = git_reference_target(head)) != NULL);
+	cl_git_pass(git_signature_now(&sig, "foo", "foo@bar"));
+
+	cl_git_pass(git_reflog_read(&reflog, fixture.worktree, REFLOG));
+	cl_git_pass(git_reflog_append(reflog, oid, sig, REFLOG_MESSAGE));
+	git_reflog_write(reflog);
+
+	cl_git_pass(git_reflog_read(&parent_reflog, fixture.repo, REFLOG));
+	entry = git_reflog_entry_byindex(parent_reflog, 0);
+	cl_assert(git_oid_cmp(oid, &entry->oid_old) == 0);
+	cl_assert(git_oid_cmp(oid, &entry->oid_cur) == 0);
+
+	git_reference_free(head);
+	git_signature_free(sig);
+	git_reflog_free(reflog);
+	git_reflog_free(parent_reflog);
+}
+
+
+// Source: reflog.c
+// Lines 66-91
+
+
+[ANSWER]
+MAY

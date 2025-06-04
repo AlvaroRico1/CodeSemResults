@@ -1,0 +1,601 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'accnext' at line 11
+2. Pointer 'varalloc' at line 18
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static decNumber * decDivideOp(decNumber *res,
+                               const decNumber *lhs, const decNumber *rhs,
+                               decContext *set, Flag op, uInt *status) {
+  #if DECSUBSET
+  decNumber *alloclhs=NULL;        /* non-NULL if rounded lhs allocated  */
+  decNumber *allocrhs=NULL;        /* .., rhs  */
+  #endif
+  Unit  accbuff[SD2U(DECBUFFER+DECDPUN+10)]; /* local buffer  */
+  Unit  *acc=accbuff;              /* -> accumulator array for result  */
+  Unit  *allocacc=NULL;            /* -> allocated buffer, iff allocated  */
+  Unit  *accnext;                  /* -> where next digit will go  */
+  Int   acclength;                 /* length of acc needed [Units]  */
+  Int   accunits;                  /* count of units accumulated  */
+  Int   accdigits;                 /* count of digits accumulated  */
+
+  Unit  varbuff[SD2U(DECBUFFER*2+DECDPUN)];  /* buffer for var1  */
+  Unit  *var1=varbuff;             /* -> var1 array for long subtraction  */
+  Unit  *varalloc=NULL;            /* -> allocated buffer, iff used  */
+  Unit  *msu1;                     /* -> msu of var1  */
+
+  const Unit *var2;                /* -> var2 array  */
+  const Unit *msu2;                /* -> msu of var2  */
+  Int   msu2plus;                  /* msu2 plus one [does not vary]  */
+  eInt  msu2pair;                  /* msu2 pair plus one [does not vary]  */
+
+  Int   var1units, var2units;      /* actual lengths  */
+  Int   var2ulen;                  /* logical length (units)  */
+  Int   var1initpad=0;             /* var1 initial padding (digits)  */
+  Int   maxdigits;                 /* longest LHS or required acc length  */
+  Int   mult;                      /* multiplier for subtraction  */
+  Unit  thisunit;                  /* current unit being accumulated  */
+  Int   residue;                   /* for rounding  */
+  Int   reqdigits=set->digits;     /* requested DIGITS  */
+  Int   exponent;                  /* working exponent  */
+  Int   maxexponent=0;             /* DIVIDE maximum exponent if unrounded  */
+  uByte bits;                      /* working sign  */
+  Unit  *target;                   /* work  */
+  const Unit *source;              /* ..  */
+  uInt  const *pow;                /* ..  */
+  Int   shift, cut;                /* ..  */
+  #if DECSUBSET
+  Int   dropped;                   /* work  */
+  #endif
+
+  #if DECCHECK
+  if (decCheckOperands(res, lhs, rhs, set)) return res;
+  #endif
+
+  do {                             /* protect allocated storage  */
+    #if DECSUBSET
+    if (!set->extended) {
+      /* reduce operands and set lostDigits status, as needed  */
+      if (lhs->digits>reqdigits) {
+        alloclhs=decRoundOperand(lhs, set, status);
+        if (alloclhs==NULL) break;
+        lhs=alloclhs;
+        }
+      if (rhs->digits>reqdigits) {
+        allocrhs=decRoundOperand(rhs, set, status);
+        if (allocrhs==NULL) break;
+        rhs=allocrhs;
+        }
+      }
+    #endif
+    /* [following code does not require input rounding]  */
+
+    bits=(lhs->bits^rhs->bits)&DECNEG;  /* assumed sign for divisions  */
+
+    /* handle infinities and NaNs  */
+    if (SPECIALARGS) {                  /* a special bit set  */
+      if (SPECIALARGS & (DECSNAN | DECNAN)) { /* one or two NaNs  */
+        decNaNs(res, lhs, rhs, set, status);
+        break;
+        }
+      /* one or two infinities  */
+      if (decNumberIsInfinite(lhs)) {   /* LHS (dividend) is infinite  */
+        if (decNumberIsInfinite(rhs) || /* two infinities are invalid ..  */
+            op & (REMAINDER | REMNEAR)) { /* as is remainder of infinity  */
+          *status|=DEC_Invalid_operation;
+          break;
+          }
+        /* [Note that infinity/0 raises no exceptions]  */
+        uprv_decNumberZero(res);
+        res->bits=bits|DECINF;          /* set +/- infinity  */
+        break;
+        }
+       else {                           /* RHS (divisor) is infinite  */
+        residue=0;
+        if (op&(REMAINDER|REMNEAR)) {
+          /* result is [finished clone of] lhs  */
+          decCopyFit(res, lhs, set, &residue, status);
+          }
+         else {  /* a division  */
+          uprv_decNumberZero(res);
+          res->bits=bits;               /* set +/- zero  */
+          /* for DIVIDEINT the exponent is always 0.  For DIVIDE, result  */
+          /* is a 0 with infinitely negative exponent, clamped to minimum  */
+          if (op&DIVIDE) {
+            res->exponent=set->emin-set->digits+1;
+            *status|=DEC_Clamped;
+            }
+          }
+        decFinish(res, set, &residue, status);
+        break;
+        }
+      }
+
+    /* handle 0 rhs (x/0)  */
+    if (ISZERO(rhs)) {                  /* x/0 is always exceptional  */
+      if (ISZERO(lhs)) {
+        uprv_decNumberZero(res);             /* [after lhs test]  */
+        *status|=DEC_Division_undefined;/* 0/0 will become NaN  */
+        }
+       else {
+        uprv_decNumberZero(res);
+        if (op&(REMAINDER|REMNEAR)) *status|=DEC_Invalid_operation;
+         else {
+          *status|=DEC_Division_by_zero; /* x/0  */
+          res->bits=bits|DECINF;         /* .. is +/- Infinity  */
+          }
+        }
+      break;}
+
+    /* handle 0 lhs (0/x)  */
+    if (ISZERO(lhs)) {                  /* 0/x [x!=0]  */
+      #if DECSUBSET
+      if (!set->extended) uprv_decNumberZero(res);
+       else {
+      #endif
+        if (op&DIVIDE) {
+          residue=0;
+          exponent=lhs->exponent-rhs->exponent; /* ideal exponent  */
+          uprv_decNumberCopy(res, lhs);      /* [zeros always fit]  */
+          res->bits=bits;               /* sign as computed  */
+          res->exponent=exponent;       /* exponent, too  */
+          decFinalize(res, set, &residue, status);   /* check exponent  */
+          }
+         else if (op&DIVIDEINT) {
+          uprv_decNumberZero(res);           /* integer 0  */
+          res->bits=bits;               /* sign as computed  */
+          }
+         else {                         /* a remainder  */
+          exponent=rhs->exponent;       /* [save in case overwrite]  */
+          uprv_decNumberCopy(res, lhs);      /* [zeros always fit]  */
+          if (exponent<res->exponent) res->exponent=exponent; /* use lower  */
+          }
+      #if DECSUBSET
+        }
+      #endif
+      break;}
+
+    /* Precalculate exponent.  This starts off adjusted (and hence fits  */
+    /* in 31 bits) and becomes the usual unadjusted exponent as the  */
+    /* division proceeds.  The order of evaluation is important, here,  */
+    /* to avoid wrap.  */
+    exponent=(lhs->exponent+lhs->digits)-(rhs->exponent+rhs->digits);
+
+    /* If the working exponent is -ve, then some quick exits are  */
+    /* possible because the quotient is known to be <1  */
+    /* [for REMNEAR, it needs to be < -1, as -0.5 could need work]  */
+    if (exponent<0 && !(op==DIVIDE)) {
+      if (op&DIVIDEINT) {
+        uprv_decNumberZero(res);                  /* integer part is 0  */
+        #if DECSUBSET
+        if (set->extended)
+        #endif
+          res->bits=bits;                    /* set +/- zero  */
+        break;}
+      /* fastpath remainders so long as the lhs has the smaller  */
+      /* (or equal) exponent  */
+      if (lhs->exponent<=rhs->exponent) {
+        if (op&REMAINDER || exponent<-1) {
+          /* It is REMAINDER or safe REMNEAR; result is [finished  */
+          /* clone of] lhs  (r = x - 0*y)  */
+          residue=0;
+          decCopyFit(res, lhs, set, &residue, status);
+          decFinish(res, set, &residue, status);
+          break;
+          }
+        /* [unsafe REMNEAR drops through]  */
+        }
+      } /* fastpaths  */
+
+    /* Long (slow) division is needed; roll up the sleeves... */
+
+    /* The accumulator will hold the quotient of the division.  */
+    /* If it needs to be too long for stack storage, then allocate.  */
+    acclength=D2U(reqdigits+DECDPUN);   /* in Units  */
+    if (acclength*sizeof(Unit)>sizeof(accbuff)) {
+      /* printf("malloc dvacc %ld units\n", acclength);  */
+      allocacc=(Unit *)malloc(acclength*sizeof(Unit));
+      if (allocacc==NULL) {             /* hopeless -- abandon  */
+        *status|=DEC_Insufficient_storage;
+        break;}
+      acc=allocacc;                     /* use the allocated space  */
+      }
+
+    /* var1 is the padded LHS ready for subtractions.  */
+    /* If it needs to be too long for stack storage, then allocate.  */
+    /* The maximum units needed for var1 (long subtraction) is:  */
+    /* Enough for  */
+    /*     (rhs->digits+reqdigits-1) -- to allow full slide to right  */
+    /* or  (lhs->digits)             -- to allow for long lhs  */
+    /* whichever is larger  */
+    /*   +1                -- for rounding of slide to right  */
+    /*   +1                -- for leading 0s  */
+    /*   +1                -- for pre-adjust if a remainder or DIVIDEINT  */
+    /* [Note: unused units do not participate in decUnitAddSub data]  */
+    maxdigits=rhs->digits+reqdigits-1;
+    if (lhs->digits>maxdigits) maxdigits=lhs->digits;
+    var1units=D2U(maxdigits)+2;
+    /* allocate a guard unit above msu1 for REMAINDERNEAR  */
+    if (!(op&DIVIDE)) var1units++;
+    if ((var1units+1)*sizeof(Unit)>sizeof(varbuff)) {
+      /* printf("malloc dvvar %ld units\n", var1units+1);  */
+      varalloc=(Unit *)malloc((var1units+1)*sizeof(Unit));
+      if (varalloc==NULL) {             /* hopeless -- abandon  */
+        *status|=DEC_Insufficient_storage;
+        break;}
+      var1=varalloc;                    /* use the allocated space  */
+      }
+
+    /* Extend the lhs and rhs to full long subtraction length.  The lhs  */
+    /* is truly extended into the var1 buffer, with 0 padding, so a  */
+    /* subtract in place is always possible.  The rhs (var2) has  */
+    /* virtual padding (implemented by decUnitAddSub).  */
+    /* One guard unit was allocated above msu1 for rem=rem+rem in  */
+    /* REMAINDERNEAR.  */
+    msu1=var1+var1units-1;              /* msu of var1  */
+    source=lhs->lsu+D2U(lhs->digits)-1; /* msu of input array  */
+    for (target=msu1; source>=lhs->lsu; source--, target--) *target=*source;
+    for (; target>=var1; target--) *target=0;
+
+    /* rhs (var2) is left-aligned with var1 at the start  */
+    var2ulen=var1units;                 /* rhs logical length (units)  */
+    var2units=D2U(rhs->digits);         /* rhs actual length (units)  */
+    var2=rhs->lsu;                      /* -> rhs array  */
+    msu2=var2+var2units-1;              /* -> msu of var2 [never changes]  */
+    /* now set up the variables which will be used for estimating the  */
+    /* multiplication factor.  If these variables are not exact, add  */
+    /* 1 to make sure that the multiplier is never overestimated.  */
+    msu2plus=*msu2;                     /* it's value ..  */
+    if (var2units>1) msu2plus++;        /* .. +1 if any more  */
+    msu2pair=(eInt)*msu2*(DECDPUNMAX+1);/* top two pair ..  */
+    if (var2units>1) {                  /* .. [else treat 2nd as 0]  */
+      msu2pair+=*(msu2-1);              /* ..  */
+      if (var2units>2) msu2pair++;      /* .. +1 if any more  */
+      }
+
+    /* The calculation is working in units, which may have leading zeros,  */
+    /* but the exponent was calculated on the assumption that they are  */
+    /* both left-aligned.  Adjust the exponent to compensate: add the  */
+    /* number of leading zeros in var1 msu and subtract those in var2 msu.  */
+    /* [This is actually done by counting the digits and negating, as  */
+    /* lead1=DECDPUN-digits1, and similarly for lead2.]  */
+    for (pow=&powers[1]; *msu1>=*pow; pow++) exponent--;
+    for (pow=&powers[1]; *msu2>=*pow; pow++) exponent++;
+
+    /* Now, if doing an integer divide or remainder, ensure that  */
+    /* the result will be Unit-aligned.  To do this, shift the var1  */
+    /* accumulator towards least if need be.  (It's much easier to  */
+    /* do this now than to reassemble the residue afterwards, if  */
+    /* doing a remainder.)  Also ensure the exponent is not negative.  */
+    if (!(op&DIVIDE)) {
+      Unit *u;                          /* work  */
+      /* save the initial 'false' padding of var1, in digits  */
+      var1initpad=(var1units-D2U(lhs->digits))*DECDPUN;
+      /* Determine the shift to do.  */
+      if (exponent<0) cut=-exponent;
+       else cut=DECDPUN-exponent%DECDPUN;
+      decShiftToLeast(var1, var1units, cut);
+      exponent+=cut;                    /* maintain numerical value  */
+      var1initpad-=cut;                 /* .. and reduce padding  */
+      /* clean any most-significant units which were just emptied  */
+      for (u=msu1; cut>=DECDPUN; cut-=DECDPUN, u--) *u=0;
+      } /* align  */
+     else { /* is DIVIDE  */
+      maxexponent=lhs->exponent-rhs->exponent;    /* save  */
+      /* optimization: if the first iteration will just produce 0,  */
+      /* preadjust to skip it [valid for DIVIDE only]  */
+      if (*msu1<*msu2) {
+        var2ulen--;                     /* shift down  */
+        exponent-=DECDPUN;              /* update the exponent  */
+        }
+      }
+
+    /* ---- start the long-division loops ------------------------------  */
+    accunits=0;                         /* no units accumulated yet  */
+    accdigits=0;                        /* .. or digits  */
+    accnext=acc+acclength-1;            /* -> msu of acc [NB: allows digits+1]  */
+    for (;;) {                          /* outer forever loop  */
+      thisunit=0;                       /* current unit assumed 0  */
+      /* find the next unit  */
+      for (;;) {                        /* inner forever loop  */
+        /* strip leading zero units [from either pre-adjust or from  */
+        /* subtract last time around].  Leave at least one unit.  */
+        for (; *msu1==0 && msu1>var1; msu1--) var1units--;
+
+        if (var1units<var2ulen) break;       /* var1 too low for subtract  */
+        if (var1units==var2ulen) {           /* unit-by-unit compare needed  */
+          /* compare the two numbers, from msu  */
+          const Unit *pv1, *pv2;
+          Unit v2;                           /* units to compare  */
+          pv2=msu2;                          /* -> msu  */
+          for (pv1=msu1; ; pv1--, pv2--) {
+            /* v1=*pv1 -- always OK  */
+            v2=0;                            /* assume in padding  */
+            if (pv2>=var2) v2=*pv2;          /* in range  */
+            if (*pv1!=v2) break;             /* no longer the same  */
+            if (pv1==var1) break;            /* done; leave pv1 as is  */
+            }
+          /* here when all inspected or a difference seen  */
+          if (*pv1<v2) break;                /* var1 too low to subtract  */
+          if (*pv1==v2) {                    /* var1 == var2  */
+            /* reach here if var1 and var2 are identical; subtraction  */
+            /* would increase digit by one, and the residue will be 0 so  */
+            /* the calculation is done; leave the loop with residue=0.  */
+            thisunit++;                      /* as though subtracted  */
+            *var1=0;                         /* set var1 to 0  */
+            var1units=1;                     /* ..  */
+            break;  /* from inner  */
+            } /* var1 == var2  */
+          /* *pv1>v2.  Prepare for real subtraction; the lengths are equal  */
+          /* Estimate the multiplier (there's always a msu1-1)...  */
+          /* Bring in two units of var2 to provide a good estimate.  */
+          mult=(Int)(((eInt)*msu1*(DECDPUNMAX+1)+*(msu1-1))/msu2pair);
+          } /* lengths the same  */
+         else { /* var1units > var2ulen, so subtraction is safe  */
+          /* The var2 msu is one unit towards the lsu of the var1 msu,  */
+          /* so only one unit for var2 can be used.  */
+          mult=(Int)(((eInt)*msu1*(DECDPUNMAX+1)+*(msu1-1))/msu2plus);
+          }
+        if (mult==0) mult=1;                 /* must always be at least 1  */
+        /* subtraction needed; var1 is > var2  */
+        thisunit=(Unit)(thisunit+mult);      /* accumulate  */
+        /* subtract var1-var2, into var1; only the overlap needs  */
+        /* processing, as this is an in-place calculation  */
+        shift=var2ulen-var2units;
+        #if DECTRACE
+          decDumpAr('1', &var1[shift], var1units-shift);
+          decDumpAr('2', var2, var2units);
+          printf("m=%ld\n", -mult);
+        #endif
+        decUnitAddSub(&var1[shift], var1units-shift,
+                      var2, var2units, 0,
+                      &var1[shift], -mult);
+        #if DECTRACE
+          decDumpAr('#', &var1[shift], var1units-shift);
+        #endif
+        /* var1 now probably has leading zeros; these are removed at the  */
+        /* top of the inner loop.  */
+        } /* inner loop  */
+
+      /* The next unit has been calculated in full; unless it's a  */
+      /* leading zero, add to acc  */
+      if (accunits!=0 || thisunit!=0) {      /* is first or non-zero  */
+        *accnext=thisunit;                   /* store in accumulator  */
+        /* account exactly for the new digits  */
+        if (accunits==0) {
+          accdigits++;                       /* at least one  */
+          for (pow=&powers[1]; thisunit>=*pow; pow++) accdigits++;
+          }
+         else accdigits+=DECDPUN;
+        accunits++;                          /* update count  */
+        accnext--;                           /* ready for next  */
+        if (accdigits>reqdigits) break;      /* have enough digits  */
+        }
+
+      /* if the residue is zero, the operation is done (unless divide  */
+      /* or divideInteger and still not enough digits yet)  */
+      if (*var1==0 && var1units==1) {        /* residue is 0  */
+        if (op&(REMAINDER|REMNEAR)) break;
+        if ((op&DIVIDE) && (exponent<=maxexponent)) break;
+        /* [drop through if divideInteger]  */
+        }
+      /* also done enough if calculating remainder or integer  */
+      /* divide and just did the last ('units') unit  */
+      if (exponent==0 && !(op&DIVIDE)) break;
+
+      /* to get here, var1 is less than var2, so divide var2 by the per-  */
+      /* Unit power of ten and go for the next digit  */
+      var2ulen--;                            /* shift down  */
+      exponent-=DECDPUN;                     /* update the exponent  */
+      } /* outer loop  */
+
+    /* ---- division is complete ---------------------------------------  */
+    /* here: acc      has at least reqdigits+1 of good results (or fewer  */
+    /*                if early stop), starting at accnext+1 (its lsu)  */
+    /*       var1     has any residue at the stopping point  */
+    /*       accunits is the number of digits collected in acc  */
+    if (accunits==0) {             /* acc is 0  */
+      accunits=1;                  /* show have a unit ..  */
+      accdigits=1;                 /* ..  */
+      *accnext=0;                  /* .. whose value is 0  */
+      }
+     else accnext++;               /* back to last placed  */
+    /* accnext now -> lowest unit of result  */
+
+    residue=0;                     /* assume no residue  */
+    if (op&DIVIDE) {
+      /* record the presence of any residue, for rounding  */
+      if (*var1!=0 || var1units>1) residue=1;
+       else { /* no residue  */
+        /* Had an exact division; clean up spurious trailing 0s.  */
+        /* There will be at most DECDPUN-1, from the final multiply,  */
+        /* and then only if the result is non-0 (and even) and the  */
+        /* exponent is 'loose'.  */
+        #if DECDPUN>1
+        Unit lsu=*accnext;
+        if (!(lsu&0x01) && (lsu!=0)) {
+          /* count the trailing zeros  */
+          Int drop=0;
+          for (;; drop++) {    /* [will terminate because lsu!=0]  */
+            if (exponent>=maxexponent) break;     /* don't chop real 0s  */
+            #if DECDPUN<=4
+              if ((lsu-QUOT10(lsu, drop+1)
+                  *powers[drop+1])!=0) break;     /* found non-0 digit  */
+            #else
+              if (lsu%powers[drop+1]!=0) break;   /* found non-0 digit  */
+            #endif
+            exponent++;
+            }
+          if (drop>0) {
+            accunits=decShiftToLeast(accnext, accunits, drop);
+            accdigits=decGetDigits(accnext, accunits);
+            accunits=D2U(accdigits);
+            /* [exponent was adjusted in the loop]  */
+            }
+          } /* neither odd nor 0  */
+        #endif
+        } /* exact divide  */
+      } /* divide  */
+     else /* op!=DIVIDE */ {
+      /* check for coefficient overflow  */
+      if (accdigits+exponent>reqdigits) {
+        *status|=DEC_Division_impossible;
+        break;
+        }
+      if (op & (REMAINDER|REMNEAR)) {
+        /* [Here, the exponent will be 0, because var1 was adjusted  */
+        /* appropriately.]  */
+        Int postshift;                       /* work  */
+        Flag wasodd=0;                       /* integer was odd  */
+        Unit *quotlsu;                       /* for save  */
+        Int  quotdigits;                     /* ..  */
+
+        bits=lhs->bits;                      /* remainder sign is always as lhs  */
+
+        /* Fastpath when residue is truly 0 is worthwhile [and  */
+        /* simplifies the code below]  */
+        if (*var1==0 && var1units==1) {      /* residue is 0  */
+          Int exp=lhs->exponent;             /* save min(exponents)  */
+          if (rhs->exponent<exp) exp=rhs->exponent;
+          uprv_decNumberZero(res);                /* 0 coefficient  */
+          #if DECSUBSET
+          if (set->extended)
+          #endif
+          res->exponent=exp;                 /* .. with proper exponent  */
+          res->bits=(uByte)(bits&DECNEG);          /* [cleaned]  */
+          decFinish(res, set, &residue, status);   /* might clamp  */
+          break;
+          }
+        /* note if the quotient was odd  */
+        if (*accnext & 0x01) wasodd=1;       /* acc is odd  */
+        quotlsu=accnext;                     /* save in case need to reinspect  */
+        quotdigits=accdigits;                /* ..  */
+
+        /* treat the residue, in var1, as the value to return, via acc  */
+        /* calculate the unused zero digits.  This is the smaller of:  */
+        /*   var1 initial padding (saved above)  */
+        /*   var2 residual padding, which happens to be given by:  */
+        postshift=var1initpad+exponent-lhs->exponent+rhs->exponent;
+        /* [the 'exponent' term accounts for the shifts during divide]  */
+        if (var1initpad<postshift) postshift=var1initpad;
+
+        /* shift var1 the requested amount, and adjust its digits  */
+        var1units=decShiftToLeast(var1, var1units, postshift);
+        accnext=var1;
+        accdigits=decGetDigits(var1, var1units);
+        accunits=D2U(accdigits);
+
+        exponent=lhs->exponent;         /* exponent is smaller of lhs & rhs  */
+        if (rhs->exponent<exponent) exponent=rhs->exponent;
+
+        /* Now correct the result if doing remainderNear; if it  */
+        /* (looking just at coefficients) is > rhs/2, or == rhs/2 and  */
+        /* the integer was odd then the result should be rem-rhs.  */
+        if (op&REMNEAR) {
+          Int compare, tarunits;        /* work  */
+          Unit *up;                     /* ..  */
+          /* calculate remainder*2 into the var1 buffer (which has  */
+          /* 'headroom' of an extra unit and hence enough space)  */
+          /* [a dedicated 'double' loop would be faster, here]  */
+          tarunits=decUnitAddSub(accnext, accunits, accnext, accunits,
+                                 0, accnext, 1);
+          /* decDumpAr('r', accnext, tarunits);  */
+
+          /* Here, accnext (var1) holds tarunits Units with twice the  */
+          /* remainder's coefficient, which must now be compared to the  */
+          /* RHS.  The remainder's exponent may be smaller than the RHS's.  */
+          compare=decUnitCompare(accnext, tarunits, rhs->lsu, D2U(rhs->digits),
+                                 rhs->exponent-exponent);
+          if (compare==BADINT) {             /* deep trouble  */
+            *status|=DEC_Insufficient_storage;
+            break;}
+
+          /* now restore the remainder by dividing by two; the lsu  */
+          /* is known to be even.  */
+          for (up=accnext; up<accnext+tarunits; up++) {
+            Int half;              /* half to add to lower unit  */
+            half=*up & 0x01;
+            *up/=2;                /* [shift]  */
+            if (!half) continue;
+            *(up-1)+=(DECDPUNMAX+1)/2;
+            }
+          /* [accunits still describes the original remainder length]  */
+
+          if (compare>0 || (compare==0 && wasodd)) { /* adjustment needed  */
+            Int exp, expunits, exprem;       /* work  */
+            /* This is effectively causing round-up of the quotient,  */
+            /* so if it was the rare case where it was full and all  */
+            /* nines, it would overflow and hence division-impossible  */
+            /* should be raised  */
+            Flag allnines=0;                 /* 1 if quotient all nines  */
+            if (quotdigits==reqdigits) {     /* could be borderline  */
+              for (up=quotlsu; ; up++) {
+                if (quotdigits>DECDPUN) {
+                  if (*up!=DECDPUNMAX) break;/* non-nines  */
+                  }
+                 else {                      /* this is the last Unit  */
+                  if (*up==powers[quotdigits]-1) allnines=1;
+                  break;
+                  }
+                quotdigits-=DECDPUN;         /* checked those digits  */
+                } /* up  */
+              } /* borderline check  */
+            if (allnines) {
+              *status|=DEC_Division_impossible;
+              break;}
+
+            /* rem-rhs is needed; the sign will invert.  Again, var1  */
+            /* can safely be used for the working Units array.  */
+            exp=rhs->exponent-exponent;      /* RHS padding needed  */
+            /* Calculate units and remainder from exponent.  */
+            expunits=exp/DECDPUN;
+            exprem=exp%DECDPUN;
+            /* subtract [A+B*(-m)]; the result will always be negative  */
+            accunits=-decUnitAddSub(accnext, accunits,
+                                    rhs->lsu, D2U(rhs->digits),
+                                    expunits, accnext, -(Int)powers[exprem]);
+            accdigits=decGetDigits(accnext, accunits); /* count digits exactly  */
+            accunits=D2U(accdigits);    /* and recalculate the units for copy  */
+            /* [exponent is as for original remainder]  */
+            bits^=DECNEG;               /* flip the sign  */
+            }
+          } /* REMNEAR  */
+        } /* REMAINDER or REMNEAR  */
+      } /* not DIVIDE  */
+
+    /* Set exponent and bits  */
+    res->exponent=exponent;
+    res->bits=(uByte)(bits&DECNEG);          /* [cleaned]  */
+
+    /* Now the coefficient.  */
+    decSetCoeff(res, set, accnext, accdigits, &residue, status);
+
+    decFinish(res, set, &residue, status);   /* final cleanup  */
+
+    #if DECSUBSET
+    /* If a divide then strip trailing zeros if subset [after round]  */
+    if (!set->extended && (op==DIVIDE)) decTrim(res, set, 0, 1, &dropped);
+    #endif
+    } while(0);                              /* end protected  */
+
+  if (varalloc!=NULL) free(varalloc);   /* drop any storage used  */
+  if (allocacc!=NULL) free(allocacc);   /* ..  */
+  #if DECSUBSET
+  if (allocrhs!=NULL) free(allocrhs);   /* ..  */
+  if (alloclhs!=NULL) free(alloclhs);   /* ..  */
+  #endif
+  return res;
+  } /* decDivideOp  */
+
+
+// Source: decNumber.cpp
+// Lines 4252-4833
+
+
+[ANSWER]
+MUST

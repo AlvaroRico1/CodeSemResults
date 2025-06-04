@@ -1,0 +1,196 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'cstr' at line 132
+2. Pointer 'str' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+real_from_string (REAL_VALUE_TYPE *r, const char *str)
+{
+  int exp = 0;
+  bool sign = false;
+
+  get_zero (r, 0);
+
+  if (*str == '-')
+    {
+      sign = true;
+      str++;
+    }
+  else if (*str == '+')
+    str++;
+
+  if (!strncmp (str, "QNaN", 4))
+    {
+      get_canonical_qnan (r, sign);
+      return 0;
+    }
+  else if (!strncmp (str, "SNaN", 4))
+    {
+      get_canonical_snan (r, sign);
+      return 0;
+    }
+  else if (!strncmp (str, "Inf", 3))
+    {
+      get_inf (r, sign);
+      return 0;
+    }
+
+  if (str[0] == '0' && (str[1] == 'x' || str[1] == 'X'))
+    {
+      /* Hexadecimal floating point.  */
+      int pos = SIGNIFICAND_BITS - 4, d;
+
+      str += 2;
+
+      while (*str == '0')
+	str++;
+      while (1)
+	{
+	  d = hex_value (*str);
+	  if (d == _hex_bad)
+	    break;
+	  if (pos >= 0)
+	    {
+	      r->sig[pos / HOST_BITS_PER_LONG]
+		|= (unsigned long) d << (pos % HOST_BITS_PER_LONG);
+	      pos -= 4;
+	    }
+	  else if (d)
+	    /* Ensure correct rounding by setting last bit if there is
+	       a subsequent nonzero digit.  */
+	    r->sig[0] |= 1;
+	  exp += 4;
+	  str++;
+	}
+      if (*str == '.')
+	{
+	  str++;
+	  if (pos == SIGNIFICAND_BITS - 4)
+	    {
+	      while (*str == '0')
+		str++, exp -= 4;
+	    }
+	  while (1)
+	    {
+	      d = hex_value (*str);
+	      if (d == _hex_bad)
+		break;
+	      if (pos >= 0)
+		{
+		  r->sig[pos / HOST_BITS_PER_LONG]
+		    |= (unsigned long) d << (pos % HOST_BITS_PER_LONG);
+		  pos -= 4;
+		}
+	      else if (d)
+		/* Ensure correct rounding by setting last bit if there is
+		   a subsequent nonzero digit.  */
+		r->sig[0] |= 1;
+	      str++;
+	    }
+	}
+
+      /* If the mantissa is zero, ignore the exponent.  */
+      if (!cmp_significand_0 (r))
+	goto is_a_zero;
+
+      if (*str == 'p' || *str == 'P')
+	{
+	  bool exp_neg = false;
+
+	  str++;
+	  if (*str == '-')
+	    {
+	      exp_neg = true;
+	      str++;
+	    }
+	  else if (*str == '+')
+	    str++;
+
+	  d = 0;
+	  while (ISDIGIT (*str))
+	    {
+	      d *= 10;
+	      d += *str - '0';
+	      if (d > MAX_EXP)
+		{
+		  /* Overflowed the exponent.  */
+		  if (exp_neg)
+		    goto underflow;
+		  else
+		    goto overflow;
+		}
+	      str++;
+	    }
+	  if (exp_neg)
+	    d = -d;
+
+	  exp += d;
+	}
+
+      r->cl = rvc_normal;
+      SET_REAL_EXP (r, exp);
+
+      normalize (r);
+    }
+  else
+    {
+      /* Decimal floating point.  */
+      const char *cstr = str;
+      mpfr_t m;
+      bool inexact;
+
+      while (*cstr == '0')
+	cstr++;
+      if (*cstr == '.')
+	{
+	  cstr++;
+	  while (*cstr == '0')
+	    cstr++;
+	}
+
+      /* If the mantissa is zero, ignore the exponent.  */
+      if (!ISDIGIT (*cstr))
+	goto is_a_zero;
+
+      /* Nonzero value, possibly overflowing or underflowing.  */
+      mpfr_init2 (m, SIGNIFICAND_BITS);
+      inexact = mpfr_strtofr (m, str, NULL, 10, MPFR_RNDZ);
+      /* The result should never be a NaN, and because the rounding is
+	 toward zero should never be an infinity.  */
+      gcc_assert (!mpfr_nan_p (m) && !mpfr_inf_p (m));
+      if (mpfr_zero_p (m) || mpfr_get_exp (m) < -MAX_EXP + 4)
+	{
+	  mpfr_clear (m);
+	  goto underflow;
+	}
+      else if (mpfr_get_exp (m) > MAX_EXP - 4)
+	{
+	  mpfr_clear (m);
+	  goto overflow;
+	}
+      else
+	{
+	  real_from_mpfr (r, m, NULL_TREE, MPFR_RNDZ);
+	  /* 1 to 3 bits may have been shifted off (with a sticky bit)
+	     because the hex digits used in real_from_mpfr did not
+	     start with a digit 8 to f, but the exponent bounds above
+	     should have avoided underflow or overflow.  */
+	  gcc_assert (r->cl == rvc_normal);
+	  /* Set a sticky bit if mpfr_strtofr was inexact.  */
+	  r->sig[0] |= inexact;
+	  mpfr_clear (m);
+	}
+    }
+
+
+// Source: real.c
+// Lines 1960-2136
+
+
+[ANSWER]
+MUST

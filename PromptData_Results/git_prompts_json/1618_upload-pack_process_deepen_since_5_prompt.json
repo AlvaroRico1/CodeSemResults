@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'deepen_since' at line 1\n2. Pointer 'end' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int process_deepen_since(const char *line, timestamp_t *deepen_since, int *deepen_rev_list)\n{\n\tconst char *arg;\n\tif (skip_prefix(line, \"deepen-since \", &arg)) {\n\t\tchar *end = NULL;\n\t\t*deepen_since = parse_timestamp(arg, &end, 0);\n\t\tif (!end || *end || !deepen_since ||\n\t\t    /* revisions.c's max_age -1 is special */\n\t\t    *deepen_since == -1)\n\t\t\tdie(\"Invalid deepen-since: %s\", line);\n\t\t*deepen_rev_list = 1;\n\t\treturn 1;\n\t}\n\n\n// Source: upload-pack.c\n// Lines 956-968\n",
+  "ANSWER": "MAY"
+}

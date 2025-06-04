@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'mkdir_opts' at line 8\n2. Pointer 'data' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int checkout_mkdir(\n\tcheckout_data *data,\n\tconst char *path,\n\tconst char *base,\n\tmode_t mode,\n\tunsigned int flags)\n{\n\tstruct git_futils_mkdir_options mkdir_opts = {0};\n\tint error;\n\n\tmkdir_opts.dir_map = data->mkdir_map;\n\tmkdir_opts.pool = &data->pool;\n\n\terror = git_futils_mkdir_relative(\n\t\tpath, base, mode, flags, &mkdir_opts);\n\n\tdata->perfdata.mkdir_calls += mkdir_opts.perfdata.mkdir_calls;\n\tdata->perfdata.stat_calls += mkdir_opts.perfdata.stat_calls;\n\tdata->perfdata.chmod_calls += mkdir_opts.perfdata.chmod_calls;\n\n\treturn error;\n}\n\n\n// Source: checkout.c\n// Lines 1412-1433\n",
+  "ANSWER": "MUST"
+}

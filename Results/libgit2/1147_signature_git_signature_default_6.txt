@@ -1,0 +1,1 @@
+cfg,libgit2/src/libgit2/signature.c,4,user_name,libgit2/src/libgit2/signature.c,5,2

@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'len' at line 2
+2. Pointer 'net' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+ulong my_net_read(NET *net) {
+  size_t len;
+  /* turn off non blocking operations */
+  if (!vio_is_blocking(net->vio)) vio_set_blocking_flag(net->vio, true);
+
+  if (net->compress)
+    net_read_compressed_packet(net, len);
+  else
+    net_read_uncompressed_packet(net, len);
+
+  return static_cast<ulong>(len);
+}
+
+
+// Source: net_serv.cc
+// Lines 2195-2206
+
+
+[ANSWER]
+MUST-NOT

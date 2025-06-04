@@ -1,0 +1,144 @@
+ipa_reference_read_optimization_summary (void)
+{
+  struct lto_file_decl_data ** file_data_vec
+    = lto_get_file_decl_data ();
+  struct lto_file_decl_data * file_data;
+  unsigned int j = 0;
+  bitmap_obstack_initialize (&optimization_summary_obstack);
+
+  gcc_checking_assert (ipa_ref_opt_sum_summaries == NULL);
+  ipa_ref_opt_sum_summaries = new ipa_ref_opt_summary_t (symtab);
+  ipa_reference_vars_map = new reference_vars_map_t(257);
+  varpool_node_hooks
+	 = symtab->add_varpool_removal_hook (varpool_removal_hook, NULL);
+  ipa_reference_vars_uids = 0;
+
+  all_module_statics = BITMAP_ALLOC (&optimization_summary_obstack);
+  no_module_statics = BITMAP_ALLOC (&optimization_summary_obstack);
+
+  while ((file_data = file_data_vec[j++]))
+    {
+      const char *data;
+      size_t len;
+      class lto_input_block *ib
+	= lto_create_simple_input_block (file_data,
+					 LTO_section_ipa_reference,
+					 &data, &len);
+      if (ib)
+	{
+	  unsigned int i;
+	  unsigned int f_count = streamer_read_uhwi (ib);
+	  int b_count;
+	  if (!f_count)
+	    continue;
+	  b_count = streamer_read_hwi (ib);
+	  if (dump_file)
+	    fprintf (dump_file, "all module statics:");
+	  for (i = 0; i < (unsigned int)b_count; i++)
+	    {
+	      unsigned int var_index = streamer_read_uhwi (ib);
+	      tree v_decl = lto_file_decl_data_get_var_decl (file_data,
+							     var_index);
+	      bool existed;
+	      bitmap_set_bit (all_module_statics,
+			      ipa_reference_var_get_or_insert_uid
+				 (v_decl, &existed));
+	      gcc_checking_assert (!existed);
+	      if (dump_file)
+		fprintf (dump_file, " %s", fndecl_name (v_decl));
+	    }
+
+	  for (i = 0; i < f_count; i++)
+	    {
+	      unsigned int j, index;
+	      struct cgraph_node *node;
+	      int v_count;
+	      lto_symtab_encoder_t encoder;
+
+	      index = streamer_read_uhwi (ib);
+	      encoder = file_data->symtab_node_encoder;
+	      node = dyn_cast<cgraph_node *> (lto_symtab_encoder_deref
+		(encoder, index));
+
+	      ipa_reference_optimization_summary_d *info
+		= ipa_ref_opt_sum_summaries->get_create (node);
+
+	      if (dump_file)
+		fprintf (dump_file,
+			 "\nFunction name:%s:\n  static read:",
+			 node->dump_asm_name ());
+
+	      /* Set the statics read.  */
+	      v_count = streamer_read_hwi (ib);
+	      if (v_count == -1)
+		{
+		  info->statics_read = all_module_statics;
+		  if (dump_file)
+		    fprintf (dump_file, " all module statics");
+		}
+	      else if (v_count == 0)
+		info->statics_read = no_module_statics;
+	      else
+		{
+		  info->statics_read = BITMAP_ALLOC
+		    (&optimization_summary_obstack);
+		  for (j = 0; j < (unsigned int)v_count; j++)
+		    {
+		      unsigned int var_index = streamer_read_uhwi (ib);
+		      tree v_decl = lto_file_decl_data_get_var_decl (file_data,
+								     var_index);
+		      bitmap_set_bit (info->statics_read,
+				      ipa_reference_var_uid (v_decl));
+		      if (dump_file)
+			fprintf (dump_file, " %s", fndecl_name (v_decl));
+		    }
+		}
+
+	      if (dump_file)
+		fprintf (dump_file,
+			 "\n  static written:");
+	      /* Set the statics written.  */
+	      v_count = streamer_read_hwi (ib);
+	      if (v_count == -1)
+		{
+		  info->statics_written = all_module_statics;
+		  if (dump_file)
+		    fprintf (dump_file, " all module statics");
+		}
+	      else if (v_count == 0)
+		info->statics_written = no_module_statics;
+	      else
+		{
+		  info->statics_written = BITMAP_ALLOC
+		    (&optimization_summary_obstack);
+		  for (j = 0; j < (unsigned int)v_count; j++)
+		    {
+		      unsigned int var_index = streamer_read_uhwi (ib);
+		      tree v_decl = lto_file_decl_data_get_var_decl (file_data,
+								     var_index);
+		      bitmap_set_bit (info->statics_written,
+				      ipa_reference_var_uid (v_decl));
+		      if (dump_file)
+			fprintf (dump_file, " %s", fndecl_name (v_decl));
+		    }
+		}
+	      if (dump_file)
+		fprintf (dump_file, "\n");
+	    }
+
+	  lto_destroy_simple_input_block (file_data,
+					  LTO_section_ipa_reference,
+					  ib, data, len);
+	}
+      else
+	/* Fatal error here.  We do not want to support compiling ltrans units
+	   with different version of compiler or different flags than
+	   the WPA unit, so this should never happen.  */
+	fatal_error (input_location,
+		     "ipa reference summary is missing in ltrans unit");
+    }
+}
+
+
+// Source: ipa-reference.c
+// Lines 1123-1262

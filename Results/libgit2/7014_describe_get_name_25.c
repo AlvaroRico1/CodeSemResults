@@ -1,0 +1,50 @@
+static int get_name(const char *refname, void *payload)
+{
+	struct get_name_data *data;
+	bool is_tag, is_annotated, all;
+	git_oid peeled, sha1;
+	unsigned int prio;
+	int error = 0;
+
+	data = (struct get_name_data *)payload;
+	is_tag = !git__prefixcmp(refname, GIT_REFS_TAGS_DIR);
+	all = data->opts->describe_strategy == GIT_DESCRIBE_ALL;
+
+	/* Reject anything outside refs/tags/ unless --all */
+	if (!all && !is_tag)
+		return 0;
+
+	/* Accept only tags that match the pattern, if given */
+	if (data->opts->pattern && (!is_tag || wildmatch(data->opts->pattern,
+		refname + strlen(GIT_REFS_TAGS_DIR), 0)))
+				return 0;
+
+	/* Is it annotated? */
+	if ((error = retrieve_peeled_tag_or_object_oid(
+		&peeled, &sha1, data->repo, refname)) < 0)
+		return error;
+
+	is_annotated = error;
+
+	/*
+	 * By default, we only use annotated tags, but with --tags
+	 * we fall back to lightweight ones (even without --tags,
+	 * we still remember lightweight ones, only to give hints
+	 * in an error message).  --all allows any refs to be used.
+	 */
+	if (is_annotated)
+		prio = 2;
+	else if (is_tag)
+		prio = 1;
+	else
+		prio = 0;
+
+	add_to_known_names(data->repo, data->names,
+		all ? refname + strlen(GIT_REFS_DIR) : refname + strlen(GIT_REFS_TAGS_DIR),
+		&peeled, prio, &sha1);
+	return 0;
+}
+
+
+// Source: describe.c
+// Lines 202-247

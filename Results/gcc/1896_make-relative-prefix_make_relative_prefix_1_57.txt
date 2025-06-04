@@ -1,0 +1,1 @@
+endp,gcc/libiberty/make-relative-prefix.c,23,progname,gcc/libiberty/make-relative-prefix.c,1,2

@@ -1,0 +1,1 @@
+data,tmux/window-buffer.c,3,modedata,tmux/window-buffer.c,1,1

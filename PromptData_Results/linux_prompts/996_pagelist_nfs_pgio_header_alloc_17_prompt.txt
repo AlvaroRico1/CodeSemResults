@@ -1,0 +1,29 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'hdr' at line 3
+2. Pointer 'ops' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+struct nfs_pgio_header *nfs_pgio_header_alloc(const struct nfs_rw_ops *ops)
+{
+	struct nfs_pgio_header *hdr = ops->rw_alloc_header();
+
+	if (hdr) {
+		INIT_LIST_HEAD(&hdr->pages);
+		hdr->rw_ops = ops;
+	}
+	return hdr;
+}
+
+
+// Source: pagelist.c
+// Lines 516-525
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,47 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'value' at line 14
+2. Pointer 'node' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+list *listDup(list *orig)
+{
+    list *copy;
+    listIter iter;
+    listNode *node;
+
+    if ((copy = listCreate()) == NULL)
+        return NULL;
+    copy->dup = orig->dup;
+    copy->free = orig->free;
+    copy->match = orig->match;
+    listRewind(orig, &iter);
+    while((node = listNext(&iter)) != NULL) {
+        void *value;
+
+        if (copy->dup) {
+            value = copy->dup(node->value);
+            if (value == NULL) {
+                listRelease(copy);
+                return NULL;
+            }
+        } else
+            value = node->value;
+        if (listAddNodeTail(copy, value) == NULL) {
+            listRelease(copy);
+            return NULL;
+        }
+    }
+
+
+// Source: adlist.c
+// Lines 251-278
+
+
+[ANSWER]
+MUST

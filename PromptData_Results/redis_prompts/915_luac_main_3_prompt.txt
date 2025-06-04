@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 's' at line 4
+2. Pointer 'argv' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int main(int argc, char* argv[])
+{
+ lua_State* L;
+ struct Smain s;
+ int i=doargs(argc,argv);
+ argc-=i; argv+=i;
+ if (argc<=0) usage("no input files given");
+ L=lua_open();
+ if (L==NULL) fatal("not enough memory for state");
+ s.argc=argc;
+ s.argv=argv;
+ if (lua_cpcall(L,pmain,&s)!=0) fatal(lua_tostring(L,-1));
+ lua_close(L);
+ return EXIT_SUCCESS;
+}
+
+
+// Source: luac.c
+// Lines 186-200
+
+
+[ANSWER]
+MUST

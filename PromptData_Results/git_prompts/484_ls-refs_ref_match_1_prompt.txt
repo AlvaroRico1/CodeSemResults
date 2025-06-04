@@ -1,0 +1,32 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'prefix' at line 9
+2. Pointer 'prefixes' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int ref_match(const struct strvec *prefixes, const char *refname)
+{
+	int i;
+
+	if (!prefixes->nr)
+		return 1; /* no restriction */
+
+	for (i = 0; i < prefixes->nr; i++) {
+		const char *prefix = prefixes->v[i];
+
+		if (starts_with(refname, prefix))
+			return 1;
+	}
+
+
+// Source: ls-refs.c
+// Lines 53-65
+
+
+[ANSWER]
+MUST

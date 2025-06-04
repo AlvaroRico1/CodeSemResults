@@ -1,0 +1,1 @@
+ri,redis/src/sentinel.c,2,sdsname,redis/src/sentinel.c,5,1

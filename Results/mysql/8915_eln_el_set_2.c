@@ -1,0 +1,170 @@
+el_set(EditLine *el, int op, ...)
+{
+	va_list ap;
+	int ret;
+
+	if (!el)
+		return -1;
+	va_start(ap, op);
+
+	switch (op) {
+	case EL_PROMPT:         /* el_pfunc_t */
+	case EL_RPROMPT: {
+		el_pfunc_t p = va_arg(ap, el_pfunc_t);
+		ret = prompt_set(el, p, 0, op, 0);
+		break;
+	}
+
+	case EL_RESIZE: {
+		el_zfunc_t p = va_arg(ap, el_zfunc_t);
+		void *arg = va_arg(ap, void *);
+		ret = ch_resizefun(el, p, arg);
+		break;
+	}
+
+	case EL_ALIAS_TEXT: {
+		el_afunc_t p = va_arg(ap, el_afunc_t);
+		void *arg = va_arg(ap, void *);
+		ret = ch_aliasfun(el, p, arg);
+		break;
+	}
+
+	case EL_PROMPT_ESC:
+	case EL_RPROMPT_ESC: {
+		el_pfunc_t p = va_arg(ap, el_pfunc_t);
+		int c = va_arg(ap, int);
+
+		ret = prompt_set(el, p, c, op, 0);
+		break;
+	}
+
+	case EL_TERMINAL:       /* const char * */
+		ret = el_wset(el, op, va_arg(ap, char *));
+		break;
+
+	case EL_EDITOR:		/* const wchar_t * */
+		ret = el_wset(el, op, ct_decode_string(va_arg(ap, char *),
+		    &el->el_lgcyconv));
+		break;
+
+	case EL_SIGNAL:         /* int */
+	case EL_EDITMODE:
+	case EL_UNBUFFERED:
+	case EL_PREP_TERM:
+		ret = el_wset(el, op, va_arg(ap, int));
+		break;
+
+	case EL_BIND:   /* const char * list -> const wchar_t * list */
+	case EL_TELLTC:
+	case EL_SETTC:
+	case EL_ECHOTC:
+	case EL_SETTY: {
+		const char *argv[20];
+		int i;
+		const wchar_t **wargv;
+		for (i = 1; i < (int)__arraycount(argv) - 1; ++i)
+			if ((argv[i] = va_arg(ap, const char *)) == NULL)
+			    break;
+		argv[0] = argv[i] = NULL;
+		wargv = (void *)ct_decode_argv(i + 1, argv, &el->el_lgcyconv);
+		if (!wargv) {
+		    ret = -1;
+		    goto out;
+		}
+		/*
+		 * AFAIK we can't portably pass through our new wargv to
+		 * el_wset(), so we have to reimplement the body of
+		 * el_wset() for these ops.
+		 */
+		switch (op) {
+		case EL_BIND:
+			wargv[0] = L"bind";
+			ret = map_bind(el, i, wargv);
+			break;
+		case EL_TELLTC:
+			wargv[0] = L"telltc";
+			ret = terminal_telltc(el, i, wargv);
+			break;
+		case EL_SETTC:
+			wargv[0] = L"settc";
+			ret = terminal_settc(el, i, wargv);
+			break;
+		case EL_ECHOTC:
+			wargv[0] = L"echotc";
+			ret = terminal_echotc(el, i, wargv);
+			break;
+		case EL_SETTY:
+			wargv[0] = L"setty";
+			ret = tty_stty(el, i, wargv);
+			break;
+		default:
+			ret = -1;
+		}
+		el_free(wargv);
+		break;
+	}
+
+	/* XXX: do we need to change el_func_t too? */
+	case EL_ADDFN: {          /* const char *, const char *, el_func_t */
+		const char *args[2];
+		el_func_t func;
+		wchar_t **wargv;
+
+		args[0] = va_arg(ap, const char *);
+		args[1] = va_arg(ap, const char *);
+		func = va_arg(ap, el_func_t);
+
+		wargv = ct_decode_argv(2, args, &el->el_lgcyconv);
+		if (!wargv) {
+		    ret = -1;
+		    goto out;
+		}
+		/* XXX: The two strdup's leak */
+		ret = map_addfunc(el, wcsdup(wargv[0]), wcsdup(wargv[1]),
+		    func);
+		el_free(wargv);
+		break;
+	}
+	case EL_HIST: {           /* hist_fun_t, const char * */
+		hist_fun_t fun = va_arg(ap, hist_fun_t);
+		void *ptr = va_arg(ap, void *);
+		ret = hist_set(el, fun, ptr);
+		el->el_flags |= NARROW_HISTORY;
+		break;
+	}
+
+	case EL_GETCFN:         /* el_rfunc_t */
+		ret = el_wset(el, op, va_arg(ap, el_rfunc_t));
+		break;
+
+	case EL_CLIENTDATA:     /* void * */
+		ret = el_wset(el, op, va_arg(ap, void *));
+		break;
+
+	case EL_SETFP: {          /* int, FILE * */
+		int what = va_arg(ap, int);
+		FILE *fp = va_arg(ap, FILE *);
+		ret = el_wset(el, op, what, fp);
+		break;
+	}
+
+	case EL_REFRESH:
+		re_clear_display(el);
+		re_refresh(el);
+		terminal__flush(el);
+		ret = 0;
+		break;
+
+	default:
+		ret = -1;
+		break;
+	}
+
+out:
+	va_end(ap);
+	return ret;
+}
+
+
+// Source: eln.c
+// Lines 105-270

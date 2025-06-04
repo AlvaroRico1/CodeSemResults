@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'colon' at line 3\n2. Pointer 'host' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void get_host_and_port(char **host, const char **port)\n{\n\tchar *colon, *end;\n\tend = host_end(host, 1);\n\tcolon = strchr(end, ':');\n\tif (colon) {\n\t\tlong portnr = strtol(colon + 1, &end, 10);\n\t\tif (end != colon + 1 && *end == '\\0' && 0 <= portnr && portnr < 65536) {\n\t\t\t*colon = 0;\n\t\t\t*port = colon + 1;\n\t\t} else if (!colon[1]) {\n\t\t\t*colon = 0;\n\t\t}\n\t}\n}\n\n\n// Source: connect.c\n// Lines 700-714\n",
+  "ANSWER": "MAY"
+}

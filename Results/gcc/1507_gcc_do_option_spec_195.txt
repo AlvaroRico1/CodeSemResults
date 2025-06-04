@@ -1,0 +1,1 @@
+tmp_spec_p,gcc/gcc/gcc.c,5,p,gcc/gcc/gcc.c,4,0

@@ -1,0 +1,1 @@
+return_value,linux/drivers/acpi/acpica/hwpci.c,7,object_type,linux/drivers/acpi/acpica/hwpci.c,6,2

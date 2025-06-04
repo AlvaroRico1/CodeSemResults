@@ -1,0 +1,28 @@
+set_bb_regs (basic_block bb, rtx_insn *insn)
+{
+  lra_insn_recog_data_t id = lra_get_insn_recog_data (insn);
+  remat_bb_data_t bb_info = get_remat_bb_data (bb);
+  struct lra_insn_reg *reg;
+
+  for (reg = id->regs; reg != NULL; reg = reg->next)
+    {
+      unsigned regno = reg->regno;
+      if (reg->type != OP_IN)
+        bitmap_set_bit (&bb_info->changed_regs, regno);
+      else if (find_regno_note (insn, REG_DEAD, regno) != NULL)
+	bitmap_set_bit (&bb_info->dead_regs, regno);
+      if (regno >= FIRST_PSEUDO_REGISTER && reg->subreg_p)
+	bitmap_set_bit (&subreg_regs, regno);
+    }
+  if (CALL_P (insn))
+    {
+      /* Partially-clobbered registers might still be live.  */
+      HARD_REG_SET clobbers = insn_callee_abi (insn).full_reg_clobbers ();
+      bitmap_ior_into (&get_remat_bb_data (bb)->dead_regs,
+		       bitmap_view<HARD_REG_SET> (clobbers));
+    }
+}
+
+
+// Source: lra-remat.c
+// Lines 614-637

@@ -1,0 +1,79 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'dst_pos' at line 51
+2. Pointer 'regular_pos' at line 50
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void Optimize_table_order::semijoin_mat_scan_access_paths(
+    uint last_inner_tab, uint last_outer_tab, table_map remaining_tables,
+    TABLE_LIST *sjm_nest, double *newcount, double *newcost) {
+  DBUG_TRACE;
+
+  const Cost_model_server *const cost_model = join->cost_model();
+  Opt_trace_context *const trace = &thd->opt_trace;
+  Opt_trace_object recalculate(trace, "recalculate_access_paths_and_cost");
+  Opt_trace_array trace_tables(trace, "tables");
+  double cost;      // Calculated running cost of operation
+  double rowcount;  // Rowcount of join prefix (ie before first_inner).
+
+  POSITION *const positions =
+      got_final_plan ? join->best_positions : join->positions;
+  const uint inner_count = my_count_bits(sjm_nest->sj_inner_tables);
+
+  // Get the prefix cost.
+  const uint first_inner = last_inner_tab + 1 - inner_count;
+  if (first_inner == join->const_tables) {
+    rowcount = 1.0;
+    cost = 0.0;
+  } else {
+    rowcount = positions[first_inner - 1].prefix_rowcount;
+    cost = positions[first_inner - 1].prefix_cost;
+  }
+
+  // Add materialization cost.
+  cost += sjm_nest->nested_join->sjm.materialization_cost.total_cost() +
+          rowcount * sjm_nest->nested_join->sjm.scan_cost.total_cost();
+
+  for (uint i = last_inner_tab + 1; i <= last_outer_tab; i++)
+    remaining_tables |= positions[i].table->table_ref->map();
+  /*
+    Materialization removes duplicates from the materialized table, so
+    number of rows to scan is probably less than the number of rows
+    from a full join, on which the access paths of outer tables are currently
+    based. Rerun best_access_path to adjust for reduced rowcount.
+  */
+  const double inner_fanout = sjm_nest->nested_join->sjm.expected_rowcount;
+  double outer_fanout = 1.0;
+
+  Deps_of_remaining_lateral_derived_tables deps_lateral(join, ~excluded_tables);
+  // recalculate, as we go back in the range of "unoptimized" tables:
+  deps_lateral.recalculate(last_inner_tab + 1);
+
+  for (uint i = last_inner_tab + 1; i <= last_outer_tab; i++) {
+    Opt_trace_object trace_one_table(trace);
+    JOIN_TAB *const tab = positions[i].table;
+    trace_one_table.add_utf8_table(tab->table_ref);
+    POSITION regular_pos;
+    POSITION *const dst_pos = got_final_plan ? positions + i : &regular_pos;
+    best_access_path(tab, remaining_tables, i, false,
+                     rowcount * inner_fanout * outer_fanout, dst_pos);
+    remaining_tables &= ~tab->table_ref->map();
+    outer_fanout *= dst_pos->rows_fetched;
+    cost += dst_pos->read_cost + cost_model->row_evaluate_cost(
+                                     rowcount * inner_fanout * outer_fanout);
+    outer_fanout *= dst_pos->filter_effect;
+    deps_lateral.recalculate(tab, i + 1);
+  }
+
+
+// Source: sql_planner.cc
+// Lines 3772-3831
+
+
+[ANSWER]
+MUST

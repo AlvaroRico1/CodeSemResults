@@ -1,0 +1,49 @@
+static bool decorrelate_equality(Semijoin_decorrelation &sj_decor,
+                                 Item_func *func, bool *was_correlated) {
+  *was_correlated = false;
+  Item_bool_func2 *bool_func = down_cast<Item_bool_func2 *>(func);
+  Item *const left = bool_func->arguments()[0];
+  Item *const right = bool_func->arguments()[1];
+  Item *inner = nullptr;
+  Item *outer = nullptr;
+  table_map left_used_tables = left->used_tables() & ~INNER_TABLE_BIT;
+  table_map right_used_tables = right->used_tables() & ~INNER_TABLE_BIT;
+
+  /*
+    Predicates that have non-deterministic elements are not decorrelated,
+    see explanation for Query_block::decorrelate_condition().
+  */
+  if ((left_used_tables & RAND_TABLE_BIT) ||
+      (right_used_tables & RAND_TABLE_BIT))
+    return false;
+
+  if (left_used_tables == OUTER_REF_TABLE_BIT) {
+    outer = left;
+  } else if (!(left_used_tables & OUTER_REF_TABLE_BIT)) {
+    inner = left;
+  }
+  if (right_used_tables == OUTER_REF_TABLE_BIT) {
+    outer = right;
+  } else if (!(right_used_tables & OUTER_REF_TABLE_BIT)) {
+    inner = right;
+  }
+  if (inner == nullptr || outer == nullptr) return false;
+
+  // Equalities over row items cannot be decorrelated
+  if (outer->type() == Item::ROW_ITEM) return false;
+
+  sj_decor.add_outer(outer);
+  sj_decor.add_inner(inner);
+  if (sj_decor.add_op_type(
+          // use canonical form "outer OP inner":
+          (outer == left) ? bool_func->functype() : bool_func->rev_functype()))
+    return true;
+
+  *was_correlated = true;
+
+  return false;
+}
+
+
+// Source: sql_resolver.cc
+// Lines 2552-2596

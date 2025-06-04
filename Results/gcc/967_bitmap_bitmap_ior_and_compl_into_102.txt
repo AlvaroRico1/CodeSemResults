@@ -1,0 +1,1 @@
+and_elt_ptr,gcc/gcc/bitmap.c,28,and_elt,gcc/gcc/bitmap.c,6,1

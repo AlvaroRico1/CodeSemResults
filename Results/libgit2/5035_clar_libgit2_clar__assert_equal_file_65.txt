@@ -1,0 +1,1 @@
+ignore_cr,libgit2/tests/clar/clar_libgit2.c,4,fd,libgit2/tests/clar/clar_libgit2.c,12,0

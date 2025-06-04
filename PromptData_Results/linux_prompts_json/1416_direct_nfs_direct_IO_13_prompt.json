@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'inode' at line 3\n2. Pointer 'iocb' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nssize_t nfs_direct_IO(struct kiocb *iocb, struct iov_iter *iter)\n{\n\tstruct inode *inode = iocb->ki_filp->f_mapping->host;\n\n\t/* we only support swap file calling nfs_direct_IO */\n\tif (!IS_SWAPFILE(inode))\n\t\treturn 0;\n\n\tVM_BUG_ON(iov_iter_count(iter) != PAGE_SIZE);\n\n\tif (iov_iter_rw(iter) == READ)\n\t\treturn nfs_file_direct_read(iocb, iter);\n\treturn nfs_file_direct_write(iocb, iter);\n}\n\n\n// Source: direct.c\n// Lines 264-277\n",
+  "ANSWER": "MUST"
+}

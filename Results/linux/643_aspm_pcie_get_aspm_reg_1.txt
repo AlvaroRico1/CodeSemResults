@@ -1,0 +1,1 @@
+reg16,linux/drivers/pci/pcie/aspm.c,4,reg32,linux/drivers/pci/pcie/aspm.c,5,2

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'head' at line 3\n2. Pointer 'te' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int submodule_update_head(git_submodule *submodule)\n{\n\tgit_tree *head = NULL;\n\tgit_tree_entry *te = NULL;\n\n\tsubmodule->flags = submodule->flags &\n\t\t~(GIT_SUBMODULE_STATUS_IN_HEAD |\n\t\t  GIT_SUBMODULE_STATUS__HEAD_OID_VALID);\n\n\t/* if we can't look up file in current head, then done */\n\tif (git_repository_head_tree(&head, submodule->repo) < 0 ||\n\t\tgit_tree_entry_bypath(&te, head, submodule->path) < 0)\n\t\tgit_error_clear();\n\telse\n\t\tsubmodule_update_from_head_data(submodule, te->attr, git_tree_entry_id(te));\n\n\tgit_tree_entry_free(te);\n\tgit_tree_free(head);\n\treturn 0;\n}\n\n\n// Source: submodule.c\n// Lines 1649-1668\n",
+  "ANSWER": "MAY"
+}

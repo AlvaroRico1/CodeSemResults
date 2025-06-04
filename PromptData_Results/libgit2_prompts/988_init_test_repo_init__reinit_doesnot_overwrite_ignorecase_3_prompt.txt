@@ -1,0 +1,45 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'config' at line 3
+2. Pointer 'current_value' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_repo_init__reinit_doesnot_overwrite_ignorecase(void)
+{
+	git_config *config;
+	int current_value;
+
+	/* Init a new repo */
+	cl_set_cleanup(&cleanup_repository, "not.overwrite.git");
+	cl_git_pass(git_repository_init(&g_repo, "not.overwrite.git", 1));
+
+	/* Change the "core.ignorecase" config value to something unlikely */
+	git_repository_config(&config, g_repo);
+	git_config_set_int32(config, "core.ignorecase", 42);
+	git_config_free(config);
+	git_repository_free(g_repo);
+	g_repo = NULL;
+
+	/* Reinit the repository */
+	cl_git_pass(git_repository_init(&g_repo, "not.overwrite.git", 1));
+	git_repository_config(&config, g_repo);
+
+	/* Ensure the "core.ignorecase" config value hasn't been updated */
+	cl_git_pass(git_config_get_int32(&current_value, config, "core.ignorecase"));
+	cl_assert_equal_i(42, current_value);
+
+	git_config_free(config);
+}
+
+
+// Source: init.c
+// Lines 327-352
+
+
+[ANSWER]
+MAY

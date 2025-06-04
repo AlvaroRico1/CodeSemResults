@@ -1,0 +1,64 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'fixed' at line 4
+2. Pointer 'str' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int unescape_line(
+	char **out, bool *is_multi, const char *ptr, int quote_count)
+{
+	char *str, *fixed, *esc;
+	size_t ptr_len = strlen(ptr), alloc_len;
+
+	*is_multi = false;
+
+	if (GIT_ADD_SIZET_OVERFLOW(&alloc_len, ptr_len, 1) ||
+		(str = git__malloc(alloc_len)) == NULL) {
+		return -1;
+	}
+
+	fixed = str;
+
+	while (*ptr != '\0') {
+		if (*ptr == '"') {
+			quote_count++;
+		} else if (*ptr != '\\') {
+			*fixed++ = *ptr;
+		} else {
+			/* backslash, check the next char */
+			ptr++;
+			/* if we're at the end, it's a multiline, so keep the backslash */
+			if (*ptr == '\0') {
+				*is_multi = true;
+				goto done;
+			}
+			if ((esc = strchr(git_config_escapes, *ptr)) != NULL) {
+				*fixed++ = git_config_escaped[esc - git_config_escapes];
+			} else {
+				git__free(str);
+				git_error_set(GIT_ERROR_CONFIG, "invalid escape at %s", ptr);
+				return -1;
+			}
+		}
+		ptr++;
+	}
+
+done:
+	*fixed = '\0';
+	*out = str;
+
+	return 0;
+}
+
+
+// Source: config_parse.c
+// Lines 282-326
+
+
+[ANSWER]
+MUST

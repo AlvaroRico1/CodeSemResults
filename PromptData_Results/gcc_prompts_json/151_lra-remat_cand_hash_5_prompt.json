@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'static_id' at line 5\n2. Pointer 'id' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ncand_hash (const void *cand)\n{\n  const_cand_t c = (const_cand_t) cand;\n  lra_insn_recog_data_t id = lra_get_insn_recog_data (c->insn);\n  struct lra_static_insn_data *static_id = id->insn_static_data;\n  int nops = static_id->n_operands;\n  hashval_t hash = 0;\n\n  for (int i = 0; i < nops; i++)\n    if (i == c->nop)\n      hash = iterative_hash_object (c->regno, hash);\n    else if (static_id->operand[i].type == OP_IN)\n      hash = iterative_hash_object (*id->operand_loc[i], hash);\n  return hash;\n}\n\n\n// Source: lra-remat.c\n// Lines 174-188\n",
+  "ANSWER": "MUST"
+}

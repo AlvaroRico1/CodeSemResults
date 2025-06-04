@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'l' at line 3\n2. Pointer 'l' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid prune_notes(struct notes_tree *t, int flags)\n{\n\tstruct note_delete_list *l = NULL;\n\n\tif (!t)\n\t\tt = &default_notes_tree;\n\tassert(t->initialized);\n\n\tfor_each_note(t, 0, prune_notes_helper, &l);\n\n\twhile (l) {\n\t\tif (flags & NOTES_PRUNE_VERBOSE)\n\t\t\tprintf(\"%s\\n\", hash_to_hex(l->sha1));\n\t\tif (!(flags & NOTES_PRUNE_DRYRUN))\n\t\t\tremove_note(t, l->sha1);\n\t\tl = l->next;\n\t}\n}\n\n\n// Source: notes.c\n// Lines 1200-1217\n",
+  "ANSWER": "MUST"
+}

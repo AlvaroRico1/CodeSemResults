@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'index' at line 4
+2. Pointer 'repo' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void reset_index_to_treeish(git_object *treeish)
+{
+	git_object *tree;
+	git_index *index;
+	git_repository *repo = git_object_owner(treeish);
+
+	cl_git_pass(git_object_peel(&tree, treeish, GIT_OBJECT_TREE));
+
+	cl_git_pass(git_repository_index(&index, repo));
+	cl_git_pass(git_index_read_tree(index, (git_tree *)tree));
+	cl_git_pass(git_index_write(index));
+
+	git_object_free(tree);
+	git_index_free(index);
+}
+
+
+// Source: checkout_helpers.c
+// Lines 22-36
+
+
+[ANSWER]
+MUST-NOT

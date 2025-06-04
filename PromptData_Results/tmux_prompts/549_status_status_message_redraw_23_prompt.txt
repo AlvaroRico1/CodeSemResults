@@ -1,0 +1,66 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 's' at line 5
+2. Pointer 'c' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+status_message_redraw(struct client *c)
+{
+	struct status_line	*sl = &c->status;
+	struct screen_write_ctx	 ctx;
+	struct session		*s = c->session;
+	struct screen		 old_screen;
+	size_t			 len;
+	u_int			 lines, offset;
+	struct grid_cell	 gc;
+	struct format_tree	*ft;
+
+	if (c->tty.sx == 0 || c->tty.sy == 0)
+		return (0);
+	memcpy(&old_screen, sl->active, sizeof old_screen);
+
+	lines = status_line_size(c);
+	if (lines <= 1)
+		lines = 1;
+	screen_init(sl->active, c->tty.sx, lines, 0);
+
+	len = screen_write_strlen("%s", c->message_string);
+	if (len > c->tty.sx)
+		len = c->tty.sx;
+
+	ft = format_create_defaults(NULL, c, NULL, NULL, NULL);
+	style_apply(&gc, s->options, "message-style", ft);
+	format_free(ft);
+
+	screen_write_start(&ctx, sl->active);
+	screen_write_fast_copy(&ctx, &sl->screen, 0, 0, c->tty.sx, lines - 1);
+	screen_write_cursormove(&ctx, 0, lines - 1, 0);
+	for (offset = 0; offset < c->tty.sx; offset++)
+		screen_write_putc(&ctx, &gc, ' ');
+	screen_write_cursormove(&ctx, 0, lines - 1, 0);
+	if (c->message_ignore_styles)
+		screen_write_nputs(&ctx, len, &gc, "%s", c->message_string);
+	else
+		format_draw(&ctx, &gc, c->tty.sx, c->message_string, NULL);
+	screen_write_stop(&ctx);
+
+	if (grid_compare(sl->active->grid, old_screen.grid) == 0) {
+		screen_free(&old_screen);
+		return (0);
+	}
+	screen_free(&old_screen);
+	return (1);
+}
+
+
+// Source: status.c
+// Lines 528-574
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'p' at line 3\n2. Pointer 'attr_name' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nremove_attribute (const char *attr_name, tree list)\n{\n  tree *p;\n  gcc_checking_assert (attr_name[0] != '_');\n\n  for (p = &list; *p;)\n    {\n      tree l = *p;\n\n      tree attr = get_attribute_name (l);\n      if (is_attribute_p (attr_name, attr))\n\t*p = TREE_CHAIN (l);\n      else\n\tp = &TREE_CHAIN (l);\n    }\n\n  return list;\n}\n\n\n// Source: attribs.c\n// Lines 1407-1424\n",
+  "ANSWER": "MUST-NOT"
+}

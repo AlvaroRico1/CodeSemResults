@@ -1,0 +1,43 @@
+bool handle_reload_request(THD *thd, unsigned long options, TABLE_LIST *tables,
+                           int *write_to_binlog) {
+  bool result = false;
+  select_errors = 0; /* Write if more errors */
+  int tmp_write_to_binlog = *write_to_binlog = 1;
+
+  assert(!thd || !thd->in_sub_stmt);
+
+  if (options & REFRESH_GRANT) {
+    THD *tmp_thd = nullptr;
+    /*
+      If handle_reload_request() is called from SIGHUP handler we have to
+      allocate temporary THD for execution of acl_reload()/grant_reload().
+    */
+    if (!thd && (thd = (tmp_thd = new THD))) {
+      thd->thread_stack = (char *)&tmp_thd;
+      thd->store_globals();
+    }
+
+    if (thd) {
+      bool reload_acl_failed = reload_acl_caches(thd, false);
+      bool reload_servers_failed = servers_reload(thd);
+      notify_flush_event(thd);
+      if (reload_acl_failed || reload_servers_failed) {
+        result = true;
+        /*
+          When an error is returned, my_message may have not been called and
+          the client will hang waiting for a response.
+        */
+        my_error(ER_UNKNOWN_ERROR, MYF(0));
+      }
+    }
+
+    reset_mqh(thd, (LEX_USER *)nullptr, true);
+    if (tmp_thd) {
+      delete tmp_thd;
+      thd = nullptr;
+    }
+  }
+
+
+// Source: sql_reload.cc
+// Lines 142-180

@@ -1,0 +1,1 @@
+operand,linux/drivers/acpi/acpica/exoparg1.c,4,digit,linux/drivers/acpi/acpica/exoparg1.c,10,2

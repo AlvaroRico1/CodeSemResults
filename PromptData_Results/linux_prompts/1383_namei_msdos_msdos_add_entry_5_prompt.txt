@@ -1,0 +1,54 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'date' at line 7
+2. Pointer 'time' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int msdos_add_entry(struct inode *dir, const unsigned char *name,
+			   int is_dir, int is_hid, int cluster,
+			   struct timespec64 *ts, struct fat_slot_info *sinfo)
+{
+	struct msdos_sb_info *sbi = MSDOS_SB(dir->i_sb);
+	struct msdos_dir_entry de;
+	__le16 time, date;
+	int err;
+
+	memcpy(de.name, name, MSDOS_NAME);
+	de.attr = is_dir ? ATTR_DIR : ATTR_ARCH;
+	if (is_hid)
+		de.attr |= ATTR_HIDDEN;
+	de.lcase = 0;
+	fat_time_unix2fat(sbi, ts, &time, &date, NULL);
+	de.cdate = de.adate = 0;
+	de.ctime = 0;
+	de.ctime_cs = 0;
+	de.time = time;
+	de.date = date;
+	fat_set_start(&de, cluster);
+	de.size = 0;
+
+	err = fat_add_entries(dir, &de, 1, sinfo);
+	if (err)
+		return err;
+
+	fat_truncate_time(dir, ts, S_CTIME|S_MTIME);
+	if (IS_DIRSYNC(dir))
+		(void)fat_sync_inode(dir);
+	else
+		mark_inode_dirty(dir);
+
+	return 0;
+}
+
+
+// Source: namei_msdos.c
+// Lines 227-261
+
+
+[ANSWER]
+MAY

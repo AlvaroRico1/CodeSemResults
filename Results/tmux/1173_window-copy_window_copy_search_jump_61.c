@@ -1,0 +1,74 @@
+window_copy_search_jump(struct window_mode_entry *wme, struct grid *gd,
+    struct grid *sgd, u_int fx, u_int fy, u_int endline, int cis, int wrap,
+    int direction, int regex)
+{
+	u_int	 i, px, sx, ssize = 1;
+	int	 found = 0, cflags = REG_EXTENDED;
+	char	*sbuf;
+	regex_t	 reg;
+
+	if (regex) {
+		sbuf = xmalloc(ssize);
+		sbuf[0] = '\0';
+		sbuf = window_copy_stringify(sgd, 0, 0, sgd->sx, sbuf, &ssize);
+		if (cis)
+			cflags |= REG_ICASE;
+		if (regcomp(&reg, sbuf, cflags) != 0) {
+			free(sbuf);
+			return (0);
+		}
+		free(sbuf);
+	}
+
+	if (direction) {
+		for (i = fy; i <= endline; i++) {
+			if (regex) {
+				found = window_copy_search_lr_regex(gd,
+				    &px, &sx, i, fx, gd->sx, &reg);
+			} else {
+				found = window_copy_search_lr(gd, sgd,
+				    &px, i, fx, gd->sx, cis);
+			}
+			if (found)
+				break;
+			fx = 0;
+		}
+	} else {
+		for (i = fy + 1; endline < i; i--) {
+			if (regex) {
+				found = window_copy_search_rl_regex(gd,
+				    &px, &sx, i - 1, 0, fx + 1, &reg);
+				if (found) {
+					window_copy_search_back_overlap(gd,
+					    &reg, &px, &sx, &i, endline);
+				}
+			} else {
+				found = window_copy_search_rl(gd, sgd,
+				    &px, i - 1, 0, fx + 1, cis);
+			}
+			if (found) {
+				i--;
+				break;
+			}
+			fx = gd->sx - 1;
+		}
+	}
+	if (regex)
+		regfree(&reg);
+
+	if (found) {
+		window_copy_scroll_to(wme, px, i, 1);
+		return (1);
+	}
+	if (wrap) {
+		return (window_copy_search_jump(wme, gd, sgd,
+		    direction ? 0 : gd->sx - 1,
+		    direction ? 0 : gd->hsize + gd->sy - 1, fy, cis, 0,
+		    direction, regex));
+	}
+	return (0);
+}
+
+
+// Source: window-copy.c
+// Lines 3432-3501

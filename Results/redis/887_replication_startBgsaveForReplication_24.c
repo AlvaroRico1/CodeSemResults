@@ -1,0 +1,52 @@
+int startBgsaveForReplication(int mincapa) {
+    int retval;
+    int socket_target = server.repl_diskless_sync && (mincapa & SLAVE_CAPA_EOF);
+    listIter li;
+    listNode *ln;
+
+    serverLog(LL_NOTICE,"Starting BGSAVE for SYNC with target: %s",
+        socket_target ? "replicas sockets" : "disk");
+
+    rdbSaveInfo rsi, *rsiptr;
+    rsiptr = rdbPopulateSaveInfo(&rsi);
+    /* Only do rdbSave* when rsiptr is not NULL,
+     * otherwise slave will miss repl-stream-db. */
+    if (rsiptr) {
+        if (socket_target)
+            retval = rdbSaveToSlavesSockets(rsiptr);
+        else
+            retval = rdbSaveBackground(server.rdb_filename,rsiptr);
+    } else {
+        serverLog(LL_WARNING,"BGSAVE for replication: replication information not available, can't generate the RDB file right now. Try later.");
+        retval = C_ERR;
+    }
+
+    /* If we succeeded to start a BGSAVE with disk target, let's remember
+     * this fact, so that we can later delete the file if needed. Note
+     * that we don't set the flag to 1 if the feature is disabled, otherwise
+     * it would never be cleared: the file is not deleted. This way if
+     * the user enables it later with CONFIG SET, we are fine. */
+    if (retval == C_OK && !socket_target && server.rdb_del_sync_files)
+        RDBGeneratedByReplication = 1;
+
+    /* If we failed to BGSAVE, remove the slaves waiting for a full
+     * resynchronization from the list of slaves, inform them with
+     * an error about what happened, close the connection ASAP. */
+    if (retval == C_ERR) {
+        serverLog(LL_WARNING,"BGSAVE for replication failed");
+        listRewind(server.slaves,&li);
+        while((ln = listNext(&li))) {
+            client *slave = ln->value;
+
+            if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START) {
+                slave->replstate = REPL_STATE_NONE;
+                slave->flags &= ~CLIENT_SLAVE;
+                listDelNode(server.slaves,ln);
+                addReplyError(slave,
+                    "BGSAVE failed, replication can't continue");
+                slave->flags |= CLIENT_CLOSE_AFTER_REPLY;
+            }
+
+
+// Source: replication.c
+// Lines 646-693

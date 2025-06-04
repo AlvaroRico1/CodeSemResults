@@ -1,0 +1,84 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'region' at line 1
+2. Pointer 'ord_stmt' at line 53
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+expand_omp (struct omp_region *region)
+{
+  omp_any_child_fn_dumped = false;
+  while (region)
+    {
+      location_t saved_location;
+      gimple *inner_stmt = NULL;
+
+      /* First, determine whether this is a combined parallel+workshare
+	 region.  */
+      if (region->type == GIMPLE_OMP_PARALLEL)
+	determine_parallel_type (region);
+      else if (region->type == GIMPLE_OMP_TARGET)
+	grid_expand_target_grid_body (region);
+
+      if (region->type == GIMPLE_OMP_FOR
+	  && gimple_omp_for_combined_p (last_stmt (region->entry)))
+	inner_stmt = last_stmt (region->inner->entry);
+
+      if (region->inner)
+	expand_omp (region->inner);
+
+      saved_location = input_location;
+      if (gimple_has_location (last_stmt (region->entry)))
+	input_location = gimple_location (last_stmt (region->entry));
+
+      switch (region->type)
+	{
+	case GIMPLE_OMP_PARALLEL:
+	case GIMPLE_OMP_TASK:
+	  expand_omp_taskreg (region);
+	  break;
+
+	case GIMPLE_OMP_FOR:
+	  expand_omp_for (region, inner_stmt);
+	  break;
+
+	case GIMPLE_OMP_SECTIONS:
+	  expand_omp_sections (region);
+	  break;
+
+	case GIMPLE_OMP_SECTION:
+	  /* Individual omp sections are handled together with their
+	     parent GIMPLE_OMP_SECTIONS region.  */
+	  break;
+
+	case GIMPLE_OMP_SINGLE:
+	  expand_omp_single (region);
+	  break;
+
+	case GIMPLE_OMP_ORDERED:
+	  {
+	    gomp_ordered *ord_stmt
+	      = as_a <gomp_ordered *> (last_stmt (region->entry));
+	    if (omp_find_clause (gimple_omp_ordered_clauses (ord_stmt),
+				 OMP_CLAUSE_DEPEND))
+	      {
+		/* We'll expand these when expanding corresponding
+		   worksharing region with ordered(n) clause.  */
+		gcc_assert (region->outer
+			    && region->outer->type == GIMPLE_OMP_FOR);
+		region->ord_stmt = ord_stmt;
+		break;
+	      }
+	  }
+
+
+// Source: omp-expand.c
+// Lines 8804-8868
+
+
+[ANSWER]
+MUST

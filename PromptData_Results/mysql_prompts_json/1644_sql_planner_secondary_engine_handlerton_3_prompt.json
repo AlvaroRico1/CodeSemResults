@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'sql_cmd' at line 2\n2. Pointer 'thd' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic const handlerton *secondary_engine_handlerton(const THD *thd) {\n  const Sql_cmd *sql_cmd = thd->lex->m_sql_cmd;\n  if (sql_cmd == nullptr) return nullptr;\n  return sql_cmd->secondary_engine();\n}\n\n\n// Source: sql_planner.cc\n// Lines 2429-2433\n",
+  "ANSWER": "MUST"
+}

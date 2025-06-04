@@ -1,0 +1,1 @@
+name,protobuf/src/google/protobuf/descriptor.cc,5,names_ptr,protobuf/src/google/protobuf/descriptor.cc,3,1

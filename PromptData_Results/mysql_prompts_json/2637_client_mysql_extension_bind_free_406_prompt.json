@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'idx' at line 5\n2. Pointer 'ext' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid mysql_extension_bind_free(MYSQL_EXTENSION *ext) {\n  DBUG_TRACE;\n  if (ext->bind_info.n_params) {\n    my_free(ext->bind_info.bind);\n    for (uint idx = 0; idx < ext->bind_info.n_params; idx++)\n      my_free(ext->bind_info.names[idx]);\n    my_free(ext->bind_info.names);\n  }\n\n\n// Source: client.cc\n// Lines 3235-3242\n",
+  "ANSWER": "MUST-NOT"
+}

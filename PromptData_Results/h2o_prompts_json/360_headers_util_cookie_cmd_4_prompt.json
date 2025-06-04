@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'header' at line 5\n2. Pointer 'headers' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void cookie_cmd(h2o_mem_pool_t *pool, h2o_headers_t *headers, h2o_headers_command_t *cmd)\n{\n    ssize_t header_index;\n    for (header_index = -1; (header_index = h2o_find_header(headers, H2O_TOKEN_COOKIE, header_index)) != -1;) {\n        h2o_header_t *header = headers->entries + header_index;\n        filter_cookie(pool, &header->value.base, &header->value.len, cmd);\n        if (header->value.len == 0)\n            h2o_delete_header(headers, header_index);\n    }\n\n\n// Source: headers_util.c\n// Lines 70-78\n",
+  "ANSWER": "MUST"
+}

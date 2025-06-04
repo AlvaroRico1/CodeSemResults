@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'lazy_name' at line 11\n2. Pointer 'name' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid LazyDescriptor::SetLazy(StringPiece name,\n                             const FileDescriptor* file) {\n  // verify Init() has been called and Set hasn't been called yet.\n  GOOGLE_CHECK(!descriptor_);\n  GOOGLE_CHECK(!once_);\n  GOOGLE_CHECK(file && file->pool_);\n  GOOGLE_CHECK(file->pool_->lazily_build_dependencies_);\n  GOOGLE_CHECK(!file->finished_building_);\n  once_ = ::new (file->pool_->tables_->AllocateBytes(static_cast<int>(\n      sizeof(internal::once_flag) + name.size() + 1))) internal::once_flag{};\n  char* lazy_name = reinterpret_cast<char*>(once_ + 1);\n  memcpy(lazy_name, name.data(), name.size());\n  lazy_name[name.size()] = 0;\n}\n\n\n// Source: descriptor.cc\n// Lines 8181-8194\n",
+  "ANSWER": "MAY"
+}

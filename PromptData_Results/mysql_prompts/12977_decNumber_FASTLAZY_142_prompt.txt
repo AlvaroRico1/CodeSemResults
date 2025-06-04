@@ -1,0 +1,307 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'lip' at line 18
+2. Pointer 'zlhi' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+      #define FASTLAZY       1844  /* carry resolution point [1->1844]  */
+    #endif
+    /* three buffers are used, two for chunked copies of the operands  */
+    /* (base 10**8 or base 10**9) and one base 2**64 accumulator with  */
+    /* lazy carry evaluation  */
+    uInt   zlhibuff[(DECBUFFER*2+1)/8+1]; /* buffer (+1 for DECBUFFER==0)  */
+    uInt  *zlhi=zlhibuff;                 /* -> lhs array  */
+    uInt  *alloclhi=NULL;                 /* -> allocated buffer, iff allocated  */
+    uInt   zrhibuff[(DECBUFFER*2+1)/8+1]; /* buffer (+1 for DECBUFFER==0)  */
+    uInt  *zrhi=zrhibuff;                 /* -> rhs array  */
+    uInt  *allocrhi=NULL;                 /* -> allocated buffer, iff allocated  */
+    uLong  zaccbuff[(DECBUFFER*2+1)/4+2]; /* buffer (+1 for DECBUFFER==0)  */
+    /* [allocacc is shared for both paths, as only one will run]  */
+    uLong *zacc=zaccbuff;          /* -> accumulator array for exact result  */
+    #if DECDPUN==1
+    Int    zoff;                   /* accumulator offset  */
+    #endif
+    uInt  *lip, *rip;              /* item pointers  */
+    uInt  *lmsi, *rmsi;            /* most significant items  */
+    Int    ilhs, irhs, iacc;       /* item counts in the arrays  */
+    Int    lazy;                   /* lazy carry counter  */
+    uLong  lcarry;                 /* uLong carry  */
+    uInt   carry;                  /* carry (NB not uLong)  */
+    Int    count;                  /* work  */
+    const  Unit *cup;              /* ..  */
+    Unit  *up;                     /* ..  */
+    uLong *lp;                     /* ..  */
+    Int    p;                      /* ..  */
+  #endif
+
+  #if DECSUBSET
+    decNumber *alloclhs=NULL;      /* -> allocated buffer, iff allocated  */
+    decNumber *allocrhs=NULL;      /* -> allocated buffer, iff allocated  */
+  #endif
+
+  #if DECCHECK
+  if (decCheckOperands(res, lhs, rhs, set)) return res;
+  #endif
+
+  /* precalculate result sign  */
+  bits=(uByte)((lhs->bits^rhs->bits)&DECNEG);
+
+  /* handle infinities and NaNs  */
+  if (SPECIALARGS) {               /* a special bit set  */
+    if (SPECIALARGS & (DECSNAN | DECNAN)) { /* one or two NaNs  */
+      decNaNs(res, lhs, rhs, set, status);
+      return res;}
+    /* one or two infinities; Infinity * 0 is invalid  */
+    if (((lhs->bits & DECINF)==0 && ISZERO(lhs))
+      ||((rhs->bits & DECINF)==0 && ISZERO(rhs))) {
+      *status|=DEC_Invalid_operation;
+      return res;}
+    uprv_decNumberZero(res);
+    res->bits=bits|DECINF;         /* infinity  */
+    return res;}
+
+  /* For best speed, as in DMSRCN [the original Rexx numerics  */
+  /* module], use the shorter number as the multiplier (rhs) and  */
+  /* the longer as the multiplicand (lhs) to minimise the number of  */
+  /* adds (partial products)  */
+  if (lhs->digits<rhs->digits) {   /* swap...  */
+    const decNumber *hold=lhs;
+    lhs=rhs;
+    rhs=hold;
+    }
+
+  do {                             /* protect allocated storage  */
+    #if DECSUBSET
+    if (!set->extended) {
+      /* reduce operands and set lostDigits status, as needed  */
+      if (lhs->digits>set->digits) {
+        alloclhs=decRoundOperand(lhs, set, status);
+        if (alloclhs==NULL) break;
+        lhs=alloclhs;
+        }
+      if (rhs->digits>set->digits) {
+        allocrhs=decRoundOperand(rhs, set, status);
+        if (allocrhs==NULL) break;
+        rhs=allocrhs;
+        }
+      }
+    #endif
+    /* [following code does not require input rounding]  */
+
+    #if FASTMUL                    /* fastpath can be used  */
+    /* use the fast path if there are enough digits in the shorter  */
+    /* operand to make the setup and takedown worthwhile  */
+    #define NEEDTWO (DECDPUN*2)    /* within two decUnitAddSub calls  */
+    if (rhs->digits>NEEDTWO) {     /* use fastpath...  */
+      /* calculate the number of elements in each array  */
+      ilhs=(lhs->digits+FASTDIGS-1)/FASTDIGS; /* [ceiling]  */
+      irhs=(rhs->digits+FASTDIGS-1)/FASTDIGS; /* ..  */
+      iacc=ilhs+irhs;
+
+      /* allocate buffers if required, as usual  */
+      needbytes=ilhs*sizeof(uInt);
+      if (needbytes>(Int)sizeof(zlhibuff)) {
+        alloclhi=(uInt *)malloc(needbytes);
+        zlhi=alloclhi;}
+      needbytes=irhs*sizeof(uInt);
+      if (needbytes>(Int)sizeof(zrhibuff)) {
+        allocrhi=(uInt *)malloc(needbytes);
+        zrhi=allocrhi;}
+
+      /* Allocating the accumulator space needs a special case when  */
+      /* DECDPUN=1 because when converting the accumulator to Units  */
+      /* after the multiplication each 8-byte item becomes 9 1-byte  */
+      /* units.  Therefore iacc extra bytes are needed at the front  */
+      /* (rounded up to a multiple of 8 bytes), and the uLong  */
+      /* accumulator starts offset the appropriate number of units  */
+      /* to the right to avoid overwrite during the unchunking.  */
+
+      /* Make sure no signed int overflow below. This is always true */
+      /* if the given numbers have less digits than DEC_MAX_DIGITS. */
+      U_ASSERT((uint32_t)iacc <= INT32_MAX/sizeof(uLong));
+      needbytes=iacc*sizeof(uLong);
+      #if DECDPUN==1
+      zoff=(iacc+7)/8;        /* items to offset by  */
+      needbytes+=zoff*8;
+      #endif
+      if (needbytes>(Int)sizeof(zaccbuff)) {
+        allocacc=(uLong *)malloc(needbytes);
+        zacc=(uLong *)allocacc;}
+      if (zlhi==NULL||zrhi==NULL||zacc==NULL) {
+        *status|=DEC_Insufficient_storage;
+        break;}
+
+      acc=(Unit *)zacc;       /* -> target Unit array  */
+      #if DECDPUN==1
+      zacc+=zoff;             /* start uLong accumulator to right  */
+      #endif
+
+      /* assemble the chunked copies of the left and right sides  */
+      for (count=lhs->digits, cup=lhs->lsu, lip=zlhi; count>0; lip++)
+        for (p=0, *lip=0; p<FASTDIGS && count>0;
+             p+=DECDPUN, cup++, count-=DECDPUN)
+          *lip+=*cup*powers[p];
+      lmsi=lip-1;     /* save -> msi  */
+      for (count=rhs->digits, cup=rhs->lsu, rip=zrhi; count>0; rip++)
+        for (p=0, *rip=0; p<FASTDIGS && count>0;
+             p+=DECDPUN, cup++, count-=DECDPUN)
+          *rip+=*cup*powers[p];
+      rmsi=rip-1;     /* save -> msi  */
+
+      /* zero the accumulator  */
+      for (lp=zacc; lp<zacc+iacc; lp++) *lp=0;
+
+      /* Start the multiplication */
+      /* Resolving carries can dominate the cost of accumulating the  */
+      /* partial products, so this is only done when necessary.  */
+      /* Each uLong item in the accumulator can hold values up to  */
+      /* 2**64-1, and each partial product can be as large as  */
+      /* (10**FASTDIGS-1)**2.  When FASTDIGS=9, this can be added to  */
+      /* itself 18.4 times in a uLong without overflowing, so during  */
+      /* the main calculation resolution is carried out every 18th  */
+      /* add -- every 162 digits.  Similarly, when FASTDIGS=8, the  */
+      /* partial products can be added to themselves 1844.6 times in  */
+      /* a uLong without overflowing, so intermediate carry  */
+      /* resolution occurs only every 14752 digits.  Hence for common  */
+      /* short numbers usually only the one final carry resolution  */
+      /* occurs.  */
+      /* (The count is set via FASTLAZY to simplify experiments to  */
+      /* measure the value of this approach: a 35% improvement on a  */
+      /* [34x34] multiply.)  */
+      lazy=FASTLAZY;                         /* carry delay count  */
+      for (rip=zrhi; rip<=rmsi; rip++) {     /* over each item in rhs  */
+        lp=zacc+(rip-zrhi);                  /* where to add the lhs  */
+        for (lip=zlhi; lip<=lmsi; lip++, lp++) { /* over each item in lhs  */
+          *lp+=(uLong)(*lip)*(*rip);         /* [this should in-line]  */
+          } /* lip loop  */
+        lazy--;
+        if (lazy>0 && rip!=rmsi) continue;
+        lazy=FASTLAZY;                       /* reset delay count  */
+        /* spin up the accumulator resolving overflows  */
+        for (lp=zacc; lp<zacc+iacc; lp++) {
+          if (*lp<FASTBASE) continue;        /* it fits  */
+          lcarry=*lp/FASTBASE;               /* top part [slow divide]  */
+          /* lcarry can exceed 2**32-1, so check again; this check  */
+          /* and occasional extra divide (slow) is well worth it, as  */
+          /* it allows FASTLAZY to be increased to 18 rather than 4  */
+          /* in the FASTDIGS=9 case  */
+          if (lcarry<FASTBASE) carry=(uInt)lcarry;  /* [usual]  */
+           else { /* two-place carry [fairly rare]  */
+            uInt carry2=(uInt)(lcarry/FASTBASE);    /* top top part  */
+            *(lp+2)+=carry2;                        /* add to item+2  */
+            *lp-=((uLong)FASTBASE*FASTBASE*carry2); /* [slow]  */
+            carry=(uInt)(lcarry-((uLong)FASTBASE*carry2)); /* [inline]  */
+            }
+          *(lp+1)+=carry;                    /* add to item above [inline]  */
+          *lp-=((uLong)FASTBASE*carry);      /* [inline]  */
+          } /* carry resolution  */
+        } /* rip loop  */
+
+      /* The multiplication is complete; time to convert back into  */
+      /* units.  This can be done in-place in the accumulator and in  */
+      /* 32-bit operations, because carries were resolved after the  */
+      /* final add.  This needs N-1 divides and multiplies for  */
+      /* each item in the accumulator (which will become up to N  */
+      /* units, where 2<=N<=9).  */
+      for (lp=zacc, up=acc; lp<zacc+iacc; lp++) {
+        uInt item=(uInt)*lp;                 /* decapitate to uInt  */
+        for (p=0; p<FASTDIGS-DECDPUN; p+=DECDPUN, up++) {
+          uInt part=item/(DECDPUNMAX+1);
+          *up=(Unit)(item-(part*(DECDPUNMAX+1)));
+          item=part;
+          } /* p  */
+        *up=(Unit)item; up++;                /* [final needs no division]  */
+        } /* lp  */
+      accunits = static_cast<int32_t>(up-acc);                       /* count of units  */
+      }
+     else { /* here to use units directly, without chunking ['old code']  */
+    #endif
+
+      /* if accumulator will be too long for local storage, then allocate  */
+      acc=accbuff;                 /* -> assume buffer for accumulator  */
+      needbytes=(D2U(lhs->digits)+D2U(rhs->digits))*sizeof(Unit);
+      if (needbytes>(Int)sizeof(accbuff)) {
+        allocacc=(Unit *)malloc(needbytes);
+        if (allocacc==NULL) {*status|=DEC_Insufficient_storage; break;}
+        acc=(Unit *)allocacc;                /* use the allocated space  */
+        }
+
+      /* Now the main long multiplication loop */
+      /* Unlike the equivalent in the IBM Java implementation, there  */
+      /* is no advantage in calculating from msu to lsu.  So, do it  */
+      /* by the book, as it were.  */
+      /* Each iteration calculates ACC=ACC+MULTAND*MULT  */
+      accunits=1;                  /* accumulator starts at '0'  */
+      *acc=0;                      /* .. (lsu=0)  */
+      shift=0;                     /* no multiplicand shift at first  */
+      madlength=D2U(lhs->digits);  /* this won't change  */
+      mermsup=rhs->lsu+D2U(rhs->digits); /* -> msu+1 of multiplier  */
+
+      for (mer=rhs->lsu; mer<mermsup; mer++) {
+        /* Here, *mer is the next Unit in the multiplier to use  */
+        /* If non-zero [optimization] add it...  */
+        if (*mer!=0) accunits=decUnitAddSub(&acc[shift], accunits-shift,
+                                            lhs->lsu, madlength, 0,
+                                            &acc[shift], *mer)
+                                            + shift;
+         else { /* extend acc with a 0; it will be used shortly  */
+          *(acc+accunits)=0;       /* [this avoids length of <=0 later]  */
+          accunits++;
+          }
+        /* multiply multiplicand by 10**DECDPUN for next Unit to left  */
+        shift++;                   /* add this for 'logical length'  */
+        } /* n  */
+    #if FASTMUL
+      } /* unchunked units  */
+    #endif
+    /* common end-path  */
+    #if DECTRACE
+      decDumpAr('*', acc, accunits);         /* Show exact result  */
+    #endif
+
+    /* acc now contains the exact result of the multiplication,  */
+    /* possibly with a leading zero unit; build the decNumber from  */
+    /* it, noting if any residue  */
+    res->bits=bits;                          /* set sign  */
+    res->digits=decGetDigits(acc, accunits); /* count digits exactly  */
+
+    /* There can be a 31-bit wrap in calculating the exponent.  */
+    /* This can only happen if both input exponents are negative and  */
+    /* both their magnitudes are large.  If there was a wrap, set a  */
+    /* safe very negative exponent, from which decFinalize() will  */
+    /* raise a hard underflow shortly.  */
+    exponent=lhs->exponent+rhs->exponent;    /* calculate exponent  */
+    if (lhs->exponent<0 && rhs->exponent<0 && exponent>0)
+      exponent=-2*DECNUMMAXE;                /* force underflow  */
+    res->exponent=exponent;                  /* OK to overwrite now  */
+
+
+    /* Set the coefficient.  If any rounding, residue records  */
+    decSetCoeff(res, set, acc, res->digits, &residue, status);
+    decFinish(res, set, &residue, status);   /* final cleanup  */
+    } while(0);                         /* end protected  */
+
+  if (allocacc!=NULL) free(allocacc);   /* drop any storage used  */
+  #if DECSUBSET
+  if (allocrhs!=NULL) free(allocrhs);   /* ..  */
+  if (alloclhs!=NULL) free(alloclhs);   /* ..  */
+  #endif
+  #if FASTMUL
+  if (allocrhi!=NULL) free(allocrhi);   /* ..  */
+  if (alloclhi!=NULL) free(alloclhi);   /* ..  */
+  #endif
+  return res;
+  } /* decMultiplyOp  */
+
+
+// Source: decNumber.cpp
+// Lines 4898-5185
+
+
+[ANSWER]
+MUST

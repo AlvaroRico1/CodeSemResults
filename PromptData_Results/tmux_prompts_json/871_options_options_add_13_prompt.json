@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'o' at line 3\n2. Pointer 'oo' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\noptions_add(struct options *oo, const char *name)\n{\n\tstruct options_entry\t*o;\n\n\to = options_get_only(oo, name);\n\tif (o != NULL)\n\t\toptions_remove(o);\n\n\to = xcalloc(1, sizeof *o);\n\to->owner = oo;\n\to->name = xstrdup(name);\n\n\tRB_INSERT(options_tree, &oo->tree, o);\n\treturn (o);\n}\n\n\n// Source: options.c\n// Lines 320-334\n",
+  "ANSWER": "MUST"
+}

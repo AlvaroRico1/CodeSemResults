@@ -1,0 +1,1 @@
+ret,gcc/libiberty/make-relative-prefix.c,8,bin_num,gcc/libiberty/make-relative-prefix.c,5,2

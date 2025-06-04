@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'self' at line 3\n2. Pointer 'cmd' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int on_config_http3_ratio(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)\n{\n    struct proxy_configurator_t *self = (void *)cmd->configurator;\n    int ret = h2o_configurator_scanf(cmd, node, \"%\" SCNd8, &self->vars->conf.protocol_ratio.http3);\n    if (ret < 0)\n        return ret;\n    if (self->vars->conf.protocol_ratio.http3 < 0 || 100 < self->vars->conf.protocol_ratio.http3) {\n        h2o_configurator_errprintf(cmd, node, \"proxy.http3.ratio must be between 0 and 100\");\n        return -1;\n    }\n    return 0;\n}\n\n\n// Source: proxy.c\n// Lines 530-541\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,30 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'entries_len' at line 1
+2. Pointer 'i' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void create_index_names(struct checkout_name_entry *entries, size_t entries_len)
+{
+	size_t i;
+
+	for (i = 0; i < entries_len; i++) {
+		cl_git_pass(git_index_name_add(g_index,
+			strlen(entries[i].ancestor) == 0 ? NULL : entries[i].ancestor,
+			strlen(entries[i].ours) == 0 ? NULL : entries[i].ours,
+			strlen(entries[i].theirs) == 0 ? NULL : entries[i].theirs));
+	}
+}
+
+
+// Source: conflict.c
+// Lines 116-126
+
+
+[ANSWER]
+MUST-NOT

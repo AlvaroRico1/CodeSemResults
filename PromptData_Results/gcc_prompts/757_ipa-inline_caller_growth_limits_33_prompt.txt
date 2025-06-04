@@ -1,0 +1,98 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'to' at line 3
+2. Pointer 'to' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+caller_growth_limits (struct cgraph_edge *e)
+{
+  struct cgraph_node *to = e->caller;
+  struct cgraph_node *what = e->callee->ultimate_alias_target ();
+  int newsize;
+  int limit = 0;
+  HOST_WIDE_INT stack_size_limit = 0, inlined_stack;
+  ipa_size_summary *outer_info = ipa_size_summaries->get (to);
+
+  /* Look for function e->caller is inlined to.  While doing
+     so work out the largest function body on the way.  As
+     described above, we want to base our function growth
+     limits based on that.  Not on the self size of the
+     outer function, not on the self size of inline code
+     we immediately inline to.  This is the most relaxed
+     interpretation of the rule "do not grow large functions
+     too much in order to prevent compiler from exploding".  */
+  while (true)
+    {
+      ipa_size_summary *size_info = ipa_size_summaries->get (to);
+      if (limit < size_info->self_size)
+	limit = size_info->self_size;
+      if (stack_size_limit < size_info->estimated_self_stack_size)
+	stack_size_limit = size_info->estimated_self_stack_size;
+      if (to->inlined_to)
+        to = to->callers->caller;
+      else
+	break;
+    }
+
+  ipa_fn_summary *what_info = ipa_fn_summaries->get (what);
+  ipa_size_summary *what_size_info = ipa_size_summaries->get (what);
+
+  if (limit < what_size_info->self_size)
+    limit = what_size_info->self_size;
+
+  limit += limit * opt_for_fn (to->decl, param_large_function_growth) / 100;
+
+  /* Check the size after inlining against the function limits.  But allow
+     the function to shrink if it went over the limits by forced inlining.  */
+  newsize = estimate_size_after_inlining (to, e);
+  if (newsize >= ipa_size_summaries->get (what)->size
+      && newsize > opt_for_fn (to->decl, param_large_function_insns)
+      && newsize > limit)
+    {
+      e->inline_failed = CIF_LARGE_FUNCTION_GROWTH_LIMIT;
+      return false;
+    }
+
+  if (!what_info->estimated_stack_size)
+    return true;
+
+  /* FIXME: Stack size limit often prevents inlining in Fortran programs
+     due to large i/o datastructures used by the Fortran front-end.
+     We ought to ignore this limit when we know that the edge is executed
+     on every invocation of the caller (i.e. its call statement dominates
+     exit block).  We do not track this information, yet.  */
+  stack_size_limit += ((gcov_type)stack_size_limit
+		       * opt_for_fn (to->decl, param_stack_frame_growth)
+		       / 100);
+
+  inlined_stack = (ipa_get_stack_frame_offset (to)
+		   + outer_info->estimated_self_stack_size
+		   + what_info->estimated_stack_size);
+  /* Check new stack consumption with stack consumption at the place
+     stack is used.  */
+  if (inlined_stack > stack_size_limit
+      /* If function already has large stack usage from sibling
+	 inline call, we can inline, too.
+	 This bit overoptimistically assume that we are good at stack
+	 packing.  */
+      && inlined_stack > ipa_fn_summaries->get (to)->estimated_stack_size
+      && inlined_stack > opt_for_fn (to->decl, param_large_stack_frame))
+    {
+      e->inline_failed = CIF_LARGE_STACK_FRAME_GROWTH_LIMIT;
+      return false;
+    }
+  return true;
+}
+
+
+// Source: ipa-inline.c
+// Lines 145-223
+
+
+[ANSWER]
+MUST

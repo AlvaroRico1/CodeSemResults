@@ -1,0 +1,236 @@
+read_kcore(struct file *file, char __user *buffer, size_t buflen, loff_t *fpos)
+{
+	char *buf = file->private_data;
+	size_t phdrs_offset, notes_offset, data_offset;
+	size_t phdrs_len, notes_len;
+	struct kcore_list *m;
+	size_t tsz;
+	int nphdr;
+	unsigned long start;
+	size_t orig_buflen = buflen;
+	int ret = 0;
+
+	down_read(&kclist_lock);
+
+	get_kcore_size(&nphdr, &phdrs_len, &notes_len, &data_offset);
+	phdrs_offset = sizeof(struct elfhdr);
+	notes_offset = phdrs_offset + phdrs_len;
+
+	/* ELF file header. */
+	if (buflen && *fpos < sizeof(struct elfhdr)) {
+		struct elfhdr ehdr = {
+			.e_ident = {
+				[EI_MAG0] = ELFMAG0,
+				[EI_MAG1] = ELFMAG1,
+				[EI_MAG2] = ELFMAG2,
+				[EI_MAG3] = ELFMAG3,
+				[EI_CLASS] = ELF_CLASS,
+				[EI_DATA] = ELF_DATA,
+				[EI_VERSION] = EV_CURRENT,
+				[EI_OSABI] = ELF_OSABI,
+			},
+			.e_type = ET_CORE,
+			.e_machine = ELF_ARCH,
+			.e_version = EV_CURRENT,
+			.e_phoff = sizeof(struct elfhdr),
+			.e_flags = ELF_CORE_EFLAGS,
+			.e_ehsize = sizeof(struct elfhdr),
+			.e_phentsize = sizeof(struct elf_phdr),
+			.e_phnum = nphdr,
+		};
+
+		tsz = min_t(size_t, buflen, sizeof(struct elfhdr) - *fpos);
+		if (copy_to_user(buffer, (char *)&ehdr + *fpos, tsz)) {
+			ret = -EFAULT;
+			goto out;
+		}
+
+		buffer += tsz;
+		buflen -= tsz;
+		*fpos += tsz;
+	}
+
+	/* ELF program headers. */
+	if (buflen && *fpos < phdrs_offset + phdrs_len) {
+		struct elf_phdr *phdrs, *phdr;
+
+		phdrs = kzalloc(phdrs_len, GFP_KERNEL);
+		if (!phdrs) {
+			ret = -ENOMEM;
+			goto out;
+		}
+
+		phdrs[0].p_type = PT_NOTE;
+		phdrs[0].p_offset = notes_offset;
+		phdrs[0].p_filesz = notes_len;
+
+		phdr = &phdrs[1];
+		list_for_each_entry(m, &kclist_head, list) {
+			phdr->p_type = PT_LOAD;
+			phdr->p_flags = PF_R | PF_W | PF_X;
+			phdr->p_offset = kc_vaddr_to_offset(m->addr) + data_offset;
+			if (m->type == KCORE_REMAP)
+				phdr->p_vaddr = (size_t)m->vaddr;
+			else
+				phdr->p_vaddr = (size_t)m->addr;
+			if (m->type == KCORE_RAM || m->type == KCORE_REMAP)
+				phdr->p_paddr = __pa(m->addr);
+			else if (m->type == KCORE_TEXT)
+				phdr->p_paddr = __pa_symbol(m->addr);
+			else
+				phdr->p_paddr = (elf_addr_t)-1;
+			phdr->p_filesz = phdr->p_memsz = m->size;
+			phdr->p_align = PAGE_SIZE;
+			phdr++;
+		}
+
+		tsz = min_t(size_t, buflen, phdrs_offset + phdrs_len - *fpos);
+		if (copy_to_user(buffer, (char *)phdrs + *fpos - phdrs_offset,
+				 tsz)) {
+			kfree(phdrs);
+			ret = -EFAULT;
+			goto out;
+		}
+		kfree(phdrs);
+
+		buffer += tsz;
+		buflen -= tsz;
+		*fpos += tsz;
+	}
+
+	/* ELF note segment. */
+	if (buflen && *fpos < notes_offset + notes_len) {
+		struct elf_prstatus prstatus = {};
+		struct elf_prpsinfo prpsinfo = {
+			.pr_sname = 'R',
+			.pr_fname = "vmlinux",
+		};
+		char *notes;
+		size_t i = 0;
+
+		strlcpy(prpsinfo.pr_psargs, saved_command_line,
+			sizeof(prpsinfo.pr_psargs));
+
+		notes = kzalloc(notes_len, GFP_KERNEL);
+		if (!notes) {
+			ret = -ENOMEM;
+			goto out;
+		}
+
+		append_kcore_note(notes, &i, CORE_STR, NT_PRSTATUS, &prstatus,
+				  sizeof(prstatus));
+		append_kcore_note(notes, &i, CORE_STR, NT_PRPSINFO, &prpsinfo,
+				  sizeof(prpsinfo));
+		append_kcore_note(notes, &i, CORE_STR, NT_TASKSTRUCT, current,
+				  arch_task_struct_size);
+		/*
+		 * vmcoreinfo_size is mostly constant after init time, but it
+		 * can be changed by crash_save_vmcoreinfo(). Racing here with a
+		 * panic on another CPU before the machine goes down is insanely
+		 * unlikely, but it's better to not leave potential buffer
+		 * overflows lying around, regardless.
+		 */
+		append_kcore_note(notes, &i, VMCOREINFO_NOTE_NAME, 0,
+				  vmcoreinfo_data,
+				  min(vmcoreinfo_size, notes_len - i));
+
+		tsz = min_t(size_t, buflen, notes_offset + notes_len - *fpos);
+		if (copy_to_user(buffer, notes + *fpos - notes_offset, tsz)) {
+			kfree(notes);
+			ret = -EFAULT;
+			goto out;
+		}
+		kfree(notes);
+
+		buffer += tsz;
+		buflen -= tsz;
+		*fpos += tsz;
+	}
+
+	/*
+	 * Check to see if our file offset matches with any of
+	 * the addresses in the elf_phdr on our list.
+	 */
+	start = kc_offset_to_vaddr(*fpos - data_offset);
+	if ((tsz = (PAGE_SIZE - (start & ~PAGE_MASK))) > buflen)
+		tsz = buflen;
+
+	m = NULL;
+	while (buflen) {
+		/*
+		 * If this is the first iteration or the address is not within
+		 * the previous entry, search for a matching entry.
+		 */
+		if (!m || start < m->addr || start >= m->addr + m->size) {
+			list_for_each_entry(m, &kclist_head, list) {
+				if (start >= m->addr &&
+				    start < m->addr + m->size)
+					break;
+			}
+		}
+
+		if (&m->list == &kclist_head) {
+			if (clear_user(buffer, tsz)) {
+				ret = -EFAULT;
+				goto out;
+			}
+			m = NULL;	/* skip the list anchor */
+		} else if (!pfn_is_ram(__pa(start) >> PAGE_SHIFT)) {
+			if (clear_user(buffer, tsz)) {
+				ret = -EFAULT;
+				goto out;
+			}
+		} else if (m->type == KCORE_VMALLOC) {
+			vread(buf, (char *)start, tsz);
+			/* we have to zero-fill user buffer even if no read */
+			if (copy_to_user(buffer, buf, tsz)) {
+				ret = -EFAULT;
+				goto out;
+			}
+		} else if (m->type == KCORE_USER) {
+			/* User page is handled prior to normal kernel page: */
+			if (copy_to_user(buffer, (char *)start, tsz)) {
+				ret = -EFAULT;
+				goto out;
+			}
+		} else {
+			if (kern_addr_valid(start)) {
+				/*
+				 * Using bounce buffer to bypass the
+				 * hardened user copy kernel text checks.
+				 */
+				if (probe_kernel_read(buf, (void *) start, tsz)) {
+					if (clear_user(buffer, tsz)) {
+						ret = -EFAULT;
+						goto out;
+					}
+				} else {
+					if (copy_to_user(buffer, buf, tsz)) {
+						ret = -EFAULT;
+						goto out;
+					}
+				}
+			} else {
+				if (clear_user(buffer, tsz)) {
+					ret = -EFAULT;
+					goto out;
+				}
+			}
+		}
+		buflen -= tsz;
+		*fpos += tsz;
+		buffer += tsz;
+		start += tsz;
+		tsz = (buflen > PAGE_SIZE ? PAGE_SIZE : buflen);
+	}
+
+out:
+	up_read(&kclist_lock);
+	if (ret)
+		return ret;
+	return orig_buflen - buflen;
+}
+
+
+// Source: kcore.c
+// Lines 313-544

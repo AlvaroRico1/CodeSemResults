@@ -1,0 +1,29 @@
+lower_emutls_phi_arg (gphi *phi, unsigned int i,
+		      struct lower_emutls_data *d)
+{
+  struct walk_stmt_info wi;
+  struct phi_arg_d *pd = gimple_phi_arg (phi, i);
+
+  /* Early out for a very common case we don't care about.  */
+  if (TREE_CODE (pd->def) == SSA_NAME)
+    return;
+
+  d->loc = pd->locus;
+
+  memset (&wi, 0, sizeof (wi));
+  wi.info = d;
+  wi.val_only = true;
+  walk_tree (&pd->def, lower_emutls_1, &wi, NULL);
+
+  /* For normal statements, we let update_stmt do its job.  But for phi
+     nodes, we have to manipulate the immediate use list by hand.  */
+  if (wi.changed)
+    {
+      gcc_assert (TREE_CODE (pd->def) == SSA_NAME);
+      link_imm_use_stmt (&pd->imm_use, pd->def, phi);
+    }
+}
+
+
+// Source: tree-emutls.c
+// Lines 578-602

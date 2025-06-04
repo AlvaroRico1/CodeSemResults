@@ -1,0 +1,67 @@
+gimple_fold_builtin_memchr (gimple_stmt_iterator *gsi)
+{
+  gimple *stmt = gsi_stmt (*gsi);
+  tree lhs = gimple_call_lhs (stmt);
+  tree arg1 = gimple_call_arg (stmt, 0);
+  tree arg2 = gimple_call_arg (stmt, 1);
+  tree len = gimple_call_arg (stmt, 2);
+
+  /* If the LEN parameter is zero, return zero.  */
+  if (integer_zerop (len))
+    {
+      replace_call_with_value (gsi, build_int_cst (ptr_type_node, 0));
+      return true;
+    }
+
+  char c;
+  if (TREE_CODE (arg2) != INTEGER_CST
+      || !tree_fits_uhwi_p (len)
+      || !target_char_cst_p (arg2, &c))
+    return false;
+
+  unsigned HOST_WIDE_INT length = tree_to_uhwi (len);
+  unsigned HOST_WIDE_INT string_length;
+  const char *p1 = c_getstr (arg1, &string_length);
+
+  if (p1)
+    {
+      const char *r = (const char *)memchr (p1, c, MIN (length, string_length));
+      if (r == NULL)
+	{
+	  tree mem_size, offset_node;
+	  string_constant (arg1, &offset_node, &mem_size, NULL);
+	  unsigned HOST_WIDE_INT offset = (offset_node == NULL_TREE)
+					  ? 0 : tree_to_uhwi (offset_node);
+	  /* MEM_SIZE is the size of the array the string literal
+	     is stored in.  */
+	  unsigned HOST_WIDE_INT string_size = tree_to_uhwi (mem_size) - offset;
+	  gcc_checking_assert (string_length <= string_size);
+	  if (length <= string_size)
+	    {
+	      replace_call_with_value (gsi, build_int_cst (ptr_type_node, 0));
+	      return true;
+	    }
+	}
+      else
+	{
+	  unsigned HOST_WIDE_INT offset = r - p1;
+	  gimple_seq stmts = NULL;
+	  if (lhs != NULL_TREE)
+	    {
+	      tree offset_cst = build_int_cst (TREE_TYPE (len), offset);
+	      gassign *stmt = gimple_build_assign (lhs, POINTER_PLUS_EXPR,
+						   arg1, offset_cst);
+	      gimple_seq_add_stmt_without_update (&stmts, stmt);
+	    }
+	  else
+	    gimple_seq_add_stmt_without_update (&stmts,
+						gimple_build_nop ());
+
+	  gsi_replace_with_seq_vops (gsi, stmts);
+	  return true;
+	}
+    }
+
+
+// Source: gimple-fold.c
+// Lines 2604-2666

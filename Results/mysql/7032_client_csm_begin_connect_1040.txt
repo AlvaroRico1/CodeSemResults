@@ -1,0 +1,1 @@
+bind_result,mysql/sql-common/client.cc,187,saved_error,mysql/sql-common/client.cc,187,0

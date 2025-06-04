@@ -1,0 +1,61 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'reflog' at line 3
+2. Pointer 'ref' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_refs_reflog_reflog__reading_a_reflog_with_invalid_format_succeeds(void)
+{
+	git_reflog *reflog;
+	const char *refname = "refs/heads/newline";
+	const char *refmessage =
+		"Reflog*message with a newline and enough content after it to pass the GIT_REFLOG_SIZE_MIN check inside reflog_parse.";
+	const git_reflog_entry *entry;
+	git_reference *ref;
+	git_oid id;
+	git_str logpath = GIT_STR_INIT, logcontents = GIT_STR_INIT;
+	char *star;
+
+	/* Create a new branch. */
+	cl_git_pass(git_oid_fromstr(&id, current_master_tip));
+	cl_git_pass(git_reference_create(&ref, g_repo, refname, &id, 1, refmessage));
+
+	/*
+	 * Corrupt the branch reflog by introducing a newline inside the reflog message.
+	 * We do this by replacing '*' with '\n'
+	 */
+	cl_git_pass(git_str_join_n(&logpath, '/', 3, git_repository_path(g_repo), GIT_REFLOG_DIR, refname));
+	cl_git_pass(git_futils_readbuffer(&logcontents, git_str_cstr(&logpath)));
+	cl_assert((star = strchr(git_str_cstr(&logcontents), '*')) != NULL);
+	*star = '\n';
+	cl_git_rewritefile(git_str_cstr(&logpath), git_str_cstr(&logcontents));
+
+	/*
+	 * Confirm that the file was rewritten successfully
+	 * and now contains a '\n' in the expected location
+	 */
+	cl_git_pass(git_futils_readbuffer(&logcontents, git_str_cstr(&logpath)));
+	cl_assert(strstr(git_str_cstr(&logcontents), "Reflog\nmessage") != NULL);
+
+	cl_git_pass(git_reflog_read(&reflog, g_repo, refname));
+	cl_assert(entry = git_reflog_entry_byindex(reflog, 0));
+	cl_assert_equal_s(git_reflog_entry_message(entry), "Reflog");
+
+	git_reference_free(ref);
+	git_reflog_free(reflog);
+	git_str_dispose(&logpath);
+	git_str_dispose(&logcontents);
+}
+
+
+// Source: reflog.c
+// Lines 225-266
+
+
+[ANSWER]
+MAY

@@ -1,0 +1,1 @@
+offset,linux/kernel/trace/trace_kprobe.c,30,maxactive,linux/kernel/trace/trace_kprobe.c,29,2

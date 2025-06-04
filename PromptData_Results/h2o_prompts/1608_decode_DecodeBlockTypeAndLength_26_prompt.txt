@@ -1,0 +1,44 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'memento' at line 17
+2. Pointer 'ringbuffer' at line 9
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static BROTLI_INLINE BROTLI_BOOL DecodeBlockTypeAndLength(
+    int safe, BrotliDecoderState* s, int tree_type) {
+  uint32_t max_block_type = s->num_block_types[tree_type];
+  const HuffmanCode* type_tree = &s->block_type_trees[
+      tree_type * BROTLI_HUFFMAN_MAX_SIZE_258];
+  const HuffmanCode* len_tree = &s->block_len_trees[
+      tree_type * BROTLI_HUFFMAN_MAX_SIZE_26];
+  BrotliBitReader* br = &s->br;
+  uint32_t* ringbuffer = &s->block_type_rb[tree_type * 2];
+  uint32_t block_type;
+
+  /* Read 0..15 + 3..39 bits */
+  if (!safe) {
+    block_type = ReadSymbol(type_tree, br);
+    s->block_length[tree_type] = ReadBlockLength(len_tree, br);
+  } else {
+    BrotliBitReaderState memento;
+    BrotliBitReaderSaveState(br, &memento);
+    if (!SafeReadSymbol(type_tree, br, &block_type)) return BROTLI_FALSE;
+    if (!SafeReadBlockLength(s, &s->block_length[tree_type], len_tree, br)) {
+      s->substate_read_block_length = BROTLI_STATE_READ_BLOCK_LENGTH_NONE;
+      BrotliBitReaderRestoreState(br, &memento);
+      return BROTLI_FALSE;
+    }
+  }
+
+
+// Source: decode.c
+// Lines 1059-1083
+
+
+[ANSWER]
+MAY

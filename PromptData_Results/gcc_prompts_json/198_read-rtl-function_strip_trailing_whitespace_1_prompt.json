@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'terminator' at line 3\n2. Pointer 'desc' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstrip_trailing_whitespace (char *desc)\n{\n  char *terminator = desc + strlen (desc);\n  while (desc < terminator)\n    {\n      terminator--;\n      if (ISSPACE (*terminator))\n\t*terminator = '\\0';\n      else\n\tbreak;\n    }\n}\n\n\n// Source: read-rtl-function.c\n// Lines 307-318\n",
+  "ANSWER": "MUST"
+}

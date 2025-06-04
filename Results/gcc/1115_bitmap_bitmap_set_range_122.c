@@ -1,0 +1,109 @@
+bitmap_set_range (bitmap head, unsigned int start, unsigned int count)
+{
+  unsigned int first_index, end_bit_plus1, last_index;
+  bitmap_element *elt, *elt_prev;
+  unsigned int i;
+
+  gcc_checking_assert (!head->tree_form);
+
+  if (!count)
+    return;
+
+  if (count == 1)
+    {
+      bitmap_set_bit (head, start);
+      return;
+    }
+
+  first_index = start / BITMAP_ELEMENT_ALL_BITS;
+  end_bit_plus1 = start + count;
+  last_index = (end_bit_plus1 - 1) / BITMAP_ELEMENT_ALL_BITS;
+  elt = bitmap_list_find_element (head, first_index);
+
+  /* If bitmap_list_find_element returns zero, the current is the closest block
+     to the result.  Otherwise, just use bitmap_element_allocate to
+     ensure ELT is set; in the loop below, ELT == NULL means "insert
+     at the end of the bitmap".  */
+  if (!elt)
+    {
+      elt = bitmap_element_allocate (head);
+      elt->indx = first_index;
+      bitmap_list_link_element (head, elt);
+    }
+
+  gcc_checking_assert (elt->indx == first_index);
+  elt_prev = elt->prev;
+  for (i = first_index; i <= last_index; i++)
+    {
+      unsigned elt_start_bit = i * BITMAP_ELEMENT_ALL_BITS;
+      unsigned elt_end_bit_plus1 = elt_start_bit + BITMAP_ELEMENT_ALL_BITS;
+
+      unsigned int first_word_to_mod;
+      BITMAP_WORD first_mask;
+      unsigned int last_word_to_mod;
+      BITMAP_WORD last_mask;
+      unsigned int ix;
+
+      if (!elt || elt->indx != i)
+	elt = bitmap_list_insert_element_after (head, elt_prev, i);
+
+      if (elt_start_bit <= start)
+	{
+	  /* The first bit to turn on is somewhere inside this
+	     elt.  */
+	  first_word_to_mod = (start - elt_start_bit) / BITMAP_WORD_BITS;
+
+	  /* This mask should have 1s in all bits >= start position. */
+	  first_mask =
+	    (((BITMAP_WORD) 1) << ((start % BITMAP_WORD_BITS))) - 1;
+	  first_mask = ~first_mask;
+	}
+      else
+	{
+	  /* The first bit to turn on is below this start of this elt.  */
+	  first_word_to_mod = 0;
+	  first_mask = ~(BITMAP_WORD) 0;
+	}
+
+      if (elt_end_bit_plus1 <= end_bit_plus1)
+	{
+	  /* The last bit to turn on is beyond this elt.  */
+	  last_word_to_mod = BITMAP_ELEMENT_WORDS - 1;
+	  last_mask = ~(BITMAP_WORD) 0;
+	}
+      else
+	{
+	  /* The last bit to turn on is inside to this elt.  */
+	  last_word_to_mod =
+	    (end_bit_plus1 - elt_start_bit) / BITMAP_WORD_BITS;
+
+	  /* The last mask should have 1s below the end bit.  */
+	  last_mask =
+	    (((BITMAP_WORD) 1) << ((end_bit_plus1 % BITMAP_WORD_BITS))) - 1;
+	}
+
+      if (first_word_to_mod == last_word_to_mod)
+	{
+	  BITMAP_WORD mask = first_mask & last_mask;
+	  elt->bits[first_word_to_mod] |= mask;
+	}
+      else
+	{
+	  elt->bits[first_word_to_mod] |= first_mask;
+	  if (BITMAP_ELEMENT_WORDS > 2)
+	    for (ix = first_word_to_mod + 1; ix < last_word_to_mod; ix++)
+	      elt->bits[ix] = ~(BITMAP_WORD) 0;
+	  elt->bits[last_word_to_mod] |= last_mask;
+	}
+
+      elt_prev = elt;
+      elt = elt->next;
+    }
+
+  head->current = elt ? elt : elt_prev;
+  head->indx = head->current->indx;
+}
+
+
+// Source: bitmap.c
+// Lines 1572-1676

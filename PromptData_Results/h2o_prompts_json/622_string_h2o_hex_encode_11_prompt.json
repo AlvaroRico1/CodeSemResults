@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'src_end' at line 3\n2. Pointer 'src' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid h2o_hex_encode(char *dst, const void *_src, size_t src_len)\n{\n    const unsigned char *src = _src, *src_end = src + src_len;\n    for (; src != src_end; ++src) {\n        *dst++ = \"0123456789abcdef\"[*src >> 4];\n        *dst++ = \"0123456789abcdef\"[*src & 0xf];\n    }\n    *dst = '\\0';\n}\n\n\n// Source: string.c\n// Lines 312-320\n",
+  "ANSWER": "MUST"
+}

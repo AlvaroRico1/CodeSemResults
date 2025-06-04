@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'filename' at line 1\n2. Pointer 'fp' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstruct clar_summary *clar_summary_init(const char *filename)\n{\n\tstruct clar_summary *summary;\n\tFILE *fp;\n\n\tif ((fp = fopen(filename, \"w\")) == NULL)\n\t\treturn NULL;\n\n\tif ((summary = malloc(sizeof(struct clar_summary))) == NULL) {\n\t\tfclose(fp);\n\t\treturn NULL;\n\t}\n\n\tsummary->filename = filename;\n\tsummary->fp = fp;\n\n\treturn summary;\n}\n\n\n// Source: summary.h\n// Lines 61-78\n",
+  "ANSWER": "MUST-NOT"
+}

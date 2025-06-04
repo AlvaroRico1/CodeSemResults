@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'mad' at line 3\n2. Pointer 'cb_data' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int extend_abbrev_len(const struct object_id *oid, void *cb_data)\n{\n\tstruct min_abbrev_data *mad = cb_data;\n\n\tunsigned int i = mad->init_len;\n\twhile (mad->hex[i] && mad->hex[i] == get_hex_char_from_oid(oid, i))\n\t\ti++;\n\n\tif (i < GIT_MAX_RAWSZ && i >= mad->cur_len)\n\t\tmad->cur_len = i + 1;\n\n\treturn 0;\n}\n\n\n// Source: object-name.c\n// Lines 556-568\n",
+  "ANSWER": "MUST"
+}

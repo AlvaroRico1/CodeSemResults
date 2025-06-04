@@ -1,0 +1,1 @@
+temp_ptr,linux/drivers/acpi/acpica/exnames.c,3,name_string,linux/drivers/acpi/acpica/exnames.c,4,2

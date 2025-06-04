@@ -1,0 +1,24 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ctx' at line 3
+2. Pointer 'sock' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void on_read(h2o_socket_t *sock, const char *err)
+{
+    h2o_quic_ctx_t *ctx = sock->data;
+    h2o_quic_read_socket(ctx, sock);
+}
+
+
+// Source: common.c
+// Lines 896-900
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'list' at line 1\n2. Pointer 'name' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nwindow_customize_find_user_options(struct options *oo, const char ***list,\n    u_int *size)\n{\n\tstruct options_entry\t*o;\n\tconst char\t\t*name;\n\tu_int\t\t\t i;\n\n\to = options_first(oo);\n\twhile (o != NULL) {\n\t\tname = options_name(o);\n\t\tif (*name != '@') {\n\t\t\to = options_next(o);\n\t\t\tcontinue;\n\t\t}\n\t\tfor (i = 0; i < *size; i++) {\n\t\t\tif (strcmp((*list)[i], name) == 0)\n\t\t\t\tbreak;\n\t\t}\n\t\tif (i != *size) {\n\t\t\to = options_next(o);\n\t\t\tcontinue;\n\t\t}\n\t\t*list = xreallocarray(*list, (*size) + 1, sizeof **list);\n\t\t(*list)[(*size)++] = name;\n\n\t\to = options_next(o);\n\t}\n}\n\n\n// Source: window-customize.c\n// Lines 341-368\n",
+  "ANSWER": "MAY"
+}

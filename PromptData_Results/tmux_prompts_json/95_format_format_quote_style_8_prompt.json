@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'cp' at line 3\n2. Pointer 's' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nformat_quote_style(const char *s)\n{\n\tconst char\t*cp;\n\tchar\t\t*out, *at;\n\n\tat = out = xmalloc(strlen(s) * 2 + 1);\n\tfor (cp = s; *cp != '\\0'; cp++) {\n\t\tif (*cp == '#')\n\t\t\t*at++ = '#';\n\t\t*at++ = *cp;\n\t}\n\t*at = '\\0';\n\treturn (out);\n}\n\n\n// Source: format.c\n// Lines 3249-3262\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,154 @@
+void test_repo_env__open(void)
+{
+	git_repository *repo = NULL;
+	git_str repo_dir_buf = GIT_STR_INIT;
+	const char *repo_dir = NULL;
+	git_index *index = NULL;
+	const char *t_obj = "testrepo.git/objects";
+	const char *p_obj = "peeled.git/objects";
+
+	clear_git_env();
+
+	cl_fixture_sandbox("attr");
+	cl_fixture_sandbox("testrepo.git");
+	cl_fixture_sandbox("peeled.git");
+	cl_git_pass(p_rename("attr/.gitted", "attr/.git"));
+
+	cl_git_pass(git_fs_path_prettify_dir(&repo_dir_buf, "attr", NULL));
+	repo_dir = git_str_cstr(&repo_dir_buf);
+
+	/* GIT_DIR that doesn't exist */
+	cl_setenv("GIT_DIR", "does-not-exist");
+	env_fail(NULL);
+	/* Explicit start_path overrides GIT_DIR */
+	env_pass("attr");
+	env_pass("attr/.git");
+	env_pass("attr/sub");
+	env_pass("attr/sub/sub");
+
+	/* GIT_DIR with relative paths */
+	cl_setenv("GIT_DIR", "attr/.git");
+	env_pass(NULL);
+	cl_setenv("GIT_DIR", "attr");
+	env_fail(NULL);
+	cl_setenv("GIT_DIR", "attr/sub");
+	env_fail(NULL);
+	cl_setenv("GIT_DIR", "attr/sub/sub");
+	env_fail(NULL);
+
+	/* GIT_DIR with absolute paths */
+	cl_setenv_printf("GIT_DIR", "%s/.git", repo_dir);
+	env_pass(NULL);
+	cl_setenv("GIT_DIR", repo_dir);
+	env_fail(NULL);
+	cl_setenv_printf("GIT_DIR", "%s/sub", repo_dir);
+	env_fail(NULL);
+	cl_setenv_printf("GIT_DIR", "%s/sub/sub", repo_dir);
+	env_fail(NULL);
+	cl_setenv("GIT_DIR", NULL);
+
+	/* Searching from the current directory */
+	env_cd_pass("attr");
+	env_cd_pass("attr/.git");
+	env_cd_pass("attr/sub");
+	env_cd_pass("attr/sub/sub");
+
+	/* A ceiling directory blocks searches from ascending into that
+	 * directory, but doesn't block the start_path itself. */
+	cl_setenv("GIT_CEILING_DIRECTORIES", repo_dir);
+	env_cd_pass("attr");
+	env_cd_fail("attr/sub");
+	env_cd_fail("attr/sub/sub");
+
+	cl_setenv_printf("GIT_CEILING_DIRECTORIES", "%s/sub", repo_dir);
+	env_cd_pass("attr");
+	env_cd_pass("attr/sub");
+	env_cd_fail("attr/sub/sub");
+
+	/* Multiple ceiling directories */
+	cl_setenv_printf("GIT_CEILING_DIRECTORIES", "123%c%s/sub%cabc",
+		GIT_PATH_LIST_SEPARATOR, repo_dir, GIT_PATH_LIST_SEPARATOR);
+	env_cd_pass("attr");
+	env_cd_pass("attr/sub");
+	env_cd_fail("attr/sub/sub");
+
+	cl_setenv_printf("GIT_CEILING_DIRECTORIES", "%s%c%s/sub",
+		repo_dir, GIT_PATH_LIST_SEPARATOR, repo_dir);
+	env_cd_pass("attr");
+	env_cd_fail("attr/sub");
+	env_cd_fail("attr/sub/sub");
+
+	cl_setenv_printf("GIT_CEILING_DIRECTORIES", "%s/sub%c%s",
+		repo_dir, GIT_PATH_LIST_SEPARATOR, repo_dir);
+	env_cd_pass("attr");
+	env_cd_fail("attr/sub");
+	env_cd_fail("attr/sub/sub");
+
+	cl_setenv_printf("GIT_CEILING_DIRECTORIES", "%s%c%s/sub/sub",
+		repo_dir, GIT_PATH_LIST_SEPARATOR, repo_dir);
+	env_cd_pass("attr");
+	env_cd_fail("attr/sub");
+	env_cd_fail("attr/sub/sub");
+
+	cl_setenv("GIT_CEILING_DIRECTORIES", NULL);
+
+	/* Index files */
+	cl_setenv("GIT_INDEX_FILE", cl_fixture("gitgit.index"));
+	cl_git_pass(git_repository_open_ext(&repo, "attr", GIT_REPOSITORY_OPEN_FROM_ENV, NULL));
+	cl_git_pass(git_repository_index(&index, repo));
+	cl_assert_equal_s(git_index_path(index), cl_fixture("gitgit.index"));
+	cl_assert_equal_i(git_index_entrycount(index), 1437);
+	git_index_free(index);
+	git_repository_free(repo);
+	cl_setenv("GIT_INDEX_FILE", NULL);
+
+	/* Namespaces */
+	cl_setenv("GIT_NAMESPACE", "some-namespace");
+	cl_git_pass(git_repository_open_ext(&repo, "attr", GIT_REPOSITORY_OPEN_FROM_ENV, NULL));
+	cl_assert_equal_s(git_repository_get_namespace(repo), "some-namespace");
+	git_repository_free(repo);
+	cl_setenv("GIT_NAMESPACE", NULL);
+
+	/* Object directories and alternates */
+	env_check_objects(true, false, false);
+
+	cl_setenv("GIT_OBJECT_DIRECTORY", t_obj);
+	env_check_objects(false, true, false);
+	cl_setenv("GIT_OBJECT_DIRECTORY", NULL);
+
+	cl_setenv("GIT_ALTERNATE_OBJECT_DIRECTORIES", t_obj);
+	env_check_objects(true, true, false);
+	cl_setenv("GIT_ALTERNATE_OBJECT_DIRECTORIES", NULL);
+
+	cl_setenv("GIT_OBJECT_DIRECTORY", p_obj);
+	env_check_objects(false, false, true);
+	cl_setenv("GIT_OBJECT_DIRECTORY", NULL);
+
+	cl_setenv("GIT_OBJECT_DIRECTORY", t_obj);
+	cl_setenv("GIT_ALTERNATE_OBJECT_DIRECTORIES", p_obj);
+	env_check_objects(false, true, true);
+	cl_setenv("GIT_ALTERNATE_OBJECT_DIRECTORIES", NULL);
+	cl_setenv("GIT_OBJECT_DIRECTORY", NULL);
+
+	cl_setenv_printf("GIT_ALTERNATE_OBJECT_DIRECTORIES",
+			"%s%c%s", t_obj, GIT_PATH_LIST_SEPARATOR, p_obj);
+	env_check_objects(true, true, true);
+	cl_setenv("GIT_ALTERNATE_OBJECT_DIRECTORIES", NULL);
+
+	cl_setenv_printf("GIT_ALTERNATE_OBJECT_DIRECTORIES",
+			"%s%c%s", p_obj, GIT_PATH_LIST_SEPARATOR, t_obj);
+	env_check_objects(true, true, true);
+	cl_setenv("GIT_ALTERNATE_OBJECT_DIRECTORIES", NULL);
+
+	cl_fixture_cleanup("peeled.git");
+	cl_fixture_cleanup("testrepo.git");
+	cl_fixture_cleanup("attr");
+
+	git_str_dispose(&repo_dir_buf);
+
+	clear_git_env();
+}
+
+
+// Source: env.c
+// Lines 128-277

@@ -1,0 +1,1460 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'a' at line 1
+2. Pointer 'a' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool test_if_subpart(ORDER *a, ORDER *b) {
+  ORDER *first = a;
+  ORDER *second = b;
+  for (; first && second; first = first->next, second = second->next) {
+    if ((*first->item)->eq(*second->item, true))
+      continue;
+    else
+      return false;
+  }
+  // If the second argument is not subpart of the first return false
+  if (second) return false;
+  // Else assign the direction of the second argument to the first
+  else {
+    for (; a && b; a = a->next, b = b->next) a->direction = b->direction;
+    return true;
+  }
+}
+
+/**
+  calc how big buffer we need for comparing group entries.
+*/
+
+void calc_group_buffer(JOIN *join, ORDER *group) {
+  DBUG_TRACE;
+  uint key_length = 0, parts = 0, null_parts = 0;
+
+  if (group) join->grouped = true;
+  for (; group; group = group->next) {
+    Item *group_item = *group->item;
+    Field *field = group_item->get_tmp_table_field();
+    if (field) {
+      enum_field_types type;
+      if ((type = field->type()) == MYSQL_TYPE_BLOB)
+        key_length += MAX_BLOB_WIDTH;  // Can't be used as a key
+      else if (type == MYSQL_TYPE_VARCHAR || type == MYSQL_TYPE_VAR_STRING)
+        key_length += field->field_length + HA_KEY_BLOB_LENGTH;
+      else if (type == MYSQL_TYPE_BIT) {
+        /* Bit is usually stored as a longlong key for group fields */
+        key_length += 8;  // Big enough
+      } else
+        key_length += field->pack_length();
+    } else {
+      switch (group_item->result_type()) {
+        case REAL_RESULT:
+          key_length += sizeof(double);
+          break;
+        case INT_RESULT:
+          key_length += sizeof(longlong);
+          break;
+        case DECIMAL_RESULT:
+          key_length += my_decimal_get_binary_size(
+              group_item->max_length - (group_item->decimals ? 1 : 0),
+              group_item->decimals);
+          break;
+        case STRING_RESULT: {
+          /*
+            As items represented as DATE/TIME fields in the group buffer
+            have STRING_RESULT result type, we increase the length
+            by 8 as maximum pack length of such fields.
+          */
+          if (group_item->is_temporal()) {
+            key_length += 8;
+          } else if (group_item->data_type() == MYSQL_TYPE_BLOB)
+            key_length += MAX_BLOB_WIDTH;  // Can't be used as a key
+          else {
+            /*
+              Group strings are taken as varstrings and require an length field.
+              A field is not yet created by create_tmp_field()
+              and the sizes should match up.
+            */
+            key_length += group_item->max_length + HA_KEY_BLOB_LENGTH;
+          }
+          break;
+        }
+        default:
+          /* This case should never be choosen */
+          assert(0);
+          my_error(ER_OUT_OF_RESOURCES, MYF(ME_FATALERROR));
+      }
+    }
+    parts++;
+    if (group_item->is_nullable()) null_parts++;
+  }
+  join->tmp_table_param.group_length = key_length + null_parts;
+  join->tmp_table_param.group_parts = parts;
+  join->tmp_table_param.group_null_parts = null_parts;
+}
+
+/**
+  Make an array of pointers to sum_functions to speed up
+  sum_func calculation.
+
+  @retval
+    0	ok
+  @retval
+    1	Error
+*/
+
+bool JOIN::alloc_func_list() {
+  uint func_count, group_parts;
+  DBUG_TRACE;
+
+  func_count = tmp_table_param.sum_func_count;
+  /*
+    If we are using rollup, we need a copy of the summary functions for
+    each level
+  */
+  if (rollup_state != RollupState::NONE) func_count *= (send_group_parts + 1);
+
+  group_parts = send_group_parts;
+  /*
+    If distinct, reserve memory for possible
+    disctinct->group_by optimization
+  */
+  if (select_distinct) {
+    group_parts += CountVisibleFields(*fields);
+    /*
+      If the ORDER clause is specified then it's possible that
+      it also will be optimized, so reserve space for it too
+    */
+    if (!order.empty()) {
+      ORDER *ord;
+      for (ord = order.order; ord; ord = ord->next) group_parts++;
+    }
+  }
+
+  /* This must use calloc() as rollup_make_fields depends on this */
+  sum_funcs =
+      (Item_sum **)thd->mem_calloc(sizeof(Item_sum **) * (func_count + 1) +
+                                   sizeof(Item_sum ***) * (group_parts + 1));
+  return sum_funcs == nullptr;
+}
+
+/**
+  Initialize 'sum_funcs' array with all Item_sum objects.
+
+  @param fields            All items
+  @param before_group_by   Set to 1 if this is called before GROUP BY handling
+  @param recompute         Set to true if sum_funcs must be recomputed
+
+  @retval
+    0  ok
+  @retval
+    1  error
+*/
+
+bool JOIN::make_sum_func_list(const mem_root_deque<Item *> &fields,
+                              bool before_group_by, bool recompute) {
+  DBUG_TRACE;
+
+  if (*sum_funcs && !recompute)
+    return false; /* We have already initialized sum_funcs. */
+
+  Item_sum **func = sum_funcs;
+  for (Item *item : fields) {
+    if (item->type() == Item::SUM_FUNC_ITEM && !item->const_item() &&
+        down_cast<Item_sum *>(item)->aggr_query_block == query_block) {
+      assert(!item->m_is_window_function);
+      *func++ = down_cast<Item_sum *>(item);
+    }
+  }
+  if (before_group_by && rollup_state == RollupState::INITED) {
+    rollup_state = RollupState::READY;
+  } else if (rollup_state == RollupState::READY)
+    return false;   // Don't put end marker
+  *func = nullptr;  // End marker
+  return false;
+}
+
+/**
+  Free joins of subselect of this select.
+
+  @param thd      thread handle
+  @param select   pointer to Query_block which subselects joins we will free
+
+  @todo when the final use of this function (from SET statements) is removed,
+  this function can be deleted.
+*/
+
+void free_underlaid_joins(THD *thd, Query_block *select) {
+  for (Query_expression *query_expression =
+           select->first_inner_query_expression();
+       query_expression;
+       query_expression = query_expression->next_query_expression())
+    query_expression->cleanup(thd, false);
+}
+
+/**
+  Change the Query_result object of the query block.
+
+  If old_result is not used, forward the call to the current
+  Query_result in case it is a wrapper around old_result.
+
+  Call prepare() on the new Query_result if we decide to use it.
+
+  @param thd        Thread handle
+  @param new_result New Query_result object
+  @param old_result Old Query_result object (NULL to force change)
+
+  @retval false Success
+  @retval true  Error
+*/
+
+bool Query_block::change_query_result(THD *thd,
+                                      Query_result_interceptor *new_result,
+                                      Query_result_interceptor *old_result) {
+  DBUG_TRACE;
+  if (old_result == nullptr || query_result() == old_result) {
+    set_query_result(new_result);
+    if (query_result()->prepare(thd, fields, master_query_expression()))
+      return true; /* purecov: inspected */
+    return false;
+  } else {
+    const bool ret = query_result()->change_query_result(thd, new_result);
+    return ret;
+  }
+}
+
+/**
+  Add having condition as a filter condition, which is applied when reading
+  from the temp table.
+
+  @param    curr_tmp_table  Table number to which having conds are added.
+  @returns  false if success, true if error.
+*/
+
+bool JOIN::add_having_as_tmp_table_cond(uint curr_tmp_table) {
+  having_cond->update_used_tables();
+  QEP_TAB *const curr_table = &qep_tab[curr_tmp_table];
+  table_map used_tables;
+  Opt_trace_context *const trace = &thd->opt_trace;
+
+  DBUG_TRACE;
+
+  if (curr_table->table_ref)
+    used_tables = curr_table->table_ref->map();
+  else {
+    /*
+      Pushing parts of HAVING to an internal temporary table.
+      Fields in HAVING condition may have been replaced with fields in an
+      internal temporary table. This table has map=1.
+    */
+    assert(having_cond->has_subquery() ||
+           !(having_cond->used_tables() & ~(1 | PSEUDO_TABLE_BITS)));
+    used_tables = 1;
+  }
+  // Condition may contain outer references, const and non-deterministic exprs:
+  used_tables |= PSEUDO_TABLE_BITS;
+
+  /*
+    All conditions which can be applied after reading from used_tables are
+    added as filter conditions of curr_tmp_table. If condition's used_tables is
+    not read yet for example subquery in having, then it will be kept as it is
+    in original having_cond of join.
+    If ROLLUP, having condition needs to be tested after writing rollup data.
+    So do not move the having condition.
+  */
+  Item *sort_table_cond =
+      (rollup_state == RollupState::NONE)
+          ? make_cond_for_table(thd, having_cond, used_tables, table_map{0},
+                                false)
+          : nullptr;
+  if (sort_table_cond) {
+    if (!curr_table->condition())
+      curr_table->set_condition(sort_table_cond);
+    else {
+      curr_table->set_condition(
+          new Item_cond_and(curr_table->condition(), sort_table_cond));
+      if (curr_table->condition()->fix_fields(thd, nullptr)) return true;
+    }
+    curr_table->condition()->apply_is_true();
+    DBUG_EXECUTE("where", print_where(thd, curr_table->condition(),
+                                      "select and having", QT_ORDINARY););
+
+    having_cond = make_cond_for_table(thd, having_cond, ~table_map{0},
+                                      ~used_tables, false);
+    DBUG_EXECUTE("where", print_where(thd, having_cond, "having after sort",
+                                      QT_ORDINARY););
+
+    Opt_trace_object trace_wrapper(trace);
+    Opt_trace_object(trace, "sort_using_internal_table")
+        .add("condition_for_sort", sort_table_cond)
+        .add("having_after_sort", having_cond);
+  }
+
+  return false;
+}
+
+/**
+  Init tmp tables usage info.
+
+  @details
+  This function finalizes execution plan by taking following actions:
+    .) tmp tables are created, but not instantiated (this is done during
+       execution). QEP_TABs dedicated to tmp tables are filled appropriately.
+       see JOIN::create_intermediate_table.
+    .) prepare fields lists (fields, all_fields, ref_item_array slices) for
+       each required stage of execution. These fields lists are set for
+       tmp tables' tabs and for the tab of last table in the join.
+    .) fill info for sorting/grouping/dups removal is prepared and saved to
+       appropriate tabs. Here is an example:
+        SELECT * from t1,t2 WHERE ... GROUP BY t1.f1 ORDER BY t2.f2, t1.f2
+        and lets assume that the table order in the plan is t1,t2.
+       In this case optimizer will sort for group only the first table as the
+       second one isn't mentioned in GROUP BY. The result will be materialized
+       in tmp table.  As filesort can't sort join optimizer will sort tmp table
+       also. The first sorting (for group) is called simple as is doesn't
+       require tmp table.  The Filesort object for it is created here - in
+       JOIN::create_intermediate_table.  Filesort for the second case is
+       created here, in JOIN::make_tmp_tables_info.
+
+  @note
+  This function may change tmp_table_param.precomputed_group_by. This
+  affects how create_tmp_table() treats aggregation functions, so
+  count_field_types() must be called again to make sure this is taken
+  into consideration.
+
+  @returns
+  false - Ok
+  true  - Error
+*/
+
+bool JOIN::make_tmp_tables_info() {
+  assert(!join_tab);
+  mem_root_deque<Item *> *curr_fields = fields;
+  bool materialize_join = false;
+  uint curr_tmp_table = const_tables;
+  TABLE *exec_tmp_table = nullptr;
+
+  /*
+    If the plan is constant, we will not do window tmp table processing
+    cf. special code path in do_query_block.
+  */
+  m_windowing_steps = m_windows.elements > 0 && !plan_is_const() &&
+                      !implicit_grouping && !group_optimized_away;
+  const bool may_trace =  // just to avoid an empty trace block
+      need_tmp_before_win || implicit_grouping || m_windowing_steps ||
+      !group_list.empty() || !order.empty();
+
+  Opt_trace_context *const trace = &thd->opt_trace;
+  Opt_trace_disable_I_S trace_disabled(trace, !may_trace);
+  Opt_trace_object wrapper(trace);
+  Opt_trace_array trace_tmp(trace, "considering_tmp_tables");
+
+  DBUG_TRACE;
+
+  /*
+    In this function, we may change having_cond into a condition on a
+    temporary sort/group table, so we have to assign having_for_explain now:
+  */
+  having_for_explain = having_cond;
+
+  const bool has_group_by = this->grouped;
+
+  /*
+    The loose index scan access method guarantees that all grouping or
+    duplicate row elimination (for distinct) is already performed
+    during data retrieval, and that all MIN/MAX functions are already
+    computed for each group. Thus all MIN/MAX functions should be
+    treated as regular functions, and there is no need to perform
+    grouping in the main execution loop.
+    Notice that currently loose index scan is applicable only for
+    single table queries, thus it is sufficient to test only the first
+    join_tab element of the plan for its access method.
+  */
+  if (qep_tab && qep_tab[0].quick() &&
+      qep_tab[0].quick()->is_loose_index_scan())
+    tmp_table_param.precomputed_group_by =
+        !qep_tab[0].quick()->is_agg_loose_index_scan();
+
+  uint last_slice_before_windowing = REF_SLICE_ACTIVE;
+
+  /*
+    Create the first temporary table if distinct elimination is requested or
+    if the sort is too complicated to be evaluated as a filesort.
+  */
+  if (need_tmp_before_win) {
+    curr_tmp_table = primary_tables;
+    Opt_trace_object trace_this_outer(trace);
+    trace_this_outer.add("adding_tmp_table_in_plan_at_position",
+                         curr_tmp_table);
+    tmp_tables++;
+
+    /*
+      Make a copy of the base slice in the save slice.
+      This is needed because later steps will overwrite the base slice with
+      another slice (1-3).
+      After this slice has been used, overwrite the base slice again with
+      the copy in the save slice.
+    */
+    if (alloc_ref_item_slice(thd, REF_SLICE_SAVED_BASE)) return true;
+
+    copy_ref_item_slice(REF_SLICE_SAVED_BASE, REF_SLICE_ACTIVE);
+    current_ref_item_slice = REF_SLICE_SAVED_BASE;
+
+    /*
+      Create temporary table for use in a single execution.
+      (Will be reused if this is a subquery that is executed several times
+       for one execution of the statement)
+      Don't use tmp table grouping for json aggregate funcs as it's
+      very ineffective.
+    */
+    ORDER_with_src tmp_group;
+    if (!simple_group && !(test_flags & TEST_NO_KEY_GROUP) && !with_json_agg)
+      tmp_group = group_list;
+
+    tmp_table_param.hidden_field_count = CountHiddenFields(*fields);
+
+    if (create_intermediate_table(&qep_tab[curr_tmp_table], *fields, tmp_group,
+                                  !group_list.empty() && simple_group))
+      return true;
+    exec_tmp_table = qep_tab[curr_tmp_table].table();
+
+    if (exec_tmp_table->s->is_distinct) optimize_distinct();
+
+    /*
+      If there is no sorting or grouping, 'use_order'
+      index result should not have been requested.
+      Exception: LooseScan strategy for semijoin requires
+      sorted access even if final result is not to be sorted.
+    */
+    assert(
+        !(m_ordered_index_usage == ORDERED_INDEX_VOID && !plan_is_const() &&
+          qep_tab[const_tables].position()->sj_strategy != SJ_OPT_LOOSE_SCAN &&
+          qep_tab[const_tables].use_order()));
+
+    /*
+      Allocate a slice of ref items that describe the items to be copied
+      from the first temporary table.
+    */
+    if (alloc_ref_item_slice(thd, REF_SLICE_TMP1)) return true;
+
+    // Change sum_fields reference to calculated fields in tmp_table
+    if (streaming_aggregation || qep_tab[curr_tmp_table].table()->group ||
+        tmp_table_param.precomputed_group_by) {
+      if (change_to_use_tmp_fields(fields, thd, ref_items[REF_SLICE_TMP1],
+                                   &tmp_fields[REF_SLICE_TMP1],
+                                   query_block->m_added_non_hidden_fields))
+        return true;
+    } else {
+      if (change_to_use_tmp_fields_except_sums(
+              fields, thd, query_block, ref_items[REF_SLICE_TMP1],
+              &tmp_fields[REF_SLICE_TMP1],
+              query_block->m_added_non_hidden_fields))
+        return true;
+    }
+    curr_fields = &tmp_fields[REF_SLICE_TMP1];
+    // Need to set them now for correct group_fields setup, reset at the end.
+    set_ref_item_slice(REF_SLICE_TMP1);
+    qep_tab[curr_tmp_table].ref_item_slice = REF_SLICE_TMP1;
+    setup_tmptable_write_func(&qep_tab[curr_tmp_table], &trace_this_outer);
+    last_slice_before_windowing = REF_SLICE_TMP1;
+
+    /*
+      If having is not handled here, it will be checked before the row is sent
+      to the client.
+    */
+    if (having_cond &&
+        (streaming_aggregation ||
+         (exec_tmp_table->s->is_distinct && group_list.empty()))) {
+      /*
+        If there is no select distinct or rollup, then move the having to table
+        conds of tmp table.
+        NOTE : We cannot apply having after distinct. If columns of having are
+               not part of select distinct, then distinct may remove rows
+               which can satisfy having.
+
+        As this condition will read the tmp table, it is appropriate that
+        REF_SLICE_TMP1 is in effect when we create it below.
+      */
+      if ((!select_distinct && rollup_state == RollupState::NONE) &&
+          add_having_as_tmp_table_cond(curr_tmp_table))
+        return true;
+
+      /*
+        Having condition which we are not able to add as tmp table conds are
+        kept as before. And, this will be applied before storing the rows in
+        tmp table.
+      */
+      qep_tab[curr_tmp_table].having = having_cond;
+      having_cond = nullptr;  // Already done
+    }
+
+    tmp_table_param.func_count = 0;
+
+    if (streaming_aggregation || qep_tab[curr_tmp_table].table()->group) {
+      tmp_table_param.field_count += tmp_table_param.sum_func_count;
+      tmp_table_param.sum_func_count = 0;
+    }
+
+    if (exec_tmp_table->group) {  // Already grouped
+                                  /*
+                                    Check if group by has to respect ordering. If true, move group by to
+                                    order by.
+                                  */
+      if (order.empty() && !skip_sort_order) {
+        for (ORDER *group = group_list.order; group; group = group->next) {
+          if (group->direction != ORDER_NOT_RELEVANT) {
+            order = group_list; /* order by group */
+            break;
+          }
+        }
+      }
+      group_list.clean();
+    }
+    /*
+      If we have different sort & group then we must sort the data by group
+      and copy it to a second temporary table.
+      This code is also used if we are using distinct something
+      we haven't been able to store in the temporary table yet
+      like SEC_TO_TIME(SUM(...)) or when distinct is used with rollup.
+    */
+
+    if ((!group_list.empty() &&
+         (!test_if_subpart(group_list.order, order.order) || select_distinct ||
+          m_windowing_steps || rollup_state != RollupState::NONE)) ||
+        (select_distinct && (tmp_table_param.using_outer_summary_function ||
+                             rollup_state != RollupState::NONE))) {
+      DBUG_PRINT("info", ("Creating group table"));
+
+      calc_group_buffer(this, group_list.order);
+      count_field_types(query_block, &tmp_table_param,
+                        tmp_fields[REF_SLICE_TMP1],
+                        select_distinct && group_list.empty(), false);
+      tmp_table_param.hidden_field_count =
+          CountHiddenFields(tmp_fields[REF_SLICE_TMP1]);
+      streaming_aggregation = false;
+      if (!exec_tmp_table->group && !exec_tmp_table->s->is_distinct) {
+        // 1st tmp table were materializing join result
+        materialize_join = true;
+        explain_flags.set(ESC_BUFFER_RESULT, ESP_USING_TMPTABLE);
+      }
+      curr_tmp_table++;
+      tmp_tables++;
+      Opt_trace_object trace_this_tbl(trace);
+      trace_this_tbl.add("adding_tmp_table_in_plan_at_position", curr_tmp_table)
+          .add_alnum("cause", "sorting_to_make_groups");
+
+      /* group data to new table */
+      /*
+        If the access method is loose index scan then all MIN/MAX
+        functions are precomputed, and should be treated as regular
+        functions. See extended comment above.
+      */
+      if (qep_tab[0].quick() && qep_tab[0].quick()->is_loose_index_scan())
+        tmp_table_param.precomputed_group_by = true;
+
+      ORDER_with_src dummy;  // TODO can use table->group here also
+
+      if (create_intermediate_table(&qep_tab[curr_tmp_table], *curr_fields,
+                                    dummy, true))
+        return true;
+
+      if (!group_list.empty()) {
+        explain_flags.set(group_list.src, ESP_USING_TMPTABLE);
+        if (!plan_is_const())  // No need to sort a single row
+        {
+          if (add_sorting_to_table(curr_tmp_table - 1, &group_list,
+                                   /*force_stable_sort=*/false,
+                                   /*sort_before_group=*/true))
+            return true;
+        }
+
+        if (make_group_fields(this, this)) return true;
+      }
+
+      // Setup sum funcs only when necessary, otherwise we might break info
+      // for the first table
+      if (!group_list.empty() || tmp_table_param.sum_func_count) {
+        if (make_sum_func_list(*curr_fields, true, true)) return true;
+        const bool need_distinct =
+            !(qep_tab[0].quick() &&
+              qep_tab[0].quick()->is_agg_loose_index_scan());
+        if (prepare_sum_aggregators(sum_funcs, need_distinct)) return true;
+        group_list.clean();
+        if (setup_sum_funcs(thd, sum_funcs)) return true;
+      }
+
+      /*
+        Allocate a slice of ref items that describe the items to be copied
+        from the second temporary table.
+      */
+      if (alloc_ref_item_slice(thd, REF_SLICE_TMP2)) return true;
+
+      // No sum funcs anymore
+      if (change_to_use_tmp_fields(&tmp_fields[REF_SLICE_TMP1], thd,
+                                   ref_items[REF_SLICE_TMP2],
+                                   &tmp_fields[REF_SLICE_TMP2],
+                                   query_block->m_added_non_hidden_fields))
+        return true;
+
+      curr_fields = &tmp_fields[REF_SLICE_TMP2];
+      set_ref_item_slice(REF_SLICE_TMP2);
+      qep_tab[curr_tmp_table].ref_item_slice = REF_SLICE_TMP2;
+      setup_tmptable_write_func(&qep_tab[curr_tmp_table], &trace_this_tbl);
+      last_slice_before_windowing = REF_SLICE_TMP2;
+    }
+    if (qep_tab[curr_tmp_table].table()->s->is_distinct)
+      select_distinct = false; /* Each row is unique */
+
+    if (select_distinct && group_list.empty() && !m_windowing_steps) {
+      if (having_cond) {
+        qep_tab[curr_tmp_table].having = having_cond;
+        having_cond->update_used_tables();
+        having_cond = nullptr;
+      }
+      qep_tab[curr_tmp_table].needs_duplicate_removal = true;
+      trace_this_outer.add("reading_from_table_eliminates_duplicates", true);
+      explain_flags.set(ESC_DISTINCT, ESP_DUPS_REMOVAL);
+      select_distinct = false;
+    }
+    /* Clean tmp_table_param for the next tmp table. */
+    tmp_table_param.field_count = tmp_table_param.sum_func_count =
+        tmp_table_param.func_count = 0;
+
+    tmp_table_param.cleanup();
+    streaming_aggregation = false;
+
+    if (!group_optimized_away) {
+      grouped = false;
+    } else {
+      /*
+        If grouping has been optimized away, a temporary table is
+        normally not needed unless we're explicitly requested to create
+        one (e.g. due to a SQL_BUFFER_RESULT hint or INSERT ... SELECT or
+        there is a windowing function that needs sorting).
+
+        In this case (grouping was optimized away), temp_table was
+        created without a grouping expression and JOIN::exec() will not
+        perform the necessary grouping (by the use of end_send_group()
+        or end_write_group()) if JOIN::group is set to false.
+      */
+      /*
+         The temporary table was explicitly requested or there is a window
+         function which needs sorting (check need_tmp_before_win in
+         JOIN::optimize).
+      */
+      assert(query_block->active_options() & OPTION_BUFFER_RESULT ||
+             m_windowing_steps);
+      // the temporary table does not have a grouping expression
+      assert(!qep_tab[curr_tmp_table].table()->group);
+    }
+    calc_group_buffer(this, group_list.order);
+    count_field_types(query_block, &tmp_table_param, *curr_fields, false,
+                      false);
+  }
+
+  /*
+    Set up structures for a temporary table but do not actually create
+    the temporary table if one of these conditions are true:
+    - The query is implicitly grouped.
+    - The query is explicitly grouped and
+        + implemented as a simple grouping, or
+        + LIMIT 1 is specified, or
+        + ROLLUP is specified, or
+        + <some unknown condition>.
+  */
+
+  if ((grouped || implicit_grouping) && !m_windowing_steps) {
+    if (make_group_fields(this, this)) return true;
+
+    if (make_sum_func_list(*curr_fields, true, true)) return true;
+    const bool need_distinct = !(qep_tab && qep_tab[0].quick() &&
+                                 qep_tab[0].quick()->is_agg_loose_index_scan());
+    if (prepare_sum_aggregators(sum_funcs, need_distinct)) return true;
+    if (setup_sum_funcs(thd, sum_funcs) || thd->is_fatal_error()) return true;
+  }
+
+  if (qep_tab && (!group_list.empty() ||
+                  (!order.empty() && !m_windowing_steps /* [1] */))) {
+    /*
+      [1] above: too early to do query ORDER BY if we have windowing; must
+      wait till after window processing.
+    */
+    ASSERT_BEST_REF_IN_JOIN_ORDER(this);
+    DBUG_PRINT("info", ("Sorting for send_result_set_metadata"));
+    /*
+      If we have already done the group, add HAVING to sorted table except
+      when rollup is present
+    */
+    if (having_cond && group_list.empty() && !streaming_aggregation &&
+        rollup_state == RollupState::NONE) {
+      if (add_having_as_tmp_table_cond(curr_tmp_table)) return true;
+    }
+
+    if (grouped)
+      m_select_limit = HA_POS_ERROR;
+    else if (!need_tmp_before_win) {
+      /*
+        We can abort sorting after thd->select_limit rows if there are no
+        filter conditions for any tables after the sorted one.
+        Filter conditions come in several forms:
+         1. as a condition item attached to the join_tab, or
+         2. as a keyuse attached to the join_tab (ref access).
+      */
+      for (uint i = const_tables + 1; i < primary_tables; i++) {
+        QEP_TAB *const tab = qep_tab + i;
+        if (tab->condition() ||  // 1
+            (best_ref[tab->idx()]->keyuse() &&
+             tab->first_inner() == NO_PLAN_IDX))  // 2
+        {
+          /* We have to sort all rows */
+          m_select_limit = HA_POS_ERROR;
+          break;
+        }
+      }
+    }
+    /*
+      Here we add sorting stage for ORDER BY/GROUP BY clause, if the
+      optimiser chose FILESORT to be faster than INDEX SCAN or there is
+      no suitable index present.
+      OPTION_FOUND_ROWS supersedes LIMIT and is taken into account.
+    */
+    DBUG_PRINT("info", ("Sorting for order by/group by"));
+    ORDER_with_src order_arg = group_list.empty() ? order : group_list;
+    if (qep_tab &&
+        m_ordered_index_usage != (group_list.empty()
+                                      ? ORDERED_INDEX_ORDER_BY
+                                      : ORDERED_INDEX_GROUP_BY) &&
+        // Windowing will change order, so it's too early to sort here
+        !m_windowing_steps) {
+      // Sort either first non-const table or the last tmp table
+      QEP_TAB *const sort_tab = &qep_tab[curr_tmp_table];
+      if (need_tmp_before_win && !materialize_join && !exec_tmp_table->group)
+        explain_flags.set(order_arg.src, ESP_USING_TMPTABLE);
+
+      if (add_sorting_to_table(curr_tmp_table, &order_arg,
+                               /*force_stable_sort=*/false,
+                               /*sort_before_group=*/false))
+        return true;
+      /*
+        filesort_limit:	 Return only this many rows from filesort().
+        We can use select_limit_cnt only if we have no group_by and 1 table.
+        This allows us to use Bounded_queue for queries like:
+          "select * from t1 order by b desc limit 1;"
+        m_select_limit == HA_POS_ERROR (we need a full table scan)
+        query_expression->select_limit_cnt == 1 (we only need one row in the
+        result set)
+      */
+      if (sort_tab->filesort)
+        sort_tab->filesort->limit =
+            (has_group_by || (primary_tables > curr_tmp_table + 1) ||
+             calc_found_rows)
+                ? m_select_limit
+                : query_expression()->select_limit_cnt;
+    }
+  }
+
+  if (qep_tab && m_windowing_steps) {
+    for (uint wno = 0; wno < m_windows.elements; wno++) {
+      tmp_table_param.m_window = m_windows[wno];
+
+      if (!tmp_tables) {
+        curr_tmp_table = primary_tables;
+        tmp_tables++;
+
+        if (ref_items[REF_SLICE_SAVED_BASE].is_null()) {
+          /*
+           Make a copy of the base slice in the save slice.
+           This is needed because later steps will overwrite the base slice with
+           another slice (1-3 or window slice).
+           After this slice has been used, overwrite the base slice again with
+           the copy in the save slice.
+           */
+          if (alloc_ref_item_slice(thd, REF_SLICE_SAVED_BASE)) return true;
+
+          copy_ref_item_slice(REF_SLICE_SAVED_BASE, REF_SLICE_ACTIVE);
+          current_ref_item_slice = REF_SLICE_SAVED_BASE;
+        }
+      } else {
+        curr_tmp_table++;
+        tmp_tables++;
+      }
+
+      ORDER_with_src dummy;
+
+      if (last_slice_before_windowing == REF_SLICE_ACTIVE) {
+        tmp_table_param.hidden_field_count = CountHiddenFields(*fields);
+      } else {
+        assert(tmp_tables >= 1 &&
+               last_slice_before_windowing > REF_SLICE_ACTIVE);
+
+        tmp_table_param.hidden_field_count =
+            CountHiddenFields(tmp_fields[last_slice_before_windowing]);
+      }
+
+      /*
+        Allocate a slice of ref items that describe the items to be copied
+        from the next temporary table.
+      */
+      const uint widx = REF_SLICE_WIN_1 + wno;
+      const int fbidx = widx + m_windows.elements;  // use far area
+      m_windows[wno]->set_needs_restore_input_row(
+          wno == 0 && qep_tab[primary_tables - 1].type() == JT_EQ_REF);
+
+      if (m_windows[wno]->needs_buffering()) {
+        /*
+          Create the window frame buffer tmp table.  We create a
+          temporary table with same contents as the output tmp table
+          in the windowing pipeline (columns defined by
+          curr_all_fields), but used for intermediate storage, saving
+          the window's frame buffer now that we know the window needs
+          buffering.
+        */
+        Temp_table_param *par =
+            new (thd->mem_root) Temp_table_param(tmp_table_param);
+        par->m_window_frame_buffer = true;
+        TABLE *table =
+            create_tmp_table(thd, par, *curr_fields, nullptr, false, false,
+                             query_block->active_options(), HA_POS_ERROR, "");
+        if (table == nullptr) return true;
+
+        if (alloc_ref_item_slice(thd, fbidx)) return true;
+
+        if (change_to_use_tmp_fields(curr_fields, thd, ref_items[fbidx],
+                                     &tmp_fields[fbidx],
+                                     query_block->m_added_non_hidden_fields))
+          return true;
+
+        m_windows[wno]->set_frame_buffer_param(par);
+        m_windows[wno]->set_frame_buffer(table);
+      }
+
+      Opt_trace_object trace_this_tbl(trace);
+      trace_this_tbl.add("adding_tmp_table_in_plan_at_position", curr_tmp_table)
+          .add_alnum("cause", "output_for_window_functions")
+          .add("with_buffer", m_windows[wno]->needs_buffering());
+      QEP_TAB *tab = &qep_tab[curr_tmp_table];
+      if (create_intermediate_table(tab, *curr_fields, dummy, false))
+        return true;
+
+      m_windows[wno]->set_outtable_param(tab->tmp_table_param);
+
+      if (m_windows[wno]->make_special_rows_cache(thd, tab->table()))
+        return true;
+
+      if (alloc_ref_item_slice(thd, widx)) return true;
+
+      if (change_to_use_tmp_fields(
+              (last_slice_before_windowing == REF_SLICE_ACTIVE
+                   ? fields
+                   : &tmp_fields[last_slice_before_windowing]),
+              thd, ref_items[widx], &tmp_fields[widx],
+              query_block->m_added_non_hidden_fields))
+        return true;
+
+      curr_fields = &tmp_fields[widx];
+      set_ref_item_slice(widx);
+      tab->ref_item_slice = widx;
+      setup_tmptable_write_func(tab, &trace_this_tbl);
+
+      ORDER_with_src w_partition(m_windows[wno]->sorting_order(),
+                                 ESC_WINDOWING);
+
+      if (w_partition.order != nullptr) {
+        Opt_trace_object trace_pre_sort(trace, "adding_sort_to_previous_table");
+        if (add_sorting_to_table(curr_tmp_table - 1, &w_partition,
+                                 /*force_stable_sort=*/true,
+                                 /*sort_before_group=*/false))
+          return true;
+      }
+
+      if (m_windows[wno]->is_last()) {
+        if (!order.empty() && m_ordered_index_usage != ORDERED_INDEX_ORDER_BY) {
+          if (add_sorting_to_table(curr_tmp_table, &order,
+                                   /*force_stable_sort=*/false,
+                                   /*sort_before_group=*/false))
+            return true;
+        }
+        if (!tab->filesort && !tab->table()->s->keys &&
+            (!(query_block->active_options() & OPTION_BUFFER_RESULT) ||
+             need_tmp_before_win || wno >= 1)) {
+          /*
+            Last tmp table of execution; no sort, no duplicate elimination, no
+            buffering imposed by user (or it has already been implemented by
+            a previous tmp table): hence any row needn't be written to
+            tmp table's storage; send it out to query's result instead:
+          */
+          tab->tmp_table_param->m_window_short_circuit = true;
+        }
+      }
+
+      if (having_cond != nullptr) {
+        tab->having = having_cond;
+        having_cond = nullptr;
+      }
+
+      last_slice_before_windowing = widx;
+    }
+  }
+
+  {
+    // In the case of rollup (only): After the base slice list was made, we may
+    // have modified the field list to add rollup group items and sum switchers.
+    // Since there may be HAVING filters with refs that refer to the base slice,
+    // we need to refresh that slice (and its copy, REF_SLICE_SAVED_BASE) so
+    // that it includes the updated items.
+    //
+    // Note that we do this after we've made the TMP1 and TMP2 slices, since
+    // there's a lot of logic that looks through the GROUP BY list, which refers
+    // to the base slice and expects _not_ to find rollup items there.
+    unsigned num_hidden_fields = CountHiddenFields(*fields);
+    const size_t num_select_elements = fields->size() - num_hidden_fields;
+    const size_t orig_num_select_elements =
+        num_select_elements - query_block->m_added_non_hidden_fields;
+
+    for (unsigned i = 0; i < fields->size(); ++i) {
+      Item *item = (*fields)[i];
+      size_t pos;
+      // See change_to_use_tmp_fields_except_sums for an explanation of how
+      // the visible fields, hidden fields and additonal fields added by
+      // transformations are organized in fields and ref_item_array.
+      if (i < num_hidden_fields) {
+        pos = fields->size() - i - 1 - query_block->m_added_non_hidden_fields;
+      } else {
+        pos = i - num_hidden_fields;
+        if (pos >= orig_num_select_elements) pos += num_hidden_fields;
+      }
+      query_block->base_ref_items[pos] = item;
+      if (!ref_items[REF_SLICE_SAVED_BASE].is_null()) {
+        ref_items[REF_SLICE_SAVED_BASE][pos] = item;
+      }
+    }
+  }
+
+  fields = curr_fields;
+  // Reset before execution
+  set_ref_item_slice(REF_SLICE_SAVED_BASE);
+  if (qep_tab) {
+    qep_tab[primary_tables + tmp_tables].op_type = get_end_select_func();
+  }
+  grouped = has_group_by;
+
+  unplug_join_tabs();
+
+  /*
+    Tmp tables are a layer between the nested loop and the derived table's
+    result, WITH RECURSIVE cannot work with them. This should not happen, as a
+    recursive query cannot have clauses which use a tmp table (GROUP BY,
+    etc).
+  */
+  assert(!query_block->is_recursive() || !tmp_tables);
+  return false;
+}
+
+void JOIN::unplug_join_tabs() {
+  ASSERT_BEST_REF_IN_JOIN_ORDER(this);
+
+  /*
+    During execution we will need to access QEP_TABs by map.
+    map2table points to JOIN_TABs which are to be trashed a few lines down; so
+    we won't use map2table, but build a similar map2qep_tab; no need to
+    allocate new space for this array, we can reuse that of map2table.
+  */
+  static_assert(sizeof(QEP_TAB *) == sizeof(JOIN_TAB *), "");
+  void *storage = reinterpret_cast<void *>(map2table);
+  map2qep_tab = reinterpret_cast<QEP_TAB **>(storage);
+  for (uint i = 0; i < tables; ++i)
+    if (best_ref[i]->table_ref)
+      map2qep_tab[best_ref[i]->table_ref->tableno()] = &qep_tab[i];
+
+  map2table = nullptr;
+
+  for (uint i = 0; i < tables; ++i) best_ref[i]->cleanup();
+
+  best_ref = nullptr;
+}
+
+/**
+  @brief Add Filesort object to the given table to sort if with filesort
+
+  @param idx        JOIN_TAB's position in the qep_tab array. The
+                    created Filesort object gets attached to this.
+
+  @param sort_order List of expressions to sort the table by
+  @param force_stable_sort
+                    If true, use stable sort, that is the sort will
+                    keep the reative order of equivalent elements.
+                    Needed for windowing semantics.
+  @param sort_before_group
+                    If true, this sort happens before grouping is done
+                    (potentially as a step of grouping itself),
+                    so any wrapped rollup group items should be
+                    unwrapped.
+
+  @note This function moves tab->select, if any, to filesort->select
+
+  @return false on success, true on OOM
+*/
+
+bool JOIN::add_sorting_to_table(uint idx, ORDER_with_src *sort_order,
+                                bool force_stable_sort,
+                                bool sort_before_group) {
+  DBUG_TRACE;
+  ASSERT_BEST_REF_IN_JOIN_ORDER(this);
+  assert(!query_block->is_recursive());
+  const enum join_type jt = qep_tab[idx].type();
+  if (jt == JT_CONST || jt == JT_EQ_REF)
+    return false;  // 1 single row: is already sorted
+
+  // Weedout needs an underlying table to store refs from (it deduplicates
+  // by row ID), so if this table is part of a weedout operation, we need
+  // to force sorting by row IDs -- sorting rows with addon fields returns
+  // rows that have no reference to the underlying table object.
+  bool force_sort_position = false;
+  for (plan_idx i = 0; i <= static_cast<plan_idx>(idx); ++i) {
+    if (!qep_tab[i].starts_weedout()) {
+      continue;
+    }
+
+    plan_idx weedout_end = NO_PLAN_IDX;  // Exclusive.
+    for (uint j = i; j < primary_tables; ++j) {
+      if (qep_tab[j].check_weed_out_table == qep_tab[i].flush_weedout_table) {
+        weedout_end = j + 1;
+        break;
+      }
+    }
+    if (weedout_end != NO_PLAN_IDX &&
+        weedout_end > static_cast<plan_idx>(idx)) {
+      force_sort_position = true;
+      break;
+    }
+  }
+
+  explain_flags.set(sort_order->src, ESP_USING_FILESORT);
+  QEP_TAB *const tab = &qep_tab[idx];
+  bool keep_buffers =
+      qep_tab->join() != nullptr &&
+      qep_tab->join()->query_block->master_query_expression()->item !=
+          nullptr &&
+      qep_tab->join()
+          ->query_block->master_query_expression()
+          ->item->is_uncacheable();
+
+  {
+    // Switch to the right slice if applicable, so that we fetch out the correct
+    // items from order_arg.
+    Switch_ref_item_slice slice_switch(this, tab->ref_item_slice);
+    tab->filesort = new (thd->mem_root)
+        Filesort(thd, {tab->table()}, keep_buffers, sort_order->order,
+                 HA_POS_ERROR, force_stable_sort,
+                 /*remove_duplicates=*/false, force_sort_position,
+                 /*unwrap_rollup=*/sort_before_group);
+    tab->filesort_pushed_order = sort_order->order;
+  }
+  if (!tab->filesort) return true;
+  Opt_trace_object trace_tmp(&thd->opt_trace, "filesort");
+  trace_tmp.add_alnum("adding_sort_to_table",
+                      tab->table() ? tab->table()->alias : "");
+
+  return false;
+}
+
+/**
+  Find a cheaper access key than a given key.
+
+  @param          tab                 NULL or JOIN_TAB of the accessed table
+  @param          order               Linked list of ORDER BY arguments
+  @param          table               Table if tab == NULL or tab->table()
+  @param          usable_keys         Key map to find a cheaper key in
+  @param          ref_key
+                * 0 <= key < MAX_KEY   - key number (hint) to start the search
+                * -1                   - no key number provided
+  @param          select_limit        LIMIT value, or HA_POS_ERROR if no limit
+  @param [out]    new_key             Key number if success, otherwise undefined
+  @param [out]    new_key_direction   Return -1 (reverse) or +1 if success,
+                                      otherwise undefined
+  @param [out]    new_select_limit    Return adjusted LIMIT
+  @param [out]    new_used_key_parts  NULL by default, otherwise return number
+                                      of new_key prefix columns if success
+                                      or undefined if the function fails
+  @param [out]  saved_best_key_parts  NULL by default, otherwise preserve the
+                                      value for further use in QUICK_SELECT_DESC
+
+  @note
+    This function takes into account table->quick_condition_rows statistic
+    (that is calculated by JOIN::make_join_plan()).
+    However, single table procedures such as mysql_update() and mysql_delete()
+    never call JOIN::make_join_plan(), so they have to update it manually
+    (@see get_index_for_order()).
+    This function resets bits in TABLE::quick_keys for indexes with mixed
+    ASC/DESC keyparts as range scan doesn't support range reordering
+    required for them.
+*/
+
+bool test_if_cheaper_ordering(const JOIN_TAB *tab, ORDER_with_src *order,
+                              TABLE *table, Key_map usable_keys, int ref_key,
+                              ha_rows select_limit, int *new_key,
+                              int *new_key_direction, ha_rows *new_select_limit,
+                              uint *new_used_key_parts,
+                              uint *saved_best_key_parts) {
+  DBUG_TRACE;
+  /*
+    Check whether there is an index compatible with the given order
+    usage of which is cheaper than usage of the ref_key index (ref_key>=0)
+    or a table scan.
+    It may be the case if ORDER/GROUP BY is used with LIMIT.
+  */
+  ha_rows best_select_limit = HA_POS_ERROR;
+  JOIN *join = tab ? tab->join() : nullptr;
+  if (join) ASSERT_BEST_REF_IN_JOIN_ORDER(join);
+  uint nr;
+  uint best_key_parts = 0;
+  int best_key_direction = 0;
+  ha_rows best_records = 0;
+  double read_time;
+  int best_key = -1;
+  bool is_best_covering = false;
+  double fanout = 1;
+  ha_rows table_records = table->file->stats.records;
+  bool group = join && join->grouped && order == &join->group_list;
+  double refkey_rows_estimate =
+      static_cast<double>(table->quick_condition_rows);
+  const bool has_limit = (select_limit != HA_POS_ERROR);
+  const join_type cur_access_method = tab ? tab->type() : JT_ALL;
+
+  if (join) {
+    read_time = tab->position()->read_cost;
+    for (uint jt = tab->idx() + 1; jt < join->primary_tables; jt++) {
+      POSITION *pos = join->best_ref[jt]->position();
+      fanout *= pos->rows_fetched * pos->filter_effect;
+      if (fanout < 0) break;  // fanout became 'unknown'
+    }
+  } else
+    read_time = table->file->table_scan_cost().total_cost();
+
+  /*
+    Calculate the selectivity of the ref_key for REF_ACCESS. For
+    RANGE_ACCESS we use table->quick_condition_rows.
+  */
+  if (ref_key >= 0 && cur_access_method == JT_REF) {
+    if (table->quick_keys.is_set(ref_key))
+      refkey_rows_estimate = static_cast<double>(table->quick_rows[ref_key]);
+    else {
+      const KEY *ref_keyinfo = table->key_info + ref_key;
+      if (ref_keyinfo->has_records_per_key(tab->ref().key_parts - 1))
+        refkey_rows_estimate =
+            ref_keyinfo->records_per_key(tab->ref().key_parts - 1);
+      else
+        refkey_rows_estimate = 1.0;  // No index statistics
+    }
+    assert(refkey_rows_estimate >= 1.0);
+  }
+
+  for (nr = 0; nr < table->s->keys; nr++) {
+    int direction = 0;
+    uint used_key_parts;
+    bool skip_quick;
+
+    if (usable_keys.is_set(nr) &&
+        (direction = test_if_order_by_key(order, table, nr, &used_key_parts,
+                                          &skip_quick))) {
+      bool is_covering = table->covering_keys.is_set(nr) ||
+                         (nr == table->s->primary_key &&
+                          table->file->primary_key_is_clustered());
+      // Don't allow backward scans on indexes with mixed ASC/DESC key parts
+      if (skip_quick) table->quick_keys.clear_bit(nr);
+
+      /*
+        Don't use an index scan with ORDER BY without limit.
+        For GROUP BY without limit always use index scan
+        if there is a suitable index.
+        Why we hold to this asymmetry hardly can be explained
+        rationally. It's easy to demonstrate that using
+        temporary table + filesort could be cheaper for grouping
+        queries too.
+      */
+      if (is_covering || select_limit != HA_POS_ERROR ||
+          (ref_key < 0 && (group || table->force_index_order))) {
+        rec_per_key_t rec_per_key;
+        KEY *keyinfo = table->key_info + nr;
+        if (select_limit == HA_POS_ERROR) select_limit = table_records;
+        if (group) {
+          /*
+            Used_key_parts can be larger than keyinfo->key_parts
+            when using a secondary index clustered with a primary
+            key (e.g. as in Innodb).
+            See Bug #28591 for details.
+          */
+          rec_per_key =
+              used_key_parts && used_key_parts <= actual_key_parts(keyinfo)
+                  ? keyinfo->records_per_key(used_key_parts - 1)
+                  : 1.0f;
+          rec_per_key = std::max(rec_per_key, 1.0f);
+          /*
+            With a grouping query each group containing on average
+            rec_per_key records produces only one row that will
+            be included into the result set.
+          */
+          if (select_limit > table_records / rec_per_key)
+            select_limit = table_records;
+          else
+            select_limit = (ha_rows)(select_limit * rec_per_key);
+        }
+        /*
+          If tab=tk is not the last joined table tn then to get first
+          L records from the result set we can expect to retrieve
+          only L/fanout(tk,tn) where fanout(tk,tn) says how many
+          rows in the record set on average will match each row tk.
+          Usually our estimates for fanouts are too pessimistic.
+          So the estimate for L/fanout(tk,tn) will be too optimistic
+          and as result we'll choose an index scan when using ref/range
+          access + filesort will be cheaper.
+        */
+        if (fanout == 0)                // Would have been a division-by-zero
+          select_limit = HA_POS_ERROR;  // -> 'infinite'
+        else if (fanout > 0)            // 'fanout' not unknown
+          select_limit =
+              (ha_rows)(select_limit < fanout ? 1 : select_limit / fanout);
+        /*
+          We assume that each of the tested indexes is not correlated
+          with ref_key. Thus, to select first N records we have to scan
+          N/selectivity(ref_key) index entries.
+          selectivity(ref_key) = #scanned_records/#table_records =
+          refkey_rows_estimate/table_records.
+          In any case we can't select more than #table_records.
+          N/(refkey_rows_estimate/table_records) > table_records
+          <=> N > refkey_rows_estimate.
+          Neither should it be possible to select more than #table_records
+          rows from refkey_rows_estimate.
+         */
+        if (select_limit > refkey_rows_estimate)
+          select_limit = table_records;
+        else if (table_records >= refkey_rows_estimate)
+          select_limit = (ha_rows)(select_limit * (double)table_records /
+                                   refkey_rows_estimate);
+        rec_per_key =
+            keyinfo->records_per_key(keyinfo->user_defined_key_parts - 1);
+        rec_per_key = std::max(rec_per_key, 1.0f);
+        /*
+          Here we take into account the fact that rows are
+          accessed in sequences rec_per_key records in each.
+          Rows in such a sequence are supposed to be ordered
+          by rowid/primary key. When reading the data
+          in a sequence we'll touch not more pages than the
+          table file contains.
+          TODO. Use the formula for a disk sweep sequential access
+          to calculate the cost of accessing data rows for one
+          index entry.
+        */
+        const Cost_estimate table_scan_time = table->file->table_scan_cost();
+        const double index_scan_time =
+            select_limit / rec_per_key *
+            min<double>(table->cost_model()->page_read_cost(rec_per_key),
+                        table_scan_time.total_cost());
+
+        /*
+          Switch to index that gives order if its scan time is smaller than
+          read_time of current chosen access method. In addition, if the
+          current chosen access method is index scan or table scan, always
+          switch to the index that gives order when it is covering or when
+          force index order or group by is present.
+        */
+        if (((cur_access_method == JT_ALL ||
+              cur_access_method == JT_INDEX_SCAN) &&
+             (is_covering || group || table->force_index_order)) ||
+            index_scan_time < read_time) {
+          ha_rows quick_records = table_records;
+          const ha_rows refkey_select_limit =
+              (ref_key >= 0 && table->covering_keys.is_set(ref_key))
+                  ? static_cast<ha_rows>(refkey_rows_estimate)
+                  : HA_POS_ERROR;
+
+          if ((is_best_covering && !is_covering) ||
+              (is_covering && refkey_select_limit < select_limit))
+            continue;
+          if (table->quick_keys.is_set(nr))
+            quick_records = table->quick_rows[nr];
+          if (best_key < 0 ||
+              (select_limit <= min(quick_records, best_records)
+                   ? keyinfo->user_defined_key_parts < best_key_parts
+                   : quick_records < best_records) ||
+              // We assume forward scan is faster than backward even if the
+              // key is longer. This should be taken into account in cost
+              // calculation.
+              direction > best_key_direction) {
+            best_key = nr;
+            best_key_parts = keyinfo->user_defined_key_parts;
+            if (saved_best_key_parts) *saved_best_key_parts = used_key_parts;
+            best_records = quick_records;
+            is_best_covering = is_covering;
+            best_key_direction = direction;
+            best_select_limit = select_limit;
+          }
+        }
+      }
+    }
+  }
+
+  if (best_key < 0 || best_key == ref_key) return false;
+
+  *new_key = best_key;
+  *new_key_direction = best_key_direction;
+  *new_select_limit = has_limit ? best_select_limit : table_records;
+  if (new_used_key_parts != nullptr) *new_used_key_parts = best_key_parts;
+
+  return true;
+}
+
+/**
+  Find a key to apply single table UPDATE/DELETE by a given ORDER
+
+  @param       order           Linked list of ORDER BY arguments
+  @param       tab             Table to find a key
+  @param       limit           LIMIT clause parameter
+  @param [out] need_sort       true if filesort needed
+  @param [out] reverse
+    true if the key is reversed again given ORDER (undefined if key == MAX_KEY)
+
+  @return
+    - MAX_KEY if no key found                        (need_sort == true)
+    - MAX_KEY if quick select result order is OK     (need_sort == false)
+    - key number (either index scan or quick select) (need_sort == false)
+
+  @note
+    Side effects:
+    - may deallocate or deallocate and replace select->quick;
+    - may set table->quick_condition_rows and table->quick_rows[...]
+      to table->file->stats.records.
+*/
+
+uint get_index_for_order(ORDER_with_src *order, QEP_TAB *tab, ha_rows limit,
+                         bool *need_sort, bool *reverse) {
+  if (tab->quick() &&
+      tab->quick()->unique_key_range()) {  // Single row select (always
+                                           // "ordered"): Ok to use with key
+                                           // field UPDATE
+    *need_sort = false;
+    /*
+      Returning of MAX_KEY here prevents updating of used_key_is_modified
+      in mysql_update(). Use quick select "as is".
+    */
+    return MAX_KEY;
+  }
+
+  TABLE *const table = tab->table();
+
+  if (order->empty()) {
+    *need_sort = false;
+    if (tab->quick())
+      return tab->quick()->index;  // index or MAX_KEY, use quick select as is
+    else
+      return table->file
+          ->key_used_on_scan;  // MAX_KEY or index for some engines
+  }
+
+  if (!is_simple_order(order->order))  // just to cut further expensive checks
+  {
+    *need_sort = true;
+    return MAX_KEY;
+  }
+
+  if (tab->quick()) {
+    if (tab->quick()->index == MAX_KEY) {
+      *need_sort = true;
+      return MAX_KEY;
+    }
+
+    uint used_key_parts;
+    bool skip_quick;
+    switch (test_if_order_by_key(order, table, tab->quick()->index,
+                                 &used_key_parts, &skip_quick)) {
+      case 1:  // desired order
+        *need_sort = false;
+        return tab->quick()->index;
+      case 0:  // unacceptable order
+        *need_sort = true;
+        return MAX_KEY;
+      case -1:  // desired order, but opposite direction
+      {
+        QUICK_SELECT_I *reverse_quick;
+        if (!skip_quick &&
+            (reverse_quick = tab->quick()->make_reverse(used_key_parts))) {
+          delete tab->quick();
+          tab->set_quick(reverse_quick);
+          tab->set_type(calc_join_type(reverse_quick->get_type()));
+          *need_sort = false;
+          return reverse_quick->index;
+        } else {
+          *need_sort = true;
+          return MAX_KEY;
+        }
+      }
+    }
+    assert(0);
+  } else if (limit != HA_POS_ERROR) {  // check if some index scan & LIMIT is
+                                       // more efficient than filesort
+
+    /*
+      Update quick_condition_rows since single table UPDATE/DELETE procedures
+      don't call JOIN::make_join_plan() and leave this variable uninitialized.
+    */
+    table->quick_condition_rows = table->file->stats.records;
+
+    int key, direction;
+    if (test_if_cheaper_ordering(nullptr, order, table,
+                                 table->keys_in_use_for_order_by, -1, limit,
+                                 &key, &direction, &limit)) {
+      *need_sort = false;
+      *reverse = (direction < 0);
+      return key;
+    }
+  }
+  *need_sort = true;
+  return MAX_KEY;
+}
+
+/**
+  Returns number of key parts depending on
+  OPTIMIZER_SWITCH_USE_INDEX_EXTENSIONS flag.
+
+  @param  key_info  pointer to KEY structure
+
+  @return number of key parts.
+*/
+
+uint actual_key_parts(const KEY *key_info) {
+  return current_thd->optimizer_switch_flag(
+             OPTIMIZER_SWITCH_USE_INDEX_EXTENSIONS)
+             ? key_info->actual_key_parts
+             : key_info->user_defined_key_parts;
+}
+
+uint actual_key_flags(const KEY *key_info) {
+  return current_thd->optimizer_switch_flag(
+             OPTIMIZER_SWITCH_USE_INDEX_EXTENSIONS)
+             ? key_info->actual_flags
+             : key_info->flags;
+}
+
+join_type calc_join_type(int quick_type) {
+  if ((quick_type == QUICK_SELECT_I::QS_TYPE_INDEX_MERGE) ||
+      (quick_type == QUICK_SELECT_I::QS_TYPE_ROR_INTERSECT) ||
+      (quick_type == QUICK_SELECT_I::QS_TYPE_ROR_UNION))
+    return JT_INDEX_MERGE;
+  else
+    return JT_RANGE;
+}
+
+/**
+  @} (end of group Query_Optimizer)
+
+
+// Source: sql_select.cc
+// Lines 3861-5301
+
+
+[ANSWER]
+MUST

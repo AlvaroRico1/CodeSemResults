@@ -1,0 +1,111 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ret' at line 2
+2. Pointer 'arena' at line 37
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+arena_choose_hard(tsd_t *tsd, bool internal) {
+	arena_t *ret JEMALLOC_CC_SILENCE_INIT(NULL);
+
+	if (have_percpu_arena && PERCPU_ARENA_ENABLED(opt_percpu_arena)) {
+		unsigned choose = percpu_arena_choose();
+		ret = arena_get(tsd_tsdn(tsd), choose, true);
+		assert(ret != NULL);
+		arena_bind(tsd, arena_ind_get(ret), false);
+		arena_bind(tsd, arena_ind_get(ret), true);
+
+		return ret;
+	}
+
+	if (narenas_auto > 1) {
+		unsigned i, j, choose[2], first_null;
+		bool is_new_arena[2];
+
+		/*
+		 * Determine binding for both non-internal and internal
+		 * allocation.
+		 *
+		 *   choose[0]: For application allocation.
+		 *   choose[1]: For internal metadata allocation.
+		 */
+
+		for (j = 0; j < 2; j++) {
+			choose[j] = 0;
+			is_new_arena[j] = false;
+		}
+
+		first_null = narenas_auto;
+		malloc_mutex_lock(tsd_tsdn(tsd), &arenas_lock);
+		assert(arena_get(tsd_tsdn(tsd), 0, false) != NULL);
+		for (i = 1; i < narenas_auto; i++) {
+			if (arena_get(tsd_tsdn(tsd), i, false) != NULL) {
+				/*
+				 * Choose the first arena that has the lowest
+				 * number of threads assigned to it.
+				 */
+				for (j = 0; j < 2; j++) {
+					if (arena_nthreads_get(arena_get(
+					    tsd_tsdn(tsd), i, false), !!j) <
+					    arena_nthreads_get(arena_get(
+					    tsd_tsdn(tsd), choose[j], false),
+					    !!j)) {
+						choose[j] = i;
+					}
+				}
+			} else if (first_null == narenas_auto) {
+				/*
+				 * Record the index of the first uninitialized
+				 * arena, in case all extant arenas are in use.
+				 *
+				 * NB: It is possible for there to be
+				 * discontinuities in terms of initialized
+				 * versus uninitialized arenas, due to the
+				 * "thread.arena" mallctl.
+				 */
+				first_null = i;
+			}
+		}
+
+		for (j = 0; j < 2; j++) {
+			if (arena_nthreads_get(arena_get(tsd_tsdn(tsd),
+			    choose[j], false), !!j) == 0 || first_null ==
+			    narenas_auto) {
+				/*
+				 * Use an unloaded arena, or the least loaded
+				 * arena if all arenas are already initialized.
+				 */
+				if (!!j == internal) {
+					ret = arena_get(tsd_tsdn(tsd),
+					    choose[j], false);
+				}
+			} else {
+				arena_t *arena;
+
+				/* Initialize a new arena. */
+				choose[j] = first_null;
+				arena = arena_init_locked(tsd_tsdn(tsd),
+				    choose[j],
+				    (extent_hooks_t *)&extent_hooks_default);
+				if (arena == NULL) {
+					malloc_mutex_unlock(tsd_tsdn(tsd),
+					    &arenas_lock);
+					return NULL;
+				}
+				is_new_arena[j] = true;
+				if (!!j == internal) {
+					ret = arena;
+				}
+			}
+
+
+// Source: jemalloc.c
+// Lines 485-576
+
+
+[ANSWER]
+MUST

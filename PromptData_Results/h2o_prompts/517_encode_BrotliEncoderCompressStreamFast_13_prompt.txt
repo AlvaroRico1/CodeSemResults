@@ -1,0 +1,126 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'storage_ix' at line 56
+2. Pointer 'storage' at line 55
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static BROTLI_BOOL BrotliEncoderCompressStreamFast(
+    BrotliEncoderState* s, BrotliEncoderOperation op, size_t* available_in,
+    const uint8_t** next_in, size_t* available_out, uint8_t** next_out,
+    size_t* total_out) {
+  const size_t block_size_limit = (size_t)1 << s->params.lgwin;
+  const size_t buf_size = BROTLI_MIN(size_t, kCompressFragmentTwoPassBlockSize,
+      BROTLI_MIN(size_t, *available_in, block_size_limit));
+  uint32_t* tmp_command_buf = NULL;
+  uint32_t* command_buf = NULL;
+  uint8_t* tmp_literal_buf = NULL;
+  uint8_t* literal_buf = NULL;
+  MemoryManager* m = &s->memory_manager_;
+  if (s->params.quality != FAST_ONE_PASS_COMPRESSION_QUALITY &&
+      s->params.quality != FAST_TWO_PASS_COMPRESSION_QUALITY) {
+    return BROTLI_FALSE;
+  }
+  if (s->params.quality == FAST_TWO_PASS_COMPRESSION_QUALITY) {
+    if (!s->command_buf_ && buf_size == kCompressFragmentTwoPassBlockSize) {
+      s->command_buf_ =
+          BROTLI_ALLOC(m, uint32_t, kCompressFragmentTwoPassBlockSize);
+      s->literal_buf_ =
+          BROTLI_ALLOC(m, uint8_t, kCompressFragmentTwoPassBlockSize);
+      if (BROTLI_IS_OOM(m)) return BROTLI_FALSE;
+    }
+    if (s->command_buf_) {
+      command_buf = s->command_buf_;
+      literal_buf = s->literal_buf_;
+    } else {
+      tmp_command_buf = BROTLI_ALLOC(m, uint32_t, buf_size);
+      tmp_literal_buf = BROTLI_ALLOC(m, uint8_t, buf_size);
+      if (BROTLI_IS_OOM(m)) return BROTLI_FALSE;
+      command_buf = tmp_command_buf;
+      literal_buf = tmp_literal_buf;
+    }
+  }
+
+  while (BROTLI_TRUE) {
+    if (InjectFlushOrPushOutput(s, available_out, next_out, total_out)) {
+      continue;
+    }
+
+    /* Compress block only when internal output buffer is empty, stream is not
+       finished, there is no pending flush request, and there is either
+       additional input or pending operation. */
+    if (s->available_out_ == 0 &&
+        s->stream_state_ == BROTLI_STREAM_PROCESSING &&
+        (*available_in != 0 || op != BROTLI_OPERATION_PROCESS)) {
+      size_t block_size = BROTLI_MIN(size_t, block_size_limit, *available_in);
+      BROTLI_BOOL is_last =
+          (*available_in == block_size) && (op == BROTLI_OPERATION_FINISH);
+      BROTLI_BOOL force_flush =
+          (*available_in == block_size) && (op == BROTLI_OPERATION_FLUSH);
+      size_t max_out_size = 2 * block_size + 502;
+      BROTLI_BOOL inplace = BROTLI_TRUE;
+      uint8_t* storage = NULL;
+      size_t storage_ix = s->last_byte_bits_;
+      size_t table_size;
+      int* table;
+
+      if (force_flush && block_size == 0) {
+        s->stream_state_ = BROTLI_STREAM_FLUSH_REQUESTED;
+        continue;
+      }
+      if (max_out_size <= *available_out) {
+        storage = *next_out;
+      } else {
+        inplace = BROTLI_FALSE;
+        storage = GetBrotliStorage(s, max_out_size);
+        if (BROTLI_IS_OOM(m)) return BROTLI_FALSE;
+      }
+      storage[0] = s->last_byte_;
+      table = GetHashTable(s, s->params.quality, block_size, &table_size);
+      if (BROTLI_IS_OOM(m)) return BROTLI_FALSE;
+
+      if (s->params.quality == FAST_ONE_PASS_COMPRESSION_QUALITY) {
+        BrotliCompressFragmentFast(m, *next_in, block_size, is_last, table,
+            table_size, s->cmd_depths_, s->cmd_bits_, &s->cmd_code_numbits_,
+            s->cmd_code_, &storage_ix, storage);
+        if (BROTLI_IS_OOM(m)) return BROTLI_FALSE;
+      } else {
+        BrotliCompressFragmentTwoPass(m, *next_in, block_size, is_last,
+            command_buf, literal_buf, table, table_size,
+            &storage_ix, storage);
+        if (BROTLI_IS_OOM(m)) return BROTLI_FALSE;
+      }
+      *next_in += block_size;
+      *available_in -= block_size;
+      if (inplace) {
+        size_t out_bytes = storage_ix >> 3;
+        assert(out_bytes <= *available_out);
+        assert((storage_ix & 7) == 0 || out_bytes < *available_out);
+        *next_out += out_bytes;
+        *available_out -= out_bytes;
+        s->total_out_ += out_bytes;
+        if (total_out) *total_out = s->total_out_;
+      } else {
+        size_t out_bytes = storage_ix >> 3;
+        s->next_out_ = storage;
+        s->available_out_ = out_bytes;
+      }
+      s->last_byte_ = storage[storage_ix >> 3];
+      s->last_byte_bits_ = storage_ix & 7u;
+
+      if (force_flush) s->stream_state_ = BROTLI_STREAM_FLUSH_REQUESTED;
+      if (is_last) s->stream_state_ = BROTLI_STREAM_FINISHED;
+      continue;
+    }
+
+
+// Source: encode.c
+// Lines 1460-1566
+
+
+[ANSWER]
+MAY

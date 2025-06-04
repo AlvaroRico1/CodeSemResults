@@ -1,0 +1,107 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'scan' at line 5
+2. Pointer 'ref' at line 45
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int packed_reload(refdb_fs_backend *backend)
+{
+	int error;
+	git_str packedrefs = GIT_STR_INIT;
+	char *scan, *eof, *eol;
+
+	if (!backend->gitpath)
+		return 0;
+
+	error = git_sortedcache_lockandload(backend->refcache, &packedrefs);
+
+	/*
+	 * If we can't find the packed-refs, clear table and return.
+	 * Any other error just gets passed through.
+	 * If no error, and file wasn't changed, just return.
+	 * Anything else means we need to refresh the packed refs.
+	 */
+	if (error <= 0) {
+		if (error == GIT_ENOTFOUND) {
+			GIT_UNUSED(git_sortedcache_clear(backend->refcache, true));
+			git_error_clear();
+			error = 0;
+		}
+		return error;
+	}
+
+	/* At this point, refresh the packed refs from the loaded buffer. */
+
+	GIT_UNUSED(git_sortedcache_clear(backend->refcache, false));
+
+	scan = packedrefs.ptr;
+	eof  = scan + packedrefs.size;
+
+	scan = packed_set_peeling_mode(scan, packedrefs.size, backend);
+	if (!scan)
+		goto parse_failed;
+
+	while (scan < eof && *scan == '#') {
+		if (!(eol = strchr(scan, '\n')))
+			goto parse_failed;
+		scan = eol + 1;
+	}
+
+	while (scan < eof) {
+		struct packref *ref;
+		git_oid oid;
+
+		/* parse "<OID> <refname>\n" */
+
+		if (git_oid_fromstr(&oid, scan) < 0)
+			goto parse_failed;
+		scan += GIT_OID_HEXSZ;
+
+		if (*scan++ != ' ')
+			goto parse_failed;
+		if (!(eol = strchr(scan, '\n')))
+			goto parse_failed;
+		*eol = '\0';
+		if (eol[-1] == '\r')
+			eol[-1] = '\0';
+
+		if (git_sortedcache_upsert((void **)&ref, backend->refcache, scan) < 0)
+			goto parse_failed;
+		scan = eol + 1;
+
+		git_oid_cpy(&ref->oid, &oid);
+
+		/* look for optional "^<OID>\n" */
+
+		if (*scan == '^') {
+			if (git_oid_fromstr(&oid, scan + 1) < 0)
+				goto parse_failed;
+			scan += GIT_OID_HEXSZ + 1;
+
+			if (scan < eof) {
+				if (!(eol = strchr(scan, '\n')))
+					goto parse_failed;
+				scan = eol + 1;
+			}
+
+			git_oid_cpy(&ref->peel, &oid);
+			ref->flags |= PACKREF_HAS_PEEL;
+		}
+		else if (backend->peeling_mode == PEELING_FULL ||
+				(backend->peeling_mode == PEELING_STANDARD &&
+				 git__prefixcmp(ref->name, GIT_REFS_TAGS_DIR) == 0))
+			ref->flags |= PACKREF_CANNOT_PEEL;
+	}
+
+
+// Source: refdb_fs.c
+// Lines 112-199
+
+
+[ANSWER]
+MAY

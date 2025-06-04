@@ -1,0 +1,124 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'page' at line 28
+2. Pointer 'page' at line 28
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void shmem_undo_range(struct inode *inode, loff_t lstart, loff_t lend,
+								 bool unfalloc)
+{
+	struct address_space *mapping = inode->i_mapping;
+	struct shmem_inode_info *info = SHMEM_I(inode);
+	pgoff_t start = (lstart + PAGE_SIZE - 1) >> PAGE_SHIFT;
+	pgoff_t end = (lend + 1) >> PAGE_SHIFT;
+	unsigned int partial_start = lstart & (PAGE_SIZE - 1);
+	unsigned int partial_end = (lend + 1) & (PAGE_SIZE - 1);
+	struct pagevec pvec;
+	pgoff_t indices[PAGEVEC_SIZE];
+	long nr_swaps_freed = 0;
+	pgoff_t index;
+	int i;
+
+	if (lend == -1)
+		end = -1;	/* unsigned, so actually very big */
+
+	pagevec_init(&pvec);
+	index = start;
+	while (index < end) {
+		pvec.nr = find_get_entries(mapping, index,
+			min(end - index, (pgoff_t)PAGEVEC_SIZE),
+			pvec.pages, indices);
+		if (!pvec.nr)
+			break;
+		for (i = 0; i < pagevec_count(&pvec); i++) {
+			struct page *page = pvec.pages[i];
+
+			index = indices[i];
+			if (index >= end)
+				break;
+
+			if (xa_is_value(page)) {
+				if (unfalloc)
+					continue;
+				nr_swaps_freed += !shmem_free_swap(mapping,
+								index, page);
+				continue;
+			}
+
+			VM_BUG_ON_PAGE(page_to_pgoff(page) != index, page);
+
+			if (!trylock_page(page))
+				continue;
+
+			if (PageTransTail(page)) {
+				/* Middle of THP: zero out the page */
+				clear_highpage(page);
+				unlock_page(page);
+				continue;
+			} else if (PageTransHuge(page)) {
+				if (index == round_down(end, HPAGE_PMD_NR)) {
+					/*
+					 * Range ends in the middle of THP:
+					 * zero out the page
+					 */
+					clear_highpage(page);
+					unlock_page(page);
+					continue;
+				}
+				index += HPAGE_PMD_NR - 1;
+				i += HPAGE_PMD_NR - 1;
+			}
+
+			if (!unfalloc || !PageUptodate(page)) {
+				VM_BUG_ON_PAGE(PageTail(page), page);
+				if (page_mapping(page) == mapping) {
+					VM_BUG_ON_PAGE(PageWriteback(page), page);
+					truncate_inode_page(mapping, page);
+				}
+			}
+			unlock_page(page);
+		}
+		pagevec_remove_exceptionals(&pvec);
+		pagevec_release(&pvec);
+		cond_resched();
+		index++;
+	}
+
+	if (partial_start) {
+		struct page *page = NULL;
+		shmem_getpage(inode, start - 1, &page, SGP_READ);
+		if (page) {
+			unsigned int top = PAGE_SIZE;
+			if (start > end) {
+				top = partial_end;
+				partial_end = 0;
+			}
+			zero_user_segment(page, partial_start, top);
+			set_page_dirty(page);
+			unlock_page(page);
+			put_page(page);
+		}
+	}
+	if (partial_end) {
+		struct page *page = NULL;
+		shmem_getpage(inode, end, &page, SGP_READ);
+		if (page) {
+			zero_user_segment(page, 0, partial_end);
+			set_page_dirty(page);
+			unlock_page(page);
+			put_page(page);
+		}
+	}
+
+
+// Source: shmem.c
+// Lines 780-884
+
+
+[ANSWER]
+MAY

@@ -1,0 +1,48 @@
+static int diff_update_lines(
+	git_xdiff_info *info,
+	git_diff_line *line,
+	const char *content,
+	size_t content_len)
+{
+	const char *scan = content, *scan_end = content + content_len;
+
+	for (line->num_lines = 0; scan < scan_end; ++scan)
+		if (*scan == '\n')
+			++line->num_lines;
+
+	line->content     = content;
+	line->content_len = content_len;
+
+	/* expect " "/"-"/"+", then data */
+	switch (line->origin) {
+	case GIT_DIFF_LINE_ADDITION:
+	case GIT_DIFF_LINE_DEL_EOFNL:
+		line->old_lineno = -1;
+		line->new_lineno = info->new_lineno;
+		info->new_lineno += (int)line->num_lines;
+		break;
+	case GIT_DIFF_LINE_DELETION:
+	case GIT_DIFF_LINE_ADD_EOFNL:
+		line->old_lineno = info->old_lineno;
+		line->new_lineno = -1;
+		info->old_lineno += (int)line->num_lines;
+		break;
+	case GIT_DIFF_LINE_CONTEXT:
+	case GIT_DIFF_LINE_CONTEXT_EOFNL:
+		line->old_lineno = info->old_lineno;
+		line->new_lineno = info->new_lineno;
+		info->old_lineno += (int)line->num_lines;
+		info->new_lineno += (int)line->num_lines;
+		break;
+	default:
+		git_error_set(GIT_ERROR_INVALID, "unknown diff line origin %02x",
+			(unsigned int)line->origin);
+		return -1;
+	}
+
+	return 0;
+}
+
+
+// Source: diff_xdiff.c
+// Lines 67-110

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'client' at line 3\n2. Pointer 'sock' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void req_body_send_complete(h2o_socket_t *sock, const char *err)\n{\n    struct st_h2o_http1client_t *client = sock->data;\n\n    h2o_buffer_consume(&client->body_buf.buf, client->body_buf.buf->size);\n\n    if (err != NULL) {\n        on_whole_request_sent(client->sock, err);\n        return;\n    }\n\n    int is_end_stream = client->body_buf.is_end_stream;\n\n    call_proceed_req(client, NULL);\n\n    if (is_end_stream)\n        on_whole_request_sent(client->sock, NULL);\n}\n\n\n// Source: http1client.c\n// Lines 514-531\n",
+  "ANSWER": "MUST"
+}

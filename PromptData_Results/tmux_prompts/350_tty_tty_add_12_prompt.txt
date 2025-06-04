@@ -1,0 +1,37 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'c' at line 3
+2. Pointer 'tty' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+tty_add(struct tty *tty, const char *buf, size_t len)
+{
+	struct client	*c = tty->client;
+
+	if (tty->flags & TTY_BLOCK) {
+		tty->discarded += len;
+		return;
+	}
+
+	evbuffer_add(tty->out, buf, len);
+	log_debug("%s: %.*s", c->name, (int)len, buf);
+	c->written += len;
+
+	if (tty_log_fd != -1)
+		write(tty_log_fd, buf, len);
+	if (tty->flags & TTY_STARTED)
+		event_add(&tty->event_out, NULL);
+}
+
+
+// Source: tty.c
+// Lines 542-559
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,37 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'index_entries' at line 3
+2. Pointer 'index' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void validate_apply_index(
+	git_repository *repo,
+	struct merge_index_entry *index_entries,
+	size_t index_cnt)
+{
+	git_index *index;
+	git_iterator *iterator;
+	struct iterator_compare_data data = { index_entries, index_cnt };
+
+	cl_git_pass(git_repository_index(&index, repo));
+	cl_git_pass(git_iterator_for_index(&iterator, repo, index, NULL));
+
+	cl_git_pass(git_iterator_foreach(iterator, iterator_compare, &data));
+	cl_assert_equal_i(data.idx, data.cnt);
+
+	git_iterator_free(iterator);
+	git_index_free(index);
+}
+
+
+// Source: apply_helpers.c
+// Lines 52-69
+
+
+[ANSWER]
+MUST-NOT

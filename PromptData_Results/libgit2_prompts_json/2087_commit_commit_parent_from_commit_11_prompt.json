@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'commit' at line 3\n2. Pointer 'payload' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic const git_oid *commit_parent_from_commit(size_t n, void *payload)\n{\n\tconst git_commit *commit = (const git_commit *) payload;\n\n\treturn git_array_get(commit->parent_ids, n);\n\n}\n\n\n// Source: commit.c\n// Lines 960-966\n",
+  "ANSWER": "MUST"
+}

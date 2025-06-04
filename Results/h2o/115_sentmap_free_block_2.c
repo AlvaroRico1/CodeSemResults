@@ -1,0 +1,28 @@
+static struct st_quicly_sent_block_t **free_block(quicly_sentmap_t *map, struct st_quicly_sent_block_t **ref)
+{
+    static const struct st_quicly_sent_block_t dummy = {NULL};
+    static const struct st_quicly_sent_block_t *const dummy_ref = &dummy;
+    struct st_quicly_sent_block_t *block = *ref;
+
+    if (block->next != NULL) {
+        *ref = block->next;
+        assert((*ref)->num_entries != 0);
+    } else {
+        assert(block == map->tail);
+        if (ref == &map->head) {
+            map->head = NULL;
+            map->tail = NULL;
+        } else {
+            map->tail = (void *)((char *)ref - offsetof(struct st_quicly_sent_block_t, next));
+            map->tail->next = NULL;
+        }
+        ref = (struct st_quicly_sent_block_t **)&dummy_ref;
+    }
+
+    free(block);
+    return ref;
+}
+
+
+// Source: sentmap.c
+// Lines 46-69

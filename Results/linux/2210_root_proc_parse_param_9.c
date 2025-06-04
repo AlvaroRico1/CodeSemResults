@@ -1,0 +1,33 @@
+static int proc_parse_param(struct fs_context *fc, struct fs_parameter *param)
+{
+	struct proc_fs_context *ctx = fc->fs_private;
+	struct fs_parse_result result;
+	int opt;
+
+	opt = fs_parse(fc, &proc_fs_parameters, param, &result);
+	if (opt < 0)
+		return opt;
+
+	switch (opt) {
+	case Opt_gid:
+		ctx->gid = result.uint_32;
+		break;
+
+	case Opt_hidepid:
+		ctx->hidepid = result.uint_32;
+		if (ctx->hidepid < HIDEPID_OFF ||
+		    ctx->hidepid > HIDEPID_INVISIBLE)
+			return invalf(fc, "proc: hidepid value must be between 0 and 2.\n");
+		break;
+
+	default:
+		return -EINVAL;
+	}
+
+	ctx->mask |= 1 << opt;
+	return 0;
+}
+
+
+// Source: root.c
+// Lines 55-83

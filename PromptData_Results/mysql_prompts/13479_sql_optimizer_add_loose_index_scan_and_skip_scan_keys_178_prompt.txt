@@ -1,0 +1,109 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'cur_group' at line 6
+2. Pointer 'cur_group' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void add_loose_index_scan_and_skip_scan_keys(JOIN *join,
+                                                    JOIN_TAB *join_tab) {
+  assert(join_tab->const_keys.is_subset(join_tab->keys()));
+
+  mem_root_deque<Item_field *> indexed_fields(join->thd->mem_root);
+  ORDER *cur_group;
+  const char *cause;
+
+  /* Find the indexes that might be used for skip scan queries. */
+  if (hint_table_state(join->thd, join_tab->table_ref, SKIP_SCAN_HINT_ENUM,
+                       OPTIMIZER_SKIP_SCAN) &&
+      join->where_cond && join->primary_tables == 1 &&
+      join->group_list.empty() &&
+      !is_indexed_agg_distinct(join, &indexed_fields) &&
+      !join->select_distinct) {
+    join->where_cond->walk(&Item::collect_item_field_processor,
+                           enum_walk::POSTFIX, (uchar *)&indexed_fields);
+    Key_map possible_keys;
+    possible_keys.set_all();
+    join_tab->skip_scan_keys.clear_all();
+    for (Item_field *cur_item : indexed_fields) {
+      if (cur_item->used_tables() != join_tab->table_ref->map()) return;
+      possible_keys.intersect(cur_item->field->part_of_key);
+    }
+    join_tab->skip_scan_keys.merge(possible_keys);
+    cause = "skip_scan";
+    return;
+  }
+
+  if (!join->group_list.empty()) {
+    /* Collect all query fields referenced in the GROUP clause. */
+    for (cur_group = join->group_list.order; cur_group;
+         cur_group = cur_group->next)
+      (*cur_group->item)
+          ->walk(&Item::collect_item_field_processor, enum_walk::POSTFIX,
+                 (uchar *)&indexed_fields);
+    cause = "group_by";
+  } else if (join->select_distinct) {
+    /* Collect all query fields referenced in the SELECT clause. */
+    for (Item *item : VisibleFields(*join->fields)) {
+      item->walk(&Item::collect_item_field_processor, enum_walk::POSTFIX,
+                 (uchar *)&indexed_fields);
+    }
+    cause = "distinct";
+  } else if (join->tmp_table_param.sum_func_count &&
+             is_indexed_agg_distinct(join, &indexed_fields)) {
+    /*
+      SELECT list with AGGFN(distinct col). The query qualifies for
+      loose index scan, and is_indexed_agg_distinct() has already
+      collected all referenced fields into indexed_fields.
+    */
+    join->streaming_aggregation = true;
+    cause = "indexed_distinct_aggregate";
+  } else
+    return;
+
+  if (indexed_fields.empty()) return;
+
+  Key_map possible_keys = join_tab->table()->keys_in_use_for_query;
+  possible_keys.merge(join_tab->table()->keys_in_use_for_group_by);
+
+  /* Intersect the keys of all group fields. */
+  for (Item_field *cur_item : indexed_fields) {
+    if (cur_item->used_tables() != join_tab->table_ref->map()) {
+      /*
+        Doing GROUP BY or DISTINCT on a field in another table so no
+        index in this table is usable
+      */
+      return;
+    } else
+      possible_keys.intersect(cur_item->field->part_of_key);
+  }
+
+  /*
+    At this point, possible_keys has key bits set only for usable
+    indexes because indexed_fields is non-empty and if any of the
+    fields belong to a different table the function would exit in the
+    loop above.
+  */
+
+  if (!possible_keys.is_clear_all() &&
+      !possible_keys.is_subset(join_tab->const_keys)) {
+    trace_indexes_added_group_distinct(&join->thd->opt_trace, join_tab,
+                                       possible_keys, cause);
+    join_tab->const_keys.merge(possible_keys);
+    join_tab->keys().merge(possible_keys);
+  }
+
+  assert(join_tab->const_keys.is_subset(join_tab->keys()));
+}
+
+
+// Source: sql_optimizer.cc
+// Lines 7801-7890
+
+
+[ANSWER]
+MUST

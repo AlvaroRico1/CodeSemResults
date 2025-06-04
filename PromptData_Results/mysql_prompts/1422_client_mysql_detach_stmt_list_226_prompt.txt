@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'stmt' at line 11
+2. Pointer 'func_name' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void mysql_detach_stmt_list(LIST **stmt_list MY_ATTRIBUTE((unused)),
+                            const char *func_name MY_ATTRIBUTE((unused))) {
+#ifndef MYSQL_SERVER
+  /* Reset connection handle in all prepared statements. */
+  LIST *element = *stmt_list;
+  char buff[MYSQL_ERRMSG_SIZE];
+  DBUG_TRACE;
+
+  snprintf(buff, sizeof(buff) - 1, ER_CLIENT(CR_STMT_CLOSED), func_name);
+  for (; element; element = element->next) {
+    MYSQL_STMT *stmt = (MYSQL_STMT *)element->data;
+    set_stmt_error(stmt, CR_STMT_CLOSED, unknown_sqlstate, buff);
+    stmt->mysql = nullptr;
+    /* No need to call list_delete for statement here */
+  }
+
+
+// Source: client.cc
+// Lines 6990-7004
+
+
+[ANSWER]
+MUST-NOT

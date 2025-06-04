@@ -1,0 +1,77 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'parent' at line 3
+2. Pointer 'dentry' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void tracefs_remove_recursive(struct dentry *dentry)
+{
+	struct dentry *child, *parent;
+
+	if (IS_ERR_OR_NULL(dentry))
+		return;
+
+	parent = dentry;
+ down:
+	inode_lock(parent->d_inode);
+ loop:
+	/*
+	 * The parent->d_subdirs is protected by the d_lock. Outside that
+	 * lock, the child can be unlinked and set to be freed which can
+	 * use the d_u.d_child as the rcu head and corrupt this list.
+	 */
+	spin_lock(&parent->d_lock);
+	list_for_each_entry(child, &parent->d_subdirs, d_child) {
+		if (!simple_positive(child))
+			continue;
+
+		/* perhaps simple_empty(child) makes more sense */
+		if (!list_empty(&child->d_subdirs)) {
+			spin_unlock(&parent->d_lock);
+			inode_unlock(parent->d_inode);
+			parent = child;
+			goto down;
+		}
+
+		spin_unlock(&parent->d_lock);
+
+		if (!__tracefs_remove(child, parent))
+			simple_release_fs(&tracefs_mount, &tracefs_mount_count);
+
+		/*
+		 * The parent->d_lock protects agaist child from unlinking
+		 * from d_subdirs. When releasing the parent->d_lock we can
+		 * no longer trust that the next pointer is valid.
+		 * Restart the loop. We'll skip this one with the
+		 * simple_positive() check.
+		 */
+		goto loop;
+	}
+	spin_unlock(&parent->d_lock);
+
+	inode_unlock(parent->d_inode);
+	child = parent;
+	parent = parent->d_parent;
+	inode_lock(parent->d_inode);
+
+	if (child != dentry)
+		/* go up */
+		goto loop;
+
+	if (!__tracefs_remove(child, parent))
+		simple_release_fs(&tracefs_mount, &tracefs_mount_count);
+	inode_unlock(parent->d_inode);
+}
+
+
+// Source: inode.c
+// Lines 557-614
+
+
+[ANSWER]
+MUST

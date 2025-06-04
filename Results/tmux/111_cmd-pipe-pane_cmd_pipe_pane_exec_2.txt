@@ -1,0 +1,1 @@
+wp,tmux/cmd-pipe-pane.c,6,target,tmux/cmd-pipe-pane.c,4,1

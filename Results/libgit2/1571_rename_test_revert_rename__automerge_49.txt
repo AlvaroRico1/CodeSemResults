@@ -1,0 +1,1 @@
+head_ref,libgit2/tests/libgit2/revert/rename.c,6,index,libgit2/tests/libgit2/revert/rename.c,5,2

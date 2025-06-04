@@ -1,0 +1,67 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'item' at line 5
+2. Pointer 'cdata' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+cmd_run_shell_callback(struct job *job)
+{
+	struct cmd_run_shell_data	*cdata = job_get_data(job);
+	struct bufferevent		*event = job_get_event(job);
+	struct cmdq_item		*item = cdata->item;
+	char				*cmd = cdata->cmd, *msg = NULL, *line;
+	size_t				 size;
+	int				 retcode, status;
+
+	do {
+		if ((line = evbuffer_readline(event->input)) != NULL) {
+			cmd_run_shell_print(job, line);
+			free(line);
+		}
+	} while (line != NULL);
+
+	size = EVBUFFER_LENGTH(event->input);
+	if (size != 0) {
+		line = xmalloc(size + 1);
+		memcpy(line, EVBUFFER_DATA(event->input), size);
+		line[size] = '\0';
+
+		cmd_run_shell_print(job, line);
+
+		free(line);
+	}
+
+	status = job_get_status(job);
+	if (WIFEXITED(status)) {
+		if ((retcode = WEXITSTATUS(status)) != 0)
+			xasprintf(&msg, "'%s' returned %d", cmd, retcode);
+	} else if (WIFSIGNALED(status)) {
+		retcode = WTERMSIG(status);
+		xasprintf(&msg, "'%s' terminated by signal %d", cmd, retcode);
+		retcode += 128;
+	} else
+		retcode = 0;
+	if (msg != NULL)
+		cmd_run_shell_print(job, msg);
+	free(msg);
+
+	if (item != NULL) {
+		if (cmdq_get_client(item) != NULL &&
+		    cmdq_get_client(item)->session == NULL)
+			cmdq_get_client(item)->retval = retcode;
+		cmdq_continue(item);
+	}
+}
+
+
+// Source: cmd-run-shell.c
+// Lines 220-267
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,59 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'quoted' at line 3
+2. Pointer 'line' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+char *get_arg(char *line, bool get_next_arg) {
+  char *ptr, *start;
+  bool quoted = false, valid_arg = false;
+  char qtype = 0;
+
+  ptr = line;
+  if (get_next_arg) {
+    for (; *ptr; ptr++)
+      ;
+    if (*(ptr + 1)) ptr++;
+  } else {
+    /* skip leading white spaces */
+    while (my_isspace(charset_info, *ptr)) ptr++;
+    if (*ptr == '\\')  // short command was used
+      ptr += 2;
+    else
+      while (*ptr && !my_isspace(charset_info, *ptr))  // skip command
+        ptr++;
+  }
+  if (!*ptr) return NullS;
+  while (my_isspace(charset_info, *ptr)) ptr++;
+  if (*ptr == '\'' || *ptr == '\"' || *ptr == '`') {
+    qtype = *ptr;
+    quoted = true;
+    ptr++;
+  }
+  for (start = ptr; *ptr; ptr++) {
+    // if it is a quoted string do not remove backslash
+    if (!quoted && *ptr == '\\' && ptr[1])  // escaped character
+    {
+      // Remove the backslash
+      my_stpmov(ptr, ptr + 1);
+    } else if ((!quoted && *ptr == ' ') || (quoted && *ptr == qtype)) {
+      *ptr = 0;
+      break;
+    }
+  }
+  valid_arg = ptr != start;
+  return valid_arg ? start : NullS;
+}
+
+
+// Source: mysql.cc
+// Lines 4437-4476
+
+
+[ANSWER]
+MUST-NOT

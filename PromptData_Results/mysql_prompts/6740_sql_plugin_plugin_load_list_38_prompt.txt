@@ -1,0 +1,109 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'p' at line 7
+2. Pointer 'buffer' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static bool plugin_load_list(MEM_ROOT *tmp_root, int *argc, char **argv,
+                             const char *list, bool load_early) {
+  char buffer[FN_REFLEN];
+  LEX_STRING name = {buffer, 0}, dl = {nullptr, 0}, *str = &name;
+  st_plugin_dl *plugin_dl;
+  st_mysql_plugin *plugin;
+  char *p = buffer;
+  DBUG_TRACE;
+  while (list) {
+    if (p == buffer + sizeof(buffer) - 1) {
+      LogErr(ERROR_LEVEL, ER_PLUGIN_LOAD_PARAMETER_TOO_LONG);
+      return true;
+    }
+
+    switch ((*(p++) = *(list++))) {
+      case '\0':
+        list = nullptr; /* terminate the loop */
+                        /* fall through */
+      case ';':
+#ifndef _WIN32
+      case ':': /* can't use this as delimiter as it may be drive letter */
+#endif
+        str->str[str->length] = '\0';
+        if (str == &name)  // load all plugins in named module
+        {
+          if (!name.length) {
+            p--; /* reset pointer */
+            continue;
+          }
+
+          dl = name;
+          /*
+            The whole locking sequence is not strictly speaking needed since
+            this is a function that's executed only during server bootstrap, but
+            we do it properly for uniformity of the environment for plugin_add.
+          */
+          mysql_mutex_lock(&LOCK_plugin);
+          mysql_rwlock_wrlock(&LOCK_system_variables_hash);
+          if ((plugin_dl = plugin_dl_add(&dl, REPORT_TO_LOG, load_early))) {
+            for (plugin = plugin_dl->plugins; plugin->info; plugin++) {
+              name.str = const_cast<char *>(plugin->name);
+              name.length = strlen(name.str);
+
+              free_root(tmp_root, MYF(MY_MARK_BLOCKS_FREE));
+              if (plugin_add(tmp_root, to_lex_cstring(name), &dl, argc, argv,
+                             REPORT_TO_LOG, load_early))
+                goto error;
+            }
+            plugin_dl_del(&dl);  // reduce ref count
+          } else
+            goto error;
+        } else {
+          free_root(tmp_root, MYF(MY_MARK_BLOCKS_FREE));
+          /*
+            The whole locking sequence is not strictly speaking needed since
+            this is a function that's executed only during server bootstrap, but
+            we do it properly for uniformity of the environment for plugin_add.
+          */
+          mysql_mutex_lock(&LOCK_plugin);
+          mysql_rwlock_wrlock(&LOCK_system_variables_hash);
+          if (plugin_add(tmp_root, to_lex_cstring(name), &dl, argc, argv,
+                         REPORT_TO_LOG, load_early))
+            goto error;
+        }
+        mysql_rwlock_unlock(&LOCK_system_variables_hash);
+        mysql_mutex_unlock(&LOCK_plugin);
+        name.length = dl.length = 0;
+        dl.str = nullptr;
+        name.str = p = buffer;
+        str = &name;
+        continue;
+      case '=':
+      case '#':
+        if (str == &name) {
+          name.str[name.length] = '\0';
+          str = &dl;
+          str->str = p;
+          continue;
+        }
+        // Fall through.
+      default:
+        str->length++;
+        continue;
+    }
+  }
+  return false;
+error:
+  LogErr(ERROR_LEVEL, ER_PLUGIN_CANT_LOAD, name.str, dl.str);
+  return true;
+}
+
+
+// Source: sql_plugin.cc
+// Lines 1891-1980
+
+
+[ANSWER]
+MUST

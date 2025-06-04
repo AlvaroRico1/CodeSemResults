@@ -1,0 +1,220 @@
+propagate (void)
+{
+  struct cgraph_node *node;
+  struct cgraph_node **order =
+    XCNEWVEC (struct cgraph_node *, symtab->cgraph_count);
+  int order_pos;
+  int i;
+  bool remove_p;
+
+  if (dump_file)
+    cgraph_node::dump_cgraph (dump_file);
+
+  remove_p = ipa_discover_variable_flags ();
+  generate_summary ();
+
+  /* Propagate the local information through the call graph to produce
+     the global information.  All the nodes within a cycle will have
+     the same info so we collapse cycles first.  Then we can do the
+     propagation in one pass from the leaves to the roots.  */
+  order_pos = ipa_reduced_postorder (order, true, ignore_edge_p);
+  if (dump_file)
+    ipa_print_order (dump_file, "reduced", order, order_pos);
+
+  for (i = 0; i < order_pos; i++ )
+    {
+      unsigned x;
+      struct cgraph_node *w;
+      ipa_reference_vars_info_t node_info;
+      ipa_reference_global_vars_info_t node_g;
+      ipa_reference_local_vars_info_t node_l;
+      bool read_all = false;
+      bool write_all = false;
+
+      node = order[i];
+      if (node->alias || !opt_for_fn (node->decl, flag_ipa_reference))
+	continue;
+
+      node_info = get_reference_vars_info (node);
+      gcc_assert (node_info);
+      node_l = &node_info->local;
+      node_g = &node_info->global;
+
+      if (dump_file && (dump_flags & TDF_DETAILS))
+	fprintf (dump_file, "Starting cycle with %s\n", node->dump_name ());
+
+      vec<cgraph_node *> cycle_nodes = ipa_get_nodes_in_cycle (node);
+
+      /* If any node in a cycle is read_all or write_all, they all are.  */
+      FOR_EACH_VEC_ELT (cycle_nodes, x, w)
+	{
+	  if (dump_file && (dump_flags & TDF_DETAILS))
+	    fprintf (dump_file, "  Visiting %s\n", w->dump_asm_name ());
+	  get_read_write_all_from_node (w, read_all, write_all);
+	  if (read_all && write_all)
+	    break;
+	}
+
+      /* Initialized the bitmaps global sets for the reduced node.  */
+      if (read_all)
+	node_g->statics_read = all_module_statics;
+      else
+	node_g->statics_read = copy_static_var_set (node_l->statics_read, true);
+      if (write_all)
+	node_g->statics_written = all_module_statics;
+      else
+	node_g->statics_written
+	  = copy_static_var_set (node_l->statics_written, true);
+
+      /* Merge the sets of this cycle with all sets of callees reached
+         from this cycle.  */
+      FOR_EACH_VEC_ELT (cycle_nodes, x, w)
+	{
+	  if (read_all && write_all)
+	    break;
+
+	  if (w != node)
+	    {
+	      ipa_reference_vars_info_t w_ri = get_reference_vars_info (w);
+	      ipa_reference_local_vars_info_t w_l = &w_ri->local;
+	      int flags = flags_from_decl_or_type (w->decl);
+
+	      if (!(flags & ECF_CONST))
+		read_all = union_static_var_sets (node_g->statics_read,
+						  w_l->statics_read);
+	      if (!(flags & ECF_PURE)
+		  && !w->cannot_return_p ())
+		write_all = union_static_var_sets (node_g->statics_written,
+						   w_l->statics_written);
+	    }
+
+	  propagate_bits (node_g, w);
+	}
+
+      /* All nodes within a cycle have the same global info bitmaps.  */
+      FOR_EACH_VEC_ELT (cycle_nodes, x, w)
+	{
+	  ipa_reference_vars_info_t w_ri = get_reference_vars_info (w);
+          w_ri->global = *node_g;
+	}
+
+      cycle_nodes.release ();
+    }
+
+  if (dump_file)
+    {
+      for (i = 0; i < order_pos; i++)
+	{
+	  unsigned x;
+	  struct cgraph_node *w;
+
+	  node = order[i];
+          if (node->alias || !opt_for_fn (node->decl, flag_ipa_reference))
+	    continue;
+
+	  fprintf (dump_file, "\nFunction name:%s:", node->dump_asm_name ());
+
+	  ipa_reference_vars_info_t node_info = get_reference_vars_info (node);
+	  ipa_reference_global_vars_info_t node_g = &node_info->global;
+
+	  vec<cgraph_node *> cycle_nodes = ipa_get_nodes_in_cycle (node);
+	  FOR_EACH_VEC_ELT (cycle_nodes, x, w)
+	    {
+	      ipa_reference_vars_info_t w_ri = get_reference_vars_info (w);
+	      ipa_reference_local_vars_info_t w_l = &w_ri->local;
+	      if (w != node)
+		fprintf (dump_file, "\n  next cycle: %s ", w->dump_asm_name ());
+	      fprintf (dump_file, "\n    locals read: ");
+	      dump_static_vars_set_to_file (dump_file, w_l->statics_read);
+	      fprintf (dump_file, "\n    locals written: ");
+	      dump_static_vars_set_to_file (dump_file, w_l->statics_written);
+	    }
+	  cycle_nodes.release ();
+
+	  fprintf (dump_file, "\n  globals read: ");
+	  dump_static_vars_set_to_file (dump_file, node_g->statics_read);
+	  fprintf (dump_file, "\n  globals written: ");
+	  dump_static_vars_set_to_file (dump_file, node_g->statics_written);
+	  fprintf (dump_file, "\n");
+	}
+    }
+
+  if (ipa_ref_opt_sum_summaries == NULL)
+    ipa_ref_opt_sum_summaries = new ipa_ref_opt_summary_t (symtab);
+
+  /* Cleanup. */
+  FOR_EACH_DEFINED_FUNCTION (node)
+    {
+      ipa_reference_vars_info_t node_info;
+      ipa_reference_global_vars_info_t node_g;
+
+      /* No need to produce summaries for inline clones.  */
+      if (node->inlined_to)
+	continue;
+
+      node_info = get_reference_vars_info (node);
+      if (!node->alias && opt_for_fn (node->decl, flag_ipa_reference))
+	{
+	  node_g = &node_info->global;
+	  bool read_all = 
+		(node_g->statics_read == all_module_statics
+		 || bitmap_equal_p (node_g->statics_read, all_module_statics));
+	  bool written_all = 
+		(node_g->statics_written == all_module_statics
+		 || bitmap_equal_p (node_g->statics_written,
+				    all_module_statics));
+
+	  /* There is no need to produce summary if we collected nothing
+	     useful.  */
+	  if (read_all && written_all)
+	    continue;
+
+	  ipa_reference_optimization_summary_d *opt
+	    = ipa_ref_opt_sum_summaries->get_create (node);
+
+	  /* Create the complimentary sets.  */
+
+	  if (bitmap_empty_p (node_g->statics_read))
+	    opt->statics_read = no_module_statics;
+	  else if (read_all)
+	    opt->statics_read = all_module_statics;
+	  else
+	    {
+	      opt->statics_read
+		 = BITMAP_ALLOC (&optimization_summary_obstack);
+	      bitmap_copy (opt->statics_read, node_g->statics_read);
+	    }
+
+	  if (bitmap_empty_p (node_g->statics_written))
+	    opt->statics_written = no_module_statics;
+	  else if (written_all)
+	    opt->statics_written = all_module_statics;
+	  else
+	    {
+	      opt->statics_written
+	        = BITMAP_ALLOC (&optimization_summary_obstack);
+	      bitmap_copy (opt->statics_written, node_g->statics_written);
+	    }
+	}
+   }
+
+  ipa_free_postorder_info ();
+  free (order);
+
+  bitmap_obstack_release (&local_info_obstack);
+
+  if (ipa_ref_var_info_summaries != NULL)
+    {
+      delete ipa_ref_var_info_summaries;
+      ipa_ref_var_info_summaries = NULL;
+    }
+
+  if (dump_file)
+    vec_free (reference_vars_to_consider);
+  reference_vars_to_consider = NULL;
+  return remove_p ? TODO_remove_functions : 0;
+}
+
+
+// Source: ipa-reference.c
+// Lines 755-970

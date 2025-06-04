@@ -1,0 +1,27 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'buf' at line 4
+2. Pointer 'cb_data' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int string_list_join_lines_helper(struct string_list_item *item,
+					 void *cb_data)
+{
+	struct strbuf *buf = cb_data;
+	strbuf_addstr(buf, item->string);
+	strbuf_addch(buf, '\n');
+	return 0;
+}
+
+
+// Source: notes.c
+// Lines 889-896
+
+
+[ANSWER]
+MUST

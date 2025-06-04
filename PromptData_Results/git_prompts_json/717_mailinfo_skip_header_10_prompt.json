@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'outval' at line 2\n2. Pointer 'val' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic inline int skip_header(const struct strbuf *line, const char *hdr,\n\t\t\t      const char **outval)\n{\n\tconst char *val;\n\tif (!skip_iprefix(line->buf, hdr, &val) ||\n\t    *val++ != ':')\n\t\treturn 0;\n\twhile (isspace(*val))\n\t\tval++;\n\t*outval = val;\n\treturn 1;\n}\n\n\n// Source: mailinfo.c\n// Lines 348-359\n",
+  "ANSWER": "MUST"
+}

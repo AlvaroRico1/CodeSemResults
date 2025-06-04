@@ -1,0 +1,25 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'lex' at line 2
+2. Pointer 'thd' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void end_lex_with_single_table(THD *thd, TABLE *table, LEX *old_lex) {
+  LEX *lex = thd->lex;
+  table->get_fields_in_item_tree = false;
+  lex_end(lex);
+  thd->lex = old_lex;
+}
+
+
+// Source: sql_partition.cc
+// Lines 875-880
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,25 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'db' at line 3
+2. Pointer 'b' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int diff_delta_i2w_cmp(const void *a, const void *b)
+{
+	const git_diff_delta *da = a, *db = b;
+	int val = strcmp(diff_delta__i2w_path(da), diff_delta__i2w_path(db));
+	return val ? val : ((int)da->status - (int)db->status);
+}
+
+
+// Source: diff_generate.c
+// Lines 328-333
+
+
+[ANSWER]
+MUST

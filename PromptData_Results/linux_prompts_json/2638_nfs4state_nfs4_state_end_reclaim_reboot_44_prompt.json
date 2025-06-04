@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ops' at line 3\n2. Pointer 'clp' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void nfs4_state_end_reclaim_reboot(struct nfs_client *clp)\n{\n\tconst struct nfs4_state_recovery_ops *ops;\n\tconst struct cred *cred;\n\tint err;\n\n\tif (!nfs4_state_clear_reclaim_reboot(clp))\n\t\treturn;\n\tops = clp->cl_mvops->reboot_recovery_ops;\n\tcred = nfs4_get_clid_cred(clp);\n\terr = nfs4_reclaim_complete(clp, ops, cred);\n\tput_cred(cred);\n\tif (err == -NFS4ERR_CONN_NOT_BOUND_TO_SESSION)\n\t\tset_bit(NFS4CLNT_RECLAIM_REBOOT, &clp->cl_state);\n}\n\n\n// Source: nfs4state.c\n// Lines 1818-1832\n",
+  "ANSWER": "MUST"
+}

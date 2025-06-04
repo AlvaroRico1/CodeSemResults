@@ -1,0 +1,132 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'val64' at line 4
+2. Pointer 'buffer' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void fetch_float_with_conversion(MYSQL_BIND *param, MYSQL_FIELD *field,
+                                        double value, my_gcvt_arg_type type) {
+  uchar *buffer = pointer_cast<uchar *>(param->buffer);
+  double val64 = (value < 0 ? -floor(-value) : floor(value));
+
+  switch (param->buffer_type) {
+    case MYSQL_TYPE_NULL: /* do nothing */
+      break;
+    case MYSQL_TYPE_TINY:
+      /*
+        We need to _store_ data in the buffer before the truncation check to
+        workaround Intel FPU executive precision feature.
+        (See http://gcc.gnu.org/bugzilla/show_bug.cgi?id=323 for details)
+        Sic: AFAIU it does not guarantee to work.
+      */
+      if (param->is_unsigned) {
+        if (value < 0.0) {
+          *param->error = true;
+          break;
+        }
+        *buffer = (uint8)value;
+      } else {
+        *buffer = (int8)value;
+      }
+      *param->error = val64 != (param->is_unsigned ? (double)((uint8)*buffer)
+                                                   : (double)((int8)*buffer));
+      break;
+    case MYSQL_TYPE_SHORT:
+      if (param->is_unsigned) {
+        if (value < 0.0) {
+          *param->error = true;
+          break;
+        }
+        ushort data = (ushort)value;
+        shortstore(buffer, data);
+      } else {
+        short data = (short)value;
+        shortstore(buffer, data);
+      }
+      *param->error =
+          val64 != (param->is_unsigned ? (double)(*(ushort *)buffer)
+                                       : (double)(*(short *)buffer));
+      break;
+    case MYSQL_TYPE_LONG:
+      if (param->is_unsigned) {
+        if (value < 0.0) {
+          *param->error = true;
+          break;
+        }
+        uint32 data = (uint32)value;
+        longstore(buffer, data);
+      } else {
+        int32 data = (int32)value;
+        longstore(buffer, data);
+      }
+      *param->error =
+          val64 != (param->is_unsigned ? (double)(*(uint32 *)buffer)
+                                       : (double)(*(int32 *)buffer));
+      break;
+    case MYSQL_TYPE_LONGLONG:
+      if (param->is_unsigned) {
+        if (value < 0.0) {
+          *param->error = true;
+          break;
+        }
+        ulonglong data = (ulonglong)value;
+        longlongstore(buffer, data);
+      } else {
+        longlong data = (longlong)value;
+        longlongstore(buffer, data);
+      }
+      *param->error =
+          val64 != (param->is_unsigned ? ulonglong2double(*(ulonglong *)buffer)
+                                       : (double)(*(longlong *)buffer));
+      break;
+    case MYSQL_TYPE_FLOAT: {
+      float data = (float)value;
+      floatstore(buffer, data);
+      *param->error = (*(float *)buffer) != value;
+      break;
+    }
+    case MYSQL_TYPE_DOUBLE: {
+      doublestore(buffer, value);
+      break;
+    }
+    default: {
+      /*
+        Resort to fetch_string_with_conversion: this should handle
+        floating point -> string conversion nicely, honor all typecodes
+        and param->offset possibly set in mysql_stmt_fetch_column
+      */
+      char buff[FLOATING_POINT_BUFFER];
+      size_t len;
+      if (field->decimals >= DECIMAL_NOT_SPECIFIED)
+        len = my_gcvt(
+            value, type,
+            std::min<unsigned long>(sizeof(buff) - 1, param->buffer_length),
+            buff, nullptr);
+      else
+        len = my_fcvt(value, (int)field->decimals, buff, nullptr);
+
+      if (field->flags & ZEROFILL_FLAG && len < field->length &&
+          field->length < MAX_DOUBLE_STRING_REP_LENGTH - 1) {
+        memmove(buff + field->length - len, buff, len);
+        memset(buff, '0', field->length - len);
+        len = field->length;
+      }
+      fetch_string_with_conversion(param, buff, len);
+
+      break;
+    }
+  }
+}
+
+
+// Source: libmysql.cc
+// Lines 2947-3059
+
+
+[ANSWER]
+MUST-NOT

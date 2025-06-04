@@ -1,0 +1,71 @@
+static int diff_file_content_load_workdir_file(
+	git_diff_file_content *fc,
+	git_str *path,
+	git_diff_options *diff_opts)
+{
+	int error = 0;
+	git_filter_list *fl = NULL;
+	git_file fd = git_futils_open_ro(git_str_cstr(path));
+	git_str raw = GIT_STR_INIT;
+	git_object_size_t new_file_size = 0;
+
+	if (fd < 0)
+		return fd;
+
+	error = git_futils_filesize(&new_file_size, fd);
+
+	if (error < 0)
+		goto cleanup;
+
+	if (!(fc->file->flags & GIT_DIFF_FLAG_VALID_SIZE)) {
+		fc->file->size = new_file_size;
+		fc->file->flags |= GIT_DIFF_FLAG_VALID_SIZE;
+	} else if (fc->file->size != new_file_size) {
+		git_error_set(GIT_ERROR_FILESYSTEM, "file changed before we could read it");
+		error = -1;
+		goto cleanup;
+	}
+
+	if ((diff_opts->flags & GIT_DIFF_SHOW_BINARY) == 0 &&
+		diff_file_content_binary_by_size(fc))
+		goto cleanup;
+
+	if ((error = git_filter_list_load(
+			&fl, fc->repo, NULL, fc->file->path,
+			GIT_FILTER_TO_ODB, GIT_FILTER_ALLOW_UNSAFE)) < 0)
+		goto cleanup;
+
+	/* if there are no filters, try to mmap the file */
+	if (fl == NULL) {
+		if (!(error = git_futils_mmap_ro(
+				&fc->map, fd, 0, (size_t)fc->file->size))) {
+			fc->flags |= GIT_DIFF_FLAG__UNMAP_DATA;
+			goto cleanup;
+		}
+
+		/* if mmap failed, fall through to try readbuffer below */
+		git_error_clear();
+	}
+
+	if (!(error = git_futils_readbuffer_fd(&raw, fd, (size_t)fc->file->size))) {
+		git_str out = GIT_STR_INIT;
+
+		error = git_filter_list__convert_buf(&out, fl, &raw);
+
+		if (!error) {
+			fc->map.len  = out.size;
+			fc->map.data = out.ptr;
+			fc->flags |= GIT_DIFF_FLAG__FREE_DATA;
+		}
+	}
+
+cleanup:
+	git_filter_list_free(fl);
+	p_close(fd);
+
+	return error;
+}
+
+
+// Source: diff_file.c
+// Lines 322-388

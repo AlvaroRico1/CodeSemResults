@@ -1,0 +1,1 @@
+sc,tmux/cmd-new-window.c,7,s,tmux/cmd-new-window.c,9,1

@@ -1,0 +1,38 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'field' at line 2
+2. Pointer 'ptr' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool check_part_func_fields(Field **ptr, bool ok_with_charsets) {
+  Field *field;
+  DBUG_TRACE;
+
+  while ((field = *(ptr++))) {
+    /*
+      For CHAR/VARCHAR fields we need to take special precautions.
+      Binary collation with CHAR is automatically supported. Other
+      types need some kind of standardisation function handling
+    */
+    if (field_is_partition_charset(field)) {
+      const CHARSET_INFO *cs = field->charset();
+      if (!ok_with_charsets || cs->mbmaxlen > 1 || cs->strxfrm_multiply > 1) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+
+// Source: sql_partition.cc
+// Lines 1423-1441
+
+
+[ANSWER]
+MUST

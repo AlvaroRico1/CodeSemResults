@@ -1,0 +1,26 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'cmp' at line 5
+2. Pointer 't_is_prefix' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int my_strnncoll_8bit_bin(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
+                                 const uchar *s, size_t slen, const uchar *t,
+                                 size_t tlen, bool t_is_prefix) {
+  size_t len = std::min(slen, tlen);
+  int cmp = memcmp(s, t, len);
+  return cmp ? cmp : (int)((t_is_prefix ? len : slen) - tlen);
+}
+
+
+// Source: ctype-bin.cc
+// Lines 144-150
+
+
+[ANSWER]
+MUST-NOT

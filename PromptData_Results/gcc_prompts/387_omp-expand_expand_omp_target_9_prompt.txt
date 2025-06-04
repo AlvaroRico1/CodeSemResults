@@ -1,0 +1,157 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tgtcopy_stmt' at line 107
+2. Pointer 'stmt' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+expand_omp_target (struct omp_region *region)
+{
+  basic_block entry_bb, exit_bb, new_bb;
+  struct function *child_cfun;
+  tree child_fn, block, t;
+  gimple_stmt_iterator gsi;
+  gomp_target *entry_stmt;
+  gimple *stmt;
+  edge e;
+  bool offloaded;
+  int target_kind;
+
+  entry_stmt = as_a <gomp_target *> (last_stmt (region->entry));
+  target_kind = gimple_omp_target_kind (entry_stmt);
+  new_bb = region->entry;
+
+  offloaded = is_gimple_omp_offloaded (entry_stmt);
+  switch (target_kind)
+    {
+    case GF_OMP_TARGET_KIND_REGION:
+    case GF_OMP_TARGET_KIND_UPDATE:
+    case GF_OMP_TARGET_KIND_ENTER_DATA:
+    case GF_OMP_TARGET_KIND_EXIT_DATA:
+    case GF_OMP_TARGET_KIND_OACC_PARALLEL:
+    case GF_OMP_TARGET_KIND_OACC_KERNELS:
+    case GF_OMP_TARGET_KIND_OACC_SERIAL:
+    case GF_OMP_TARGET_KIND_OACC_UPDATE:
+    case GF_OMP_TARGET_KIND_OACC_ENTER_EXIT_DATA:
+    case GF_OMP_TARGET_KIND_OACC_DECLARE:
+    case GF_OMP_TARGET_KIND_DATA:
+    case GF_OMP_TARGET_KIND_OACC_DATA:
+    case GF_OMP_TARGET_KIND_OACC_HOST_DATA:
+      break;
+    default:
+      gcc_unreachable ();
+    }
+
+  child_fn = NULL_TREE;
+  child_cfun = NULL;
+  if (offloaded)
+    {
+      child_fn = gimple_omp_target_child_fn (entry_stmt);
+      child_cfun = DECL_STRUCT_FUNCTION (child_fn);
+    }
+
+  /* Supported by expand_omp_taskreg, but not here.  */
+  if (child_cfun != NULL)
+    gcc_checking_assert (!child_cfun->cfg);
+  gcc_checking_assert (!gimple_in_ssa_p (cfun));
+
+  entry_bb = region->entry;
+  exit_bb = region->exit;
+
+  if (target_kind == GF_OMP_TARGET_KIND_OACC_KERNELS)
+    mark_loops_in_oacc_kernels_region (region->entry, region->exit);
+
+  /* Going on, all OpenACC compute constructs are mapped to
+     'BUILT_IN_GOACC_PARALLEL', and get their compute regions outlined.
+     To distinguish between them, we attach attributes.  */
+  switch (target_kind)
+    {
+    case GF_OMP_TARGET_KIND_OACC_PARALLEL:
+      DECL_ATTRIBUTES (child_fn)
+	= tree_cons (get_identifier ("oacc parallel"),
+		     NULL_TREE, DECL_ATTRIBUTES (child_fn));
+      break;
+    case GF_OMP_TARGET_KIND_OACC_KERNELS:
+      DECL_ATTRIBUTES (child_fn)
+	= tree_cons (get_identifier ("oacc kernels"),
+		     NULL_TREE, DECL_ATTRIBUTES (child_fn));
+      break;
+    case GF_OMP_TARGET_KIND_OACC_SERIAL:
+      DECL_ATTRIBUTES (child_fn)
+	= tree_cons (get_identifier ("oacc serial"),
+		     NULL_TREE, DECL_ATTRIBUTES (child_fn));
+      break;
+    default:
+      /* Make sure we don't miss any.  */
+      gcc_checking_assert (!(is_gimple_omp_oacc (entry_stmt)
+			     && is_gimple_omp_offloaded (entry_stmt)));
+      break;
+    }
+
+  if (offloaded)
+    {
+      unsigned srcidx, dstidx, num;
+
+      /* If the offloading region needs data sent from the parent
+	 function, then the very first statement (except possible
+	 tree profile counter updates) of the offloading body
+	 is a copy assignment .OMP_DATA_I = &.OMP_DATA_O.  Since
+	 &.OMP_DATA_O is passed as an argument to the child function,
+	 we need to replace it with the argument as seen by the child
+	 function.
+
+	 In most cases, this will end up being the identity assignment
+	 .OMP_DATA_I = .OMP_DATA_I.  However, if the offloading body had
+	 a function call that has been inlined, the original PARM_DECL
+	 .OMP_DATA_I may have been converted into a different local
+	 variable.  In which case, we need to keep the assignment.  */
+      tree data_arg = gimple_omp_target_data_arg (entry_stmt);
+      if (data_arg)
+	{
+	  basic_block entry_succ_bb = single_succ (entry_bb);
+	  gimple_stmt_iterator gsi;
+	  tree arg;
+	  gimple *tgtcopy_stmt = NULL;
+	  tree sender = TREE_VEC_ELT (data_arg, 0);
+
+	  for (gsi = gsi_start_bb (entry_succ_bb); ; gsi_next (&gsi))
+	    {
+	      gcc_assert (!gsi_end_p (gsi));
+	      stmt = gsi_stmt (gsi);
+	      if (gimple_code (stmt) != GIMPLE_ASSIGN)
+		continue;
+
+	      if (gimple_num_ops (stmt) == 2)
+		{
+		  tree arg = gimple_assign_rhs1 (stmt);
+
+		  /* We're ignoring the subcode because we're
+		     effectively doing a STRIP_NOPS.  */
+
+		  if (TREE_CODE (arg) == ADDR_EXPR
+		      && TREE_OPERAND (arg, 0) == sender)
+		    {
+		      tgtcopy_stmt = stmt;
+		      break;
+		    }
+		}
+	    }
+
+	  gcc_assert (tgtcopy_stmt != NULL);
+	  arg = DECL_ARGUMENTS (child_fn);
+
+	  gcc_assert (gimple_assign_lhs (tgtcopy_stmt) == arg);
+	  gsi_remove (&gsi, true);
+	}
+
+
+// Source: omp-expand.c
+// Lines 7914-8051
+
+
+[ANSWER]
+MUST

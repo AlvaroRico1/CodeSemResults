@@ -1,0 +1,168 @@
+bool JOIN::get_best_combination() {
+  DBUG_TRACE;
+
+  // At this point "tables" and "primary"tables" represent the same:
+  assert(tables == primary_tables);
+
+  /*
+    Allocate additional space for tmp tables.
+    Number of plan nodes:
+      # of regular input tables (including semi-joined ones) +
+      # of semi-join nests for materialization +
+      1? + // For GROUP BY (or implicit grouping when we have windowing)
+      1? + // For DISTINCT
+      1? + // For aggregation functions aggregated in outer query
+           // when used with distinct
+      1? + // For ORDER BY
+      1?   // buffer result
+
+    Up to 2 tmp tables + N window output tmp are allocated (NOTE: windows also
+    have frame buffer tmp tables, but those are not relevant here).
+  */
+  uint num_tmp_tables =
+      (!group_list.empty() || (implicit_grouping && m_windows.elements) > 0
+           ? 1
+           : 0) +
+      (select_distinct ? (tmp_table_param.outer_sum_func_count ? 2 : 1) : 0) +
+      (order.empty() ? 0 : 1) +
+      (query_block->active_options() &
+               (SELECT_BIG_RESULT | OPTION_BUFFER_RESULT)
+           ? 1
+           : 0) +
+      m_windows.elements + 1; /* the presence of windows may increase need for
+                                 grouping tmp tables, cf. de-optimization
+                                 in make_tmp_tables_info
+                               */
+  if (num_tmp_tables > (2 + m_windows.elements))
+    num_tmp_tables = 2 + m_windows.elements;
+
+  /*
+    Rearrange queries with materialized semi-join nests so that the semi-join
+    nest is replaced with a reference to a materialized temporary table and all
+    materialized subquery tables are placed after the intermediate tables.
+    After the following loop, "inner_target" is the position of the first
+    subquery table (if any). "outer_target" is the position of first outer
+    table, and will later be used to track the position of any materialized
+    temporary tables.
+  */
+  const bool has_semijoin = !query_block->sj_nests.empty();
+  uint outer_target = 0;
+  uint inner_target = primary_tables + num_tmp_tables;
+  uint sjm_nests = 0;
+
+  if (has_semijoin) {
+    for (uint tableno = 0; tableno < primary_tables;) {
+      if (sj_is_materialize_strategy(best_positions[tableno].sj_strategy)) {
+        sjm_nests++;
+        inner_target -= (best_positions[tableno].n_sj_tables - 1);
+        tableno += best_positions[tableno].n_sj_tables;
+      } else
+        tableno++;
+    }
+  }
+
+  JOIN_TAB *tmp_join_tabs = nullptr;
+  if (sjm_nests + num_tmp_tables) {
+    // join_tab array only has "primary_tables" tables. We need those more:
+    if (!(tmp_join_tabs = alloc_jtab_array(thd, sjm_nests + num_tmp_tables)))
+      return true; /* purecov: inspected */
+  }
+
+  // To check that we fill the array correctly: fill it with zeros first
+  memset(best_ref, 0,
+         sizeof(JOIN_TAB *) * (primary_tables + sjm_nests + num_tmp_tables));
+
+  int sjm_index = tables;  // Number assigned to materialized temporary table
+  int remaining_sjm_inner = 0;
+  bool err = false;
+  for (uint tableno = 0; tableno < tables; tableno++) {
+    POSITION *const pos = best_positions + tableno;
+    if (has_semijoin && sj_is_materialize_strategy(pos->sj_strategy)) {
+      assert(outer_target < inner_target);
+
+      TABLE_LIST *const sj_nest = pos->table->emb_sj_nest;
+
+      // Handle this many inner tables of materialized semi-join
+      remaining_sjm_inner = pos->n_sj_tables;
+
+      /*
+        If we fail in some allocation below, we cannot bail out immediately;
+        that would put us in a difficult situation to clean up; imagine we
+        have planned this layout:
+          outer1 - sj_mat_tmp1 - outer2 - sj_mat_tmp2 - outer3
+        We have successfully filled a JOIN_TAB for sj_mat_tmp1, and are
+        failing to fill a JOIN_TAB for sj_mat_tmp2 (OOM). So we want to quit
+        this function, which will lead to cleanup functions.
+        But sj_mat_tmp1 is in this->best_ref only, outer3 is in this->join_tab
+        only: what is the array to traverse for cleaning up? What is the
+        number of tables to loop over?
+        So: if we fail in the present loop, we record the error but continue
+        filling best_ref; when it's fully filled, bail out, because then
+        best_ref can be used as reliable array for cleaning up.
+      */
+      JOIN_TAB *const tab = tmp_join_tabs++;
+      best_ref[outer_target] = tab;
+      tab->set_join(this);
+      tab->set_idx(outer_target);
+
+      /*
+        Up to this point there cannot be a failure. JOIN_TAB has been filled
+        enough to be clean-able.
+      */
+
+      Semijoin_mat_exec *const sjm_exec = new (thd->mem_root) Semijoin_mat_exec(
+          sj_nest, (pos->sj_strategy == SJ_OPT_MATERIALIZE_SCAN),
+          remaining_sjm_inner, outer_target, inner_target);
+
+      tab->set_sj_mat_exec(sjm_exec);
+
+      if (!sjm_exec || setup_semijoin_materialized_table(
+                           tab, sjm_index, pos, best_positions + sjm_index))
+        err = true; /* purecov: inspected */
+
+      outer_target++;
+      sjm_index++;
+    }
+    /*
+      Locate join_tab target for the table we are considering.
+      (remaining_sjm_inner becomes negative for non-SJM tables, this can be
+       safely ignored).
+    */
+    const uint target =
+        (remaining_sjm_inner--) > 0 ? inner_target++ : outer_target++;
+    JOIN_TAB *const tab = pos->table;
+
+    best_ref[target] = tab;
+    tab->set_idx(target);
+    tab->set_position(pos);
+    TABLE *const table = tab->table();
+    if (tab->type() != JT_CONST && tab->type() != JT_SYSTEM) {
+      if (pos->sj_strategy == SJ_OPT_LOOSE_SCAN && tab->quick() &&
+          tab->quick()->index != pos->loosescan_key) {
+        /*
+          We must use the duplicate-eliminating index, so this QUICK is not
+          an option.
+        */
+        delete tab->quick();
+        tab->set_quick(nullptr);
+      }
+      if (!pos->key) {
+        if (tab->quick())
+          tab->set_type(calc_join_type(tab->quick()->get_type()));
+        else
+          tab->set_type(JT_ALL);
+      } else
+        // REF or RANGE, clarify later when prefix tables are set for JOIN_TABs
+        tab->set_type(JT_REF);
+    }
+    assert(tab->type() != JT_UNKNOWN);
+
+    assert(table->reginfo.join_tab == tab);
+    if (!tab->join_cond())
+      table->reginfo.not_exists_optimize = false;  // Only with LEFT JOIN
+    map2table[tab->table_ref->tableno()] = tab;
+  }
+
+
+// Source: sql_optimizer.cc
+// Lines 2814-2977

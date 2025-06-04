@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'memento' at line 4
+2. Pointer 'code' at line 9
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static BROTLI_INLINE BROTLI_BOOL ReadDistanceInternal(
+    int safe, BrotliDecoderState* s, BrotliBitReader* br) {
+  int distval;
+  BrotliBitReaderState memento;
+  HuffmanCode* distance_tree = s->distance_hgroup.htrees[s->dist_htree_index];
+  if (!safe) {
+    s->distance_code = (int)ReadSymbol(distance_tree, br);
+  } else {
+    uint32_t code;
+    BrotliBitReaderSaveState(br, &memento);
+    if (!SafeReadSymbol(distance_tree, br, &code)) {
+      return BROTLI_FALSE;
+    }
+    s->distance_code = (int)code;
+  }
+
+
+// Source: decode.c
+// Lines 1449-1463
+
+
+[ANSWER]
+MAY

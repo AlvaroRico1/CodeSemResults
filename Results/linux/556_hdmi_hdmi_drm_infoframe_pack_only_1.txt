@@ -1,0 +1,1 @@
+ptr,linux/drivers/video/hdmi.c,4,buffer,linux/drivers/video/hdmi.c,2,2

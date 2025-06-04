@@ -1,0 +1,135 @@
+static int vfat_rename(struct inode *old_dir, struct dentry *old_dentry,
+		       struct inode *new_dir, struct dentry *new_dentry,
+		       unsigned int flags)
+{
+	struct buffer_head *dotdot_bh;
+	struct msdos_dir_entry *dotdot_de;
+	struct inode *old_inode, *new_inode;
+	struct fat_slot_info old_sinfo, sinfo;
+	struct timespec64 ts;
+	loff_t new_i_pos;
+	int err, is_dir, update_dotdot, corrupt = 0;
+	struct super_block *sb = old_dir->i_sb;
+
+	if (flags & ~RENAME_NOREPLACE)
+		return -EINVAL;
+
+	old_sinfo.bh = sinfo.bh = dotdot_bh = NULL;
+	old_inode = d_inode(old_dentry);
+	new_inode = d_inode(new_dentry);
+	mutex_lock(&MSDOS_SB(sb)->s_lock);
+	err = vfat_find(old_dir, &old_dentry->d_name, &old_sinfo);
+	if (err)
+		goto out;
+
+	is_dir = S_ISDIR(old_inode->i_mode);
+	update_dotdot = (is_dir && old_dir != new_dir);
+	if (update_dotdot) {
+		if (fat_get_dotdot_entry(old_inode, &dotdot_bh, &dotdot_de)) {
+			err = -EIO;
+			goto out;
+		}
+	}
+
+	ts = current_time(old_dir);
+	if (new_inode) {
+		if (is_dir) {
+			err = fat_dir_empty(new_inode);
+			if (err)
+				goto out;
+		}
+		new_i_pos = MSDOS_I(new_inode)->i_pos;
+		fat_detach(new_inode);
+	} else {
+		err = vfat_add_entry(new_dir, &new_dentry->d_name, is_dir, 0,
+				     &ts, &sinfo);
+		if (err)
+			goto out;
+		new_i_pos = sinfo.i_pos;
+	}
+	inode_inc_iversion(new_dir);
+
+	fat_detach(old_inode);
+	fat_attach(old_inode, new_i_pos);
+	if (IS_DIRSYNC(new_dir)) {
+		err = fat_sync_inode(old_inode);
+		if (err)
+			goto error_inode;
+	} else
+		mark_inode_dirty(old_inode);
+
+	if (update_dotdot) {
+		fat_set_start(dotdot_de, MSDOS_I(new_dir)->i_logstart);
+		mark_buffer_dirty_inode(dotdot_bh, old_inode);
+		if (IS_DIRSYNC(new_dir)) {
+			err = sync_dirty_buffer(dotdot_bh);
+			if (err)
+				goto error_dotdot;
+		}
+		drop_nlink(old_dir);
+		if (!new_inode)
+ 			inc_nlink(new_dir);
+	}
+
+	err = fat_remove_entries(old_dir, &old_sinfo);	/* and releases bh */
+	old_sinfo.bh = NULL;
+	if (err)
+		goto error_dotdot;
+	inode_inc_iversion(old_dir);
+	fat_truncate_time(old_dir, &ts, S_CTIME|S_MTIME);
+	if (IS_DIRSYNC(old_dir))
+		(void)fat_sync_inode(old_dir);
+	else
+		mark_inode_dirty(old_dir);
+
+	if (new_inode) {
+		drop_nlink(new_inode);
+		if (is_dir)
+			drop_nlink(new_inode);
+		fat_truncate_time(new_inode, &ts, S_CTIME);
+	}
+out:
+	brelse(sinfo.bh);
+	brelse(dotdot_bh);
+	brelse(old_sinfo.bh);
+	mutex_unlock(&MSDOS_SB(sb)->s_lock);
+
+	return err;
+
+error_dotdot:
+	/* data cluster is shared, serious corruption */
+	corrupt = 1;
+
+	if (update_dotdot) {
+		fat_set_start(dotdot_de, MSDOS_I(old_dir)->i_logstart);
+		mark_buffer_dirty_inode(dotdot_bh, old_inode);
+		corrupt |= sync_dirty_buffer(dotdot_bh);
+	}
+error_inode:
+	fat_detach(old_inode);
+	fat_attach(old_inode, old_sinfo.i_pos);
+	if (new_inode) {
+		fat_attach(new_inode, new_i_pos);
+		if (corrupt)
+			corrupt |= fat_sync_inode(new_inode);
+	} else {
+		/*
+		 * If new entry was not sharing the data cluster, it
+		 * shouldn't be serious corruption.
+		 */
+		int err2 = fat_remove_entries(new_dir, &sinfo);
+		if (corrupt)
+			corrupt |= err2;
+		sinfo.bh = NULL;
+	}
+	if (corrupt < 0) {
+		fat_fs_error(new_dir->i_sb,
+			     "%s: Filesystem corrupted (i_pos %lld)",
+			     __func__, sinfo.i_pos);
+	}
+	goto out;
+}
+
+
+// Source: namei_vfat.c
+// Lines 895-1025

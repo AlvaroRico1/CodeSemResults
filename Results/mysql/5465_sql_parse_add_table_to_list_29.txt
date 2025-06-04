@@ -1,0 +1,1 @@
+ptr,mysql/sql/sql_parse.cc,42,index_hints_arg,mysql/sql/sql_parse.cc,4,1

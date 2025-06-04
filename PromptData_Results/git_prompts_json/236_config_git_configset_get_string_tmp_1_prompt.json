@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'dest' at line 2\n2. Pointer 'value' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint git_configset_get_string_tmp(struct config_set *cs, const char *key,\n\t\t\t\t const char **dest)\n{\n\tconst char *value;\n\tif (!git_configset_get_value(cs, key, &value)) {\n\t\tif (!value)\n\t\t\treturn config_error_nonbool(key);\n\t\t*dest = value;\n\t\treturn 0;\n\t} else {\n\t\treturn 1;\n\t}\n\n\n// Source: config.c\n// Lines 2175-2186\n",
+  "ANSWER": "MAY"
+}

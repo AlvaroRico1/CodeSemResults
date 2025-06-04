@@ -1,0 +1,41 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'qs' at line 1
+2. Pointer 'stream' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void h2o_http3_on_create_unidirectional_stream(quicly_stream_t *qs)
+{
+    if (quicly_stream_is_self_initiated(qs)) {
+        /* create egress unistream */
+        static const quicly_stream_callbacks_t callbacks = {egress_unistream_on_destroy, egress_unistream_on_send_shift,
+                                                            egress_unistream_on_send_emit, egress_unistream_on_send_stop};
+        struct st_h2o_http3_egress_unistream_t *stream = h2o_mem_alloc(sizeof(*stream));
+        qs->data = stream;
+        qs->callbacks = &callbacks;
+        stream->quic = qs;
+        h2o_buffer_init(&stream->sendbuf, &h2o_socket_buffer_prototype);
+    } else {
+        /* create ingress unistream */
+        static const quicly_stream_callbacks_t callbacks = {
+            ingress_unistream_on_destroy, NULL, NULL, NULL, ingress_unistream_on_receive, ingress_unistream_on_receive_reset};
+        struct st_h2o_http3_ingress_unistream_t *stream = h2o_mem_alloc(sizeof(*stream));
+        qs->data = stream;
+        qs->callbacks = &callbacks;
+        stream->quic = qs;
+        h2o_buffer_init(&stream->recvbuf, &h2o_socket_buffer_prototype);
+        stream->handle_input = unknown_type_handle_input;
+    }
+
+
+// Source: common.c
+// Lines 390-411
+
+
+[ANSWER]
+MUST

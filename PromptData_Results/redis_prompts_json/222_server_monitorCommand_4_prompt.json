@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'new' at line None\n2. Pointer 'tmp' at line None\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid monitorCommand(client *c) {\n    if (c->flags & CLIENT_DENY_BLOCKING) {\n        /**\n         * A client that has CLIENT_DENY_BLOCKING flag on\n         * expects a reply per command and so can't execute MONITOR. */\n        addReplyError(c, \"MONITOR isn't allowed for DENY BLOCKING client\");\n        return;\n    }\n\n    /* ignore MONITOR if already slave or in monitor mode */\n    if (c->flags & CLIENT_SLAVE) return;\n\n    c->flags |= (CLIENT_SLAVE|CLIENT_MONITOR);\n    listAddNodeTail(server.monitors,c);\n    addReply(c,shared.ok);\n}\n\n\n// Source: server.c\n// Lines 5358-5373\n",
+  "ANSWER": "MUST"
+}

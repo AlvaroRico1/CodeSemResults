@@ -1,0 +1,73 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'next' at line 13
+2. Pointer 'elt' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+remove_from_table (struct table_elt *elt, unsigned int hash)
+{
+  if (elt == 0)
+    return;
+
+  /* Mark this element as removed.  See cse_insn.  */
+  elt->first_same_value = 0;
+
+  /* Remove the table element from its equivalence class.  */
+
+  {
+    struct table_elt *prev = elt->prev_same_value;
+    struct table_elt *next = elt->next_same_value;
+
+    if (next)
+      next->prev_same_value = prev;
+
+    if (prev)
+      prev->next_same_value = next;
+    else
+      {
+	struct table_elt *newfirst = next;
+	while (next)
+	  {
+	    next->first_same_value = newfirst;
+	    next = next->next_same_value;
+	  }
+      }
+  }
+
+  /* Remove the table element from its hash bucket.  */
+
+  {
+    struct table_elt *prev = elt->prev_same_hash;
+    struct table_elt *next = elt->next_same_hash;
+
+    if (next)
+      next->prev_same_hash = prev;
+
+    if (prev)
+      prev->next_same_hash = next;
+    else if (table[hash] == elt)
+      table[hash] = next;
+    else
+      {
+	/* This entry is not in the proper hash bucket.  This can happen
+	   when two classes were merged by `merge_equiv_classes'.  Search
+	   for the hash bucket that it heads.  This happens only very
+	   rarely, so the cost is acceptable.  */
+	for (hash = 0; hash < HASH_SIZE; hash++)
+	  if (table[hash] == elt)
+	    table[hash] = next;
+      }
+  }
+
+
+// Source: cse.c
+// Lines 1364-1417
+
+
+[ANSWER]
+MUST

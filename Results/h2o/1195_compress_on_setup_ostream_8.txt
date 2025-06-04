@@ -1,0 +1,1 @@
+encoder,h2o/lib/handler/compress.c,4,compressor,h2o/lib/handler/compress.c,7,1

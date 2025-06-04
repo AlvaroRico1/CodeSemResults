@@ -1,0 +1,1 @@
+ptr,mysql/sql/sql_parse.cc,42,alias_str,mysql/sql/sql_parse.cc,30,1

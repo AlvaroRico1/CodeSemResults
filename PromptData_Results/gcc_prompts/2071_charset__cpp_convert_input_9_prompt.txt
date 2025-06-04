@@ -1,0 +1,91 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'buffer' at line 7
+2. Pointer 'st_size' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+_cpp_convert_input (cpp_reader *pfile, const char *input_charset,
+		    uchar *input, size_t size, size_t len,
+		    const unsigned char **buffer_start, off_t *st_size)
+{
+  struct cset_converter input_cset;
+  struct _cpp_strbuf to;
+  unsigned char *buffer;
+
+  input_cset = init_iconv_desc (pfile, SOURCE_CHARSET, input_charset);
+  if (input_cset.func == convert_no_conversion)
+    {
+      to.text = input;
+      to.asize = size;
+      to.len = len;
+    }
+  else
+    {
+      to.asize = MAX (65536, len);
+      to.text = XNEWVEC (uchar, to.asize);
+      to.len = 0;
+
+      if (!APPLY_CONVERSION (input_cset, input, len, &to))
+	cpp_error (pfile, CPP_DL_ERROR,
+		   "failure to convert %s to %s",
+		   CPP_OPTION (pfile, input_charset), SOURCE_CHARSET);
+
+      free (input);
+    }
+
+  /* Clean up the mess.  */
+  if (input_cset.func == convert_using_iconv)
+    iconv_close (input_cset.cd);
+
+  /* Resize buffer if we allocated substantially too much, or if we
+     haven't enough space for the \n-terminator or following
+     15 bytes of padding (used to quiet warnings from valgrind or
+     Address Sanitizer, when the optimized lexer accesses aligned
+     16-byte memory chunks, including the bytes after the malloced,
+     area, and stops lexing on '\n').  */
+  if (to.len + 4096 < to.asize || to.len + 16 > to.asize)
+    to.text = XRESIZEVEC (uchar, to.text, to.len + 16);
+
+  memset (to.text + to.len, '\0', 16);
+
+  /* If the file is using old-school Mac line endings (\r only),
+     terminate with another \r, not an \n, so that we do not mistake
+     the \r\n sequence for a single DOS line ending and erroneously
+     issue the "No newline at end of file" diagnostic.  */
+  if (to.len && to.text[to.len - 1] == '\r')
+    to.text[to.len] = '\r';
+  else
+    to.text[to.len] = '\n';
+
+  buffer = to.text;
+  *st_size = to.len;
+#if HOST_CHARSET == HOST_CHARSET_ASCII
+  /* The HOST_CHARSET test just above ensures that the source charset
+     is UTF-8.  So, ignore a UTF-8 BOM if we see one.  Note that
+     glib'c UTF-8 iconv() provider (as of glibc 2.7) does not ignore a
+     BOM -- however, even if it did, we would still need this code due
+     to the 'convert_no_conversion' case.  */
+  if (to.len >= 3 && to.text[0] == 0xef && to.text[1] == 0xbb
+      && to.text[2] == 0xbf)
+    {
+      *st_size -= 3;
+      buffer += 3;
+    }
+#endif
+
+  *buffer_start = to.text;
+  return buffer;
+}
+
+
+// Source: charset.c
+// Lines 2137-2208
+
+
+[ANSWER]
+MAY

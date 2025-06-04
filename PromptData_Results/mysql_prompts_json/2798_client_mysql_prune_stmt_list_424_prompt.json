@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'pruned_list' at line 2\n2. Pointer 'mysql' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void mysql_prune_stmt_list(MYSQL *mysql) {\n  LIST *pruned_list = nullptr;\n\n  while (mysql->stmts) {\n    LIST *element = mysql->stmts;\n    MYSQL_STMT *stmt;\n\n    mysql->stmts = list_delete(element, element);\n    stmt = (MYSQL_STMT *)element->data;\n    if (stmt->state != MYSQL_STMT_INIT_DONE) {\n      stmt->mysql = nullptr;\n      stmt->last_errno = CR_SERVER_LOST;\n      my_stpcpy(stmt->last_error, ER_CLIENT(CR_SERVER_LOST));\n      my_stpcpy(stmt->sqlstate, unknown_sqlstate);\n    } else {\n      pruned_list = list_add(pruned_list, element);\n    }\n  }\n\n  mysql->stmts = pruned_list;\n}\n\n\n// Source: client.cc\n// Lines 6953-6973\n",
+  "ANSWER": "MUST-NOT"
+}

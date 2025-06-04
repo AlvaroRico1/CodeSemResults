@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'client' at line 3\n2. Pointer 'redis' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void on_connect(const redisAsyncContext *redis, int status)\n{\n    h2o_redis_client_t *client = (h2o_redis_client_t *)redis->data;\n    if (client == NULL)\n        return;\n\n    if (status != REDIS_OK) {\n        close_and_detach_connection(client, h2o_redis_error_connection);\n        return;\n    }\n    h2o_timer_unlink(&client->_timeout_entry);\n\n    client->state = H2O_REDIS_CONNECTION_STATE_CONNECTED;\n    if (client->on_connect != NULL)\n        client->on_connect();\n}\n\n\n// Source: redis.c\n// Lines 94-109\n",
+  "ANSWER": "MUST"
+}

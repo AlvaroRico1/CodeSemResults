@@ -1,0 +1,66 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'math_size' at line 5
+2. Pointer 'buf_fx' at line 7
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+get_sigframe(struct k_sigaction *ka, struct pt_regs *regs, size_t frame_size,
+	     void __user **fpstate)
+{
+	/* Default to using normal stack */
+	unsigned long math_size = 0;
+	unsigned long sp = regs->sp;
+	unsigned long buf_fx = 0;
+	int onsigstack = on_sig_stack(sp);
+	int ret;
+
+	/* redzone */
+	if (IS_ENABLED(CONFIG_X86_64))
+		sp -= 128;
+
+	/* This is the X/Open sanctioned signal stack switching.  */
+	if (ka->sa.sa_flags & SA_ONSTACK) {
+		if (sas_ss_flags(sp) == 0)
+			sp = current->sas_ss_sp + current->sas_ss_size;
+	} else if (IS_ENABLED(CONFIG_X86_32) &&
+		   !onsigstack &&
+		   regs->ss != __USER_DS &&
+		   !(ka->sa.sa_flags & SA_RESTORER) &&
+		   ka->sa.sa_restorer) {
+		/* This is the legacy signal stack switching. */
+		sp = (unsigned long) ka->sa.sa_restorer;
+	}
+
+	sp = fpu__alloc_mathframe(sp, IS_ENABLED(CONFIG_X86_32),
+				  &buf_fx, &math_size);
+	*fpstate = (void __user *)sp;
+
+	sp = align_sigframe(sp - frame_size);
+
+	/*
+	 * If we are on the alternate signal stack and would overflow it, don't.
+	 * Return an always-bogus address instead so we will die with SIGSEGV.
+	 */
+	if (onsigstack && !likely(on_sig_stack(sp)))
+		return (void __user *)-1L;
+
+	/* save i387 and extended state */
+	ret = copy_fpstate_to_sigframe(*fpstate, (void __user *)buf_fx, math_size);
+	if (ret < 0)
+		return (void __user *)-1L;
+
+	return (void __user *)sp;
+}
+
+
+// Source: signal.c
+// Lines 240-286
+
+
+[ANSWER]
+MUST-NOT

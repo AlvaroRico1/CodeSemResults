@@ -1,0 +1,1 @@
+other_repeated_message,protobuf/src/google/protobuf/extension_set.cc,49,other_extension,protobuf/src/google/protobuf/extension_set.cc,3,1

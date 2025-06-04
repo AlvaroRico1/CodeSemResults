@@ -1,0 +1,1 @@
+node,redis/src/quicklist.c,22,entry,redis/src/quicklist.c,16,1

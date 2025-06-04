@@ -1,0 +1,1 @@
+operand,linux/drivers/acpi/acpica/dsopcode.c,6,table_index,linux/drivers/acpi/acpica/dsopcode.c,10,2

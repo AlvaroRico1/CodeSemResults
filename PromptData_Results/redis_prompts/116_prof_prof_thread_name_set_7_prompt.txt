@@ -1,0 +1,55 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tdata' at line 2
+2. Pointer 's' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+prof_thread_name_set(tsd_t *tsd, const char *thread_name) {
+	prof_tdata_t *tdata;
+	unsigned i;
+	char *s;
+
+	tdata = prof_tdata_get(tsd, true);
+	if (tdata == NULL) {
+		return EAGAIN;
+	}
+
+	/* Validate input. */
+	if (thread_name == NULL) {
+		return EFAULT;
+	}
+	for (i = 0; thread_name[i] != '\0'; i++) {
+		char c = thread_name[i];
+		if (!isgraph(c) && !isblank(c)) {
+			return EFAULT;
+		}
+	}
+
+	s = prof_thread_name_alloc(tsd_tsdn(tsd), thread_name);
+	if (s == NULL) {
+		return EAGAIN;
+	}
+
+	if (tdata->thread_name != NULL) {
+		idalloctm(tsd_tsdn(tsd), tdata->thread_name, NULL, NULL, true,
+		    true);
+		tdata->thread_name = NULL;
+	}
+	if (strlen(s) > 0) {
+		tdata->thread_name = s;
+	}
+	return 0;
+}
+
+
+// Source: prof.c
+// Lines 2157-2192
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,82 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'time' at line 8
+2. Pointer 'time_cs' at line 9
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int fat_alloc_new_dir(struct inode *dir, struct timespec64 *ts)
+{
+	struct super_block *sb = dir->i_sb;
+	struct msdos_sb_info *sbi = MSDOS_SB(sb);
+	struct buffer_head *bhs[MAX_BUF_PER_PAGE];
+	struct msdos_dir_entry *de;
+	sector_t blknr;
+	__le16 date, time;
+	u8 time_cs;
+	int err, cluster;
+
+	err = fat_alloc_clusters(dir, &cluster, 1);
+	if (err)
+		goto error;
+
+	blknr = fat_clus_to_blknr(sbi, cluster);
+	bhs[0] = sb_getblk(sb, blknr);
+	if (!bhs[0]) {
+		err = -ENOMEM;
+		goto error_free;
+	}
+
+	fat_time_unix2fat(sbi, ts, &time, &date, &time_cs);
+
+	de = (struct msdos_dir_entry *)bhs[0]->b_data;
+	/* Avoid race with userspace read via bdev */
+	lock_buffer(bhs[0]);
+	/* filling the new directory slots ("." and ".." entries) */
+	memcpy(de[0].name, MSDOS_DOT, MSDOS_NAME);
+	memcpy(de[1].name, MSDOS_DOTDOT, MSDOS_NAME);
+	de->attr = de[1].attr = ATTR_DIR;
+	de[0].lcase = de[1].lcase = 0;
+	de[0].time = de[1].time = time;
+	de[0].date = de[1].date = date;
+	if (sbi->options.isvfat) {
+		/* extra timestamps */
+		de[0].ctime = de[1].ctime = time;
+		de[0].ctime_cs = de[1].ctime_cs = time_cs;
+		de[0].adate = de[0].cdate = de[1].adate = de[1].cdate = date;
+	} else {
+		de[0].ctime = de[1].ctime = 0;
+		de[0].ctime_cs = de[1].ctime_cs = 0;
+		de[0].adate = de[0].cdate = de[1].adate = de[1].cdate = 0;
+	}
+	fat_set_start(&de[0], cluster);
+	fat_set_start(&de[1], MSDOS_I(dir)->i_logstart);
+	de[0].size = de[1].size = 0;
+	memset(de + 2, 0, sb->s_blocksize - 2 * sizeof(*de));
+	set_buffer_uptodate(bhs[0]);
+	unlock_buffer(bhs[0]);
+	mark_buffer_dirty_inode(bhs[0], dir);
+
+	err = fat_zeroed_cluster(dir, blknr, 1, bhs, MAX_BUF_PER_PAGE);
+	if (err)
+		goto error_free;
+
+	return cluster;
+
+error_free:
+	fat_free_clusters(dir, cluster);
+error:
+	return err;
+}
+
+
+// Source: dir.c
+// Lines 1139-1201
+
+
+[ANSWER]
+MAY

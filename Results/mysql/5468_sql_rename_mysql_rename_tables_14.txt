@@ -1,0 +1,1 @@
+table,mysql/sql/sql_rename.cc,20,table,mysql/sql/sql_rename.cc,20,1

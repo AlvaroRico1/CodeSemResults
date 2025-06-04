@@ -1,0 +1,147 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'config' at line 5
+2. Pointer 'submodule_url' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_submodule_update(git_submodule *sm, int init, git_submodule_update_options *_update_options)
+{
+	int error;
+	unsigned int submodule_status;
+	git_config *config = NULL;
+	const char *submodule_url;
+	git_repository *sub_repo = NULL;
+	git_remote *remote = NULL;
+	git_object *target_commit = NULL;
+	git_str buf = GIT_STR_INIT;
+	git_submodule_update_options update_options = GIT_SUBMODULE_UPDATE_OPTIONS_INIT;
+	git_clone_options clone_options = GIT_CLONE_OPTIONS_INIT;
+
+	GIT_ASSERT_ARG(sm);
+
+	if (_update_options)
+		memcpy(&update_options, _update_options, sizeof(git_submodule_update_options));
+
+	GIT_ERROR_CHECK_VERSION(&update_options, GIT_SUBMODULE_UPDATE_OPTIONS_VERSION, "git_submodule_update_options");
+
+	/* Copy over the remote callbacks */
+	memcpy(&clone_options.fetch_opts, &update_options.fetch_opts, sizeof(git_fetch_options));
+
+	/* Get the status of the submodule to determine if it is already initialized  */
+	if ((error = git_submodule_status(&submodule_status, sm->repo, sm->name, GIT_SUBMODULE_IGNORE_UNSPECIFIED)) < 0)
+		goto done;
+
+	/*
+	 * If submodule work dir is not already initialized, check to see
+	 * what we need to do (initialize, clone, return error...)
+	 */
+	if (submodule_status & GIT_SUBMODULE_STATUS_WD_UNINITIALIZED) {
+		/*
+		 * Work dir is not initialized, check to see if the submodule
+		 * info has been copied into .git/config
+		 */
+		if ((error = git_repository_config_snapshot(&config, sm->repo)) < 0 ||
+			(error = git_str_printf(&buf, "submodule.%s.url", git_submodule_name(sm))) < 0)
+			goto done;
+
+		if ((error = git_config_get_string(&submodule_url, config, git_str_cstr(&buf))) < 0) {
+			/*
+			 * If the error is not "not found" or if it is "not found" and we are not
+			 * initializing the submodule, then return error.
+			 */
+			if (error != GIT_ENOTFOUND)
+				goto done;
+
+			if (!init) {
+				git_error_set(GIT_ERROR_SUBMODULE, "submodule is not initialized");
+				error = GIT_ERROR;
+				goto done;
+			}
+
+			/* The submodule has not been initialized yet - initialize it now.*/
+			if ((error = git_submodule_init(sm, 0)) < 0)
+				goto done;
+
+			git_config_free(config);
+			config = NULL;
+
+			if ((error = git_repository_config_snapshot(&config, sm->repo)) < 0 ||
+				(error = git_config_get_string(&submodule_url, config, git_str_cstr(&buf))) < 0)
+				goto done;
+		}
+
+		/** submodule is initialized - now clone it **/
+		/* override repo creation */
+		clone_options.repository_cb = git_submodule_update_repo_init_cb;
+		clone_options.repository_cb_payload = sm;
+
+		/*
+		 * Do not perform checkout as part of clone, instead we
+		 * will checkout the specific commit manually.
+		 */
+		clone_options.checkout_opts.checkout_strategy = GIT_CHECKOUT_NONE;
+
+		if ((error = git_clone(&sub_repo, submodule_url, sm->path, &clone_options)) < 0 ||
+			(error = git_repository_set_head_detached(sub_repo, git_submodule_index_id(sm))) < 0 ||
+			(error = git_checkout_head(sub_repo, &update_options.checkout_opts)) != 0)
+			goto done;
+	} else {
+		const git_oid *oid;
+
+		/**
+		 * Work dir is initialized - look up the commit in the parent repository's index,
+		 * update the workdir contents of the subrepository, and set the subrepository's
+		 * head to the new commit.
+		 */
+		if ((error = git_submodule_open(&sub_repo, sm)) < 0)
+			goto done;
+
+		if ((oid = git_submodule_index_id(sm)) == NULL) {
+			git_error_set(GIT_ERROR_SUBMODULE, "could not get ID of submodule in index");
+			error = -1;
+			goto done;
+		}
+
+		/* Look up the target commit in the submodule. */
+		if ((error = git_object_lookup(&target_commit, sub_repo, oid, GIT_OBJECT_COMMIT)) < 0) {
+			/* If it isn't found then fetch and try again. */
+			if (error != GIT_ENOTFOUND || !update_options.allow_fetch ||
+				(error = lookup_default_remote(&remote, sub_repo)) < 0 ||
+				(error = git_remote_fetch(remote, NULL, &update_options.fetch_opts, NULL)) < 0 ||
+				(error = git_object_lookup(&target_commit, sub_repo, git_submodule_index_id(sm), GIT_OBJECT_COMMIT)) < 0)
+				goto done;
+		}
+
+		if ((error = git_checkout_tree(sub_repo, target_commit, &update_options.checkout_opts)) != 0 ||
+			(error = git_repository_set_head_detached(sub_repo, git_submodule_index_id(sm))) < 0)
+			goto done;
+
+		/* Invalidate the wd flags as the workdir has been updated. */
+		sm->flags = sm->flags &
+			~(GIT_SUBMODULE_STATUS_IN_WD |
+		  	GIT_SUBMODULE_STATUS__WD_OID_VALID |
+		  	GIT_SUBMODULE_STATUS__WD_SCANNED);
+	}
+
+done:
+	git_str_dispose(&buf);
+	git_config_free(config);
+	git_object_free(target_commit);
+	git_remote_free(remote);
+	git_repository_free(sub_repo);
+
+	return error;
+}
+
+
+// Source: submodule.c
+// Lines 1315-1442
+
+
+[ANSWER]
+MAY

@@ -1,0 +1,107 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'not_before' at line 8
+2. Pointer 'key' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static struct st_session_ticket_t *parse_ticket_entry(yoml_t *element, char *errstr)
+{
+    yoml_t *t;
+    struct st_session_ticket_t *ticket;
+    unsigned char name[sizeof(ticket->name) + 1], *key;
+    const EVP_CIPHER *cipher;
+    const EVP_MD *hash;
+    uint64_t not_before, not_after;
+
+    errstr[0] = '\0';
+
+    if (element->type != YOML_TYPE_MAPPING) {
+        strcpy(errstr, "node is not a mapping");
+        return NULL;
+    }
+
+#define FETCH(n, post)                                                                                                             \
+    do {                                                                                                                           \
+        if ((t = yoml_get(element, n)) == NULL) {                                                                                  \
+            strcpy(errstr, " mandatory attribute `" n "` is missing");                                                             \
+            return NULL;                                                                                                           \
+        }                                                                                                                          \
+        if (t->type != YOML_TYPE_SCALAR) {                                                                                         \
+            strcpy(errstr, "attribute `" n "` is not a string");                                                                   \
+            return NULL;                                                                                                           \
+        }                                                                                                                          \
+        post                                                                                                                       \
+    } while (0)
+
+    FETCH("name", {
+        if (strlen(t->data.scalar) != sizeof(ticket->name) * 2) {
+            strcpy(errstr, "length of `name` attribute is not 32 bytes");
+            return NULL;
+        }
+        if (h2o_hex_decode(name, t->data.scalar, sizeof(ticket->name) * 2) != 0) {
+            strcpy(errstr, "failed to decode the hex-encoded name");
+            return NULL;
+        }
+    });
+    FETCH("cipher", {
+        if ((cipher = EVP_get_cipherbyname(t->data.scalar)) == NULL) {
+            strcpy(errstr, "cannot find the named cipher algorithm");
+            return NULL;
+        }
+    });
+    FETCH("hash", {
+        if ((hash = EVP_get_digestbyname(t->data.scalar)) == NULL) {
+            strcpy(errstr, "cannot find the named hash algorgithm");
+            return NULL;
+        }
+    });
+    FETCH("key", {
+        size_t keylen = EVP_CIPHER_key_length(cipher) + EVP_MD_block_size(hash);
+        if (strlen(t->data.scalar) != keylen * 2) {
+            sprintf(errstr, "length of the `key` attribute is incorrect (is %zu, must be %zu)\n", strlen(t->data.scalar),
+                    keylen * 2);
+            return NULL;
+        }
+        key = alloca(keylen + 1);
+        if (h2o_hex_decode(key, t->data.scalar, keylen * 2) != 0) {
+            strcpy(errstr, "failed to decode the hex-encoded key");
+            return NULL;
+        }
+    });
+    FETCH("not_before", {
+        if (sscanf(t->data.scalar, "%" SCNu64, &not_before) != 1) {
+            strcpy(errstr, "failed to parse the `not_before` attribute");
+            return NULL;
+        }
+    });
+    FETCH("not_after", {
+        if (sscanf(t->data.scalar, "%" SCNu64, &not_after) != 1) {
+            strcpy(errstr, "failed to parse the `not_after` attribute");
+            return NULL;
+        }
+    });
+    if (!(not_before <= not_after)) {
+        strcpy(errstr, "`not_after` is not equal to or greater than `not_before`");
+        return NULL;
+    }
+
+#undef FETCH
+
+    ticket = new_ticket(cipher, hash, not_before, not_after, 0);
+    memcpy(ticket->name, name, sizeof(ticket->name));
+    memcpy(ticket->keybuf, key, EVP_CIPHER_key_length(cipher) + EVP_MD_block_size(hash));
+    return ticket;
+}
+
+
+// Source: ssl.c
+// Lines 506-593
+
+
+[ANSWER]
+MAY

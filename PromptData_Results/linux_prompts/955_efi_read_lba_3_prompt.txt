@@ -1,0 +1,43 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'data' at line 14
+2. Pointer 'buffer' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static size_t read_lba(struct parsed_partitions *state,
+		       u64 lba, u8 *buffer, size_t count)
+{
+	size_t totalreadcount = 0;
+	struct block_device *bdev = state->bdev;
+	sector_t n = lba * (bdev_logical_block_size(bdev) / 512);
+
+	if (!buffer || lba > last_lba(bdev))
+                return 0;
+
+	while (count) {
+		int copied = 512;
+		Sector sect;
+		unsigned char *data = read_part_sector(state, n++, &sect);
+		if (!data)
+			break;
+		if (copied > count)
+			copied = count;
+		memcpy(buffer, data, copied);
+		put_dev_sector(sect);
+		buffer += copied;
+		totalreadcount +=copied;
+		count -= copied;
+	}
+
+
+// Source: efi.c
+// Lines 237-260
+
+
+[ANSWER]
+MAY

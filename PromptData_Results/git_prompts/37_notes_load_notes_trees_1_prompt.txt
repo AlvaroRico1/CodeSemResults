@@ -1,0 +1,30 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'trees' at line 5
+2. Pointer 't' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+struct notes_tree **load_notes_trees(struct string_list *refs, int flags)
+{
+	struct string_list_item *item;
+	int counter = 0;
+	struct notes_tree **trees;
+	ALLOC_ARRAY(trees, refs->nr + 1);
+	for_each_string_list_item(item, refs) {
+		struct notes_tree *t = xcalloc(1, sizeof(struct notes_tree));
+		init_notes(t, item->string, combine_notes_ignore, flags);
+		trees[counter++] = t;
+	}
+
+
+// Source: notes.c
+// Lines 1035-1045
+
+
+[ANSWER]
+MUST

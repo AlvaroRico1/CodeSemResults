@@ -1,0 +1,1 @@
+dest_mode,libgit2/tests/clar/clar/fs.h,1,child,libgit2/tests/clar/clar/fs.h,10,0

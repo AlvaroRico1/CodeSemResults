@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'loop' at line 10\n2. Pointer 'bb' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ndelete_basic_block (basic_block bb)\n{\n  if (!cfg_hooks->delete_basic_block)\n    internal_error (\"%s does not support delete_basic_block\", cfg_hooks->name);\n\n  cfg_hooks->delete_basic_block (bb);\n\n  if (current_loops != NULL)\n    {\n      class loop *loop = bb->loop_father;\n\n      /* If we remove the header or the latch of a loop, mark the loop for\n\t removal.  */\n      if (loop->latch == bb\n\t  || loop->header == bb)\n\tmark_loop_for_removal (loop);\n\n      remove_bb_from_loops (bb);\n    }\n\n\n// Source: cfghooks.c\n// Lines 598-616\n",
+  "ANSWER": "MUST"
+}

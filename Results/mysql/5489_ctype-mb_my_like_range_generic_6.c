@@ -1,0 +1,126 @@
+bool my_like_range_generic(const CHARSET_INFO *cs, const char *ptr,
+                           size_t ptr_length, char escape, char w_one,
+                           char w_many, size_t res_length, char *min_str,
+                           char *max_str, size_t *min_length,
+                           size_t *max_length) {
+  const char *end = ptr + ptr_length;
+  const char *min_org = min_str;
+  const char *max_org = max_str;
+  char *min_end = min_str + res_length;
+  char *max_end = max_str + res_length;
+  size_t charlen = res_length / cs->mbmaxlen;
+  size_t res_length_diff;
+
+  for (; charlen > 0; charlen--) {
+    my_wc_t wc, wc2;
+    int res;
+    if ((res = cs->cset->mb_wc(cs, &wc, pointer_cast<const uchar *>(ptr),
+                               pointer_cast<const uchar *>(end))) <= 0) {
+      if (res == MY_CS_ILSEQ) /* Bad sequence */
+        return true;          /* min_length and max_length are not important */
+      break;                  /* End of the string */
+    }
+    ptr += res;
+
+    if (wc == (my_wc_t)escape) {
+      if ((res = cs->cset->mb_wc(cs, &wc, pointer_cast<const uchar *>(ptr),
+                                 pointer_cast<const uchar *>(end))) <= 0) {
+        if (res == MY_CS_ILSEQ)
+          return true; /* min_length and max_length are not important */
+        /*
+           End of the string: Escape is the last character.
+           Put escape as a normal character.
+           We'll will leave the loop on the next iteration.
+        */
+      } else
+        ptr += res;
+
+      /* Put escape character to min_str and max_str  */
+      if ((res = cs->cset->wc_mb(cs, wc, (uchar *)min_str, (uchar *)min_end)) <=
+          0)
+        goto pad_set_lengths; /* No space */
+      min_str += res;
+
+      if ((res = cs->cset->wc_mb(cs, wc, (uchar *)max_str, (uchar *)max_end)) <=
+          0)
+        goto pad_set_lengths; /* No space */
+      max_str += res;
+      continue;
+    } else if (wc == (my_wc_t)w_one) {
+      if ((res = cs->cset->wc_mb(cs, cs->min_sort_char, (uchar *)min_str,
+                                 (uchar *)min_end)) <= 0)
+        goto pad_set_lengths;
+      min_str += res;
+
+      if ((res = cs->cset->wc_mb(cs, cs->max_sort_char, (uchar *)max_str,
+                                 (uchar *)max_end)) <= 0)
+        goto pad_set_lengths;
+      max_str += res;
+      continue;
+    } else if (wc == (my_wc_t)w_many) {
+      /*
+        Calculate length of keys:
+        a\min\min... is the smallest possible string
+        a\max\max... is the biggest possible string
+      */
+      *min_length = ((cs->state & MY_CS_BINSORT) ? (size_t)(min_str - min_org)
+                                                 : res_length);
+      *max_length = res_length;
+      goto pad_min_max;
+    }
+
+    const char *contraction_flags = nullptr;
+    if (cs->uca) contraction_flags = cs->uca->contraction_flags;
+    if (contraction_flags &&
+        my_uca_can_be_contraction_head(contraction_flags, wc) &&
+        (res = cs->cset->mb_wc(cs, &wc2, pointer_cast<const uchar *>(ptr),
+                               pointer_cast<const uchar *>(end))) > 0) {
+      const uint16 *weight;
+      if ((wc2 == (my_wc_t)w_one || wc2 == (my_wc_t)w_many)) {
+        /* Contraction head followed by a wildcard */
+        *min_length = *max_length = res_length;
+        goto pad_min_max;
+      }
+
+      if (my_uca_can_be_contraction_tail(contraction_flags, wc2) &&
+          (weight = my_uca_contraction2_weight(cs->uca->contraction_nodes, wc,
+                                               wc2)) &&
+          weight[0]) {
+        /* Contraction found */
+        if (charlen == 1) {
+          /* contraction does not fit to result */
+          *min_length = *max_length = res_length;
+          goto pad_min_max;
+        }
+
+        ptr += res;
+        charlen--;
+
+        /* Put contraction head */
+        if ((res = cs->cset->wc_mb(cs, wc, (uchar *)min_str,
+                                   (uchar *)min_end)) <= 0)
+          goto pad_set_lengths;
+        min_str += res;
+
+        if ((res = cs->cset->wc_mb(cs, wc, (uchar *)max_str,
+                                   (uchar *)max_end)) <= 0)
+          goto pad_set_lengths;
+        max_str += res;
+        wc = wc2; /* Prepare to put contraction tail */
+      }
+    }
+
+    /* Normal character, or contraction tail */
+    if ((res = cs->cset->wc_mb(cs, wc, (uchar *)min_str, (uchar *)min_end)) <=
+        0)
+      goto pad_set_lengths;
+    min_str += res;
+    if ((res = cs->cset->wc_mb(cs, wc, (uchar *)max_str, (uchar *)max_end)) <=
+        0)
+      goto pad_set_lengths;
+    max_str += res;
+  }
+
+
+// Source: ctype-mb.cc
+// Lines 808-929

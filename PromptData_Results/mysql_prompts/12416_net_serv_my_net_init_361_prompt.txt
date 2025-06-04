@@ -1,0 +1,60 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ext' at line 23
+2. Pointer 'vio' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool my_net_init(NET *net, Vio *vio) {
+  DBUG_TRACE;
+  net->vio = vio;
+  my_net_local_init(net); /* Set some limits */
+  if (!(net->buff = (uchar *)my_malloc(
+            key_memory_NET_buff,
+            (size_t)net->max_packet + NET_HEADER_SIZE + COMP_HEADER_SIZE,
+            MYF(MY_WME))))
+    return true;
+  net->buff_end = net->buff + net->max_packet;
+  net->error = NET_ERROR_UNSET;
+  net->return_status = nullptr;
+  net->pkt_nr = net->compress_pkt_nr = 0;
+  net->write_pos = net->read_pos = net->buff;
+  net->last_error[0] = 0;
+  net->compress = false;
+  net->reading_or_writing = 0;
+  net->where_b = net->remain_in_buf = 0;
+  net->last_errno = 0;
+#ifdef MYSQL_SERVER
+  net->extension = nullptr;
+#else
+  NET_EXTENSION *ext = net_extension_init();
+  ext->net_async_context->cur_pos = net->buff + net->where_b;
+  ext->net_async_context->read_rows_is_first_read = true;
+  ext->net_async_context->async_operation = NET_ASYNC_OP_IDLE;
+  ext->net_async_context->async_send_command_status =
+      NET_ASYNC_SEND_COMMAND_IDLE;
+  ext->net_async_context->async_read_query_result_status =
+      NET_ASYNC_READ_QUERY_RESULT_IDLE;
+  ext->net_async_context->async_packet_read_state = NET_ASYNC_PACKET_READ_IDLE;
+  ext->compress_ctx.algorithm = enum_compression_algorithm::MYSQL_UNCOMPRESSED;
+  net->extension = ext;
+#endif
+  if (vio) {
+    /* For perl DBI/DBD. */
+    net->fd = vio_fd(vio);
+    vio_fastsend(vio);
+  }
+  return false;
+}
+
+
+// Source: net_serv.cc
+// Lines 145-185
+
+
+[ANSWER]
+MUST-NOT

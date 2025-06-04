@@ -1,0 +1,24 @@
+hsa_get_string_cst_symbol (tree string_cst)
+{
+  gcc_checking_assert (TREE_CODE (string_cst) == STRING_CST);
+
+  hsa_symbol **slot = hsa_cfun->m_string_constants_map.get (string_cst);
+  if (slot)
+    return *slot;
+
+  hsa_op_immed *cst = new hsa_op_immed (string_cst);
+  hsa_symbol *sym = new hsa_symbol (cst->m_type, BRIG_SEGMENT_GLOBAL,
+				    BRIG_LINKAGE_MODULE, true,
+				    BRIG_ALLOCATION_AGENT);
+  sym->m_cst_value = cst;
+  sym->m_dim = TREE_STRING_LENGTH (string_cst);
+  sym->m_name_number = hsa_cfun->m_global_symbols.length ();
+
+  hsa_cfun->m_global_symbols.safe_push (sym);
+  hsa_cfun->m_string_constants_map.put (string_cst, sym);
+  return sym;
+}
+
+
+// Source: hsa-gen.c
+// Lines 1008-1027

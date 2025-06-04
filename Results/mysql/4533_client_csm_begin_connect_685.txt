@@ -1,0 +1,1 @@
+bind_result,mysql/sql-common/client.cc,187,unix_socket,mysql/sql-common/client.cc,8,0

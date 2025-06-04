@@ -1,0 +1,35 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'b' at line 2
+2. Pointer 'b' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void SerialArena::CleanupList() {
+  Block* b = head_;
+  b->start = reinterpret_cast<CleanupNode*>(limit_);
+  do {
+    auto* limit = reinterpret_cast<CleanupNode*>(
+        b->Pointer(b->size & static_cast<size_t>(-8)));
+    auto it = b->start;
+    auto num = limit - it;
+    if (num > 0) {
+      for (; it < limit; it++) {
+        it->cleanup(it->elem);
+      }
+    }
+    b = b->next;
+  } while (b);
+}
+
+
+// Source: arena.cc
+// Lines 191-206
+
+
+[ANSWER]
+MUST

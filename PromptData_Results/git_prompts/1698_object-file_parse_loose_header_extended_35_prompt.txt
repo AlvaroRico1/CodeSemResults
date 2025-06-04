@@ -1,0 +1,79 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'oi' at line 1
+2. Pointer 'size_scratch' at line None
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int parse_loose_header_extended(const char *hdr, struct object_info *oi,
+				       unsigned int flags)
+{
+	const char *type_buf = hdr;
+	unsigned long size;
+	int type, type_len = 0;
+
+	/*
+	 * The type can be of any size but is followed by
+	 * a space.
+	 */
+	for (;;) {
+		char c = *hdr++;
+		if (!c)
+			return -1;
+		if (c == ' ')
+			break;
+		type_len++;
+	}
+
+	type = type_from_string_gently(type_buf, type_len, 1);
+	if (oi->type_name)
+		strbuf_add(oi->type_name, type_buf, type_len);
+	/*
+	 * Set type to 0 if its an unknown object and
+	 * we're obtaining the type using '--allow-unknown-type'
+	 * option.
+	 */
+	if ((flags & OBJECT_INFO_ALLOW_UNKNOWN_TYPE) && (type < 0))
+		type = 0;
+	else if (type < 0)
+		die(_("invalid object type"));
+	if (oi->typep)
+		*oi->typep = type;
+
+	/*
+	 * The length must follow immediately, and be in canonical
+	 * decimal format (ie "010" is not valid).
+	 */
+	size = *hdr++ - '0';
+	if (size > 9)
+		return -1;
+	if (size) {
+		for (;;) {
+			unsigned long c = *hdr - '0';
+			if (c > 9)
+				break;
+			hdr++;
+			size = size * 10 + c;
+		}
+	}
+
+	if (oi->sizep)
+		*oi->sizep = size;
+
+	/*
+	 * The length must be followed by a zero byte
+	 */
+	return *hdr ? -1 : type;
+}
+
+
+// Source: object-file.c
+// Lines 1320-1379
+
+
+[ANSWER]
+MUST

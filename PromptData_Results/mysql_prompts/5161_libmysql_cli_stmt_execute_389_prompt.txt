@@ -1,0 +1,60 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'mysql' at line 5
+2. Pointer 'stmt' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int cli_stmt_execute(MYSQL_STMT *stmt) {
+  DBUG_TRACE;
+
+  if (stmt->param_count) {
+    MYSQL *mysql = stmt->mysql;
+    uchar *param_data = nullptr;
+    bool result;
+    unsigned long param_length = 0;
+    bool send_named_params =
+        (mysql->server_capabilities & CLIENT_QUERY_ATTRIBUTES) != 0;
+
+    if (!stmt->bind_param_done) {
+      set_stmt_error(stmt, CR_PARAMS_NOT_BOUND, unknown_sqlstate, nullptr);
+      return 1;
+    }
+    if (mysql->status != MYSQL_STATUS_READY ||
+        mysql->server_status & SERVER_MORE_RESULTS_EXISTS) {
+      set_stmt_error(stmt, CR_COMMANDS_OUT_OF_SYNC, unknown_sqlstate, nullptr);
+      return 1;
+    }
+
+    if (mysql->net.vio)
+      net_clear(&mysql->net, true); /* Sets net->write_pos */
+    else {
+      set_stmt_errmsg(stmt, &mysql->net);
+      return 1;
+    }
+
+    if (mysql_int_serialize_param_data(
+            &mysql->net, stmt->param_count, stmt->params, NULL, 1, &param_data,
+            &param_length, stmt->send_types_to_server, send_named_params,
+            false)) {
+      set_stmt_errmsg(stmt, &mysql->net);
+      return 1;
+    }
+
+    result = execute(stmt, pointer_cast<char *>(param_data), param_length);
+    stmt->send_types_to_server = false;
+    my_free(param_data);
+    return result;
+  }
+
+
+// Source: libmysql.cc
+// Lines 1823-1863
+
+
+[ANSWER]
+MUST-NOT

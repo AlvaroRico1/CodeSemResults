@@ -1,0 +1,1 @@
+symbol,gcc/gcc/ipa-comdats.c,5,first,gcc/gcc/ipa-comdats.c,7,1

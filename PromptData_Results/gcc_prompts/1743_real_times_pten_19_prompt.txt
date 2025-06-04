@@ -1,0 +1,41 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'rr' at line 3
+2. Pointer 'r' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+times_pten (REAL_VALUE_TYPE *r, int exp)
+{
+  REAL_VALUE_TYPE pten, *rr;
+  bool negative = (exp < 0);
+  int i;
+
+  if (negative)
+    {
+      exp = -exp;
+      pten = *real_digit (1);
+      rr = &pten;
+    }
+  else
+    rr = r;
+
+  for (i = 0; exp > 0; ++i, exp >>= 1)
+    if (exp & 1)
+      do_multiply (rr, rr, ten_to_ptwo (i));
+
+  if (negative)
+    do_divide (r, r, &pten);
+}
+
+
+// Source: real.c
+// Lines 2401-2422
+
+
+[ANSWER]
+MUST

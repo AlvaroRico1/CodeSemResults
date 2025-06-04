@@ -1,0 +1,72 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'opt' at line 5
+2. Pointer 'data' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int show_one_mergetag(struct commit *commit,
+			     struct commit_extra_header *extra,
+			     void *data)
+{
+	struct rev_info *opt = (struct rev_info *)data;
+	struct object_id oid;
+	struct tag *tag;
+	struct strbuf verify_message;
+	struct signature_check sigc = { 0 };
+	int status, nth;
+	struct strbuf payload = STRBUF_INIT;
+	struct strbuf signature = STRBUF_INIT;
+
+	hash_object_file(the_hash_algo, extra->value, extra->len,
+			 type_name(OBJ_TAG), &oid);
+	tag = lookup_tag(the_repository, &oid);
+	if (!tag)
+		return -1; /* error message already given */
+
+	strbuf_init(&verify_message, 256);
+	if (parse_tag_buffer(the_repository, tag, extra->value, extra->len))
+		strbuf_addstr(&verify_message, "malformed mergetag\n");
+	else if (is_common_merge(commit) &&
+		 oideq(&tag->tagged->oid,
+		       &commit->parents->next->item->object.oid))
+		strbuf_addf(&verify_message,
+			    "merged tag '%s'\n", tag->tag);
+	else if ((nth = which_parent(&tag->tagged->oid, commit)) < 0)
+		strbuf_addf(&verify_message, "tag %s names a non-parent %s\n",
+				    tag->tag, oid_to_hex(&tag->tagged->oid));
+	else
+		strbuf_addf(&verify_message,
+			    "parent #%d, tagged '%s'\n", nth + 1, tag->tag);
+
+	status = -1;
+	if (parse_signature(extra->value, extra->len, &payload, &signature)) {
+		/* could have a good signature */
+		status = check_signature(payload.buf, payload.len,
+					 signature.buf, signature.len, &sigc);
+		if (sigc.gpg_output)
+			strbuf_addstr(&verify_message, sigc.gpg_output);
+		else
+			strbuf_addstr(&verify_message, "No signature\n");
+		signature_check_clear(&sigc);
+		/* otherwise we couldn't verify, which is shown as bad */
+	}
+
+	show_sig_lines(opt, status, verify_message.buf);
+	strbuf_release(&verify_message);
+	strbuf_release(&payload);
+	strbuf_release(&signature);
+	return 0;
+}
+
+
+// Source: log-tree.c
+// Lines 549-601
+
+
+[ANSWER]
+MUST

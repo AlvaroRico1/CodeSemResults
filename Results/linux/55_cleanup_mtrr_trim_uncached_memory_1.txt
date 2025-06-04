@@ -1,0 +1,1 @@
+size,linux/arch/x86/kernel/cpu/mtrr/cleanup.c,3,type,linux/arch/x86/kernel/cpu/mtrr/cleanup.c,4,2

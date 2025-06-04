@@ -1,0 +1,30 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'e' at line 2
+2. Pointer 's' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int my_wc_mb_bin(const CHARSET_INFO *cs MY_ATTRIBUTE((unused)),
+                        my_wc_t wc, uchar *s, uchar *e) {
+  if (s >= e) return MY_CS_TOOSMALL;
+
+  if (wc < 256) {
+    s[0] = (char)wc;
+    return 1;
+  }
+  return MY_CS_ILUNI;
+}
+}  // extern "C"
+
+
+// Source: ctype-bin.cc
+// Lines 240-250
+
+
+[ANSWER]
+MUST-NOT

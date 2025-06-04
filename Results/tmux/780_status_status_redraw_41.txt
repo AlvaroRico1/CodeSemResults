@@ -1,0 +1,1 @@
+sle,tmux/status.c,4,expanded,tmux/status.c,13,1

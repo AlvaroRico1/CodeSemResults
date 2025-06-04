@@ -1,0 +1,47 @@
+int git_diff_tree_to_tree(
+	git_diff **out,
+	git_repository *repo,
+	git_tree *old_tree,
+	git_tree *new_tree,
+	const git_diff_options *opts)
+{
+	git_iterator_flag_t iflag = GIT_ITERATOR_DONT_IGNORE_CASE;
+	git_iterator_options a_opts = GIT_ITERATOR_OPTIONS_INIT,
+		b_opts = GIT_ITERATOR_OPTIONS_INIT;
+	git_iterator *a = NULL, *b = NULL;
+	git_diff *diff = NULL;
+	char *prefix = NULL;
+	int error = 0;
+
+	GIT_ASSERT_ARG(out);
+	GIT_ASSERT_ARG(repo);
+
+	*out = NULL;
+
+	/* for tree to tree diff, be case sensitive even if the index is
+	 * currently case insensitive, unless the user explicitly asked
+	 * for case insensitivity
+	 */
+	if (opts && (opts->flags & GIT_DIFF_IGNORE_CASE) != 0)
+		iflag = GIT_ITERATOR_IGNORE_CASE;
+
+	if ((error = diff_prepare_iterator_opts(&prefix, &a_opts, iflag, &b_opts, iflag, opts)) < 0 ||
+	    (error = git_iterator_for_tree(&a, old_tree, &a_opts)) < 0 ||
+	    (error = git_iterator_for_tree(&b, new_tree, &b_opts)) < 0 ||
+	    (error = git_diff__from_iterators(&diff, repo, a, b, opts)) < 0)
+		goto out;
+
+	*out = diff;
+	diff = NULL;
+out:
+	git_iterator_free(a);
+	git_iterator_free(b);
+	git_diff_free(diff);
+	git__free(prefix);
+
+	return error;
+}
+
+
+// Source: diff_generate.c
+// Lines 1336-1378

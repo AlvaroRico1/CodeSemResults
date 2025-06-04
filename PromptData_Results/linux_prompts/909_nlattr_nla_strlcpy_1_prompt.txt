@@ -1,0 +1,36 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'src' at line 4
+2. Pointer 'dst' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+size_t nla_strlcpy(char *dst, const struct nlattr *nla, size_t dstsize)
+{
+	size_t srclen = nla_len(nla);
+	char *src = nla_data(nla);
+
+	if (srclen > 0 && src[srclen - 1] == '\0')
+		srclen--;
+
+	if (dstsize > 0) {
+		size_t len = (srclen >= dstsize) ? dstsize - 1 : srclen;
+
+		memset(dst, 0, dstsize);
+		memcpy(dst, src, len);
+	}
+
+	return srclen;
+}
+
+
+// Source: nlattr.c
+// Lines 516-532
+
+
+[ANSWER]
+MAY

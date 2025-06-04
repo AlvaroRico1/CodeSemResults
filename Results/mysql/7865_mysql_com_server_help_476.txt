@@ -1,0 +1,1 @@
+server_cmd,mysql/client/mysql.cc,4,help_arg,mysql/client/mysql.cc,2,0

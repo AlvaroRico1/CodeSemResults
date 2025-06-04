@@ -1,0 +1,63 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'file_name' at line 3
+2. Pointer 'cfg' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_config_write__add_value_with_duplicate_header(void)
+{
+	const char *file_name  = "config-duplicate-insert";
+	const char *entry_name = "foo.c";
+	const char *old_val    = "old";
+	const char *new_val    = "new";
+	const char *str;
+	git_config *cfg, *snapshot;
+
+	/* c = old should be replaced by c = new.
+	 * The bug causes c = new to be inserted under the first 'foo' header.
+	 */
+	const char *file_content =
+		"[foo]\n"   \
+		"  a = b\n" \
+		"[other]\n" \
+		"  a = b\n" \
+		"[foo]\n"   \
+		"  c = old\n";
+
+	/* Write the test config */
+	cl_git_mkfile(file_name, file_content);
+	cl_git_pass(git_config_open_ondisk(&cfg, file_name));
+
+	/* make sure the expected entry (foo.c) exists */
+	cl_git_pass(git_config_snapshot(&snapshot, cfg));
+	cl_git_pass(git_config_get_string(&str, snapshot, entry_name));
+	cl_assert_equal_s(old_val, str);
+	git_config_free(snapshot);
+
+	/* Try setting foo.c to something else */
+	cl_git_pass(git_config_set_string(cfg, entry_name, new_val));
+	git_config_free(cfg);
+
+	/* Reopen the file and make sure the new value was set */
+	cl_git_pass(git_config_open_ondisk(&cfg, file_name));
+	cl_git_pass(git_config_snapshot(&snapshot, cfg));
+	cl_git_pass(git_config_get_string(&str, snapshot, entry_name));
+	cl_assert_equal_s(new_val, str);
+
+	/* Cleanup */
+	git_config_free(snapshot);
+	git_config_free(cfg);
+}
+
+
+// Source: write.c
+// Lines 155-198
+
+
+[ANSWER]
+MUST-NOT

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'to' at line 1\n2. Pointer 'value' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\n  char *Write(int value, char *to) const {\n    assert(value >= 0 && value < 100);\n    return std::copy_n(m_digits[value], 2, to);\n  }\n\n private:\n  char m_digits[100][2]{};\n};\n\n\n// Source: integer_digits.h\n// Lines 54-61\n",
+  "ANSWER": "MUST-NOT"
+}

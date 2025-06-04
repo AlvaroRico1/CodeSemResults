@@ -1,0 +1,1 @@
+item_equal,mysql/sql/sql_planner.cc,48,item_field,mysql/sql/sql_planner.cc,47,1

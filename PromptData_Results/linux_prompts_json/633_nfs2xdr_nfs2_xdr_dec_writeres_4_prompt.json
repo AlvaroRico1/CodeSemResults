@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'result' at line 4\n2. Pointer 'data' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int nfs2_xdr_dec_writeres(struct rpc_rqst *req, struct xdr_stream *xdr,\n\t\t\t\t void *data)\n{\n\tstruct nfs_pgio_res *result = data;\n\n\t/* All NFSv2 writes are \"file sync\" writes */\n\tresult->verf->committed = NFS_FILE_SYNC;\n\treturn decode_attrstat(xdr, result->fattr, &result->op_status,\n\t\t\trpc_rqst_userns(req));\n}\n\n\n// Source: nfs2xdr.c\n// Lines 896-905\n",
+  "ANSWER": "MUST"
+}

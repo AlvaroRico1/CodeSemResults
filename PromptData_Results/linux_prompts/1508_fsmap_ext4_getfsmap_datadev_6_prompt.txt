@@ -1,0 +1,122 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'last_cluster' at line 13
+2. Pointer 'end_ag' at line 11
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int ext4_getfsmap_datadev(struct super_block *sb,
+				 struct ext4_fsmap *keys,
+				 struct ext4_getfsmap_info *info)
+{
+	struct ext4_sb_info *sbi = EXT4_SB(sb);
+	ext4_fsblk_t start_fsb;
+	ext4_fsblk_t end_fsb;
+	ext4_fsblk_t bofs;
+	ext4_fsblk_t eofs;
+	ext4_group_t start_ag;
+	ext4_group_t end_ag;
+	ext4_grpblk_t first_cluster;
+	ext4_grpblk_t last_cluster;
+	int error = 0;
+
+	bofs = le32_to_cpu(sbi->s_es->s_first_data_block);
+	eofs = ext4_blocks_count(sbi->s_es);
+	if (keys[0].fmr_physical >= eofs)
+		return 0;
+	else if (keys[0].fmr_physical < bofs)
+		keys[0].fmr_physical = bofs;
+	if (keys[1].fmr_physical >= eofs)
+		keys[1].fmr_physical = eofs - 1;
+	start_fsb = keys[0].fmr_physical;
+	end_fsb = keys[1].fmr_physical;
+
+	/* Determine first and last group to examine based on start and end */
+	ext4_get_group_no_and_offset(sb, start_fsb, &start_ag, &first_cluster);
+	ext4_get_group_no_and_offset(sb, end_fsb, &end_ag, &last_cluster);
+
+	/*
+	 * Convert the fsmap low/high keys to bg based keys.  Initialize
+	 * low to the fsmap low key and max out the high key to the end
+	 * of the bg.
+	 */
+	info->gfi_low = keys[0];
+	info->gfi_low.fmr_physical = EXT4_C2B(sbi, first_cluster);
+	info->gfi_low.fmr_length = 0;
+
+	memset(&info->gfi_high, 0xFF, sizeof(info->gfi_high));
+
+	/* Assemble a list of all the fixed-location metadata. */
+	error = ext4_getfsmap_find_fixed_metadata(sb, &info->gfi_meta_list);
+	if (error)
+		goto err;
+
+	/* Query each bg */
+	for (info->gfi_agno = start_ag;
+	     info->gfi_agno <= end_ag;
+	     info->gfi_agno++) {
+		/*
+		 * Set the bg high key from the fsmap high key if this
+		 * is the last bg that we're querying.
+		 */
+		if (info->gfi_agno == end_ag) {
+			info->gfi_high = keys[1];
+			info->gfi_high.fmr_physical = EXT4_C2B(sbi,
+					last_cluster);
+			info->gfi_high.fmr_length = 0;
+		}
+
+		trace_ext4_fsmap_low_key(sb, info->gfi_dev, info->gfi_agno,
+				info->gfi_low.fmr_physical,
+				info->gfi_low.fmr_length,
+				info->gfi_low.fmr_owner);
+
+		trace_ext4_fsmap_high_key(sb, info->gfi_dev, info->gfi_agno,
+				info->gfi_high.fmr_physical,
+				info->gfi_high.fmr_length,
+				info->gfi_high.fmr_owner);
+
+		error = ext4_mballoc_query_range(sb, info->gfi_agno,
+				EXT4_B2C(sbi, info->gfi_low.fmr_physical),
+				EXT4_B2C(sbi, info->gfi_high.fmr_physical),
+				ext4_getfsmap_datadev_helper, info);
+		if (error)
+			goto err;
+
+		/*
+		 * Set the bg low key to the start of the bg prior to
+		 * moving on to the next bg.
+		 */
+		if (info->gfi_agno == start_ag)
+			memset(&info->gfi_low, 0, sizeof(info->gfi_low));
+	}
+
+	/* Do we have a retained free extent? */
+	if (info->gfi_lastfree.fmr_owner) {
+		error = ext4_getfsmap_helper(sb, info, &info->gfi_lastfree);
+		if (error)
+			goto err;
+	}
+
+	/* Report any gaps at the end of the bg */
+	info->gfi_last = true;
+	error = ext4_getfsmap_datadev_helper(sb, end_ag, last_cluster, 0, info);
+	if (error)
+		goto err;
+
+err:
+	ext4_getfsmap_free_fixed_metadata(&info->gfi_meta_list);
+	return error;
+}
+
+
+// Source: fsmap.c
+// Lines 463-565
+
+
+[ANSWER]
+MAY

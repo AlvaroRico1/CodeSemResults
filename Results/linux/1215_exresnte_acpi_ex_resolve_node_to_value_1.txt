@@ -1,0 +1,1 @@
+object_ptr,linux/drivers/acpi/acpica/exresnte.c,1,obj_desc,linux/drivers/acpi/acpica/exresnte.c,6,2

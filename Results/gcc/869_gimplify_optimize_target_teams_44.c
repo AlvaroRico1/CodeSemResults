@@ -1,0 +1,65 @@
+optimize_target_teams (tree target, gimple_seq *pre_p)
+{
+  tree body = OMP_BODY (target);
+  tree teams = walk_tree (&body, find_omp_teams, NULL, NULL);
+  tree num_teams = integer_zero_node;
+  tree thread_limit = integer_zero_node;
+  location_t num_teams_loc = EXPR_LOCATION (target);
+  location_t thread_limit_loc = EXPR_LOCATION (target);
+  tree c, *p, expr;
+  struct gimplify_omp_ctx *target_ctx = gimplify_omp_ctxp;
+
+  if (teams == NULL_TREE)
+    num_teams = integer_one_node;
+  else
+    for (c = OMP_TEAMS_CLAUSES (teams); c; c = OMP_CLAUSE_CHAIN (c))
+      {
+	if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_NUM_TEAMS)
+	  {
+	    p = &num_teams;
+	    num_teams_loc = OMP_CLAUSE_LOCATION (c);
+	  }
+	else if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_THREAD_LIMIT)
+	  {
+	    p = &thread_limit;
+	    thread_limit_loc = OMP_CLAUSE_LOCATION (c);
+	  }
+	else
+	  continue;
+	expr = OMP_CLAUSE_OPERAND (c, 0);
+	if (TREE_CODE (expr) == INTEGER_CST)
+	  {
+	    *p = expr;
+	    continue;
+	  }
+	if (walk_tree (&expr, computable_teams_clause, NULL, NULL))
+	  {
+	    *p = integer_minus_one_node;
+	    continue;
+	  }
+	*p = expr;
+	gimplify_omp_ctxp = gimplify_omp_ctxp->outer_context;
+	if (gimplify_expr (p, pre_p, NULL, is_gimple_val, fb_rvalue, false)
+	    == GS_ERROR)
+	  {
+	    gimplify_omp_ctxp = target_ctx;
+	    *p = integer_minus_one_node;
+	    continue;
+	  }
+	gimplify_omp_ctxp = target_ctx;
+	if (!DECL_P (expr) && TREE_CODE (expr) != TARGET_EXPR)
+	  OMP_CLAUSE_OPERAND (c, 0) = *p;
+      }
+  c = build_omp_clause (thread_limit_loc, OMP_CLAUSE_THREAD_LIMIT);
+  OMP_CLAUSE_THREAD_LIMIT_EXPR (c) = thread_limit;
+  OMP_CLAUSE_CHAIN (c) = OMP_TARGET_CLAUSES (target);
+  OMP_TARGET_CLAUSES (target) = c;
+  c = build_omp_clause (num_teams_loc, OMP_CLAUSE_NUM_TEAMS);
+  OMP_CLAUSE_NUM_TEAMS_EXPR (c) = num_teams;
+  OMP_CLAUSE_CHAIN (c) = OMP_TARGET_CLAUSES (target);
+  OMP_TARGET_CLAUSES (target) = c;
+}
+
+
+// Source: gimplify.c
+// Lines 12667-12727

@@ -1,0 +1,1 @@
+sock,h2o/lib/handler/fastcgi.c,1,generator,h2o/lib/handler/fastcgi.c,3,1

@@ -1,0 +1,224 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'num_args' at line 2
+2. Pointer 'virt_loc' at line 9
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+collect_args (cpp_reader *pfile, const cpp_hashnode *node,
+	      _cpp_buff **pragma_buff, unsigned *num_args)
+{
+  _cpp_buff *buff, *base_buff;
+  cpp_macro *macro;
+  macro_arg *args, *arg;
+  const cpp_token *token;
+  unsigned int argc;
+  location_t virt_loc;
+  bool track_macro_expansion_p = CPP_OPTION (pfile, track_macro_expansion);
+  unsigned num_args_alloced = 0;
+
+  macro = node->value.macro;
+  if (macro->paramc)
+    argc = macro->paramc;
+  else
+    argc = 1;
+
+#define DEFAULT_NUM_TOKENS_PER_MACRO_ARG 50
+#define ARG_TOKENS_EXTENT 1000
+
+  buff = _cpp_get_buff (pfile, argc * (DEFAULT_NUM_TOKENS_PER_MACRO_ARG
+				       * sizeof (cpp_token *)
+				       + sizeof (macro_arg)));
+  base_buff = buff;
+  args = (macro_arg *) buff->base;
+  memset (args, 0, argc * sizeof (macro_arg));
+  buff->cur = (unsigned char *) &args[argc];
+  arg = args, argc = 0;
+
+  /* Collect the tokens making up each argument.  We don't yet know
+     how many arguments have been supplied, whether too many or too
+     few.  Hence the slightly bizarre usage of "argc" and "arg".  */
+  do
+    {
+      unsigned int paren_depth = 0;
+      unsigned int ntokens = 0;
+      unsigned virt_locs_capacity = DEFAULT_NUM_TOKENS_PER_MACRO_ARG;
+      num_args_alloced++;
+
+      argc++;
+      arg->first = (const cpp_token **) buff->cur;
+      if (track_macro_expansion_p)
+	{
+	  virt_locs_capacity = DEFAULT_NUM_TOKENS_PER_MACRO_ARG;
+	  arg->virt_locs = XNEWVEC (location_t,
+				    virt_locs_capacity);
+	}
+
+      for (;;)
+	{
+	  /* Require space for 2 new tokens (including a CPP_EOF).  */
+	  if ((unsigned char *) &arg->first[ntokens + 2] > buff->limit)
+	    {
+	      buff = _cpp_append_extend_buff (pfile, buff,
+					      ARG_TOKENS_EXTENT
+					      * sizeof (cpp_token *));
+	      arg->first = (const cpp_token **) buff->cur;
+	    }
+	  if (track_macro_expansion_p
+	      && (ntokens + 2 > virt_locs_capacity))
+	    {
+	      virt_locs_capacity += ARG_TOKENS_EXTENT;
+	      arg->virt_locs = XRESIZEVEC (location_t,
+					   arg->virt_locs,
+					   virt_locs_capacity);
+	    }
+
+	  token = cpp_get_token_1 (pfile, &virt_loc);
+
+	  if (token->type == CPP_PADDING)
+	    {
+	      /* Drop leading padding.  */
+	      if (ntokens == 0)
+		continue;
+	    }
+	  else if (token->type == CPP_OPEN_PAREN)
+	    paren_depth++;
+	  else if (token->type == CPP_CLOSE_PAREN)
+	    {
+	      if (paren_depth-- == 0)
+		break;
+	    }
+	  else if (token->type == CPP_COMMA)
+	    {
+	      /* A comma does not terminate an argument within
+		 parentheses or as part of a variable argument.  */
+	      if (paren_depth == 0
+		  && ! (macro->variadic && argc == macro->paramc))
+		break;
+	    }
+	  else if (token->type == CPP_EOF
+		   || (token->type == CPP_HASH && token->flags & BOL))
+	    break;
+	  else if (token->type == CPP_PRAGMA)
+	    {
+	      cpp_token *newtok = _cpp_temp_token (pfile);
+
+	      /* CPP_PRAGMA token lives in directive_result, which will
+		 be overwritten on the next directive.  */
+	      *newtok = *token;
+	      token = newtok;
+	      do
+		{
+		  if (*pragma_buff == NULL
+		      || BUFF_ROOM (*pragma_buff) < sizeof (cpp_token *))
+		    {
+		      _cpp_buff *next;
+		      if (*pragma_buff == NULL)
+			*pragma_buff
+			  = _cpp_get_buff (pfile, 32 * sizeof (cpp_token *));
+		      else
+			{
+			  next = *pragma_buff;
+			  *pragma_buff
+			    = _cpp_get_buff (pfile,
+					     (BUFF_FRONT (*pragma_buff)
+					      - (*pragma_buff)->base) * 2);
+			  (*pragma_buff)->next = next;
+			}
+		    }
+		  *(const cpp_token **) BUFF_FRONT (*pragma_buff) = token;
+		  BUFF_FRONT (*pragma_buff) += sizeof (cpp_token *);
+		  if (token->type == CPP_PRAGMA_EOL)
+		    break;
+		  token = cpp_get_token_1 (pfile, &virt_loc);
+		}
+	      while (token->type != CPP_EOF);
+
+	      /* In deferred pragmas parsing_args and prevent_expansion
+		 had been changed, reset it.  */
+	      pfile->state.parsing_args = 2;
+	      pfile->state.prevent_expansion = 1;
+
+	      if (token->type == CPP_EOF)
+		break;
+	      else
+		continue;
+	    }
+	  set_arg_token (arg, token, virt_loc,
+			 ntokens, MACRO_ARG_TOKEN_NORMAL,
+			 CPP_OPTION (pfile, track_macro_expansion));
+	  ntokens++;
+	}
+
+      /* Drop trailing padding.  */
+      while (ntokens > 0 && arg->first[ntokens - 1]->type == CPP_PADDING)
+	ntokens--;
+
+      arg->count = ntokens;
+      set_arg_token (arg, &pfile->eof, pfile->eof.src_loc,
+		     ntokens, MACRO_ARG_TOKEN_NORMAL,
+		     CPP_OPTION (pfile, track_macro_expansion));
+
+      /* Terminate the argument.  Excess arguments loop back and
+	 overwrite the final legitimate argument, before failing.  */
+      if (argc <= macro->paramc)
+	{
+	  buff->cur = (unsigned char *) &arg->first[ntokens + 1];
+	  if (argc != macro->paramc)
+	    arg++;
+	}
+    }
+  while (token->type != CPP_CLOSE_PAREN && token->type != CPP_EOF);
+
+  if (token->type == CPP_EOF)
+    {
+      /* We still need the CPP_EOF to end directives, and to end
+	 pre-expansion of a macro argument.  Step back is not
+	 unconditional, since we don't want to return a CPP_EOF to our
+	 callers at the end of an -include-d file.  */
+      if (pfile->context->prev || pfile->state.in_directive)
+	_cpp_backup_tokens (pfile, 1);
+      cpp_error (pfile, CPP_DL_ERROR,
+		 "unterminated argument list invoking macro \"%s\"",
+		 NODE_NAME (node));
+    }
+  else
+    {
+      /* A single empty argument is counted as no argument.  */
+      if (argc == 1 && macro->paramc == 0 && args[0].count == 0)
+	argc = 0;
+      if (_cpp_arguments_ok (pfile, macro, node, argc))
+	{
+	  /* GCC has special semantics for , ## b where b is a varargs
+	     parameter: we remove the comma if b was omitted entirely.
+	     If b was merely an empty argument, the comma is retained.
+	     If the macro takes just one (varargs) parameter, then we
+	     retain the comma only if we are standards conforming.
+
+	     If FIRST is NULL replace_args () swallows the comma.  */
+	  if (macro->variadic && (argc < macro->paramc
+				  || (argc == 1 && args[0].count == 0
+				      && !CPP_OPTION (pfile, std))))
+	    args[macro->paramc - 1].first = NULL;
+	  if (num_args)
+	    *num_args = num_args_alloced;
+	  return base_buff;
+	}
+    }
+
+  /* An error occurred.  */
+  _cpp_release_buff (pfile, base_buff);
+  return NULL;
+}
+
+
+// Source: macro.c
+// Lines 1094-1298
+
+
+[ANSWER]
+MAY

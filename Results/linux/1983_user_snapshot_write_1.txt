@@ -1,0 +1,1 @@
+offp,linux/kernel/power/user.c,2,pg_offp,linux/kernel/power/user.c,6,2

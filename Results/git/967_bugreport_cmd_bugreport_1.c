@@ -1,0 +1,45 @@
+int cmd_bugreport(int argc, const char **argv, const char *prefix)
+{
+	struct strbuf buffer = STRBUF_INIT;
+	struct strbuf report_path = STRBUF_INIT;
+	int report = -1;
+	time_t now = time(NULL);
+	struct tm tm;
+	char *option_output = NULL;
+	char *option_suffix = "%Y-%m-%d-%H%M";
+	const char *user_relative_path = NULL;
+	char *prefixed_filename;
+
+	const struct option bugreport_options[] = {
+		OPT_STRING('o', "output-directory", &option_output, N_("path"),
+			   N_("specify a destination for the bugreport file")),
+		OPT_STRING('s', "suffix", &option_suffix, N_("format"),
+			   N_("specify a strftime format suffix for the filename")),
+		OPT_END()
+	};
+
+	argc = parse_options(argc, argv, prefix, bugreport_options,
+			     bugreport_usage, 0);
+
+	/* Prepare the path to put the result */
+	prefixed_filename = prefix_filename(prefix,
+					    option_output ? option_output : "");
+	strbuf_addstr(&report_path, prefixed_filename);
+	strbuf_complete(&report_path, '/');
+
+	strbuf_addstr(&report_path, "git-bugreport-");
+	strbuf_addftime(&report_path, option_suffix, localtime_r(&now, &tm), 0, 0);
+	strbuf_addstr(&report_path, ".txt");
+
+	switch (safe_create_leading_directories(report_path.buf)) {
+	case SCLD_OK:
+	case SCLD_EXISTS:
+		break;
+	default:
+		die(_("could not create leading directories for '%s'"),
+		    report_path.buf);
+	}
+
+
+// Source: bugreport.c
+// Lines 94-134

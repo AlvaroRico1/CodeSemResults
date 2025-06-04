@@ -1,0 +1,94 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'agpt' at line 5
+2. Pointer 'pgpt' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int find_valid_gpt(struct parsed_partitions *state, gpt_header **gpt,
+			  gpt_entry **ptes)
+{
+	int good_pgpt = 0, good_agpt = 0, good_pmbr = 0;
+	gpt_header *pgpt = NULL, *agpt = NULL;
+	gpt_entry *pptes = NULL, *aptes = NULL;
+	legacy_mbr *legacymbr;
+	sector_t total_sectors = i_size_read(state->bdev->bd_inode) >> 9;
+	u64 lastlba;
+
+	if (!ptes)
+		return 0;
+
+	lastlba = last_lba(state->bdev);
+        if (!force_gpt) {
+		/* This will be added to the EFI Spec. per Intel after v1.02. */
+		legacymbr = kzalloc(sizeof(*legacymbr), GFP_KERNEL);
+		if (!legacymbr)
+			goto fail;
+
+		read_lba(state, 0, (u8 *)legacymbr, sizeof(*legacymbr));
+		good_pmbr = is_pmbr_valid(legacymbr, total_sectors);
+		kfree(legacymbr);
+
+		if (!good_pmbr)
+			goto fail;
+
+		pr_debug("Device has a %s MBR\n",
+			 good_pmbr == GPT_MBR_PROTECTIVE ?
+						"protective" : "hybrid");
+	}
+
+	good_pgpt = is_gpt_valid(state, GPT_PRIMARY_PARTITION_TABLE_LBA,
+				 &pgpt, &pptes);
+        if (good_pgpt)
+		good_agpt = is_gpt_valid(state,
+					 le64_to_cpu(pgpt->alternate_lba),
+					 &agpt, &aptes);
+        if (!good_agpt && force_gpt)
+                good_agpt = is_gpt_valid(state, lastlba, &agpt, &aptes);
+
+        /* The obviously unsuccessful case */
+        if (!good_pgpt && !good_agpt)
+                goto fail;
+
+        compare_gpts(pgpt, agpt, lastlba);
+
+        /* The good cases */
+        if (good_pgpt) {
+                *gpt  = pgpt;
+                *ptes = pptes;
+                kfree(agpt);
+                kfree(aptes);
+		if (!good_agpt)
+                        pr_warn("Alternate GPT is invalid, using primary GPT.\n");
+                return 1;
+        }
+        else if (good_agpt) {
+                *gpt  = agpt;
+                *ptes = aptes;
+                kfree(pgpt);
+                kfree(pptes);
+		pr_warn("Primary GPT is invalid, using alternate GPT.\n");
+                return 1;
+        }
+
+ fail:
+        kfree(pgpt);
+        kfree(agpt);
+        kfree(pptes);
+        kfree(aptes);
+        *gpt = NULL;
+        *ptes = NULL;
+        return 0;
+}
+
+
+// Source: efi.c
+// Lines 583-657
+
+
+[ANSWER]
+MAY

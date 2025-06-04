@@ -1,0 +1,160 @@
+bool Sql_cmd_load_table::read_xml_field(THD *thd, COPY_INFO &info,
+                                        TABLE_LIST *table_list,
+                                        READ_INFO &read_info,
+                                        ulong skip_lines) {
+  TABLE *table = table_list->table;
+  const CHARSET_INFO *cs = read_info.read_charset;
+  DBUG_TRACE;
+
+  for (;;) {
+    if (thd->killed) {
+      thd->send_kill_message();
+      return true;
+    }
+
+    // read row tag and save values into tag list
+    if (read_info.read_xml()) break;
+
+    List_iterator_fast<XML_TAG> xmlit(read_info.taglist);
+    xmlit.rewind();
+    XML_TAG *tag = nullptr;
+
+#ifndef NDEBUG
+    DBUG_PRINT("read_xml_field", ("skip_lines=%d", (int)skip_lines));
+    while ((tag = xmlit++)) {
+      DBUG_PRINT("read_xml_field", ("got tag:%i '%s' '%s'", tag->level,
+                                    tag->field.c_ptr(), tag->value.c_ptr()));
+    }
+#endif
+
+    restore_record(table, s->default_values);
+    /*
+      Check whether default values of the fields not specified in column list
+      are correct or not.
+    */
+    if (validate_default_values_of_unset_fields(thd, table)) {
+      read_info.error = true;
+      break;
+    }
+
+    Autoinc_field_has_explicit_non_null_value_reset_guard after_each_row(table);
+
+    auto it = m_opt_fields_or_vars.begin();
+    Item *item = nullptr;
+    for (; it != m_opt_fields_or_vars.end(); ++it) {
+      item = *it;
+      /* If this line is to be skipped we don't want to fill field or var */
+      if (skip_lines) continue;
+
+      // Skip hidden generated columns.
+      if (is_hidden_generated_column(table, item)) continue;
+
+      /* find field in tag list */
+      xmlit.rewind();
+      tag = xmlit++;
+
+      while (tag && strcmp(tag->field.c_ptr(), item->item_name.ptr()) != 0)
+        tag = xmlit++;
+
+      item = item->real_item();
+
+      if (!tag)  // found null
+      {
+        if (item->type() == Item::FIELD_ITEM) {
+          Field *field = (static_cast<Item_field *>(item))->field;
+          field->reset();
+          field->set_null();
+          if (field == table->next_number_field)
+            table->autoinc_field_has_explicit_non_null_value = true;
+          if (!field->is_nullable()) {
+            if (field->type() == FIELD_TYPE_TIMESTAMP)
+              // Specific of TIMESTAMP NOT NULL: set to CURRENT_TIMESTAMP.
+              Item_func_now_local::store_in(field);
+            else if (field != table->next_number_field)
+              field->set_warning(Sql_condition::SL_WARNING,
+                                 ER_WARN_NULL_TO_NOTNULL, 1);
+          }
+        } else {
+          assert(nullptr != dynamic_cast<Item_user_var_as_out_param *>(item));
+          ((Item_user_var_as_out_param *)item)->set_null_value(cs);
+        }
+        continue;
+      }
+
+      if (item->type() == Item::FIELD_ITEM) {
+        Field *field = ((Item_field *)item)->field;
+        field->set_notnull();
+        if (field == table->next_number_field)
+          table->autoinc_field_has_explicit_non_null_value = true;
+        field->store(tag->value.ptr(), tag->value.length(), cs);
+      } else {
+        assert(nullptr != dynamic_cast<Item_user_var_as_out_param *>(item));
+        ((Item_user_var_as_out_param *)item)
+            ->set_value(tag->value.ptr(), tag->value.length(), cs);
+      }
+    }
+
+    if (read_info.error) break;
+
+    if (skip_lines) {
+      skip_lines--;
+      continue;
+    }
+
+    if (item != nullptr) {
+      /* Have not read any field, thus input file is simply ended */
+      if (it == m_opt_fields_or_vars.begin()) break;
+
+      for (; it != m_opt_fields_or_vars.end(); item = *it++) {
+        if (item->type() == Item::FIELD_ITEM) {
+          /*
+            QQ: We probably should not throw warning for each field.
+            But how about intention to always have the same number
+            of warnings in THD::num_truncated_fields (and get rid of
+            num_truncated_fields in the end?)
+          */
+          thd->num_truncated_fields++;
+          push_warning_printf(thd, Sql_condition::SL_WARNING,
+                              ER_WARN_TOO_FEW_RECORDS,
+                              ER_THD(thd, ER_WARN_TOO_FEW_RECORDS),
+                              thd->get_stmt_da()->current_row_for_condition());
+        } else {
+          assert(nullptr != dynamic_cast<Item_user_var_as_out_param *>(item));
+          ((Item_user_var_as_out_param *)item)->set_null_value(cs);
+        }
+      }
+    }
+
+    if (thd->killed || fill_record_n_invoke_before_triggers(
+                           thd, &info, m_opt_set_fields, m_opt_set_exprs, table,
+                           TRG_EVENT_INSERT, table->s->fields, true, nullptr))
+      return true;
+
+    switch (table_list->view_check_option(thd)) {
+      case VIEW_CHECK_SKIP:
+        goto continue_loop;
+      case VIEW_CHECK_ERROR:
+        return true;
+    }
+
+    if (invoke_table_check_constraints(thd, table)) {
+      if (thd->is_error()) return true;
+      // continue when IGNORE clause is used.
+      goto continue_loop;
+    }
+
+    if (write_record(thd, table, &info, nullptr)) return true;
+
+    /*
+      We don't need to reset auto-increment field since we are restoring
+      its default value at the beginning of each loop iteration.
+    */
+    thd->get_stmt_da()->inc_current_row_for_condition();
+  continue_loop:;
+  }
+  return read_info.error || thd->is_error();
+} /* load xml end */
+
+
+// Source: sql_load.cc
+// Lines 1142-1297

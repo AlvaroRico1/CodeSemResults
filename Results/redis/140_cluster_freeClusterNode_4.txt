@@ -1,0 +1,1 @@
+master,redis/src/cluster.c,10,slave,redis/src/cluster.c,None,1

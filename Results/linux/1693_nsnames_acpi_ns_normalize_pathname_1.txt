@@ -1,0 +1,1 @@
+new_path,linux/drivers/acpi/acpica/nsnames.c,5,input_path,linux/drivers/acpi/acpica/nsnames.c,3,2

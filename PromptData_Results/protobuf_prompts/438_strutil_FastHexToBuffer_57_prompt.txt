@@ -1,0 +1,31 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'p' at line 5
+2. Pointer 'buffer' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+char *FastHexToBuffer(int i, char* buffer) {
+  GOOGLE_CHECK(i >= 0) << "FastHexToBuffer() wants non-negative integers, not " << i;
+
+  static const char *hexdigits = "0123456789abcdef";
+  char *p = buffer + 21;
+  *p-- = '\0';
+  do {
+    *p-- = hexdigits[i & 15];   // mod by 16
+    i >>= 4;                    // divide by 16
+  } while (i > 0);
+  return p + 1;
+}
+
+
+// Source: strutil.cc
+// Lines 886-897
+
+
+[ANSWER]
+MUST

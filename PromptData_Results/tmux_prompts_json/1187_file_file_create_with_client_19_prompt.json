@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'cf' at line 4\n2. Pointer 'cbdata' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nfile_create_with_client(struct client *c, int stream, client_file_cb cb,\n    void *cbdata)\n{\n\tstruct client_file\t*cf;\n\n\tif (c != NULL && (c->flags & CLIENT_ATTACHED))\n\t\tc = NULL;\n\n\tcf = xcalloc(1, sizeof *cf);\n\tcf->c = c;\n\tcf->references = 1;\n\tcf->stream = stream;\n\n\tcf->buffer = evbuffer_new();\n\tif (cf->buffer == NULL)\n\t\tfatalx(\"out of memory\");\n\n\tcf->cb = cb;\n\tcf->data = cbdata;\n\n\tif (cf->c != NULL) {\n\t\tcf->peer = cf->c->peer;\n\t\tcf->tree = &cf->c->files;\n\t\tRB_INSERT(client_files, &cf->c->files, cf);\n\t\tcf->c->references++;\n\t}\n\n\treturn (cf);\n}\n\n\n// Source: file.c\n// Lines 97-125\n",
+  "ANSWER": "MUST"
+}

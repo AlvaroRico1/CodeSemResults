@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ctrl' at line 5\n2. Pointer 'cap' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void pci_std_enable_acs(struct pci_dev *dev)\n{\n\tint pos;\n\tu16 cap;\n\tu16 ctrl;\n\n\tpos = pci_find_ext_capability(dev, PCI_EXT_CAP_ID_ACS);\n\tif (!pos)\n\t\treturn;\n\n\tpci_read_config_word(dev, pos + PCI_ACS_CAP, &cap);\n\tpci_read_config_word(dev, pos + PCI_ACS_CTRL, &ctrl);\n\n\t/* Source Validation */\n\tctrl |= (cap & PCI_ACS_SV);\n\n\t/* P2P Request Redirect */\n\tctrl |= (cap & PCI_ACS_RR);\n\n\t/* P2P Completion Redirect */\n\tctrl |= (cap & PCI_ACS_CR);\n\n\t/* Upstream Forwarding */\n\tctrl |= (cap & PCI_ACS_UF);\n\n\tpci_write_config_word(dev, pos + PCI_ACS_CTRL, ctrl);\n}\n\n\n// Source: pci.c\n// Lines 3241-3267\n",
+  "ANSWER": "MAY"
+}

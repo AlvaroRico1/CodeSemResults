@@ -1,0 +1,51 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'cfg' at line 4
+2. Pointer 'config_url' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_submodule_init__absolute_url(void)
+{
+	git_submodule *sm;
+	git_config *cfg;
+	git_str absolute_url = GIT_STR_INIT;
+	const char *config_url;
+
+	g_repo = setup_fixture_submodule_simple();
+
+	cl_assert(git_fs_path_dirname_r(&absolute_url, git_repository_workdir(g_repo)) > 0);
+	cl_git_pass(git_str_joinpath(&absolute_url, absolute_url.ptr, "testrepo.git"));
+
+	/* write the absolute url to the .gitmodules file*/
+	cl_git_pass(git_submodule_set_url(g_repo, "testrepo", absolute_url.ptr));
+
+	cl_git_pass(git_submodule_lookup(&sm, g_repo, "testrepo"));
+
+	/* verify that the .gitmodules is set with an absolute path*/
+	cl_assert_equal_s(absolute_url.ptr, git_submodule_url(sm));
+
+	/* init and verify that absolute path is written to .git/config */
+	cl_git_pass(git_submodule_init(sm, false));
+
+	cl_git_pass(git_repository_config_snapshot(&cfg, g_repo));
+
+	cl_git_pass(git_config_get_string(&config_url, cfg, "submodule.testrepo.url"));
+	cl_assert_equal_s(absolute_url.ptr, config_url);
+
+	git_str_dispose(&absolute_url);
+	git_config_free(cfg);
+	git_submodule_free(sm);
+}
+
+
+// Source: init.c
+// Lines 14-45
+
+
+[ANSWER]
+MAY

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'lex' at line 4\n2. Pointer 'thd' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic bool select_like_stmt_test(THD *thd, Query_result *result,\n                                  ulonglong added_options) {\n  DBUG_TRACE;\n  LEX *const lex = thd->lex;\n\n  lex->query_block->context.resolve_in_select_list = true;\n\n  if (lex->unit->prepare(thd, result, nullptr, added_options, 0)) {\n    return true;\n  }\n  lex->save_cmd_properties(thd);\n\n  return false;\n}\n\n\n// Source: sql_prepare.cc\n// Lines 1100-1113\n",
+  "ANSWER": "MUST"
+}

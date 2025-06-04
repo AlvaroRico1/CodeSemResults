@@ -1,0 +1,83 @@
+bool Sql_cmd_load_table::read_fixed_length(THD *thd, COPY_INFO &info,
+                                           TABLE_LIST *table_list,
+                                           READ_INFO &read_info,
+                                           ulong skip_lines) {
+  TABLE *table = table_list->table;
+  bool err;
+  DBUG_TRACE;
+
+  while (!read_info.read_fixed_length()) {
+    if (thd->killed) {
+      thd->send_kill_message();
+      return true;
+    }
+    if (skip_lines) {
+      /*
+        We could implement this with a simple seek if:
+        - We are not using DATA INFILE LOCAL
+        - escape character is  ""
+        - line starting prefix is ""
+      */
+      skip_lines--;
+      continue;
+    }
+    uchar *pos = read_info.row_start;
+
+    restore_record(table, s->default_values);
+    /*
+      Check whether default values of the fields not specified in column list
+      are correct or not.
+    */
+    if (validate_default_values_of_unset_fields(thd, table)) {
+      read_info.error = true;
+      break;
+    }
+
+    Autoinc_field_has_explicit_non_null_value_reset_guard after_each_row(table);
+
+    for (Item *item : m_opt_fields_or_vars) {
+      // Skip hidden generated columns.
+      if (is_hidden_generated_column(table, item)) continue;
+      /*
+        There is no variables in fields_vars list in this format so
+        this conversion is safe (no need to check for STRING_ITEM).
+      */
+      assert(item->real_item()->type() == Item::FIELD_ITEM);
+      Item_field *sql_field = static_cast<Item_field *>(item->real_item());
+      Field *field = sql_field->field;
+      if (field == table->next_number_field)
+        table->autoinc_field_has_explicit_non_null_value = true;
+      /*
+        No fields specified in fields_vars list can be null in this format.
+        Mark field as not null, we should do this for each row because of
+        restore_record...
+      */
+      field->set_notnull();
+
+      if (pos == read_info.row_end) {
+        thd->num_truncated_fields++; /* Not enough fields */
+        push_warning_printf(thd, Sql_condition::SL_WARNING,
+                            ER_WARN_TOO_FEW_RECORDS,
+                            ER_THD(thd, ER_WARN_TOO_FEW_RECORDS),
+                            thd->get_stmt_da()->current_row_for_condition());
+        if (field->type() == FIELD_TYPE_TIMESTAMP && !field->is_nullable()) {
+          // Specific of TIMESTAMP NOT NULL: set to CURRENT_TIMESTAMP.
+          Item_func_now_local::store_in(field);
+        }
+      } else {
+        uint length;
+        uchar save_chr;
+        if ((length = (uint)(read_info.row_end - pos)) > field->field_length)
+          length = field->field_length;
+        save_chr = pos[length];
+        pos[length] = '\0';  // Safeguard aganst malloc
+        field->store((char *)pos, length, read_info.read_charset);
+        pos[length] = save_chr;
+        if ((pos += length) > read_info.row_end)
+          pos = read_info.row_end; /* Fills rest with space */
+      }
+    }
+
+
+// Source: sql_load.cc
+// Lines 762-840

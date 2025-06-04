@@ -1,0 +1,47 @@
+args_make_commands_prepare(struct cmd *self, struct cmdq_item *item, u_int idx,
+    const char *default_command, int wait, int expand)
+{
+	struct args			*args = cmd_get_args(self);
+	struct cmd_find_state		*target = cmdq_get_target(item);
+	struct client			*tc = cmdq_get_target_client(item);
+	struct args_value		*value;
+	struct args_command_state	*state;
+	const char			*cmd;
+
+	state = xcalloc(1, sizeof *state);
+
+	if (idx < args->count) {
+		value = &args->values[idx];
+		if (value->type == ARGS_COMMANDS) {
+			state->cmdlist = value->cmdlist;
+			state->cmdlist->references++;
+			return (state);
+		}
+		cmd = value->string;
+	} else {
+		if (default_command == NULL)
+			fatalx("argument out of range");
+		cmd = default_command;
+	}
+
+
+	if (expand)
+		state->cmd = format_single_from_target(item, cmd);
+	else
+		state->cmd = xstrdup(cmd);
+	log_debug("%s: %s", __func__, state->cmd);
+
+	if (wait)
+		state->pi.item = item;
+	cmd_get_source(self, &state->pi.file, &state->pi.line);
+	state->pi.c = tc;
+	if (state->pi.c != NULL)
+		state->pi.c->references++;
+	cmd_find_copy_state(&state->pi.fs, target);
+
+	return (state);
+}
+
+
+// Source: arguments.c
+// Lines 679-721

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'arg' at line 3\n2. Pointer 'arg_' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nset_parm_default_def_partition (tree var, void *arg_)\n{\n  parm_default_def_partition_arg *arg = (parm_default_def_partition_arg *)arg_;\n  var_map map = arg->first;\n  bitmap parts = arg->second;\n\n  if (!is_gimple_reg (var))\n    return;\n\n  tree ssa = ssa_default_def (cfun, var);\n  gcc_assert (ssa);\n\n  int version = var_to_partition (map, ssa);\n  gcc_assert (version != NO_PARTITION);\n\n  bool changed = bitmap_set_bit (parts, version);\n  gcc_assert (changed);\n}\n\n\n// Source: tree-outof-ssa.c\n// Lines 946-963\n",
+  "ANSWER": "MUST"
+}

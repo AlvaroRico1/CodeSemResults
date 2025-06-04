@@ -1,0 +1,96 @@
+ipa_fn_summary_write (void)
+{
+  struct output_block *ob = create_output_block (LTO_section_ipa_fn_summary);
+  lto_symtab_encoder_iterator lsei;
+  lto_symtab_encoder_t encoder = ob->decl_state->symtab_node_encoder;
+  unsigned int count = 0;
+
+  for (lsei = lsei_start_function_in_partition (encoder); !lsei_end_p (lsei);
+       lsei_next_function_in_partition (&lsei))
+    {
+      cgraph_node *cnode = lsei_cgraph_node (lsei);
+      if (cnode->definition && !cnode->alias)
+	count++;
+    }
+  streamer_write_uhwi (ob, count);
+
+  for (lsei = lsei_start_function_in_partition (encoder); !lsei_end_p (lsei);
+       lsei_next_function_in_partition (&lsei))
+    {
+      cgraph_node *cnode = lsei_cgraph_node (lsei);
+      if (cnode->definition && !cnode->alias)
+	{
+	  class ipa_fn_summary *info = ipa_fn_summaries->get (cnode);
+	  class ipa_size_summary *size_info = ipa_size_summaries->get (cnode);
+	  struct bitpack_d bp;
+	  struct cgraph_edge *edge;
+	  int i;
+	  size_time_entry *e;
+	  struct condition *c;
+
+	  streamer_write_uhwi (ob, lto_symtab_encoder_encode (encoder, cnode));
+	  streamer_write_hwi (ob, size_info->estimated_self_stack_size);
+	  streamer_write_hwi (ob, size_info->self_size);
+	  info->time.stream_out (ob);
+	  bp = bitpack_create (ob->main_stream);
+	  bp_pack_value (&bp, info->inlinable, 1);
+	  bp_pack_value (&bp, false, 1);
+	  bp_pack_value (&bp, info->fp_expressions, 1);
+	  streamer_write_bitpack (&bp);
+	  streamer_write_uhwi (ob, vec_safe_length (info->conds));
+	  for (i = 0; vec_safe_iterate (info->conds, i, &c); i++)
+	    {
+	      int j;
+	      struct expr_eval_op *op;
+
+	      streamer_write_uhwi (ob, c->operand_num);
+	      streamer_write_uhwi (ob, c->code);
+	      stream_write_tree (ob, c->type, true);
+	      stream_write_tree (ob, c->val, true);
+	      bp = bitpack_create (ob->main_stream);
+	      bp_pack_value (&bp, c->agg_contents, 1);
+	      bp_pack_value (&bp, c->by_ref, 1);
+	      streamer_write_bitpack (&bp);
+	      if (c->agg_contents)
+		streamer_write_uhwi (ob, c->offset);
+	      streamer_write_uhwi (ob, vec_safe_length (c->param_ops));
+	      for (j = 0; vec_safe_iterate (c->param_ops, j, &op); j++)
+		{
+		  streamer_write_uhwi (ob, op->code);
+		  stream_write_tree (ob, op->type, true);
+		  if (op->val[0])
+		    {
+		      bp = bitpack_create (ob->main_stream);
+		      bp_pack_value (&bp, op->index, 2);
+		      streamer_write_bitpack (&bp);
+		      stream_write_tree (ob, op->val[0], true);
+		      if (op->val[1])
+			stream_write_tree (ob, op->val[1], true);
+		    }
+		}
+	    }
+	  streamer_write_uhwi (ob, vec_safe_length (info->size_time_table));
+	  for (i = 0; vec_safe_iterate (info->size_time_table, i, &e); i++)
+	    {
+	      streamer_write_uhwi (ob, e->size);
+	      e->time.stream_out (ob);
+	      e->exec_predicate.stream_out (ob);
+	      e->nonconst_predicate.stream_out (ob);
+	    }
+	  if (info->loop_iterations)
+	    info->loop_iterations->stream_out (ob);
+ 	  else
+	    streamer_write_uhwi (ob, 0);
+	  if (info->loop_stride)
+	    info->loop_stride->stream_out (ob);
+ 	  else
+	    streamer_write_uhwi (ob, 0);
+	  for (edge = cnode->callees; edge; edge = edge->next_callee)
+	    write_ipa_call_summary (ob, edge);
+	  for (edge = cnode->indirect_calls; edge; edge = edge->next_callee)
+	    write_ipa_call_summary (ob, edge);
+	}
+
+
+// Source: ipa-fnsummary.c
+// Lines 4412-4503

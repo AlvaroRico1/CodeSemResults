@@ -1,0 +1,64 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'e' at line 4
+2. Pointer 'e' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+reset_edge_caches (struct cgraph_node *node)
+{
+  struct cgraph_edge *edge;
+  struct cgraph_edge *e = node->callees;
+  struct cgraph_node *where = node;
+  struct ipa_ref *ref;
+
+  if (where->inlined_to)
+    where = where->inlined_to;
+
+  reset_node_cache (where);
+
+  if (edge_growth_cache != NULL)
+    for (edge = where->callers; edge; edge = edge->next_caller)
+      if (edge->inline_failed)
+	edge_growth_cache->remove (edge);
+
+  FOR_EACH_ALIAS (where, ref)
+    reset_edge_caches (dyn_cast <cgraph_node *> (ref->referring));
+
+  if (!e)
+    return;
+
+  while (true)
+    if (!e->inline_failed && e->callee->callees)
+      e = e->callee->callees;
+    else
+      {
+	if (edge_growth_cache != NULL && e->inline_failed)
+	  edge_growth_cache->remove (e);
+	if (e->next_callee)
+	  e = e->next_callee;
+	else
+	  {
+	    do
+	      {
+		if (e->caller == node)
+		  return;
+		e = e->caller->callers;
+	      }
+	    while (!e->next_callee);
+	    e = e->next_callee;
+	  }
+      }
+}
+
+
+// Source: ipa-inline.c
+// Lines 1377-1421
+
+
+[ANSWER]
+MUST

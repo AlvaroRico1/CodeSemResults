@@ -1,0 +1,18 @@
+void quicly_ranges_drop_by_range_indices(quicly_ranges_t *ranges, size_t begin_range_index, size_t end_range_index)
+{
+    assert(begin_range_index < end_range_index);
+
+    MOVE(ranges->ranges + begin_range_index, ranges->ranges + end_range_index, ranges->num_ranges - end_range_index);
+    ranges->num_ranges -= end_range_index - begin_range_index;
+    if (ranges->capacity > 4 && ranges->num_ranges * 3 <= ranges->capacity) {
+        size_t new_capacity = ranges->capacity / 2;
+        quicly_range_t *new_ranges = realloc(ranges->ranges, new_capacity * sizeof(*new_ranges));
+        if (new_ranges != NULL) {
+            ranges->ranges = new_ranges;
+            ranges->capacity = new_capacity;
+        }
+    }
+
+
+// Source: ranges.c
+// Lines 63-76

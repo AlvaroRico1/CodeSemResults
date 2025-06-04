@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'buflen' at line 3\n2. Pointer 'res' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nchar *__d_path(const struct path *path,\n\t       const struct path *root,\n\t       char *buf, int buflen)\n{\n\tchar *res = buf + buflen;\n\tint error;\n\n\tprepend(&res, &buflen, \"\\0\", 1);\n\terror = prepend_path(path, root, &res, &buflen);\n\n\tif (error < 0)\n\t\treturn ERR_PTR(error);\n\tif (error > 0)\n\t\treturn NULL;\n\treturn res;\n}\n\n\n// Source: d_path.c\n// Lines 174-189\n",
+  "ANSWER": "MAY"
+}

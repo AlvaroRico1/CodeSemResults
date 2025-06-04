@@ -1,0 +1,32 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'block' at line 6
+2. Pointer 'iter' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void discard_entry(quicly_sentmap_t *map, quicly_sentmap_iter_t *iter)
+{
+    assert(iter->p->acked != NULL);
+    iter->p->acked = NULL;
+
+    struct st_quicly_sent_block_t *block = *iter->ref;
+    if (--block->num_entries == 0) {
+        iter->ref = free_block(map, iter->ref);
+        block = *iter->ref;
+        iter->p = block->entries - 1;
+        iter->count = block->num_entries + 1;
+    }
+}
+
+
+// Source: sentmap.c
+// Lines 71-83
+
+
+[ANSWER]
+MUST

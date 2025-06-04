@@ -1,0 +1,27 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'next' at line 4
+2. Pointer 'r' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void free_line_log_data(struct line_log_data *r)
+{
+	while (r) {
+		struct line_log_data *next = r->next;
+		line_log_data_clear(r);
+		free(r);
+		r = next;
+	}
+
+
+// Source: line-log.c
+// Lines 254-261
+
+
+[ANSWER]
+MUST

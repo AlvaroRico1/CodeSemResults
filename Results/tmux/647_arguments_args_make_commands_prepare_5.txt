@@ -1,0 +1,1 @@
+cmd,tmux/arguments.c,1,default_command,tmux/arguments.c,2,1

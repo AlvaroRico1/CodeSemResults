@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'end' at line 3\n2. Pointer 'p' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\n        unsigned char c[4];\n    } value;\n    const char *p = host.base, *end = p + host.len;\n    size_t ndots = 0;\n\n    while (1) {\n        if ((p = fetch_aton_digit(p, end, value.c + ndots)) == NULL)\n            return -1;\n        if (ndots == 3)\n            break;\n        if (p == end || !(*p == '.'))\n            return -1;\n        ++p;\n        ++ndots;\n    }\n    if (p != end)\n        return -1;\n\n    addr->s_addr = value.n;\n    return 0;\n}\n\n\n// Source: hostinfo.c\n// Lines 266-286\n",
+  "ANSWER": "MUST"
+}

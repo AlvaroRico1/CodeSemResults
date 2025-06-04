@@ -1,0 +1,153 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tmp' at line 9
+2. Pointer 'pcode' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+parse_probe_arg(char *arg, const struct fetch_type *type,
+		struct fetch_insn **pcode, struct fetch_insn *end,
+		unsigned int flags, int offs)
+{
+	struct fetch_insn *code = *pcode;
+	unsigned long param;
+	int deref = FETCH_OP_DEREF;
+	long offset = 0;
+	char *tmp;
+	int ret = 0;
+
+	switch (arg[0]) {
+	case '$':
+		ret = parse_probe_vars(arg + 1, type, code, flags, offs);
+		break;
+
+	case '%':	/* named register */
+		ret = regs_query_register_offset(arg + 1);
+		if (ret >= 0) {
+			code->op = FETCH_OP_REG;
+			code->param = (unsigned int)ret;
+			ret = 0;
+		} else
+			trace_probe_log_err(offs, BAD_REG_NAME);
+		break;
+
+	case '@':	/* memory, file-offset or symbol */
+		if (isdigit(arg[1])) {
+			ret = kstrtoul(arg + 1, 0, &param);
+			if (ret) {
+				trace_probe_log_err(offs, BAD_MEM_ADDR);
+				break;
+			}
+			/* load address */
+			code->op = FETCH_OP_IMM;
+			code->immediate = param;
+		} else if (arg[1] == '+') {
+			/* kprobes don't support file offsets */
+			if (flags & TPARG_FL_KERNEL) {
+				trace_probe_log_err(offs, FILE_ON_KPROBE);
+				return -EINVAL;
+			}
+			ret = kstrtol(arg + 2, 0, &offset);
+			if (ret) {
+				trace_probe_log_err(offs, BAD_FILE_OFFS);
+				break;
+			}
+
+			code->op = FETCH_OP_FOFFS;
+			code->immediate = (unsigned long)offset;  // imm64?
+		} else {
+			/* uprobes don't support symbols */
+			if (!(flags & TPARG_FL_KERNEL)) {
+				trace_probe_log_err(offs, SYM_ON_UPROBE);
+				return -EINVAL;
+			}
+			/* Preserve symbol for updating */
+			code->op = FETCH_NOP_SYMBOL;
+			code->data = kstrdup(arg + 1, GFP_KERNEL);
+			if (!code->data)
+				return -ENOMEM;
+			if (++code == end) {
+				trace_probe_log_err(offs, TOO_MANY_OPS);
+				return -EINVAL;
+			}
+			code->op = FETCH_OP_IMM;
+			code->immediate = 0;
+		}
+		/* These are fetching from memory */
+		if (++code == end) {
+			trace_probe_log_err(offs, TOO_MANY_OPS);
+			return -EINVAL;
+		}
+		*pcode = code;
+		code->op = FETCH_OP_DEREF;
+		code->offset = offset;
+		break;
+
+	case '+':	/* deref memory */
+	case '-':
+		if (arg[1] == 'u') {
+			deref = FETCH_OP_UDEREF;
+			arg[1] = arg[0];
+			arg++;
+		}
+		if (arg[0] == '+')
+			arg++;	/* Skip '+', because kstrtol() rejects it. */
+		tmp = strchr(arg, '(');
+		if (!tmp) {
+			trace_probe_log_err(offs, DEREF_NEED_BRACE);
+			return -EINVAL;
+		}
+		*tmp = '\0';
+		ret = kstrtol(arg, 0, &offset);
+		if (ret) {
+			trace_probe_log_err(offs, BAD_DEREF_OFFS);
+			break;
+		}
+		offs += (tmp + 1 - arg) + (arg[0] != '-' ? 1 : 0);
+		arg = tmp + 1;
+		tmp = strrchr(arg, ')');
+		if (!tmp) {
+			trace_probe_log_err(offs + strlen(arg),
+					    DEREF_OPEN_BRACE);
+			return -EINVAL;
+		} else {
+			const struct fetch_type *t2 = find_fetch_type(NULL);
+
+			*tmp = '\0';
+			ret = parse_probe_arg(arg, t2, &code, end, flags, offs);
+			if (ret)
+				break;
+			if (code->op == FETCH_OP_COMM) {
+				trace_probe_log_err(offs, COMM_CANT_DEREF);
+				return -EINVAL;
+			}
+			if (++code == end) {
+				trace_probe_log_err(offs, TOO_MANY_OPS);
+				return -EINVAL;
+			}
+			*pcode = code;
+
+			code->op = deref;
+			code->offset = offset;
+		}
+		break;
+	}
+	if (!ret && code->op == FETCH_OP_NOP) {
+		/* Parsed, but do not find fetch method */
+		trace_probe_log_err(offs, BAD_FETCH_ARG);
+		ret = -EINVAL;
+	}
+	return ret;
+}
+
+
+// Source: trace_probe.c
+// Lines 321-454
+
+
+[ANSWER]
+MAY

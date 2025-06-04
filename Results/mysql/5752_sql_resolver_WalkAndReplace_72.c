@@ -1,0 +1,25 @@
+bool WalkAndReplace(
+    THD *thd, Item *item,
+    const function<ReplaceResult(Item *item, Item *parent,
+                                 unsigned argument_idx)> &get_new_item) {
+  if (item->type() == Item::FUNC_ITEM) {
+    Item_func *func_item = down_cast<Item_func *>(item);
+    if (func_item->m_is_window_function) {
+      return false;
+    }
+    for (unsigned argument_idx = 0; argument_idx < func_item->arg_count;
+         argument_idx++) {
+      Item *arg = func_item->arguments()[argument_idx];
+      ReplaceResult result = get_new_item(arg, item, argument_idx);
+      if (result.action == ReplaceResult::ERROR) {
+        return true;
+      } else if (result.action == ReplaceResult::REPLACE) {
+        Item *new_arg = result.replacement;
+        func_item->arguments()[argument_idx] = new_arg;
+      } else if (WalkAndReplace(thd, arg, get_new_item)) {
+        return true;
+      }
+
+
+// Source: sql_resolver.cc
+// Lines 4683-4703

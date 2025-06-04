@@ -1,0 +1,1 @@
+inode,linux/fs/tracefs/inode.c,5,ops,linux/fs/tracefs/inode.c,2,1

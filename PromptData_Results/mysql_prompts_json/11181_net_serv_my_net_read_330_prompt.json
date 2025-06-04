@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'len' at line 2\n2. Pointer 'net' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nulong my_net_read(NET *net) {\n  size_t len;\n  /* turn off non blocking operations */\n  if (!vio_is_blocking(net->vio)) vio_set_blocking_flag(net->vio, true);\n\n  if (net->compress)\n    net_read_compressed_packet(net, len);\n  else\n    net_read_uncompressed_packet(net, len);\n\n  return static_cast<ulong>(len);\n}\n\n\n// Source: net_serv.cc\n// Lines 2195-2206\n",
+  "ANSWER": "MUST-NOT"
+}

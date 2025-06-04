@@ -1,0 +1,1 @@
+wp,tmux/cmd-paste-buffer.c,5,target,tmux/cmd-paste-buffer.c,4,1

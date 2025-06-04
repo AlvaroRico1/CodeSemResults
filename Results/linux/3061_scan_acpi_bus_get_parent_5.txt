@@ -1,0 +1,1 @@
+device,linux/drivers/acpi/scan.c,3,handle,linux/drivers/acpi/scan.c,1,2

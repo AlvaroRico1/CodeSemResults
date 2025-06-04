@@ -1,0 +1,44 @@
+static int get_partition_id_list(partition_info *part_info, uint32 *part_id,
+                                 longlong *func_value) {
+  LIST_PART_ENTRY *list_array = part_info->list_array;
+  int list_index;
+  int min_list_index = 0;
+  int max_list_index = part_info->num_list_values - 1;
+  longlong part_func_value;
+  int error = part_val_int(part_info->part_expr, &part_func_value);
+  longlong list_value;
+  bool unsigned_flag = part_info->part_expr->unsigned_flag;
+  DBUG_TRACE;
+
+  if (error) goto notfound;
+
+  if (part_info->part_expr->null_value) {
+    if (part_info->has_null_value) {
+      *part_id = part_info->has_null_part_id;
+      return 0;
+    }
+    goto notfound;
+  }
+  *func_value = part_func_value;
+  if (unsigned_flag) part_func_value -= 0x8000000000000000ULL;
+  while (max_list_index >= min_list_index) {
+    list_index = (max_list_index + min_list_index) >> 1;
+    list_value = list_array[list_index].list_value;
+    if (list_value < part_func_value)
+      min_list_index = list_index + 1;
+    else if (list_value > part_func_value) {
+      if (!list_index) goto notfound;
+      max_list_index = list_index - 1;
+    } else {
+      *part_id = (uint32)list_array[list_index].partition_id;
+      return 0;
+    }
+  }
+notfound:
+  *part_id = 0;
+  return HA_ERR_NO_PARTITION_FOUND;
+}
+
+
+// Source: sql_partition.cc
+// Lines 2847-2886

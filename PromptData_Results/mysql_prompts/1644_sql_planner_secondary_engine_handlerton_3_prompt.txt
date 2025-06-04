@@ -1,0 +1,24 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'sql_cmd' at line 2
+2. Pointer 'thd' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static const handlerton *secondary_engine_handlerton(const THD *thd) {
+  const Sql_cmd *sql_cmd = thd->lex->m_sql_cmd;
+  if (sql_cmd == nullptr) return nullptr;
+  return sql_cmd->secondary_engine();
+}
+
+
+// Source: sql_planner.cc
+// Lines 2429-2433
+
+
+[ANSWER]
+MUST

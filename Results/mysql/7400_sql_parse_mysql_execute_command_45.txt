@@ -1,0 +1,1 @@
+all_tables,mysql/sql/sql_parse.cc,9,trigger_table,mysql/sql/sql_parse.cc,143,1

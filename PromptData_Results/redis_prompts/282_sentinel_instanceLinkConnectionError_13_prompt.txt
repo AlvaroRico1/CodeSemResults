@@ -1,0 +1,32 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'link' at line 2
+2. Pointer 'c' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void instanceLinkConnectionError(const redisAsyncContext *c) {
+    instanceLink *link = c->data;
+    int pubsub;
+
+    if (!link) return;
+
+    pubsub = (link->pc == c);
+    if (pubsub)
+        link->pc = NULL;
+    else
+        link->cc = NULL;
+    link->disconnected = 1;
+}
+
+
+// Source: sentinel.c
+// Lines 1240-1252
+
+
+[ANSWER]
+MUST

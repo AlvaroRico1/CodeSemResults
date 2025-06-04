@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'l' at line 2\n2. Pointer 'failing' at line None\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid clusterNodeCleanupFailureReports(clusterNode *node) {\n    list *l = node->fail_reports;\n    listNode *ln;\n    listIter li;\n    clusterNodeFailReport *fr;\n    mstime_t maxtime = server.cluster_node_timeout *\n                     CLUSTER_FAIL_REPORT_VALIDITY_MULT;\n    mstime_t now = mstime();\n\n    listRewind(l,&li);\n    while ((ln = listNext(&li)) != NULL) {\n        fr = ln->value;\n        if (now - fr->time > maxtime) listDelNode(l,ln);\n    }\n}\n\n\n// Source: cluster.c\n// Lines 854-868\n",
+  "ANSWER": "MUST"
+}

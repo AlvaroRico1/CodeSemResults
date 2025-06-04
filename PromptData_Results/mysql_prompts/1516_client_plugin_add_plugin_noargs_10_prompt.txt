@@ -1,0 +1,29 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'retval' at line 4
+2. Pointer 'plugin' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static struct st_mysql_client_plugin *add_plugin_noargs(
+    MYSQL *mysql, struct st_mysql_client_plugin *plugin, void *dlhandle,
+    int argc, ...) {
+  struct st_mysql_client_plugin *retval = nullptr;
+  va_list ap;
+  va_start(ap, argc);
+  retval = do_add_plugin(mysql, plugin, dlhandle, argc, ap);
+  va_end(ap);
+  return retval;
+}
+
+
+// Source: client_plugin.cc
+// Lines 255-264
+
+
+[ANSWER]
+MUST-NOT

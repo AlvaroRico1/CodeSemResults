@@ -1,0 +1,48 @@
+int git_midx_entry_find(
+		git_midx_entry *e,
+		git_midx_file *idx,
+		const git_oid *short_oid,
+		size_t len)
+{
+	int pos, found = 0;
+	size_t pack_index;
+	uint32_t hi, lo;
+	const git_oid *current = NULL;
+	const unsigned char *object_offset;
+	off64_t offset;
+
+	GIT_ASSERT_ARG(idx);
+
+	hi = ntohl(idx->oid_fanout[(int)short_oid->id[0]]);
+	lo = ((short_oid->id[0] == 0x0) ? 0 : ntohl(idx->oid_fanout[(int)short_oid->id[0] - 1]));
+
+	pos = git_pack__lookup_sha1(idx->oid_lookup, GIT_OID_RAWSZ, lo, hi, short_oid->id);
+
+	if (pos >= 0) {
+		/* An object matching exactly the oid was found */
+		found = 1;
+		current = idx->oid_lookup + pos;
+	} else {
+		/* No object was found */
+		/* pos refers to the object with the "closest" oid to short_oid */
+		pos = -1 - pos;
+		if (pos < (int)idx->num_objects) {
+			current = idx->oid_lookup + pos;
+
+			if (!git_oid_ncmp(short_oid, current, len))
+				found = 1;
+		}
+	}
+
+	if (found && len != GIT_OID_HEXSZ && pos + 1 < (int)idx->num_objects) {
+		/* Check for ambiguousity */
+		const git_oid *next = current + 1;
+
+		if (!git_oid_ncmp(short_oid, next, len)) {
+			found = 2;
+		}
+	}
+
+
+// Source: midx.c
+// Lines 378-421

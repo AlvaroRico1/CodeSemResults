@@ -1,0 +1,65 @@
+enter_macro_context (cpp_reader *pfile, cpp_hashnode *node,
+		     const cpp_token *result, location_t location)
+{
+  /* The presence of a macro invalidates a file's controlling macro.  */
+  pfile->mi_valid = false;
+
+  pfile->state.angled_headers = false;
+
+  /* From here to when we push the context for the macro later down
+     this function, we need to flag the fact that we are about to
+     expand a macro.  This is useful when -ftrack-macro-expansion is
+     turned off.  In that case, we need to record the location of the
+     expansion point of the top-most macro we are about to to expand,
+     into pfile->invocation_location.  But we must not record any such
+     location once the process of expanding the macro starts; that is,
+     we must not do that recording between now and later down this
+     function where set this flag to FALSE.  */
+  pfile->about_to_expand_macro_p = true;
+
+  if (cpp_user_macro_p (node))
+    {
+      cpp_macro *macro = node->value.macro;
+      _cpp_buff *pragma_buff = NULL;
+
+      if (macro->fun_like)
+	{
+	  _cpp_buff *buff;
+	  unsigned num_args = 0;
+
+	  pfile->state.prevent_expansion++;
+	  pfile->keep_tokens++;
+	  pfile->state.parsing_args = 1;
+	  buff = funlike_invocation_p (pfile, node, &pragma_buff,
+				       &num_args);
+	  pfile->state.parsing_args = 0;
+	  pfile->keep_tokens--;
+	  pfile->state.prevent_expansion--;
+
+	  if (buff == NULL)
+	    {
+	      if (CPP_WTRADITIONAL (pfile) && ! node->value.macro->syshdr)
+		cpp_warning (pfile, CPP_W_TRADITIONAL,
+ "function-like macro \"%s\" must be used with arguments in traditional C",
+			     NODE_NAME (node));
+
+	      if (pragma_buff)
+		_cpp_release_buff (pfile, pragma_buff);
+
+	      pfile->about_to_expand_macro_p = false;
+	      return 0;
+	    }
+
+	  if (macro->paramc > 0)
+	    replace_args (pfile, node, macro,
+			  (macro_arg *) buff->base,
+			  location);
+	  /* Free the memory used by the arguments of this
+	     function-like macro.  This memory has been allocated by
+	     funlike_invocation_p and by replace_args.  */
+	  delete_macro_args (buff, num_args);
+	}
+
+
+// Source: macro.c
+// Lines 1368-1428

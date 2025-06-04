@@ -1,0 +1,29 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'p' at line 4
+2. Pointer 'r' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+const struct packed_git *has_packed_and_bad(struct repository *r,
+					    const struct object_id *oid)
+{
+	struct packed_git *p;
+
+	for (p = r->objects->packed_git; p; p = p->next)
+		if (oidset_contains(&p->bad_objects, oid))
+			return p;
+	return NULL;
+}
+
+
+// Source: packfile.c
+// Lines 1170-1179
+
+
+[ANSWER]
+MUST

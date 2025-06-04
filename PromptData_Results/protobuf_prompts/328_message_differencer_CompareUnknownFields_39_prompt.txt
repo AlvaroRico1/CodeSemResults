@@ -1,0 +1,228 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'current_repeated' at line 42
+2. Pointer 'focus_field' at line 61
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool MessageDifferencer::CompareUnknownFields(
+    const Message& message1, const Message& message2,
+    const UnknownFieldSet& unknown_field_set1,
+    const UnknownFieldSet& unknown_field_set2,
+    std::vector<SpecificField>* parent_field) {
+  // Ignore unknown fields in EQUIVALENT mode.
+  if (message_field_comparison_ == EQUIVALENT) return true;
+
+  if (unknown_field_set1.empty() && unknown_field_set2.empty()) {
+    return true;
+  }
+
+  bool is_different = false;
+
+  // We first sort the unknown fields by field number and type (in other words,
+  // in tag order), making sure to preserve ordering of values with the same
+  // tag.  This allows us to report only meaningful differences between the
+  // two sets -- that is, differing values for the same tag.  We use
+  // IndexUnknownFieldPairs to keep track of the field's original index for
+  // reporting purposes.
+  std::vector<IndexUnknownFieldPair> fields1;  // unknown_field_set1, sorted
+  std::vector<IndexUnknownFieldPair> fields2;  // unknown_field_set2, sorted
+  fields1.reserve(unknown_field_set1.field_count());
+  fields2.reserve(unknown_field_set2.field_count());
+
+  for (int i = 0; i < unknown_field_set1.field_count(); i++) {
+    fields1.push_back(std::make_pair(i, &unknown_field_set1.field(i)));
+  }
+  for (int i = 0; i < unknown_field_set2.field_count(); i++) {
+    fields2.push_back(std::make_pair(i, &unknown_field_set2.field(i)));
+  }
+
+  UnknownFieldOrdering is_before;
+  std::stable_sort(fields1.begin(), fields1.end(), is_before);
+  std::stable_sort(fields2.begin(), fields2.end(), is_before);
+
+  // In order to fill in SpecificField::index, we have to keep track of how
+  // many values we've seen with the same field number and type.
+  // current_repeated points at the first field in this range, and
+  // current_repeated_start{1,2} are the indexes of the first field in the
+  // range within fields1 and fields2.
+  const UnknownField* current_repeated = NULL;
+  int current_repeated_start1 = 0;
+  int current_repeated_start2 = 0;
+
+  // Now that we have two sorted lists, we can detect fields which appear only
+  // in one list or the other by traversing them simultaneously.
+  size_t index1 = 0;
+  size_t index2 = 0;
+  while (index1 < fields1.size() || index2 < fields2.size()) {
+    enum {
+      ADDITION,
+      DELETION,
+      MODIFICATION,
+      COMPARE_GROUPS,
+      NO_CHANGE
+    } change_type;
+
+    // focus_field is the field we're currently reporting on.  (In the case
+    // of a modification, it's the field on the left side.)
+    const UnknownField* focus_field;
+    bool match = false;
+
+    if (index2 == fields2.size() ||
+        (index1 < fields1.size() &&
+         is_before(fields1[index1], fields2[index2]))) {
+      // fields1[index1] is not present in fields2.
+      change_type = DELETION;
+      focus_field = fields1[index1].second;
+    } else if (index1 == fields1.size() ||
+               is_before(fields2[index2], fields1[index1])) {
+      // fields2[index2] is not present in fields1.
+      if (scope_ == PARTIAL) {
+        // Ignore.
+        ++index2;
+        continue;
+      }
+      change_type = ADDITION;
+      focus_field = fields2[index2].second;
+    } else {
+      // Field type and number are the same.  See if the values differ.
+      change_type = MODIFICATION;
+      focus_field = fields1[index1].second;
+
+      switch (focus_field->type()) {
+        case UnknownField::TYPE_VARINT:
+          match = fields1[index1].second->varint() ==
+                  fields2[index2].second->varint();
+          break;
+        case UnknownField::TYPE_FIXED32:
+          match = fields1[index1].second->fixed32() ==
+                  fields2[index2].second->fixed32();
+          break;
+        case UnknownField::TYPE_FIXED64:
+          match = fields1[index1].second->fixed64() ==
+                  fields2[index2].second->fixed64();
+          break;
+        case UnknownField::TYPE_LENGTH_DELIMITED:
+          match = fields1[index1].second->length_delimited() ==
+                  fields2[index2].second->length_delimited();
+          break;
+        case UnknownField::TYPE_GROUP:
+          // We must deal with this later, after building the SpecificField.
+          change_type = COMPARE_GROUPS;
+          break;
+      }
+      if (match && change_type != COMPARE_GROUPS) {
+        change_type = NO_CHANGE;
+      }
+    }
+
+    if (current_repeated == NULL ||
+        focus_field->number() != current_repeated->number() ||
+        focus_field->type() != current_repeated->type()) {
+      // We've started a new repeated field.
+      current_repeated = focus_field;
+      current_repeated_start1 = index1;
+      current_repeated_start2 = index2;
+    }
+
+    if (change_type == NO_CHANGE && reporter_ == NULL) {
+      // Fields were already compared and matched and we have no reporter.
+      ++index1;
+      ++index2;
+      continue;
+    }
+
+    // Build the SpecificField.  This is slightly complicated.
+    SpecificField specific_field;
+    specific_field.unknown_field_number = focus_field->number();
+    specific_field.unknown_field_type = focus_field->type();
+
+    specific_field.unknown_field_set1 = &unknown_field_set1;
+    specific_field.unknown_field_set2 = &unknown_field_set2;
+
+    if (change_type != ADDITION) {
+      specific_field.unknown_field_index1 = fields1[index1].first;
+    }
+    if (change_type != DELETION) {
+      specific_field.unknown_field_index2 = fields2[index2].first;
+    }
+
+    // Calculate the field index.
+    if (change_type == ADDITION) {
+      specific_field.index = index2 - current_repeated_start2;
+      specific_field.new_index = index2 - current_repeated_start2;
+    } else {
+      specific_field.index = index1 - current_repeated_start1;
+      specific_field.new_index = index2 - current_repeated_start2;
+    }
+
+    if (IsUnknownFieldIgnored(message1, message2, specific_field,
+                              *parent_field)) {
+      if (report_ignores_ && reporter_ != NULL) {
+        parent_field->push_back(specific_field);
+        reporter_->ReportUnknownFieldIgnored(message1, message2, *parent_field);
+        parent_field->pop_back();
+      }
+      if (change_type != ADDITION) ++index1;
+      if (change_type != DELETION) ++index2;
+      continue;
+    }
+
+    if (change_type == ADDITION || change_type == DELETION ||
+        change_type == MODIFICATION) {
+      if (reporter_ == NULL) {
+        // We found a difference and we have no reporter.
+        return false;
+      }
+      is_different = true;
+    }
+
+    parent_field->push_back(specific_field);
+
+    switch (change_type) {
+      case ADDITION:
+        reporter_->ReportAdded(message1, message2, *parent_field);
+        ++index2;
+        break;
+      case DELETION:
+        reporter_->ReportDeleted(message1, message2, *parent_field);
+        ++index1;
+        break;
+      case MODIFICATION:
+        reporter_->ReportModified(message1, message2, *parent_field);
+        ++index1;
+        ++index2;
+        break;
+      case COMPARE_GROUPS:
+        if (!CompareUnknownFields(
+                message1, message2, fields1[index1].second->group(),
+                fields2[index2].second->group(), parent_field)) {
+          if (reporter_ == NULL) return false;
+          is_different = true;
+          reporter_->ReportModified(message1, message2, *parent_field);
+        }
+        ++index1;
+        ++index2;
+        break;
+      case NO_CHANGE:
+        ++index1;
+        ++index2;
+        if (report_matches_) {
+          reporter_->ReportMatched(message1, message2, *parent_field);
+        }
+    }
+
+    parent_field->pop_back();
+  }
+
+
+// Source: message_differencer.cc
+// Lines 1460-1668
+
+
+[ANSWER]
+MUST

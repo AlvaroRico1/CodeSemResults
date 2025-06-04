@@ -1,0 +1,40 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'to' at line 5
+2. Pointer 'end_time' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static long do_restart_poll(struct restart_block *restart_block)
+{
+	struct pollfd __user *ufds = restart_block->poll.ufds;
+	int nfds = restart_block->poll.nfds;
+	struct timespec64 *to = NULL, end_time;
+	int ret;
+
+	if (restart_block->poll.has_timeout) {
+		end_time.tv_sec = restart_block->poll.tv_sec;
+		end_time.tv_nsec = restart_block->poll.tv_nsec;
+		to = &end_time;
+	}
+
+	ret = do_sys_poll(ufds, nfds, to);
+
+	if (ret == -ERESTARTNOHAND) {
+		restart_block->fn = do_restart_poll;
+		ret = -ERESTART_RESTARTBLOCK;
+	}
+	return ret;
+}
+
+
+// Source: select.c
+// Lines 1025-1045
+
+
+[ANSWER]
+MUST

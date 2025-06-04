@@ -1,0 +1,72 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'to' at line 25
+2. Pointer 'name' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+read_name_map (cpp_dir *dir)
+{
+  static const char FILE_NAME_MAP_FILE[] = "header.gcc";
+  char *name;
+  FILE *f;
+  size_t len, count = 0, room = 9;
+
+  len = dir->len;
+  name = (char *) alloca (len + sizeof (FILE_NAME_MAP_FILE) + 1);
+  memcpy (name, dir->name, len);
+  if (len && !IS_DIR_SEPARATOR (name[len - 1]))
+    name[len++] = '/';
+  strcpy (name + len, FILE_NAME_MAP_FILE);
+  f = fopen (name, "r");
+
+  dir->name_map = XNEWVEC (const char *, room);
+
+  /* Silently return NULL if we cannot open.  */
+  if (f)
+    {
+      int ch;
+
+      while ((ch = getc (f)) != EOF)
+	{
+	  char *to;
+
+	  if (is_space (ch))
+	    continue;
+
+	  if (count + 2 > room)
+	    {
+	      room += 8;
+	      dir->name_map = XRESIZEVEC (const char *, dir->name_map, room);
+	    }
+
+	  dir->name_map[count] = read_filename_string (ch, f);
+	  while ((ch = getc (f)) != EOF && is_hspace (ch))
+	    ;
+
+	  to = read_filename_string (ch, f);
+	  if (IS_ABSOLUTE_PATH (to))
+	    dir->name_map[count + 1] = to;
+	  else
+	    {
+	      dir->name_map[count + 1] = append_file_to_dir (to, dir);
+	      free (to);
+	    }
+
+	  count += 2;
+	  while ((ch = getc (f)) != '\n')
+	    if (ch == EOF)
+	      break;
+	}
+
+
+// Source: files.c
+// Lines 1607-1659
+
+
+[ANSWER]
+MAY

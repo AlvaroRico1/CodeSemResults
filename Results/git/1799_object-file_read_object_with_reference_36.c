@@ -1,0 +1,69 @@
+void *read_object_with_reference(struct repository *r,
+				 const struct object_id *oid,
+				 const char *required_type_name,
+				 unsigned long *size,
+				 struct object_id *actual_oid_return)
+{
+	enum object_type type, required_type;
+	void *buffer;
+	unsigned long isize;
+	struct object_id actual_oid;
+
+	required_type = type_from_string(required_type_name);
+	oidcpy(&actual_oid, oid);
+	while (1) {
+		int ref_length = -1;
+		const char *ref_type = NULL;
+
+		buffer = repo_read_object_file(r, &actual_oid, &type, &isize);
+		if (!buffer)
+			return NULL;
+		if (type == required_type) {
+			*size = isize;
+			if (actual_oid_return)
+				oidcpy(actual_oid_return, &actual_oid);
+			return buffer;
+		}
+		/* Handle references */
+		else if (type == OBJ_COMMIT)
+			ref_type = "tree ";
+		else if (type == OBJ_TAG)
+			ref_type = "object ";
+		else {
+			free(buffer);
+			return NULL;
+		}
+		ref_length = strlen(ref_type);
+
+		if (ref_length + the_hash_algo->hexsz > isize ||
+		    memcmp(buffer, ref_type, ref_length) ||
+		    get_oid_hex((char *) buffer + ref_length, &actual_oid)) {
+			free(buffer);
+			return NULL;
+		}
+		free(buffer);
+		/* Now we have the ID of the referred-to object in
+		 * actual_oid.  Check again. */
+	}
+}
+
+static void write_object_file_prepare(const struct git_hash_algo *algo,
+				      const void *buf, unsigned long len,
+				      const char *type, struct object_id *oid,
+				      char *hdr, int *hdrlen)
+{
+	git_hash_ctx c;
+
+	/* Generate the header */
+	*hdrlen = xsnprintf(hdr, *hdrlen, "%s %"PRIuMAX , type, (uintmax_t)len)+1;
+
+	/* Sha1.. */
+	algo->init_fn(&c);
+	algo->update_fn(&c, hdr, *hdrlen);
+	algo->update_fn(&c, buf, len);
+	algo->final_oid_fn(oid, &c);
+}
+
+
+// Source: object-file.c
+// Lines 1694-1758

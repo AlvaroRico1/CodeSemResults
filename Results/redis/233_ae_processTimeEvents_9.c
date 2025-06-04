@@ -1,0 +1,69 @@
+static int processTimeEvents(aeEventLoop *eventLoop) {
+    int processed = 0;
+    aeTimeEvent *te;
+    long long maxId;
+
+    te = eventLoop->timeEventHead;
+    maxId = eventLoop->timeEventNextId-1;
+    monotime now = getMonotonicUs();
+    while(te) {
+        long long id;
+
+        /* Remove events scheduled for deletion. */
+        if (te->id == AE_DELETED_EVENT_ID) {
+            aeTimeEvent *next = te->next;
+            /* If a reference exists for this timer event,
+             * don't free it. This is currently incremented
+             * for recursive timerProc calls */
+            if (te->refcount) {
+                te = next;
+                continue;
+            }
+            if (te->prev)
+                te->prev->next = te->next;
+            else
+                eventLoop->timeEventHead = te->next;
+            if (te->next)
+                te->next->prev = te->prev;
+            if (te->finalizerProc) {
+                te->finalizerProc(eventLoop, te->clientData);
+                now = getMonotonicUs();
+            }
+            zfree(te);
+            te = next;
+            continue;
+        }
+
+        /* Make sure we don't process time events created by time events in
+         * this iteration. Note that this check is currently useless: we always
+         * add new timers on the head, however if we change the implementation
+         * detail, this check may be useful again: we keep it here for future
+         * defense. */
+        if (te->id > maxId) {
+            te = te->next;
+            continue;
+        }
+
+        if (te->when <= now) {
+            int retval;
+
+            id = te->id;
+            te->refcount++;
+            retval = te->timeProc(eventLoop, id, te->clientData);
+            te->refcount--;
+            processed++;
+            now = getMonotonicUs();
+            if (retval != AE_NOMORE) {
+                te->when = now + retval * 1000;
+            } else {
+                te->id = AE_DELETED_EVENT_ID;
+            }
+        }
+        te = te->next;
+    }
+    return processed;
+}
+
+
+// Source: ae.c
+// Lines 267-331

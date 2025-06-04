@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'buf' at line 3\n2. Pointer 'bufp' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nuintmax_t decode_varint(const unsigned char **bufp)\n{\n\tconst unsigned char *buf = *bufp;\n\tunsigned char c = *buf++;\n\tuintmax_t val = c & 127;\n\twhile (c & 128) {\n\t\tval += 1;\n\t\tif (!val || MSB(val, 7))\n\t\t\treturn 0; /* overflow */\n\t\tc = *buf++;\n\t\tval = (val << 7) + (c & 127);\n\t}\n\t*bufp = buf;\n\treturn val;\n}\n\n\n// Source: varint.c\n// Lines 4-18\n",
+  "ANSWER": "MAY"
+}

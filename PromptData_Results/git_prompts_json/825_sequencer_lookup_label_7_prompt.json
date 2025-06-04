@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'tail' at line None\n2. Pointer 'reversed' at line None\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic struct commit *lookup_label(const char *label, int len,\n\t\t\t\t   struct strbuf *buf)\n{\n\tstruct commit *commit;\n\n\tstrbuf_reset(buf);\n\tstrbuf_addf(buf, \"refs/rewritten/%.*s\", len, label);\n\tcommit = lookup_commit_reference_by_name(buf->buf);\n\tif (!commit) {\n\t\t/* fall back to non-rewritten ref or commit */\n\t\tstrbuf_splice(buf, 0, strlen(\"refs/rewritten/\"), \"\", 0);\n\t\tcommit = lookup_commit_reference_by_name(buf->buf);\n\t}\n\n\n// Source: sequencer.c\n// Lines 3737-3749\n",
+  "ANSWER": "MAY"
+}

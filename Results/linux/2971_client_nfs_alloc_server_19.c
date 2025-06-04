@@ -1,0 +1,37 @@
+struct nfs_server *nfs_alloc_server(void)
+{
+	struct nfs_server *server;
+
+	server = kzalloc(sizeof(struct nfs_server), GFP_KERNEL);
+	if (!server)
+		return NULL;
+
+	server->client = server->client_acl = ERR_PTR(-EINVAL);
+
+	/* Zero out the NFS state stuff */
+	INIT_LIST_HEAD(&server->client_link);
+	INIT_LIST_HEAD(&server->master_link);
+	INIT_LIST_HEAD(&server->delegations);
+	INIT_LIST_HEAD(&server->layouts);
+	INIT_LIST_HEAD(&server->state_owners_lru);
+	INIT_LIST_HEAD(&server->ss_copies);
+
+	atomic_set(&server->active, 0);
+
+	server->io_stats = nfs_alloc_iostats();
+	if (!server->io_stats) {
+		kfree(server);
+		return NULL;
+	}
+
+	ida_init(&server->openowner_id);
+	ida_init(&server->lockowner_id);
+	pnfs_init_server(server);
+	rpc_init_wait_queue(&server->uoc_rpcwaitq, "NFS UOC");
+
+	return server;
+}
+
+
+// Source: client.c
+// Lines 878-910

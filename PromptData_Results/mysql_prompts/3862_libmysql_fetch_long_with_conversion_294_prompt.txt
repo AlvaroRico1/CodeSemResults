@@ -1,0 +1,56 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'data' at line 28
+2. Pointer 'buffer' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void fetch_long_with_conversion(MYSQL_BIND *param, MYSQL_FIELD *field,
+                                       longlong value, bool is_unsigned) {
+  uchar *buffer = pointer_cast<uchar *>(param->buffer);
+
+  switch (param->buffer_type) {
+    case MYSQL_TYPE_NULL: /* do nothing */
+      break;
+    case MYSQL_TYPE_TINY:
+      *param->error = IS_TRUNCATED(value, param->is_unsigned, INT_MIN8,
+                                   INT_MAX8, UINT_MAX8);
+      *(uchar *)param->buffer = (uchar)value;
+      break;
+    case MYSQL_TYPE_SHORT:
+      *param->error = IS_TRUNCATED(value, param->is_unsigned, INT_MIN16,
+                                   INT_MAX16, UINT_MAX16);
+      shortstore(buffer, (short)value);
+      break;
+    case MYSQL_TYPE_LONG:
+      *param->error = IS_TRUNCATED(value, param->is_unsigned, INT_MIN32,
+                                   INT_MAX32, UINT_MAX32);
+      longstore(buffer, (int32)value);
+      break;
+    case MYSQL_TYPE_LONGLONG:
+      longlongstore(buffer, value);
+      *param->error = param->is_unsigned != is_unsigned && value < 0;
+      break;
+    case MYSQL_TYPE_FLOAT: {
+      float data;
+      if (is_unsigned) {
+        data =
+            convert_with_inexact_check<ulonglong, float>(value, param->error);
+      } else {
+        data = convert_with_inexact_check<longlong, float>(value, param->error);
+      }
+      floatstore(buffer, data);
+      break;
+    }
+
+
+// Source: libmysql.cc
+// Lines 2856-2892
+
+
+[ANSWER]
+MUST-NOT

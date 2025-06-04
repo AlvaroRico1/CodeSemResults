@@ -1,0 +1,70 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'mapsize' at line 9
+2. Pointer 'contents' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int read_loose_object(const char *path,
+		      const struct object_id *expected_oid,
+		      enum object_type *type,
+		      unsigned long *size,
+		      void **contents)
+{
+	int ret = -1;
+	void *map = NULL;
+	unsigned long mapsize;
+	git_zstream stream;
+	char hdr[MAX_HEADER_LEN];
+
+	*contents = NULL;
+
+	map = map_loose_object_1(the_repository, path, NULL, &mapsize);
+	if (!map) {
+		error_errno(_("unable to mmap %s"), path);
+		goto out;
+	}
+
+	if (unpack_loose_header(&stream, map, mapsize, hdr, sizeof(hdr)) < 0) {
+		error(_("unable to unpack header of %s"), path);
+		goto out;
+	}
+
+	*type = parse_loose_header(hdr, size);
+	if (*type < 0) {
+		error(_("unable to parse header of %s"), path);
+		git_inflate_end(&stream);
+		goto out;
+	}
+
+	if (*type == OBJ_BLOB && *size > big_file_threshold) {
+		if (check_stream_oid(&stream, hdr, *size, path, expected_oid) < 0)
+			goto out;
+	} else {
+		*contents = unpack_loose_rest(&stream, hdr, *size, expected_oid);
+		if (!*contents) {
+			error(_("unable to unpack contents of %s"), path);
+			git_inflate_end(&stream);
+			goto out;
+		}
+		if (check_object_signature(the_repository, expected_oid,
+					   *contents, *size,
+					   type_name(*type))) {
+			error(_("hash mismatch for %s (expected %s)"), path,
+			      oid_to_hex(expected_oid));
+			free(*contents);
+			goto out;
+		}
+	}
+
+
+// Source: object-file.c
+// Lines 2525-2575
+
+
+[ANSWER]
+MAY

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'target' at line 5\n2. Pointer 'commit' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint parse_opt_commit(const struct option *opt, const char *arg, int unset)\n{\n\tstruct object_id oid;\n\tstruct commit *commit;\n\tstruct commit **target = opt->value;\n\n\tBUG_ON_OPT_NEG(unset);\n\n\tif (!arg)\n\t\treturn -1;\n\tif (get_oid(arg, &oid))\n\t\treturn error(\"malformed object name %s\", arg);\n\tcommit = lookup_commit_reference(the_repository, &oid);\n\tif (!commit)\n\t\treturn error(\"no such commit %s\", arg);\n\t*target = commit;\n\treturn 0;\n}\n\n\n// Source: parse-options-cb.c\n// Lines 102-119\n",
+  "ANSWER": "MUST"
+}

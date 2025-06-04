@@ -1,0 +1,37 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'i' at line 4
+2. Pointer 'len' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void print_as_hex(FILE *output_file, const char *str, ulong len,
+                         ulong total_bytes_to_send) {
+  const char *ptr = str, *end = ptr + len;
+  ulong i;
+
+  if (len > 0) {
+    fprintf(output_file, "0x");
+    for (; ptr < end; ptr++)
+      fprintf(output_file, "%02X",
+              *(static_cast<const uchar *>(static_cast<const void *>(ptr))));
+    /* Printed string length: two chars "0x" + two chars for each byte. */
+    i = 2 + len * 2;
+  } else {
+    i = fprintf(output_file, "NULL");
+  }
+  for (; i < total_bytes_to_send; i++)
+    tee_putc(static_cast<int>(' '), output_file);
+}
+
+
+// Source: mysql.cc
+// Lines 3558-3575
+
+
+[ANSWER]
+MUST-NOT

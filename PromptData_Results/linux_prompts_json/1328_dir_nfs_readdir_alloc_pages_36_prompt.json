@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'pages' at line 1\n2. Pointer 'page' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint nfs_readdir_alloc_pages(struct page **pages, unsigned int npages)\n{\n\tunsigned int i;\n\n\tfor (i = 0; i < npages; i++) {\n\t\tstruct page *page = alloc_page(GFP_KERNEL);\n\t\tif (page == NULL)\n\t\t\tgoto out_freepages;\n\t\tpages[i] = page;\n\t}\n\n\n// Source: dir.c\n// Lines 586-595\n",
+  "ANSWER": "MUST"
+}

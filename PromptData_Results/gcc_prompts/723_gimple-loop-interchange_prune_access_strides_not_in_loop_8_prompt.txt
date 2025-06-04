@@ -1,0 +1,34 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'stride' at line 12
+2. Pointer 'dr' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+prune_access_strides_not_in_loop (class loop *loop_nest,
+				  class loop *innermost,
+				  vec<data_reference_p> datarefs)
+{
+  data_reference_p dr;
+  unsigned num_loops = loop_depth (innermost) - loop_depth (loop_nest) + 1;
+  gcc_assert (num_loops > 1);
+
+  /* Block remove strides of loops that is not in current loop nest.  */
+  for (unsigned i = 0; datarefs.iterate (i, &dr); ++i)
+    {
+      vec<tree> *stride = DR_ACCESS_STRIDE (dr);
+      if (stride->length () > num_loops)
+	stride->block_remove (0, stride->length () - num_loops);
+    }
+
+
+// Source: gimple-loop-interchange.cc
+// Lines 1397-1411
+
+
+[ANSWER]
+MUST

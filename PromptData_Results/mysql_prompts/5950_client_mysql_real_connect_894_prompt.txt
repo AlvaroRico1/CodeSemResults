@@ -1,0 +1,61 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'status' at line 6
+2. Pointer 'user' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+MYSQL *STDCALL mysql_real_connect(MYSQL *mysql, const char *host,
+                                  const char *user, const char *passwd,
+                                  const char *db, uint port,
+                                  const char *unix_socket, ulong client_flag) {
+  DBUG_TRACE;
+  mysql_state_machine_status status;
+  mysql_async_connect ctx;
+  memset(&ctx, 0, sizeof(ctx));
+
+  ctx.mysql = mysql;
+  ctx.host = host;
+  ctx.port = port;
+  ctx.db = db;
+  ctx.user = user;
+  ctx.passwd = passwd;
+  ctx.unix_socket = unix_socket;
+  mysql->options.client_flag |= client_flag;
+  ctx.client_flag = mysql->options.client_flag;
+  ctx.state_function = csm_begin_connect;
+  ctx.ssl_state = SSL_NONE;
+
+  do {
+    status = ctx.state_function(&ctx);
+  } while (status != STATE_MACHINE_FAILED && status != STATE_MACHINE_DONE);
+
+  if (status == STATE_MACHINE_DONE) {
+    DBUG_PRINT("exit", ("Mysql handler: %p", mysql));
+    return mysql;
+  }
+
+  DBUG_PRINT("error", ("message: %u/%s (%s)", mysql->net.last_errno,
+                       mysql->net.sqlstate, mysql->net.last_error));
+  {
+    /* Free alloced memory */
+    end_server(mysql);
+    mysql_close_free(mysql);
+    if (!(ctx.client_flag & CLIENT_REMEMBER_OPTIONS))
+      mysql_close_free_options(mysql);
+    if (ctx.scramble_buffer_allocated) my_free(ctx.scramble_buffer);
+  }
+  return nullptr;
+}
+
+
+// Source: client.cc
+// Lines 5622-5663
+
+
+[ANSWER]
+MUST-NOT

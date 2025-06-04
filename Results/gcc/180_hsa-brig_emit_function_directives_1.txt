@@ -1,0 +1,1 @@
+slot,gcc/gcc/hsa-brig.c,57,int_fn,gcc/gcc/hsa-brig.c,59,1

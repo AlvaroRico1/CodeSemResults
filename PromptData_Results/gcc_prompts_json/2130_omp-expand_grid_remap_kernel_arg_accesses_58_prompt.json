@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'adm' at line 4\n2. Pointer 'wi' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ngrid_remap_kernel_arg_accesses (tree *tp, int *walk_subtrees, void *data)\n{\n  struct walk_stmt_info *wi = (struct walk_stmt_info *) data;\n  struct grid_arg_decl_map *adm = (struct grid_arg_decl_map *) wi->info;\n  tree t = *tp;\n\n  if (t == adm->old_arg)\n    *tp = adm->new_arg;\n  *walk_subtrees = !TYPE_P (t) && !DECL_P (t);\n  return NULL_TREE;\n}\n\n\n// Source: omp-expand.c\n// Lines 8613-8623\n",
+  "ANSWER": "MUST"
+}

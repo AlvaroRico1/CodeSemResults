@@ -1,0 +1,129 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ql' at line None
+2. Pointer 'o' at line None
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void freeMemoryOverheadData(struct redisMemOverhead *mh) {
+    zfree(mh->db);
+    zfree(mh);
+}
+
+/* Return a struct redisMemOverhead filled with memory overhead
+ * information used for the MEMORY OVERHEAD and INFO command. The returned
+ * structure pointer should be freed calling freeMemoryOverheadData(). */
+struct redisMemOverhead *getMemoryOverheadData(void) {
+    int j;
+    size_t mem_total = 0;
+    size_t mem = 0;
+    size_t zmalloc_used = zmalloc_used_memory();
+    struct redisMemOverhead *mh = zcalloc(sizeof(*mh));
+
+    mh->total_allocated = zmalloc_used;
+    mh->startup_allocated = server.initial_memory_usage;
+    mh->peak_allocated = server.stat_peak_memory;
+    mh->total_frag =
+        (float)server.cron_malloc_stats.process_rss / server.cron_malloc_stats.zmalloc_used;
+    mh->total_frag_bytes =
+        server.cron_malloc_stats.process_rss - server.cron_malloc_stats.zmalloc_used;
+    mh->allocator_frag =
+        (float)server.cron_malloc_stats.allocator_active / server.cron_malloc_stats.allocator_allocated;
+    mh->allocator_frag_bytes =
+        server.cron_malloc_stats.allocator_active - server.cron_malloc_stats.allocator_allocated;
+    mh->allocator_rss =
+        (float)server.cron_malloc_stats.allocator_resident / server.cron_malloc_stats.allocator_active;
+    mh->allocator_rss_bytes =
+        server.cron_malloc_stats.allocator_resident - server.cron_malloc_stats.allocator_active;
+    mh->rss_extra =
+        (float)server.cron_malloc_stats.process_rss / server.cron_malloc_stats.allocator_resident;
+    mh->rss_extra_bytes =
+        server.cron_malloc_stats.process_rss - server.cron_malloc_stats.allocator_resident;
+
+    mem_total += server.initial_memory_usage;
+
+    mem = 0;
+    if (server.repl_backlog)
+        mem += zmalloc_size(server.repl_backlog);
+    mh->repl_backlog = mem;
+    mem_total += mem;
+
+    /* Computing the memory used by the clients would be O(N) if done
+     * here online. We use our values computed incrementally by
+     * clientsCronTrackClientsMemUsage(). */
+    mh->clients_slaves = server.stat_clients_type_memory[CLIENT_TYPE_SLAVE];
+    mh->clients_normal = server.stat_clients_type_memory[CLIENT_TYPE_MASTER]+
+                         server.stat_clients_type_memory[CLIENT_TYPE_PUBSUB]+
+                         server.stat_clients_type_memory[CLIENT_TYPE_NORMAL];
+    mem_total += mh->clients_slaves;
+    mem_total += mh->clients_normal;
+
+    mem = 0;
+    if (server.aof_state != AOF_OFF) {
+        mem += sdsZmallocSize(server.aof_buf);
+        mem += aofRewriteBufferSize();
+    }
+    mh->aof_buffer = mem;
+    mem_total+=mem;
+
+    mem = server.lua_scripts_mem;
+    mem += dictSize(server.lua_scripts) * sizeof(dictEntry) +
+        dictSlots(server.lua_scripts) * sizeof(dictEntry*);
+    mem += dictSize(server.repl_scriptcache_dict) * sizeof(dictEntry) +
+        dictSlots(server.repl_scriptcache_dict) * sizeof(dictEntry*);
+    if (listLength(server.repl_scriptcache_fifo) > 0) {
+        mem += listLength(server.repl_scriptcache_fifo) * (sizeof(listNode) +
+            sdsZmallocSize(listNodeValue(listFirst(server.repl_scriptcache_fifo))));
+    }
+    mh->lua_caches = mem;
+    mem_total+=mem;
+
+    for (j = 0; j < server.dbnum; j++) {
+        redisDb *db = server.db+j;
+        long long keyscount = dictSize(db->dict);
+        if (keyscount==0) continue;
+
+        mh->total_keys += keyscount;
+        mh->db = zrealloc(mh->db,sizeof(mh->db[0])*(mh->num_dbs+1));
+        mh->db[mh->num_dbs].dbid = j;
+
+        mem = dictSize(db->dict) * sizeof(dictEntry) +
+              dictSlots(db->dict) * sizeof(dictEntry*) +
+              dictSize(db->dict) * sizeof(robj);
+        mh->db[mh->num_dbs].overhead_ht_main = mem;
+        mem_total+=mem;
+
+        mem = dictSize(db->expires) * sizeof(dictEntry) +
+              dictSlots(db->expires) * sizeof(dictEntry*);
+        mh->db[mh->num_dbs].overhead_ht_expires = mem;
+        mem_total+=mem;
+
+        mh->num_dbs++;
+    }
+
+    mh->overhead_total = mem_total;
+    mh->dataset = zmalloc_used - mem_total;
+    mh->peak_perc = (float)zmalloc_used*100/mh->peak_allocated;
+
+    /* Metrics computed after subtracting the startup memory from
+     * the total memory. */
+    size_t net_usage = 1;
+    if (zmalloc_used > mh->startup_allocated)
+        net_usage = zmalloc_used - mh->startup_allocated;
+    mh->dataset_perc = (float)mh->dataset*100/net_usage;
+    mh->bytes_per_key = mh->total_keys ? (net_usage / mh->total_keys) : 0;
+
+    return mh;
+}
+
+
+// Source: object.c
+// Lines 973-1082
+
+
+[ANSWER]
+MUST

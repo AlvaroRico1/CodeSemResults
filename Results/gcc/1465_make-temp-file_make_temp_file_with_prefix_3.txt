@@ -1,0 +1,1 @@
+temp_filename,gcc/libiberty/make-temp-file.c,4,suffix,gcc/libiberty/make-temp-file.c,1,2

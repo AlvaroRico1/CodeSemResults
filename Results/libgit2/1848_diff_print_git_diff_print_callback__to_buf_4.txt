@@ -1,0 +1,1 @@
+output,libgit2/src/libgit2/diff_print.c,7,payload,libgit2/src/libgit2/diff_print.c,5,1

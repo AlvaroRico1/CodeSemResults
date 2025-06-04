@@ -1,0 +1,1 @@
+buf,gcc/libcpp/macro.c,4,nbuf,gcc/libcpp/macro.c,6,0

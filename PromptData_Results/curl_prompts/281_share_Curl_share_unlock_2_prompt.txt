@@ -1,0 +1,33 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'share' at line 3
+2. Pointer 'data' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+Curl_share_unlock(struct Curl_easy *data, curl_lock_data type)
+{
+  struct Curl_share *share = data->share;
+
+  if(!share)
+    return CURLSHE_INVALID;
+
+  if(share->specifier & (1<<type)) {
+    if(share->unlockfunc) /* only call this if set! */
+      share->unlockfunc (data, type, share->clientdata);
+  }
+
+  return CURLSHE_OK;
+}
+
+
+// Source: share.c
+// Lines 251-264
+
+
+[ANSWER]
+MUST

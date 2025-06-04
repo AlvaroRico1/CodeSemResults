@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'loop' at line 4\n2. Pointer 'items' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nmenu_add_items(struct menu *menu, const struct menu_item *items,\n    struct cmdq_item *qitem, struct client *c, struct cmd_find_state *fs)\n{\n\tconst struct menu_item\t*loop;\n\n\tfor (loop = items; loop->name != NULL; loop++)\n\t\tmenu_add_item(menu, loop, qitem, c, fs);\n}\n\n\n// Source: menu.c\n// Lines 44-51\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'content' at line 4\n2. Pointer 'len' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid test_diff_blob__can_correctly_detect_binary_blob_data_as_binary(void)\n{\n\t/* alien.png */\n\tconst char *content = git_blob_rawcontent(alien);\n\tsize_t len = (size_t)git_blob_rawsize(alien);\n\tcl_assert_equal_i(true, git_blob_data_is_binary(content, len));\n}\n\n\n// Source: blob.c\n// Lines 607-613\n",
+  "ANSWER": "MUST-NOT"
+}

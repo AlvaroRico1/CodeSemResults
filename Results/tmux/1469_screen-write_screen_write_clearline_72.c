@@ -1,0 +1,25 @@
+screen_write_clearline(struct screen_write_ctx *ctx, u_int bg)
+{
+	struct screen			*s = ctx->s;
+	struct grid_line		*gl;
+	u_int				 sx = screen_size_x(s);
+	struct screen_write_citem	*ci = ctx->item;
+
+	gl = grid_get_line(s->grid, s->grid->hsize + s->cy);
+	if (gl->cellsize == 0 && COLOUR_DEFAULT(bg))
+		return;
+
+	grid_view_clear(s->grid, 0, s->cy, sx, 1, bg);
+
+	screen_write_collect_clear(ctx, s->cy, 1);
+	ci->x = 0;
+	ci->used = sx;
+	ci->type = CLEAR;
+	ci->bg = bg;
+	TAILQ_INSERT_TAIL(&ctx->s->write_list[s->cy].items, ci, entry);
+	ctx->item = screen_write_get_citem();
+}
+
+
+// Source: screen-write.c
+// Lines 1178-1198

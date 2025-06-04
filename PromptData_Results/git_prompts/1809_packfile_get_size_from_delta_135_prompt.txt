@@ -1,0 +1,73 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'data' at line 5
+2. Pointer 'delta_head' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+unsigned long get_size_from_delta(struct packed_git *p,
+				  struct pack_window **w_curs,
+				  off_t curpos)
+{
+	const unsigned char *data;
+	unsigned char delta_head[20], *in;
+	git_zstream stream;
+	int st;
+
+	memset(&stream, 0, sizeof(stream));
+	stream.next_out = delta_head;
+	stream.avail_out = sizeof(delta_head);
+
+	git_inflate_init(&stream);
+	do {
+		in = use_pack(p, w_curs, curpos, &stream.avail_in);
+		stream.next_in = in;
+		/*
+		 * Note: the window section returned by use_pack() must be
+		 * available throughout git_inflate()'s unlocked execution. To
+		 * ensure no other thread will modify the window in the
+		 * meantime, we rely on the packed_window.inuse_cnt. This
+		 * counter is incremented before window reading and checked
+		 * before window disposal.
+		 *
+		 * Other worrying sections could be the call to close_pack_fd(),
+		 * which can close packs even with in-use windows, and to
+		 * reprepare_packed_git(). Regarding the former, mmap doc says:
+		 * "closing the file descriptor does not unmap the region". And
+		 * for the latter, it won't re-open already available packs.
+		 */
+		obj_read_unlock();
+		st = git_inflate(&stream, Z_FINISH);
+		obj_read_lock();
+		curpos += stream.next_in - in;
+	} while ((st == Z_OK || st == Z_BUF_ERROR) &&
+		 stream.total_out < sizeof(delta_head));
+	git_inflate_end(&stream);
+	if ((st != Z_STREAM_END) && stream.total_out != sizeof(delta_head)) {
+		error("delta data unpack-initial failed");
+		return 0;
+	}
+
+	/* Examine the initial part of the delta to figure out
+	 * the result size.
+	 */
+	data = delta_head;
+
+	/* ignore base size */
+	get_delta_hdr_size(&data, delta_head+sizeof(delta_head));
+
+	/* Read the result size */
+	return get_delta_hdr_size(&data, delta_head+sizeof(delta_head));
+}
+
+
+// Source: packfile.c
+// Lines 1084-1137
+
+
+[ANSWER]
+MUST

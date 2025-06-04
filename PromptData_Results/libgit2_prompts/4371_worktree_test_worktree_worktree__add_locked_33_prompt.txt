@@ -1,0 +1,43 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'wt' at line 3
+2. Pointer 'branch' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_worktree_worktree__add_locked(void)
+{
+	git_worktree *wt;
+	git_repository *repo;
+	git_reference *branch;
+	git_str path = GIT_STR_INIT;
+	git_worktree_add_options opts = GIT_WORKTREE_ADD_OPTIONS_INIT;
+
+	opts.lock = 1;
+
+	cl_git_pass(git_str_joinpath(&path, fixture.repo->workdir, "../worktree-locked"));
+	cl_git_pass(git_worktree_add(&wt, fixture.repo, "worktree-locked", path.ptr, &opts));
+
+	/* Open and verify created repo */
+	cl_assert(git_worktree_is_locked(NULL, wt));
+	cl_git_pass(git_repository_open(&repo, path.ptr));
+	cl_assert(git__suffixcmp(git_repository_workdir(repo), "worktree-locked/") == 0);
+	cl_git_pass(git_branch_lookup(&branch, repo, "worktree-locked", GIT_BRANCH_LOCAL));
+
+	git_str_dispose(&path);
+	git_worktree_free(wt);
+	git_reference_free(branch);
+	git_repository_free(repo);
+}
+
+
+// Source: worktree.c
+// Lines 220-243
+
+
+[ANSWER]
+MAY

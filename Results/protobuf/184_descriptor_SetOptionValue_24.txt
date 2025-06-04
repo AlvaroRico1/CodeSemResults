@@ -1,0 +1,1 @@
+enum_value,protobuf/src/google/protobuf/descriptor.cc,149,candicate_descriptor,protobuf/src/google/protobuf/descriptor.cc,165,1

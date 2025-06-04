@@ -1,0 +1,1 @@
+err,mysql/libmysql/dns_srv.cc,7,passwd,mysql/libmysql/dns_srv.cc,3,0

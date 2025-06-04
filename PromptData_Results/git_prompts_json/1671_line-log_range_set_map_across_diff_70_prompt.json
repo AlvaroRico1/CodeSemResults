@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'touched_out' at line 4\n2. Pointer 'touched' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void range_set_map_across_diff(struct range_set *out,\n\t\t\t\t      struct range_set *rs,\n\t\t\t\t      struct diff_ranges *diff,\n\t\t\t\t      struct diff_ranges **touched_out)\n{\n\tstruct diff_ranges *touched = xmalloc(sizeof(*touched));\n\tstruct range_set tmp1 = RANGE_SET_INIT;\n\tstruct range_set tmp2 = RANGE_SET_INIT;\n\n\tdiff_ranges_init(touched);\n\tdiff_ranges_filter_touched(touched, diff, rs);\n\trange_set_difference(&tmp1, rs, &touched->target);\n\trange_set_shift_diff(&tmp2, &tmp1, diff);\n\trange_set_union(out, &tmp2, &touched->parent);\n\trange_set_release(&tmp1);\n\trange_set_release(&tmp2);\n\n\t*touched_out = touched;\n}\n\n\n// Source: line-log.c\n// Lines 453-471\n",
+  "ANSWER": "MUST"
+}

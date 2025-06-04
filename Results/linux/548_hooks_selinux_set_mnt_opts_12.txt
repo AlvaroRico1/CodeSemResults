@@ -1,0 +1,1 @@
+set_kern_flags,linux/security/selinux/hooks.c,4,defcontext_sid,linux/security/selinux/hooks.c,12,2

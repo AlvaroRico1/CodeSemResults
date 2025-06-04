@@ -1,0 +1,61 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'rev' at line 6
+2. Pointer 'rev_buf' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void mailmap_add_from_repository(git_mailmap *mm, git_repository *repo)
+{
+	git_config *config = NULL;
+	git_str rev_buf = GIT_STR_INIT;
+	git_str path_buf = GIT_STR_INIT;
+	const char *rev = NULL;
+	const char *path = NULL;
+
+	/* If we're in a bare repo, default blob to 'HEAD:.mailmap' */
+	if (repo->is_bare)
+		rev = MM_BLOB_DEFAULT;
+
+	/* Try to load 'mailmap.file' and 'mailmap.blob' cfgs from the repo */
+	if (git_repository_config(&config, repo) == 0) {
+		if (git_config__get_string_buf(&rev_buf, config, MM_BLOB_CONFIG) == 0)
+			rev = rev_buf.ptr;
+		if (git_config__get_path(&path_buf, config, MM_FILE_CONFIG) == 0)
+			path = path_buf.ptr;
+	}
+
+	/*
+	 * Load mailmap files in order, overriding previous entries with new ones.
+	 *  1. The '.mailmap' file in the repository's workdir root,
+	 *  2. The blob described by the 'mailmap.blob' config (default HEAD:.mailmap),
+	 *  3. The file described by the 'mailmap.file' config.
+	 *
+	 * We ignore errors from these loads, as these files may not exist, or may
+	 * contain invalid information, and we don't want to report that error.
+	 *
+	 * XXX: Warn?
+	 */
+	if (!repo->is_bare)
+		mailmap_add_file_ondisk(mm, MM_FILE, repo);
+	if (rev != NULL)
+		mailmap_add_blob(mm, repo, rev);
+	if (path != NULL)
+		mailmap_add_file_ondisk(mm, path, repo);
+
+	git_str_dispose(&rev_buf);
+	git_str_dispose(&path_buf);
+	git_config_free(config);
+}
+
+
+// Source: mailmap.c
+// Lines 354-395
+
+
+[ANSWER]
+MUST

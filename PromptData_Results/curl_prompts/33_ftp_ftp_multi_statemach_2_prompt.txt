@@ -1,0 +1,33 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'conn' at line 4
+2. Pointer 'data' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static CURLcode ftp_multi_statemach(struct Curl_easy *data,
+                                    bool *done)
+{
+  struct connectdata *conn = data->conn;
+  struct ftp_conn *ftpc = &conn->proto.ftpc;
+  CURLcode result = Curl_pp_statemach(data, &ftpc->pp, FALSE, FALSE);
+
+  /* Check for the state outside of the Curl_socket_check() return code checks
+     since at times we are in fact already in this state when this function
+     gets called. */
+  *done = (ftpc->state == FTP_STOP) ? TRUE : FALSE;
+
+  return result;
+}
+
+
+// Source: ftp.c
+// Lines 3106-3119
+
+
+[ANSWER]
+MUST

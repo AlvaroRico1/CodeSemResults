@@ -1,0 +1,1 @@
+gc,tmux/screen-write.c,6,choice_gc,tmux/screen-write.c,2,1

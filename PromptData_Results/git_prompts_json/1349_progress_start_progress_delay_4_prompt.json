@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'progress' at line 1\n2. Pointer 'title' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic struct progress *start_progress_delay(const char *title, uint64_t total,\n\t\t\t\t\t     unsigned delay, unsigned sparse)\n{\n\tstruct progress *progress = xmalloc(sizeof(*progress));\n\tprogress->title = title;\n\tprogress->total = total;\n\tprogress->last_value = -1;\n\tprogress->last_percent = -1;\n\tprogress->delay = delay;\n\tprogress->sparse = sparse;\n\tprogress->throughput = NULL;\n\tprogress->start_ns = getnanotime();\n\tstrbuf_init(&progress->counters_sb, 0);\n\tprogress->title_len = utf8_strwidth(title);\n\tprogress->split = 0;\n\tset_progress_signal();\n\ttrace2_region_enter(\"progress\", title, the_repository);\n\treturn progress;\n}\n\n\n// Source: progress.c\n// Lines 252-270\n",
+  "ANSWER": "MUST"
+}

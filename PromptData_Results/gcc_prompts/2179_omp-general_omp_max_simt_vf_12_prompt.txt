@@ -1,0 +1,33 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'c' at line 6
+2. Pointer 'c' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+omp_max_simt_vf (void)
+{
+  if (!optimize)
+    return 0;
+  if (ENABLE_OFFLOADING)
+    for (const char *c = getenv ("OFFLOAD_TARGET_NAMES"); c;)
+      {
+	if (!strncmp (c, "nvptx", strlen ("nvptx")))
+	  return 32;
+	else if ((c = strchr (c, ':')))
+	  c++;
+      }
+  return 0;
+}
+
+
+// Source: omp-general.c
+// Lines 598-611
+
+
+[ANSWER]
+MUST

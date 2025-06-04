@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'end' at line 2\n2. Pointer 'segment_begin' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nlog_var_extract_segment(const char* segment_begin) {\n\tconst char *end;\n\tfor (end = segment_begin; *end != '\\0' && *end != '|'; end++) {\n\t}\n\treturn end;\n}\n\n\n// Source: log.c\n// Lines 14-19\n",
+  "ANSWER": "MUST"
+}

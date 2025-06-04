@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'size' at line None\n2. Pointer 'type' at line None\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void final_cleanup_rename(struct string_list *rename)\n{\n\tconst struct rename *re;\n\tint i;\n\n\tif (rename == NULL)\n\t\treturn;\n\n\tfor (i = 0; i < rename->nr; i++) {\n\t\tre = rename->items[i].util;\n\t\tdiff_free_filepair(re->pair);\n\t}\n\tstring_list_clear(rename, 1);\n\tfree(rename);\n}\n\n\n// Source: merge-recursive.c\n// Lines 2992-3006\n",
+  "ANSWER": "MAY"
+}

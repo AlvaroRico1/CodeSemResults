@@ -1,0 +1,174 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'n' at line 6
+2. Pointer 'ptr' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+format_expand1(struct format_expand_state *es, const char *fmt)
+{
+	struct format_tree	*ft = es->ft;
+	char			*buf, *out, *name;
+	const char		*ptr, *s;
+	size_t			 off, len, n, outlen;
+	int     		 ch, brackets;
+	char			 expanded[8192];
+
+	if (fmt == NULL || *fmt == '\0')
+		return (xstrdup(""));
+
+	if (es->loop == FORMAT_LOOP_LIMIT) {
+		format_log(es, "reached loop limit (%u)", FORMAT_LOOP_LIMIT);
+		return (xstrdup(""));
+	}
+	es->loop++;
+
+	format_log(es, "expanding format: %s", fmt);
+
+	if ((es->flags & FORMAT_EXPAND_TIME) && strchr(fmt, '%') != NULL) {
+		if (es->time == 0) {
+			es->time = time(NULL);
+			localtime_r(&es->time, &es->tm);
+		}
+		if (strftime(expanded, sizeof expanded, fmt, &es->tm) == 0) {
+			format_log(es, "format is too long");
+			return (xstrdup(""));
+		}
+		if (format_logging(ft) && strcmp(expanded, fmt) != 0)
+			format_log(es, "after time expanded: %s", expanded);
+		fmt = expanded;
+	}
+
+	len = 64;
+	buf = xmalloc(len);
+	off = 0;
+
+	while (*fmt != '\0') {
+		if (*fmt != '#') {
+			while (len - off < 2) {
+				buf = xreallocarray(buf, 2, len);
+				len *= 2;
+			}
+			buf[off++] = *fmt++;
+			continue;
+		}
+		fmt++;
+
+		ch = (u_char)*fmt++;
+		switch (ch) {
+		case '(':
+			brackets = 1;
+			for (ptr = fmt; *ptr != '\0'; ptr++) {
+				if (*ptr == '(')
+					brackets++;
+				if (*ptr == ')' && --brackets == 0)
+					break;
+			}
+			if (*ptr != ')' || brackets != 0)
+				break;
+			n = ptr - fmt;
+
+			name = xstrndup(fmt, n);
+			format_log(es, "found #(): %s", name);
+
+			if ((ft->flags & FORMAT_NOJOBS) ||
+			    (es->flags & FORMAT_EXPAND_NOJOBS)) {
+				out = xstrdup("");
+				format_log(es, "#() is disabled");
+			} else {
+				out = format_job_get(es, name);
+				format_log(es, "#() result: %s", out);
+			}
+			free(name);
+
+			outlen = strlen(out);
+			while (len - off < outlen + 1) {
+				buf = xreallocarray(buf, 2, len);
+				len *= 2;
+			}
+			memcpy(buf + off, out, outlen);
+			off += outlen;
+
+			free(out);
+
+			fmt += n + 1;
+			continue;
+		case '{':
+			ptr = format_skip((char *)fmt - 2, "}");
+			if (ptr == NULL)
+				break;
+			n = ptr - fmt;
+
+			format_log(es, "found #{}: %.*s", (int)n, fmt);
+			if (format_replace(es, fmt, n, &buf, &len, &off) != 0)
+				break;
+			fmt += n + 1;
+			continue;
+		case '#':
+			/*
+			 * If ##[ (with two or more #s), then it is a style and
+			 * can be left for format_draw to handle.
+			 */
+			ptr = fmt;
+			n = 2;
+			while (*ptr == '#') {
+				ptr++;
+				n++;
+			}
+			if (*ptr == '[') {
+				format_log(es, "found #*%zu[", n);
+				while (len - off < n + 2) {
+					buf = xreallocarray(buf, 2, len);
+					len *= 2;
+				}
+				memcpy(buf + off, fmt - 2, n + 1);
+				off += n + 1;
+				fmt = ptr + 1;
+				continue;
+			}
+			/* FALLTHROUGH */
+		case '}':
+		case ',':
+			format_log(es, "found #%c", ch);
+			while (len - off < 2) {
+				buf = xreallocarray(buf, 2, len);
+				len *= 2;
+			}
+			buf[off++] = ch;
+			continue;
+		default:
+			s = NULL;
+			if (ch >= 'A' && ch <= 'Z')
+				s = format_upper[ch - 'A'];
+			else if (ch >= 'a' && ch <= 'z')
+				s = format_lower[ch - 'a'];
+			if (s == NULL) {
+				while (len - off < 3) {
+					buf = xreallocarray(buf, 2, len);
+					len *= 2;
+				}
+				buf[off++] = '#';
+				buf[off++] = ch;
+				continue;
+			}
+			n = strlen(s);
+			format_log(es, "found #%c: %s", ch, s);
+			if (format_replace(es, s, n, &buf, &len, &off) != 0)
+				break;
+			continue;
+		}
+
+		break;
+	}
+
+
+// Source: format.c
+// Lines 4462-4616
+
+
+[ANSWER]
+MUST

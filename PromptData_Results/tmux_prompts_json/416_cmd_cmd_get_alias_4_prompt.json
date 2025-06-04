@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'n' at line 6\n2. Pointer 'equals' at line 7\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ncmd_get_alias(const char *name)\n{\n\tstruct options_entry\t\t*o;\n\tstruct options_array_item\t*a;\n\tunion options_value\t\t*ov;\n\tsize_t\t\t\t\t wanted, n;\n\tconst char\t\t\t*equals;\n\n\to = options_get_only(global_options, \"command-alias\");\n\tif (o == NULL)\n\t\treturn (NULL);\n\twanted = strlen(name);\n\n\ta = options_array_first(o);\n\twhile (a != NULL) {\n\t\tov = options_array_item_value(a);\n\n\t\tequals = strchr(ov->string, '=');\n\t\tif (equals != NULL) {\n\t\t\tn = equals - ov->string;\n\t\t\tif (n == wanted && strncmp(name, ov->string, n) == 0)\n\t\t\t\treturn (xstrdup(equals + 1));\n\t\t}\n\n\t\ta = options_array_next(a);\n\t}\n\treturn (NULL);\n}\n\n\n// Source: cmd.c\n// Lines 417-444\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,76 @@
+static int create_files(struct kernfs_node *parent, struct kobject *kobj,
+			kuid_t uid, kgid_t gid,
+			const struct attribute_group *grp, int update)
+{
+	struct attribute *const *attr;
+	struct bin_attribute *const *bin_attr;
+	int error = 0, i;
+
+	if (grp->attrs) {
+		for (i = 0, attr = grp->attrs; *attr && !error; i++, attr++) {
+			umode_t mode = (*attr)->mode;
+
+			/*
+			 * In update mode, we're changing the permissions or
+			 * visibility.  Do this by first removing then
+			 * re-adding (if required) the file.
+			 */
+			if (update)
+				kernfs_remove_by_name(parent, (*attr)->name);
+			if (grp->is_visible) {
+				mode = grp->is_visible(kobj, *attr, i);
+				if (!mode)
+					continue;
+			}
+
+			WARN(mode & ~(SYSFS_PREALLOC | 0664),
+			     "Attribute %s: Invalid permissions 0%o\n",
+			     (*attr)->name, mode);
+
+			mode &= SYSFS_PREALLOC | 0664;
+			error = sysfs_add_file_mode_ns(parent, *attr, false,
+						       mode, uid, gid, NULL);
+			if (unlikely(error))
+				break;
+		}
+		if (error) {
+			remove_files(parent, grp);
+			goto exit;
+		}
+	}
+
+	if (grp->bin_attrs) {
+		for (i = 0, bin_attr = grp->bin_attrs; *bin_attr; i++, bin_attr++) {
+			umode_t mode = (*bin_attr)->attr.mode;
+
+			if (update)
+				kernfs_remove_by_name(parent,
+						(*bin_attr)->attr.name);
+			if (grp->is_bin_visible) {
+				mode = grp->is_bin_visible(kobj, *bin_attr, i);
+				if (!mode)
+					continue;
+			}
+
+			WARN(mode & ~(SYSFS_PREALLOC | 0664),
+			     "Attribute %s: Invalid permissions 0%o\n",
+			     (*bin_attr)->attr.name, mode);
+
+			mode &= SYSFS_PREALLOC | 0664;
+			error = sysfs_add_file_mode_ns(parent,
+					&(*bin_attr)->attr, true,
+					mode,
+					uid, gid, NULL);
+			if (error)
+				break;
+		}
+		if (error)
+			remove_files(parent, grp);
+	}
+exit:
+	return error;
+}
+
+
+// Source: group.c
+// Lines 33-104

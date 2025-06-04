@@ -1,0 +1,25 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'strval' at line None
+2. Pointer 'value' at line None
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void repo_cfg_bool(struct repository *r, const char *key, int *dest,
+			  int def)
+{
+	if (repo_config_get_bool(r, key, dest))
+		*dest = def;
+}
+
+
+// Source: repo-settings.c
+// Lines 6-11
+
+
+[ANSWER]
+MAY

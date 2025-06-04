@@ -1,0 +1,42 @@
+system_enable_write(struct file *filp, const char __user *ubuf, size_t cnt,
+		    loff_t *ppos)
+{
+	struct trace_subsystem_dir *dir = filp->private_data;
+	struct event_subsystem *system = dir->subsystem;
+	const char *name = NULL;
+	unsigned long val;
+	ssize_t ret;
+
+	ret = kstrtoul_from_user(ubuf, cnt, 10, &val);
+	if (ret)
+		return ret;
+
+	ret = tracing_update_buffers();
+	if (ret < 0)
+		return ret;
+
+	if (val != 0 && val != 1)
+		return -EINVAL;
+
+	/*
+	 * Opening of "enable" adds a ref count to system,
+	 * so the name is safe to use.
+	 */
+	if (system)
+		name = system->name;
+
+	ret = __ftrace_set_clr_event(dir->tr, NULL, name, NULL, val);
+	if (ret)
+		goto out;
+
+	ret = cnt;
+
+out:
+	*ppos += cnt;
+
+	return ret;
+}
+
+
+// Source: trace_events.c
+// Lines 1137-1174

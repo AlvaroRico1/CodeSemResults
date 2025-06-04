@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'retval' at line 2\n2. Pointer 'length' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint STDCALL mysql_real_query(MYSQL *mysql, const char *query, ulong length) {\n  int retval;\n  DBUG_TRACE;\n  DBUG_PRINT(\"enter\", (\"handle: %p\", mysql));\n  DBUG_PRINT(\"query\", (\"Query = '%-.*s'\", (int)length, query));\n  DBUG_EXECUTE_IF(\"inject_ER_NET_READ_INTERRUPTED\", {\n    mysql->net.last_errno = ER_NET_READ_INTERRUPTED;\n    DBUG_SET(\"-d,inject_ER_NET_READ_INTERRUPTED\");\n    return 1;\n  });\n\n  if (mysql_send_query(mysql, query, length)) return 1;\n  retval = (int)(*mysql->methods->read_query_result)(mysql);\n  mysql_extension_bind_free(MYSQL_EXTENSION_PTR(mysql));\n  return retval;\n}\n\n\n// Source: client.cc\n// Lines 7411-7426\n",
+  "ANSWER": "MUST-NOT"
+}

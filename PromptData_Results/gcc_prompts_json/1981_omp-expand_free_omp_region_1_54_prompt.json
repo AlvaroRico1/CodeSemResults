@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'n' at line 3\n2. Pointer 'i' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nfree_omp_region_1 (struct omp_region *region)\n{\n  struct omp_region *i, *n;\n\n  for (i = region->inner; i ; i = n)\n    {\n      n = i->next;\n      free_omp_region_1 (i);\n    }\n\n  free (region);\n}\n\n\n// Source: omp-expand.c\n// Lines 447-458\n",
+  "ANSWER": "MUST"
+}

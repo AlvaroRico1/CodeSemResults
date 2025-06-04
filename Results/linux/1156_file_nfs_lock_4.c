@@ -1,0 +1,38 @@
+int nfs_lock(struct file *filp, int cmd, struct file_lock *fl)
+{
+	struct inode *inode = filp->f_mapping->host;
+	int ret = -ENOLCK;
+	int is_local = 0;
+
+	dprintk("NFS: lock(%pD2, t=%x, fl=%x, r=%lld:%lld)\n",
+			filp, fl->fl_type, fl->fl_flags,
+			(long long)fl->fl_start, (long long)fl->fl_end);
+
+	nfs_inc_stats(inode, NFSIOS_VFSLOCK);
+
+	/* No mandatory locks over NFS */
+	if (__mandatory_lock(inode) && fl->fl_type != F_UNLCK)
+		goto out_err;
+
+	if (NFS_SERVER(inode)->flags & NFS_MOUNT_LOCAL_FCNTL)
+		is_local = 1;
+
+	if (NFS_PROTO(inode)->lock_check_bounds != NULL) {
+		ret = NFS_PROTO(inode)->lock_check_bounds(fl);
+		if (ret < 0)
+			goto out_err;
+	}
+
+	if (IS_GETLK(cmd))
+		ret = do_getlk(filp, cmd, fl, is_local);
+	else if (fl->fl_type == F_UNLCK)
+		ret = do_unlk(filp, cmd, fl, is_local);
+	else
+		ret = do_setlk(filp, cmd, fl, is_local);
+out_err:
+	return ret;
+}
+
+
+// Source: file.c
+// Lines 766-799

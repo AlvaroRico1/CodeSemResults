@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'info' at line 5\n2. Pointer 'buffer' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint curl_mvsnprintf(char *buffer, size_t maxlength, const char *format,\n                    va_list ap_save)\n{\n  int retcode;\n  struct nsprintf info;\n\n  info.buffer = buffer;\n  info.length = 0;\n  info.max = maxlength;\n\n  retcode = dprintf_formatf(&info, addbyter, format, ap_save);\n  if((retcode != -1) && info.max) {\n    /* we terminate this with a zero byte */\n    if(info.max == info.length) {\n      /* we're at maximum, scrap the last letter */\n      info.buffer[-1] = 0;\n      retcode--; /* don't count the nul byte */\n    }\n    else\n      info.buffer[0] = 0;\n  }\n  return retcode;\n}\n\n\n// Source: mprintf.c\n// Lines 1007-1029\n",
+  "ANSWER": "MUST"
+}

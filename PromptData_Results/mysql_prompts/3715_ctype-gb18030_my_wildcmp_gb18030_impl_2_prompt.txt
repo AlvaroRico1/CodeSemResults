@@ -1,0 +1,129 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'w_gb' at line 6
+2. Pointer 's_gb' at line 6
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int my_wildcmp_gb18030_impl(const CHARSET_INFO *cs, const char *str,
+                                   const char *str_end, const char *wildstr,
+                                   const char *wildend, uint escape, uint w_one,
+                                   uint w_many, int recurse_level) {
+  int result = -1; /* Not found, using wildcards */
+  size_t s_gb, w_gb;
+  size_t s_len = 0, w_len;
+
+  if (my_string_stack_guard && my_string_stack_guard(recurse_level)) return 1;
+
+  while (wildstr != wildend) {
+    while (true) {
+      bool escaped = false;
+      if ((w_len = get_code_and_length(cs, wildstr, wildend, &w_gb)) == 0)
+        return 1;
+
+      if (w_gb == w_many) {
+        result = 1; /* Found an anchor char */
+        break;
+      }
+
+      wildstr += w_len;
+      if (w_gb == escape && wildstr < wildend) {
+        if ((w_len = get_code_and_length(cs, wildstr, wildend, &w_gb)) == 0)
+          return 1;
+
+        wildstr += w_len;
+        escaped = true;
+      }
+
+      if ((s_len = get_code_and_length(cs, str, str_end, &s_gb)) == 0) return 1;
+      str += s_len;
+
+      if (!escaped && w_gb == w_one) {
+        result = 1; /* Found an anchor char */
+      } else {
+        s_gb = get_weight_for_gb18030_chs(cs, str - s_len, s_len);
+        w_gb = get_weight_for_gb18030_chs(cs, wildstr - w_len, w_len);
+        if (s_gb != w_gb) return 1; /* No match */
+      }
+
+      if (wildstr == wildend)
+        return (str != str_end); /* Match if both are at end */
+    }
+
+    if (w_gb == w_many) { /* Found w_many */
+      /* Remove any '%' and '_' from the wild search string */
+      for (; wildstr != wildend;) {
+        if ((w_len = get_code_and_length(cs, wildstr, wildend, &w_gb)) == 0)
+          return 1;
+
+        if (w_gb == w_many) {
+          wildstr += w_len;
+          continue;
+        }
+
+        if (w_gb == w_one) {
+          wildstr += w_len;
+
+          if ((s_len = get_code_and_length(cs, str, str_end, &s_gb)) == 0)
+            return 1;
+          str += s_len;
+          continue;
+        }
+        break; /* Not a wild character */
+      }
+
+      if (wildstr == wildend) return 0; /* OK if w_many is last */
+
+      if (str == str_end) return -1;
+
+      if ((w_len = get_code_and_length(cs, wildstr, wildend, &w_gb)) == 0)
+        return 1;
+      wildstr += w_len;
+
+      if (w_gb == escape) {
+        if (wildstr < wildend) {
+          if ((w_len = get_code_and_length(cs, wildstr, wildend, &w_gb)) == 0)
+            return 1;
+          wildstr += w_len;
+        }
+      }
+
+      while (true) {
+        /* Skip until the first character from wildstr is found */
+        while (str != str_end) {
+          if ((s_len = get_code_and_length(cs, str, str_end, &s_gb)) == 0)
+            return 1;
+
+          s_gb = get_weight_for_gb18030_chs(cs, str, s_len);
+          w_gb = get_weight_for_gb18030_chs(cs, wildstr - w_len, w_len);
+          if (s_gb == w_gb) break;
+
+          str += s_len;
+        }
+
+        if (str == str_end) return -1;
+
+        str += s_len;
+
+        result =
+            my_wildcmp_gb18030_impl(cs, str, str_end, wildstr, wildend, escape,
+                                    w_one, w_many, recurse_level + 1);
+        if (result <= 0) return result;
+      }
+    }
+  }
+
+  return (str != str_end ? 1 : 0);
+}
+
+
+// Source: ctype-gb18030.cc
+// Lines 20158-20267
+
+
+[ANSWER]
+MAY

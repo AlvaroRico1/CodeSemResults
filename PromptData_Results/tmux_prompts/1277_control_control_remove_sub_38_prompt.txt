@@ -1,0 +1,30 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'find' at line 4
+2. Pointer 'name' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+control_remove_sub(struct client *c, const char *name)
+{
+	struct control_state	*cs = c->control_state;
+	struct control_sub	*csub, find;
+
+	find.name = (char *)name;
+	if ((csub = RB_FIND(control_subs, &cs->subs, &find)) != NULL)
+		control_free_sub(cs, csub);
+	if (RB_EMPTY(&cs->subs))
+		evtimer_del(&cs->subs_timer);
+}
+
+
+// Source: control.c
+// Lines 1097-1107
+
+
+[ANSWER]
+MUST

@@ -1,0 +1,38 @@
+int git_config_entries_append(git_config_entries *entries, git_config_entry *entry)
+{
+	config_entry_list *list_head;
+	config_entry_map_head *map_head;
+
+	if ((map_head = git_strmap_get(entries->map, entry->name)) != NULL) {
+		map_head->multivar = true;
+		/*
+		 * This is a micro-optimization for configuration files
+		 * with a lot of same keys. As for multivars the entry's
+		 * key will be the same for all entries, we can just free
+		 * all except the first entry's name and just re-use it.
+		 */
+		git__free((char *) entry->name);
+		entry->name = map_head->entry->name;
+	} else {
+		map_head = git__calloc(1, sizeof(*map_head));
+		if ((git_strmap_set(entries->map, entry->name, map_head)) < 0)
+			return -1;
+	}
+	map_head->entry = entry;
+
+	list_head = git__calloc(1, sizeof(config_entry_list));
+	GIT_ERROR_CHECK_ALLOC(list_head);
+	list_head->entry = entry;
+
+	if (entries->list)
+		entries->list->last->next = list_head;
+	else
+		entries->list = list_head;
+	entries->list->last = list_head;
+
+	return 0;
+}
+
+
+// Source: config_entries.c
+// Lines 134-167

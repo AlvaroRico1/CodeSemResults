@@ -1,0 +1,41 @@
+  bool IsMatchInternal(
+      const Message& message1, const Message& message2,
+      const std::vector<SpecificField>& parent_fields,
+      const std::vector<const FieldDescriptor*>& key_field_path,
+      int path_index) const {
+    const FieldDescriptor* field = key_field_path[path_index];
+    std::vector<SpecificField> current_parent_fields(parent_fields);
+    if (path_index == static_cast<int64_t>(key_field_path.size() - 1)) {
+      if (field->is_map()) {
+        return message_differencer_->CompareMapField(message1, message2, field,
+                                                     &current_parent_fields);
+      } else if (field->is_repeated()) {
+        return message_differencer_->CompareRepeatedField(
+            message1, message2, field, &current_parent_fields);
+      } else {
+        return message_differencer_->CompareFieldValueUsingParentFields(
+            message1, message2, field, -1, -1, &current_parent_fields);
+      }
+    } else {
+      const Reflection* reflection1 = message1.GetReflection();
+      const Reflection* reflection2 = message2.GetReflection();
+      bool has_field1 = reflection1->HasField(message1, field);
+      bool has_field2 = reflection2->HasField(message2, field);
+      if (!has_field1 && !has_field2) {
+        return true;
+      }
+      if (has_field1 != has_field2) {
+        return false;
+      }
+      SpecificField specific_field;
+      specific_field.field = field;
+      current_parent_fields.push_back(specific_field);
+      return IsMatchInternal(reflection1->GetMessage(message1, field),
+                             reflection2->GetMessage(message2, field),
+                             current_parent_fields, key_field_path,
+                             path_index + 1);
+    }
+
+
+// Source: message_differencer.cc
+// Lines 166-202

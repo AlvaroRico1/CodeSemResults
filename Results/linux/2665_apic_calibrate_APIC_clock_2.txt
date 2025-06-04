@@ -1,0 +1,1 @@
+deltatsc,linux/arch/x86/kernel/apic/apic.c,7,delta,linux/arch/x86/kernel/apic/apic.c,7,2

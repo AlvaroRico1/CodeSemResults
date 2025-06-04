@@ -1,0 +1,34 @@
+static int nfs_compare_mount_options(const struct super_block *s, const struct nfs_server *b, int flags)
+{
+	const struct nfs_server *a = s->s_fs_info;
+	const struct rpc_clnt *clnt_a = a->client;
+	const struct rpc_clnt *clnt_b = b->client;
+
+	if ((s->s_flags & NFS_MS_MASK) != (flags & NFS_MS_MASK))
+		goto Ebusy;
+	if (a->nfs_client != b->nfs_client)
+		goto Ebusy;
+	if ((a->flags ^ b->flags) & NFS_MOUNT_CMP_FLAGMASK)
+		goto Ebusy;
+	if (a->wsize != b->wsize)
+		goto Ebusy;
+	if (a->rsize != b->rsize)
+		goto Ebusy;
+	if (a->acregmin != b->acregmin)
+		goto Ebusy;
+	if (a->acregmax != b->acregmax)
+		goto Ebusy;
+	if (a->acdirmin != b->acdirmin)
+		goto Ebusy;
+	if (a->acdirmax != b->acdirmax)
+		goto Ebusy;
+	if (clnt_a->cl_auth->au_flavor != clnt_b->cl_auth->au_flavor)
+		goto Ebusy;
+	return 1;
+Ebusy:
+	return 0;
+}
+
+
+// Source: super.c
+// Lines 2418-2447

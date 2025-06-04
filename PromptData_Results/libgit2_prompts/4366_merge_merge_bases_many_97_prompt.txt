@@ -1,0 +1,71 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'walk_out' at line 1
+2. Pointer 'walk' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int merge_bases_many(git_commit_list **out, git_revwalk **walk_out, git_repository *repo, size_t length, const git_oid input_array[])
+{
+	git_revwalk *walk = NULL;
+	git_vector list;
+	git_commit_list *result = NULL;
+	git_commit_list_node *commit;
+	int error = -1;
+	unsigned int i;
+
+	if (length < 2) {
+		git_error_set(GIT_ERROR_INVALID, "at least two commits are required to find an ancestor");
+		return -1;
+	}
+
+	if (git_vector_init(&list, length - 1, NULL) < 0)
+		return -1;
+
+	if (git_revwalk_new(&walk, repo) < 0)
+		goto on_error;
+
+	for (i = 1; i < length; i++) {
+		commit = git_revwalk__commit_lookup(walk, &input_array[i]);
+		if (commit == NULL)
+			goto on_error;
+
+		git_vector_insert(&list, commit);
+	}
+
+	commit = git_revwalk__commit_lookup(walk, &input_array[0]);
+	if (commit == NULL)
+		goto on_error;
+
+	if (git_merge__bases_many(&result, walk, commit, &list, 0) < 0)
+		goto on_error;
+
+	if (!result) {
+		git_error_set(GIT_ERROR_MERGE, "no merge base found");
+		error = GIT_ENOTFOUND;
+		goto on_error;
+	}
+
+	*out = result;
+	*walk_out = walk;
+
+	git_vector_free(&list);
+	return 0;
+
+on_error:
+	git_vector_free(&list);
+	git_revwalk_free(walk);
+	return error;
+}
+
+
+// Source: merge.c
+// Lines 83-134
+
+
+[ANSWER]
+MUST

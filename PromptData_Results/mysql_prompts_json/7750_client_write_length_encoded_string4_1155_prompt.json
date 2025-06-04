@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'to' at line 5\n2. Pointer 'src' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic char *write_length_encoded_string4(char *dest, char *dest_end,\n                                          const uchar *src,\n                                          const uchar *src_end) {\n  size_t src_len = (size_t)(src_end - src);\n  uchar *to = net_store_length((uchar *)dest, src_len);\n  if ((char *)(to + src_len) >= dest_end) return nullptr;\n  memcpy(to, src, src_len);\n  return (char *)(to + src_len);\n}\n\n\n// Source: client.cc\n// Lines 3930-3938\n",
+  "ANSWER": "MUST-NOT"
+}

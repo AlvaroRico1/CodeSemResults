@@ -1,0 +1,1 @@
+executable,gcc/libiberty/pex-unix.c,1,do_pipe,gcc/libiberty/pex-unix.c,15,2

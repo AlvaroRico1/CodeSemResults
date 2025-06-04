@@ -1,0 +1,35 @@
+static int client_hello_decode_server_name(ptls_iovec_t *name, const uint8_t **src, const uint8_t *const end)
+{
+    int ret = 0;
+
+    ptls_decode_open_block(*src, end, 2, {
+        if (*src == end) {
+            ret = PTLS_ALERT_DECODE_ERROR;
+            goto Exit;
+        }
+        do {
+            uint8_t type = *(*src)++;
+            ptls_decode_open_block(*src, end, 2, {
+                switch (type) {
+                case PTLS_SERVER_NAME_TYPE_HOSTNAME:
+                    if (memchr(*src, '\0', end - *src) != 0) {
+                        ret = PTLS_ALERT_ILLEGAL_PARAMETER;
+                        goto Exit;
+                    }
+                    *name = ptls_iovec_init(*src, end - *src);
+                    break;
+                default:
+                    break;
+                }
+                *src = end;
+            });
+        } while (*src != end);
+    });
+
+Exit:
+    return ret;
+}
+
+
+// Source: picotls.c
+// Lines 3029-3059

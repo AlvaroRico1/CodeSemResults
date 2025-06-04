@@ -1,0 +1,40 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'entry' at line 8
+2. Pointer 'path' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_diff__oid_for_file(
+	git_oid *out,
+	git_diff *diff,
+	const char *path,
+	uint16_t mode,
+	git_object_size_t size)
+{
+	git_index_entry entry;
+
+	if (size > UINT32_MAX) {
+		git_error_set(GIT_ERROR_NOMEMORY, "file size overflow (for 32-bits) on '%s'", path);
+		return -1;
+	}
+
+	memset(&entry, 0, sizeof(entry));
+	entry.mode = mode;
+	entry.file_size = (uint32_t)size;
+	entry.path = (char *)path;
+
+	return git_diff__oid_for_entry(out, diff, &entry, mode, NULL);
+}
+
+
+// Source: diff_generate.c
+// Lines 583-603
+
+
+[ANSWER]
+MUST

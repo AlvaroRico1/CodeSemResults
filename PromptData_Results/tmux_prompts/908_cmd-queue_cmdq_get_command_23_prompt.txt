@@ -1,0 +1,63 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'first' at line 3
+2. Pointer 'item' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+cmdq_get_command(struct cmd_list *cmdlist, struct cmdq_state *state)
+{
+	struct cmdq_item	*item, *first = NULL, *last = NULL;
+	struct cmd		*cmd;
+	const struct cmd_entry	*entry;
+	int			 created = 0;
+
+	if ((cmd = cmd_list_first(cmdlist)) == NULL)
+		return (cmdq_get_callback(cmdq_empty_command, NULL));
+
+	if (state == NULL) {
+		state = cmdq_new_state(NULL, NULL, 0);
+		created = 1;
+	}
+
+	while (cmd != NULL) {
+		entry = cmd_get_entry(cmd);
+
+		item = xcalloc(1, sizeof *item);
+		xasprintf(&item->name, "[%s/%p]", entry->name, item);
+		item->type = CMDQ_COMMAND;
+
+		item->group = cmd_get_group(cmd);
+		item->state = cmdq_link_state(state);
+
+		item->cmdlist = cmdlist;
+		item->cmd = cmd;
+
+		cmdlist->references++;
+		log_debug("%s: %s group %u", __func__, item->name, item->group);
+
+		if (first == NULL)
+			first = item;
+		if (last != NULL)
+			last->next = item;
+		last = item;
+
+		cmd = cmd_list_next(cmd);
+	}
+
+	if (created)
+		cmdq_free_state(state);
+	return (first);
+}
+
+
+// Source: cmd-queue.c
+// Lines 490-533
+
+
+[ANSWER]
+MUST

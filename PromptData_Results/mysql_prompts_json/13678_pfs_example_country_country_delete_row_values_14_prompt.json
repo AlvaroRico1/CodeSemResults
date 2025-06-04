@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'h' at line 2\n2. Pointer 'handle' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint country_delete_row_values(PSI_table_handle *handle) {\n  Country_Table_Handle *h = (Country_Table_Handle *)handle;\n\n  Country_record *cur = &country_records_array[h->m_pos.get_index()];\n\n  assert(cur->m_exist == true);\n\n  native_mutex_lock(&LOCK_country_records_array);\n  cur->m_exist = false;\n  country_rows_in_table--;\n  native_mutex_unlock(&LOCK_country_records_array);\n\n  return 0;\n}\n\n\n// Source: pfs_example_country.cc\n// Lines 400-413\n",
+  "ANSWER": "MUST"
+}

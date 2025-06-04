@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'cs' at line 3\n2. Pointer 'c' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ncontrol_write_data(struct client *c, struct evbuffer *message)\n{\n\tstruct control_state\t*cs = c->control_state;\n\n\tlog_debug(\"%s: %s: %.*s\", __func__, c->name,\n\t    (int)EVBUFFER_LENGTH(message), EVBUFFER_DATA(message));\n\n\tevbuffer_add(message, \"\\n\", 1);\n\tbufferevent_write_buffer(cs->write_event, message);\n\tevbuffer_free(message);\n}\n\n\n// Source: control.c\n// Lines 643-653\n",
+  "ANSWER": "MUST"
+}

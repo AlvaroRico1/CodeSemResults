@@ -1,0 +1,1 @@
+alt_part_info,mysql/sql/sql_partition.cc,29,thd,mysql/sql/sql_partition.cc,1,1

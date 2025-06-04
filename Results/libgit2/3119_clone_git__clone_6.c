@@ -1,0 +1,79 @@
+static int git__clone(
+	git_repository **out,
+	const char *url,
+	const char *local_path,
+	const git_clone_options *_options,
+	int use_existing)
+{
+	int error = 0;
+	git_repository *repo = NULL;
+	git_remote *origin;
+	git_clone_options options = GIT_CLONE_OPTIONS_INIT;
+	uint32_t rmdir_flags = GIT_RMDIR_REMOVE_FILES;
+	git_repository_create_cb repository_cb;
+
+	GIT_ASSERT_ARG(out);
+	GIT_ASSERT_ARG(url);
+	GIT_ASSERT_ARG(local_path);
+
+	if (_options)
+		memcpy(&options, _options, sizeof(git_clone_options));
+
+	GIT_ERROR_CHECK_VERSION(&options, GIT_CLONE_OPTIONS_VERSION, "git_clone_options");
+
+	/* Only clone to a new directory or an empty directory */
+	if (git_fs_path_exists(local_path) && !use_existing && !git_fs_path_is_empty_dir(local_path)) {
+		git_error_set(GIT_ERROR_INVALID,
+			"'%s' exists and is not an empty directory", local_path);
+		return GIT_EEXISTS;
+	}
+
+	/* Only remove the root directory on failure if we create it */
+	if (git_fs_path_exists(local_path))
+		rmdir_flags |= GIT_RMDIR_SKIP_ROOT;
+
+	if (options.repository_cb)
+		repository_cb = options.repository_cb;
+	else
+		repository_cb = default_repository_create;
+
+	if ((error = repository_cb(&repo, local_path, options.bare, options.repository_cb_payload)) < 0)
+		return error;
+
+	if (!(error = create_and_configure_origin(&origin, repo, url, &options))) {
+		int clone_local = git_clone__should_clone_local(url, options.local);
+		int link = options.local != GIT_CLONE_LOCAL_NO_LINKS;
+
+		if (clone_local == 1)
+			error = clone_local_into(
+				repo, origin, &options.fetch_opts, &options.checkout_opts,
+				options.checkout_branch, link);
+		else if (clone_local == 0)
+			error = clone_into(
+				repo, origin, &options.fetch_opts, &options.checkout_opts,
+				options.checkout_branch);
+		else
+			error = -1;
+
+		git_remote_free(origin);
+	}
+
+	if (error != 0) {
+		git_error_state last_error = {0};
+		git_error_state_capture(&last_error, error);
+
+		git_repository_free(repo);
+		repo = NULL;
+
+		(void)git_futils_rmdir_r(local_path, NULL, rmdir_flags);
+
+		git_error_state_restore(&last_error);
+	}
+
+	*out = repo;
+	return error;
+}
+
+
+// Source: clone.c
+// Lines 453-527

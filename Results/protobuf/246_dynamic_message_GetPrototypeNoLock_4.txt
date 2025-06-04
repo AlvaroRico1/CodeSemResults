@@ -1,0 +1,1 @@
+has_bits_indices,protobuf/src/google/protobuf/dynamic_message.cc,54,base,protobuf/src/google/protobuf/dynamic_message.cc,135,2

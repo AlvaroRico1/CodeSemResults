@@ -1,0 +1,205 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'ev' at line 1
+2. Pointer 'retval' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+FUNW(history)(TYPE(History) *h, TYPE(HistEvent) *ev, int fun, ...)
+{
+	va_list va;
+	const Char *str;
+	int retval;
+
+	va_start(va, fun);
+
+	he_seterrev(ev, _HE_OK);
+
+	switch (fun) {
+	case H_GETSIZE:
+		retval = history_getsize(h, ev);
+		break;
+
+	case H_SETSIZE:
+		retval = history_setsize(h, ev, va_arg(va, int));
+		break;
+
+	case H_GETUNIQUE:
+		retval = history_getunique(h, ev);
+		break;
+
+	case H_SETUNIQUE:
+		retval = history_setunique(h, ev, va_arg(va, int));
+		break;
+
+	case H_ADD:
+		str = va_arg(va, const Char *);
+		retval = HADD(h, ev, str);
+		break;
+
+	case H_DEL:
+		retval = HDEL(h, ev, va_arg(va, const int));
+		break;
+
+	case H_ENTER:
+		str = va_arg(va, const Char *);
+		if ((retval = HENTER(h, ev, str)) != -1)
+			h->h_ent = ev->num;
+		break;
+
+	case H_APPEND:
+		str = va_arg(va, const Char *);
+		if ((retval = HSET(h, ev, h->h_ent)) != -1)
+			retval = HADD(h, ev, str);
+		break;
+
+	case H_FIRST:
+		retval = HFIRST(h, ev);
+		break;
+
+	case H_NEXT:
+		retval = HNEXT(h, ev);
+		break;
+
+	case H_LAST:
+		retval = HLAST(h, ev);
+		break;
+
+	case H_PREV:
+		retval = HPREV(h, ev);
+		break;
+
+	case H_CURR:
+		retval = HCURR(h, ev);
+		break;
+
+	case H_SET:
+		retval = HSET(h, ev, va_arg(va, const int));
+		break;
+
+	case H_CLEAR:
+		HCLEAR(h, ev);
+		retval = 0;
+		break;
+
+	case H_LOAD:
+		retval = history_load(h, va_arg(va, const char *));
+		if (retval == -1)
+			he_seterrev(ev, _HE_HIST_READ);
+		break;
+
+	case H_SAVE:
+		retval = history_save(h, va_arg(va, const char *));
+		if (retval == -1)
+			he_seterrev(ev, _HE_HIST_WRITE);
+		break;
+
+	case H_SAVE_FP:
+		retval = history_save_fp(h, (size_t)-1, va_arg(va, FILE *));
+		if (retval == -1)
+		    he_seterrev(ev, _HE_HIST_WRITE);
+		break;
+
+	case H_NSAVE_FP:
+	{
+		size_t sz = va_arg(va, size_t);
+		retval = history_save_fp(h, sz, va_arg(va, FILE *));
+		if (retval == -1)
+		    he_seterrev(ev, _HE_HIST_WRITE);
+		break;
+	}
+
+	case H_PREV_EVENT:
+		retval = history_prev_event(h, ev, va_arg(va, int));
+		break;
+
+	case H_NEXT_EVENT:
+		retval = history_next_event(h, ev, va_arg(va, int));
+		break;
+
+	case H_PREV_STR:
+		retval = history_prev_string(h, ev, va_arg(va, const Char *));
+		break;
+
+	case H_NEXT_STR:
+		retval = history_next_string(h, ev, va_arg(va, const Char *));
+		break;
+
+	case H_FUNC:
+	{
+		TYPE(History) hf;
+
+		hf.h_ref = va_arg(va, void *);
+		h->h_ent = -1;
+		hf.h_first = va_arg(va, history_gfun_t);
+		hf.h_next = va_arg(va, history_gfun_t);
+		hf.h_last = va_arg(va, history_gfun_t);
+		hf.h_prev = va_arg(va, history_gfun_t);
+		hf.h_curr = va_arg(va, history_gfun_t);
+		hf.h_set = va_arg(va, history_sfun_t);
+		hf.h_clear = va_arg(va, history_vfun_t);
+		hf.h_enter = va_arg(va, history_efun_t);
+		hf.h_add = va_arg(va, history_efun_t);
+		hf.h_del = va_arg(va, history_sfun_t);
+
+		if ((retval = history_set_fun(h, &hf)) == -1)
+			he_seterrev(ev, _HE_PARAM_MISSING);
+		break;
+	}
+
+	case H_END:
+		FUN(history,end)(h);
+		retval = 0;
+		break;
+
+	case H_NEXT_EVDATA:
+	{
+		int num = va_arg(va, int);
+		void **d = va_arg(va, void **);
+		retval = history_next_evdata(h, ev, num, d);
+		break;
+	}
+
+	case H_DELDATA:
+	{
+		int num = va_arg(va, int);
+		void **d = va_arg(va, void **);
+		retval = history_deldata_nth((history_t *)h->h_ref, ev, num, d);
+		break;
+	}
+
+	case H_REPLACE: /* only use after H_NEXT_EVDATA */
+	{
+		const Char *line = va_arg(va, const Char *);
+		void *d = va_arg(va, void *);
+		const Char *s;
+		if(!line || !(s = Strdup(line))) {
+			retval = -1;
+			break;
+		}
+		((history_t *)h->h_ref)->cursor->ev.str = s;
+		((history_t *)h->h_ref)->cursor->data = d;
+		retval = 0;
+		break;
+	}
+
+	default:
+		retval = -1;
+		he_seterrev(ev, _HE_UNKNOWN);
+		break;
+	}
+	va_end(va);
+	return retval;
+}
+
+
+// Source: history.c
+// Lines 998-1183
+
+
+[ANSWER]
+MAY

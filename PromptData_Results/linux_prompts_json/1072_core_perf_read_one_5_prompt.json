@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'running' at line 4\n2. Pointer 'enabled' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int perf_read_one(struct perf_event *event,\n\t\t\t\t u64 read_format, char __user *buf)\n{\n\tu64 enabled, running;\n\tu64 values[4];\n\tint n = 0;\n\n\tvalues[n++] = __perf_event_read_value(event, &enabled, &running);\n\tif (read_format & PERF_FORMAT_TOTAL_TIME_ENABLED)\n\t\tvalues[n++] = enabled;\n\tif (read_format & PERF_FORMAT_TOTAL_TIME_RUNNING)\n\t\tvalues[n++] = running;\n\tif (read_format & PERF_FORMAT_ID)\n\t\tvalues[n++] = primary_event_id(event);\n\n\tif (copy_to_user(buf, values, n * sizeof(u64)))\n\t\treturn -EFAULT;\n\n\treturn n * sizeof(u64);\n}\n\n\n// Source: core.c\n// Lines 4830-4849\n",
+  "ANSWER": "MAY"
+}

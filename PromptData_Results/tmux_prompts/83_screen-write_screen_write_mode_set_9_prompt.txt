@@ -1,0 +1,28 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 's' at line 3
+2. Pointer 'ctx' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+screen_write_mode_set(struct screen_write_ctx *ctx, int mode)
+{
+	struct screen	*s = ctx->s;
+
+	s->mode |= mode;
+
+	if (log_get_level() != 0)
+		log_debug("%s: %s", __func__, screen_mode_to_string(mode));
+}
+
+
+// Source: screen-write.c
+// Lines 831-839
+
+
+[ANSWER]
+MUST

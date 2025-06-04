@@ -1,0 +1,80 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'pagpoint' at line 2
+2. Pointer 'tmp' at line 2
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int get_options(int argc, char **argv) {
+  char *tmp, *pagpoint;
+  int ho_error;
+
+  tmp = (char *)getenv("MYSQL_HOST");
+  if (tmp) current_host = my_strdup(PSI_NOT_INSTRUMENTED, tmp, MYF(MY_WME));
+
+  pagpoint = getenv("PAGER");
+  if (!((char *)(pagpoint))) {
+    my_stpcpy(pager, "stdout");
+    opt_nopager = true;
+  } else
+    my_stpcpy(pager, pagpoint);
+  my_stpcpy(default_pager, pager);
+
+  if (mysql_get_option(nullptr, MYSQL_OPT_MAX_ALLOWED_PACKET,
+                       &opt_max_allowed_packet) ||
+      mysql_get_option(nullptr, MYSQL_OPT_NET_BUFFER_LENGTH,
+                       &opt_max_allowed_packet)) {
+    exit(1);
+  }
+
+  if ((ho_error =
+           handle_options(&argc, &argv, my_long_options, get_one_option)))
+    exit(ho_error);
+
+  if (mysql_options(nullptr, MYSQL_OPT_MAX_ALLOWED_PACKET,
+                    &opt_max_allowed_packet) ||
+      mysql_options(nullptr, MYSQL_OPT_NET_BUFFER_LENGTH,
+                    &opt_net_buffer_length)) {
+    exit(1);
+  }
+
+  if (status.batch) /* disable pager and outfile in this case */
+  {
+    my_stpcpy(default_pager, "stdout");
+    my_stpcpy(pager, "stdout");
+    opt_nopager = true;
+    default_pager_set = false;
+    opt_outfile = false;
+    opt_reconnect = false;
+    connect_flag = 0; /* Not in interactive mode */
+  }
+
+  if (argc > 1) {
+    usage(0);
+    exit(1);
+  }
+  if (argc == 1) {
+    skip_updates = false;
+    my_free(current_db);
+    current_db = my_strdup(PSI_NOT_INSTRUMENTED, *argv, MYF(MY_WME));
+  }
+  if (tty_password) opt_password = get_tty_password(NullS);
+  if (debug_info_flag) my_end_arg = MY_CHECK_ERROR | MY_GIVE_INFO;
+  if (debug_check_flag) my_end_arg = MY_CHECK_ERROR;
+
+  if (ignore_spaces) connect_flag |= CLIENT_IGNORE_SPACE;
+
+  return (0);
+}
+
+
+// Source: mysql.cc
+// Lines 2107-2167
+
+
+[ANSWER]
+MUST-NOT

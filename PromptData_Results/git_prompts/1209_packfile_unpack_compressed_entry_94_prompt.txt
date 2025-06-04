@@ -1,0 +1,63 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'stream' at line 7
+2. Pointer 'buffer' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static void *unpack_compressed_entry(struct packed_git *p,
+				    struct pack_window **w_curs,
+				    off_t curpos,
+				    unsigned long size)
+{
+	int st;
+	git_zstream stream;
+	unsigned char *buffer, *in;
+
+	buffer = xmallocz_gently(size);
+	if (!buffer)
+		return NULL;
+	memset(&stream, 0, sizeof(stream));
+	stream.next_out = buffer;
+	stream.avail_out = size + 1;
+
+	git_inflate_init(&stream);
+	do {
+		in = use_pack(p, w_curs, curpos, &stream.avail_in);
+		stream.next_in = in;
+		/*
+		 * Note: we must ensure the window section returned by
+		 * use_pack() will be available throughout git_inflate()'s
+		 * unlocked execution. Please refer to the comment at
+		 * get_size_from_delta() to see how this is done.
+		 */
+		obj_read_unlock();
+		st = git_inflate(&stream, Z_FINISH);
+		obj_read_lock();
+		if (!stream.avail_out)
+			break; /* the payload is larger than it should be */
+		curpos += stream.next_in - in;
+	} while (st == Z_OK || st == Z_BUF_ERROR);
+	git_inflate_end(&stream);
+	if ((st != Z_STREAM_END) || stream.total_out != size) {
+		free(buffer);
+		return NULL;
+	}
+
+	/* versions of zlib can clobber unconsumed portion of outbuf */
+	buffer[size] = '\0';
+
+	return buffer;
+}
+
+
+// Source: packfile.c
+// Lines 1588-1631
+
+
+[ANSWER]
+MUST

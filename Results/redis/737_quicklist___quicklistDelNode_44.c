@@ -1,0 +1,39 @@
+REDIS_STATIC void __quicklistDelNode(quicklist *quicklist,
+                                     quicklistNode *node) {
+    /* Update the bookmark if any */
+    quicklistBookmark *bm = _quicklistBookmarkFindByNode(quicklist, node);
+    if (bm) {
+        bm->node = node->next;
+        /* if the bookmark was to the last node, delete it. */
+        if (!bm->node)
+            _quicklistBookmarkDelete(quicklist, bm);
+    }
+
+    if (node->next)
+        node->next->prev = node->prev;
+    if (node->prev)
+        node->prev->next = node->next;
+
+    if (node == quicklist->tail) {
+        quicklist->tail = node->prev;
+    }
+
+    if (node == quicklist->head) {
+        quicklist->head = node->next;
+    }
+
+    /* Update len first, so in __quicklistCompress we know exactly len */
+    quicklist->len--;
+    quicklist->count -= node->count;
+
+    /* If we deleted a node within our compress depth, we
+     * now have compressed nodes needing to be decompressed. */
+    __quicklistCompress(quicklist, NULL);
+
+    zfree(node->zl);
+    zfree(node);
+}
+
+
+// Source: quicklist.c
+// Lines 593-627

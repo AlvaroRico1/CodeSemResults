@@ -1,0 +1,1 @@
+inbufs,h2o/lib/handler/compress.c,1,flattened,h2o/lib/handler/compress.c,4,1

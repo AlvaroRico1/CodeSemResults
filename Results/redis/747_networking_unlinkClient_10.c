@@ -1,0 +1,69 @@
+void unlinkClient(client *c) {
+    listNode *ln;
+
+    /* If this is marked as current client unset it. */
+    if (server.current_client == c) server.current_client = NULL;
+
+    /* Certain operations must be done only if the client has an active connection.
+     * If the client was already unlinked or if it's a "fake client" the
+     * conn is already set to NULL. */
+    if (c->conn) {
+        /* Remove from the list of active clients. */
+        if (c->client_list_node) {
+            uint64_t id = htonu64(c->id);
+            raxRemove(server.clients_index,(unsigned char*)&id,sizeof(id),NULL);
+            listDelNode(server.clients,c->client_list_node);
+            c->client_list_node = NULL;
+        }
+
+        /* Check if this is a replica waiting for diskless replication (rdb pipe),
+         * in which case it needs to be cleaned from that list */
+        if (c->flags & CLIENT_SLAVE &&
+            c->replstate == SLAVE_STATE_WAIT_BGSAVE_END &&
+            server.rdb_pipe_conns)
+        {
+            int i;
+            for (i=0; i < server.rdb_pipe_numconns; i++) {
+                if (server.rdb_pipe_conns[i] == c->conn) {
+                    rdbPipeWriteHandlerConnRemoved(c->conn);
+                    server.rdb_pipe_conns[i] = NULL;
+                    break;
+                }
+            }
+        }
+        connClose(c->conn);
+        c->conn = NULL;
+    }
+
+    /* Remove from the list of pending writes if needed. */
+    if (c->flags & CLIENT_PENDING_WRITE) {
+        ln = listSearchKey(server.clients_pending_write,c);
+        serverAssert(ln != NULL);
+        listDelNode(server.clients_pending_write,ln);
+        c->flags &= ~CLIENT_PENDING_WRITE;
+    }
+
+    /* Remove from the list of pending reads if needed. */
+    if (c->flags & CLIENT_PENDING_READ) {
+        ln = listSearchKey(server.clients_pending_read,c);
+        serverAssert(ln != NULL);
+        listDelNode(server.clients_pending_read,ln);
+        c->flags &= ~CLIENT_PENDING_READ;
+    }
+
+    /* When client was just unblocked because of a blocking operation,
+     * remove it from the list of unblocked clients. */
+    if (c->flags & CLIENT_UNBLOCKED) {
+        ln = listSearchKey(server.unblocked_clients,c);
+        serverAssert(ln != NULL);
+        listDelNode(server.unblocked_clients,ln);
+        c->flags &= ~CLIENT_UNBLOCKED;
+    }
+
+    /* Clear the tracking status. */
+    if (c->flags & CLIENT_TRACKING) disableTracking(c);
+}
+
+
+// Source: networking.c
+// Lines 1239-1303

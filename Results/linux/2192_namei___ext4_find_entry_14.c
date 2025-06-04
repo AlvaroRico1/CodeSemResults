@@ -1,0 +1,37 @@
+static struct buffer_head *__ext4_find_entry(struct inode *dir,
+					     struct ext4_filename *fname,
+					     struct ext4_dir_entry_2 **res_dir,
+					     int *inlined)
+{
+	struct super_block *sb;
+	struct buffer_head *bh_use[NAMEI_RA_SIZE];
+	struct buffer_head *bh, *ret = NULL;
+	ext4_lblk_t start, block;
+	const u8 *name = fname->usr_fname->name;
+	size_t ra_max = 0;	/* Number of bh's in the readahead
+				   buffer, bh_use[] */
+	size_t ra_ptr = 0;	/* Current index into readahead
+				   buffer */
+	ext4_lblk_t  nblocks;
+	int i, namelen, retval;
+
+	*res_dir = NULL;
+	sb = dir->i_sb;
+	namelen = fname->usr_fname->len;
+	if (namelen > EXT4_NAME_LEN)
+		return NULL;
+
+	if (ext4_has_inline_data(dir)) {
+		int has_inline_data = 1;
+		ret = ext4_find_inline_entry(dir, fname, res_dir,
+					     &has_inline_data);
+		if (has_inline_data) {
+			if (inlined)
+				*inlined = 1;
+			goto cleanup_and_exit;
+		}
+	}
+
+
+// Source: namei.c
+// Lines 1439-1471

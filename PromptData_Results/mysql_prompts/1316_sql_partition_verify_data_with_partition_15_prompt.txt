@@ -1,0 +1,82 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'part_info' at line 8
+2. Pointer 'part_table' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+bool verify_data_with_partition(TABLE *table, TABLE *part_table,
+                                uint32 part_id) {
+  uint32 found_part_id;
+  longlong func_value; /* Unused */
+  handler *file;
+  int error;
+  uchar *old_rec;
+  partition_info *part_info;
+  DBUG_TRACE;
+  assert(table && table->file && part_table && part_table->part_info &&
+         part_table->file);
+
+  /*
+    Verify all table rows.
+    First implementation uses full scan + evaluates partition functions for
+    every row. TODO: add optimization to use index if possible, see WL#5397.
+
+    1) Open both tables (already done) and set the row buffers to use
+       the same buffer (to avoid copy).
+    2) Init rnd on table.
+    3) loop over all rows.
+      3.1) verify that partition_id on the row is correct. Break if error.
+  */
+  file = table->file;
+  part_info = part_table->part_info;
+  bitmap_union(table->read_set, &part_info->full_part_field_set);
+  old_rec = part_table->record[0];
+  part_table->record[0] = table->record[0];
+  set_field_ptr(part_info->full_part_field_array, table->record[0], old_rec);
+  if ((error = file->ha_rnd_init(true))) {
+    file->print_error(error, MYF(0));
+    goto err;
+  }
+
+  do {
+    if ((error = file->ha_rnd_next(table->record[0]))) {
+      if (error == HA_ERR_RECORD_DELETED) continue;
+      if (error == HA_ERR_END_OF_FILE)
+        error = 0;
+      else
+        file->print_error(error, MYF(0));
+      break;
+    }
+    if ((error = part_info->get_partition_id(part_info, &found_part_id,
+                                             &func_value))) {
+      part_info->err_value = func_value;
+      part_table->file->print_error(error, MYF(0));
+      break;
+    }
+    DEBUG_SYNC(current_thd, "swap_partition_first_row_read");
+    if (found_part_id != part_id) {
+      my_error(ER_ROW_DOES_NOT_MATCH_PARTITION, MYF(0));
+      error = 1;
+      break;
+    }
+  } while (true);
+  (void)file->ha_rnd_end();
+err:
+  set_field_ptr(part_info->full_part_field_array, old_rec, table->record[0]);
+  part_table->record[0] = old_rec;
+  if (error) return true;
+  return false;
+}
+
+
+// Source: sql_partition.cc
+// Lines 3540-3602
+
+
+[ANSWER]
+MUST

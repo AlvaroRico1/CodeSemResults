@@ -1,0 +1,33 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'd' at line 6
+2. Pointer 'cb_data' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int my_emit(
+	long start_a, long count_a,
+	long start_b, long count_b,
+	void *cb_data)
+{
+	blame_chunk_cb_data *d = (blame_chunk_cb_data *)cb_data;
+
+	if (blame_chunk(d->blame, d->tlno, d->plno, start_b, d->target, d->parent) < 0)
+		return -1;
+	d->plno = start_a + count_a;
+	d->tlno = start_b + count_b;
+
+	return 0;
+}
+
+
+// Source: blame_git.c
+// Lines 329-342
+
+
+[ANSWER]
+MUST

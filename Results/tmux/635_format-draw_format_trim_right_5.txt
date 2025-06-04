@@ -1,0 +1,1 @@
+out,tmux/format-draw.c,3,copy,tmux/format-draw.c,3,1

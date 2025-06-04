@@ -1,0 +1,83 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'prompt' at line 4
+2. Pointer 'count' at line 5
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+readline(const char *p)
+{
+	HistEvent ev;
+	const char * volatile prompt = p;
+	int count;
+	const char *ret;
+	char *buf;
+	static int used_event_hook;
+
+	if (e == NULL || h == NULL)
+		rl_initialize();
+	if (rl_did_startup_hook == 0 && rl_startup_hook) {
+		rl_did_startup_hook = 1;
+		(*rl_startup_hook)(NULL, 0);
+	}
+	tty_init(e);
+
+
+	rl_done = 0;
+
+	(void)setjmp(topbuf);
+	buf = NULL;
+
+	/* update prompt accordingly to what has been passed */
+	if (rl_set_prompt(prompt) == -1)
+		goto out;
+
+	if (rl_pre_input_hook)
+		(*rl_pre_input_hook)(NULL, 0);
+
+	if (rl_event_hook && !(e->el_flags & NO_TTY)) {
+		el_set(e, EL_GETCFN, _rl_event_read_char);
+		used_event_hook = 1;
+	}
+
+	if (!rl_event_hook && used_event_hook) {
+		el_set(e, EL_GETCFN, EL_BUILTIN_GETCFN);
+		used_event_hook = 0;
+	}
+
+	rl_already_prompted = 0;
+
+	/* get one line from input stream */
+	ret = el_gets(e, &count);
+
+	if (ret && count > 0) {
+		int lastidx;
+
+		buf = strdup(ret);
+		if (buf == NULL)
+			goto out;
+		lastidx = count - 1;
+		if (buf[lastidx] == '\n')
+			buf[lastidx] = '\0';
+	} else
+		buf = NULL;
+
+	history(h, &ev, H_GETSIZE);
+	history_length = ev.num;
+
+out:
+	tty_end(e, TCSADRAIN);
+	return buf;
+}
+
+
+// Source: readline.c
+// Lines 412-475
+
+
+[ANSWER]
+MAY

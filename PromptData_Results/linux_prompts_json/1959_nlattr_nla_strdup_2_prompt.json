@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'src' at line 4\n2. Pointer 'dst' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nchar *nla_strdup(const struct nlattr *nla, gfp_t flags)\n{\n\tsize_t srclen = nla_len(nla);\n\tchar *src = nla_data(nla), *dst;\n\n\tif (srclen > 0 && src[srclen - 1] == '\\0')\n\t\tsrclen--;\n\n\tdst = kmalloc(srclen + 1, flags);\n\tif (dst != NULL) {\n\t\tmemcpy(dst, src, srclen);\n\t\tdst[srclen] = '\\0';\n\t}\n\treturn dst;\n}\n\n\n// Source: nlattr.c\n// Lines 542-556\n",
+  "ANSWER": "MAY"
+}

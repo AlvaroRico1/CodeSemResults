@@ -1,0 +1,60 @@
+bitmap_xor_into (bitmap a, const_bitmap b)
+{
+  bitmap_element *a_elt = a->first;
+  const bitmap_element *b_elt = b->first;
+  bitmap_element *a_prev = NULL;
+
+  gcc_checking_assert (!a->tree_form && !b->tree_form);
+
+  if (a == b)
+    {
+      bitmap_clear (a);
+      return;
+    }
+
+  while (b_elt)
+    {
+      if (!a_elt || b_elt->indx < a_elt->indx)
+	{
+	  /* Copy b_elt.  */
+	  bitmap_element *dst = bitmap_list_insert_element_after (a, a_prev,
+								  b_elt->indx);
+	  memcpy (dst->bits, b_elt->bits, sizeof (dst->bits));
+	  a_prev = dst;
+	  b_elt = b_elt->next;
+	}
+      else if (a_elt->indx < b_elt->indx)
+	{
+	  a_prev = a_elt;
+	  a_elt = a_elt->next;
+	}
+      else
+	{
+	  /* Matching elts, generate A ^= B.  */
+	  unsigned ix;
+	  BITMAP_WORD ior = 0;
+	  bitmap_element *next = a_elt->next;
+
+	  for (ix = 0; ix < BITMAP_ELEMENT_WORDS; ix++)
+	    {
+	      BITMAP_WORD r = a_elt->bits[ix] ^ b_elt->bits[ix];
+
+	      ior |= r;
+	      a_elt->bits[ix] = r;
+	    }
+	  b_elt = b_elt->next;
+	  if (ior)
+	    a_prev = a_elt;
+	  else
+	    bitmap_list_unlink_element (a, a_elt);
+	  a_elt = next;
+	}
+    }
+  gcc_checking_assert (!a->current == !a->first);
+  if (a->current)
+    a->indx = a->current->indx;
+}
+
+
+// Source: bitmap.c
+// Lines 2167-2222

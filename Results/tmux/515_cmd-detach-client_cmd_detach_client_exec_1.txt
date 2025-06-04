@@ -1,0 +1,1 @@
+s,tmux/cmd-detach-client.c,6,source,tmux/cmd-detach-client.c,4,1

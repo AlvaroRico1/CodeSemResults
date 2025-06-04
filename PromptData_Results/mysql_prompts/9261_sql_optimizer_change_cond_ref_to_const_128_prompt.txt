@@ -1,0 +1,92 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'value' at line 3
+2. Pointer 'clone' at line 31
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static bool change_cond_ref_to_const(THD *thd, I_List<COND_CMP> *save_list,
+                                     Item *and_father, Item *cond, Item *field,
+                                     Item *value) {
+  assert(cond->real_item()->is_bool_func());
+  if (cond->type() == Item::COND_ITEM) {
+    Item_cond *const item_cond = down_cast<Item_cond *>(cond);
+    bool and_level = item_cond->functype() == Item_func::COND_AND_FUNC;
+    List_iterator<Item> li(*item_cond->argument_list());
+    Item *item;
+    while ((item = li++)) {
+      if (change_cond_ref_to_const(thd, save_list, and_level ? cond : item,
+                                   item, field, value))
+        return true;
+    }
+    return false;
+  }
+  if (cond->eq_cmp_result() == Item::COND_OK)
+    return false;  // Not a boolean function
+
+  Item_bool_func2 *func = down_cast<Item_bool_func2 *>(cond);
+  Item **args = func->arguments();
+  Item *left_item = args[0];
+  Item *right_item = args[1];
+  Item_func::Functype functype = func->functype();
+
+  if (right_item->eq(field, false) && left_item != value &&
+      right_item->cmp_context == field->cmp_context &&
+      (left_item->result_type() != STRING_RESULT ||
+       value->result_type() != STRING_RESULT ||
+       left_item->collation.collation == value->collation.collation)) {
+    Item *const clone = value->clone_item();
+    if (thd->is_error()) return true;
+
+    if (clone == nullptr) return false;
+
+    clone->collation.set(right_item->collation);
+    thd->change_item_tree(args + 1, clone);
+    func->update_used_tables();
+    if ((functype == Item_func::EQ_FUNC || functype == Item_func::EQUAL_FUNC) &&
+        and_father != cond && !left_item->const_item()) {
+      cond->marker = Item::MARKER_CONST_PROPAG;
+      COND_CMP *const cond_cmp = new COND_CMP(and_father, func);
+      if (cond_cmp == nullptr) return true;
+
+      save_list->push_back(cond_cmp);
+    }
+    if (func->set_cmp_func()) return true;
+  } else if (left_item->eq(field, false) && right_item != value &&
+             left_item->cmp_context == field->cmp_context &&
+             (right_item->result_type() != STRING_RESULT ||
+              value->result_type() != STRING_RESULT ||
+              right_item->collation.collation == value->collation.collation)) {
+    Item *const clone = value->clone_item();
+    if (thd->is_error()) return true;
+
+    if (clone == nullptr) return false;
+
+    clone->collation.set(left_item->collation);
+    thd->change_item_tree(args, clone);
+    value = clone;
+    func->update_used_tables();
+    if ((functype == Item_func::EQ_FUNC || functype == Item_func::EQUAL_FUNC) &&
+        and_father != cond && !right_item->const_item()) {
+      args[0] = args[1];  // For easy check
+      thd->change_item_tree(args + 1, value);
+      cond->marker = Item::MARKER_CONST_PROPAG;
+      COND_CMP *const cond_cmp = new COND_CMP(and_father, func);
+      if (cond_cmp == nullptr) return true;
+
+      save_list->push_back(cond_cmp);
+    }
+    if (func->set_cmp_func()) return true;
+  }
+
+
+// Source: sql_optimizer.cc
+// Lines 4529-4601
+
+
+[ANSWER]
+MUST

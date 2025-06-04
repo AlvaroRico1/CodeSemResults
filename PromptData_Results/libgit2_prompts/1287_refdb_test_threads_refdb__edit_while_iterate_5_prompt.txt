@@ -1,0 +1,90 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'refdb' at line 8
+2. Pointer 't' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_threads_refdb__edit_while_iterate(void)
+{
+	int r, t;
+	struct th_data th_data[THREADS];
+	git_oid head;
+	git_reference *ref;
+	char name[128];
+	git_refdb *refdb;
+
+#ifdef GIT_THREADS
+	git_thread th[THREADS];
+#endif
+
+	g_repo = cl_git_sandbox_init("testrepo2");
+
+	cl_git_pass(git_reference_name_to_id(&head, g_repo, "HEAD"));
+
+	/* make a bunch of references */
+
+	for (r = 0; r < 50; ++r) {
+		p_snprintf(name, sizeof(name), "refs/heads/starter-%03d", r);
+		cl_git_pass(git_reference_create(&ref, g_repo, name, &head, 0, NULL));
+		git_reference_free(ref);
+	}
+
+	cl_git_pass(git_repository_refdb(&refdb, g_repo));
+	cl_git_pass(git_refdb_compress(refdb));
+	git_refdb_free(refdb);
+
+	g_expected = -1;
+
+	g_repo = cl_git_sandbox_reopen(); /* reopen to flush caches */
+
+	for (t = 0; t < THREADS; ++t) {
+		void *(*fn)(void *arg);
+
+		switch (t & 0x3) {
+		case 0:  fn = create_refs;  break;
+		case 1:  fn = delete_refs;  break;
+		default: fn = iterate_refs; break;
+		}
+
+		th_data[t].id = t;
+		th_data[t].path = git_repository_path(g_repo);
+
+#ifdef GIT_THREADS
+		cl_git_pass(git_thread_create(&th[t], fn, &th_data[t]));
+#else
+		fn(&th_data[t]);
+#endif
+	}
+
+#ifdef GIT_THREADS
+	for (t = 0; t < THREADS; ++t) {
+		cl_git_pass(git_thread_join(&th[t], NULL));
+		cl_git_thread_check(&th_data[t]);
+	}
+
+	memset(th, 0, sizeof(th));
+
+	for (t = 0; t < THREADS; ++t) {
+		th_data[t].id = t;
+		cl_git_pass(git_thread_create(&th[t], iterate_refs, &th_data[t]));
+	}
+
+	for (t = 0; t < THREADS; ++t) {
+		cl_git_pass(git_thread_join(&th[t], NULL));
+		cl_git_thread_check(&th_data[t]);
+	}
+#endif
+}
+
+
+// Source: refdb.c
+// Lines 150-220
+
+
+[ANSWER]
+MAY

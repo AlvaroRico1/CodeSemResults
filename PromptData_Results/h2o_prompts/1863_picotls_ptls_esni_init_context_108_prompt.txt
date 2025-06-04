@@ -1,0 +1,126 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'src' at line 4
+2. Pointer 'esni_keys' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int ptls_esni_init_context(ptls_context_t *ctx, ptls_esni_context_t *esni, ptls_iovec_t esni_keys,
+                           ptls_key_exchange_context_t **key_exchanges)
+{
+    const uint8_t *src = esni_keys.base, *const end = src + esni_keys.len;
+    size_t num_key_exchanges, num_cipher_suites = 0;
+    int ret;
+
+    for (num_key_exchanges = 0; key_exchanges[num_key_exchanges] != NULL; ++num_key_exchanges)
+        ;
+
+    memset(esni, 0, sizeof(*esni));
+    if ((esni->key_exchanges = malloc(sizeof(*esni->key_exchanges) * (num_key_exchanges + 1))) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+    memcpy(esni->key_exchanges, key_exchanges, sizeof(*esni->key_exchanges) * (num_key_exchanges + 1));
+
+    /* ESNIKeys */
+    if ((ret = ptls_decode16(&esni->version, &src, end)) != 0)
+        goto Exit;
+    /* Skip checksum fields */
+    if (end - src < 4) {
+        ret = PTLS_ALERT_DECRYPT_ERROR;
+        goto Exit;
+    }
+    src += 4;
+    /* Published SNI field */
+    ptls_decode_open_block(src, end, 2, { src = end; });
+
+    /* Process the list of KeyShareEntries, verify for each of them that the ciphersuite is supported. */
+    ptls_decode_open_block(src, end, 2, {
+        do {
+            /* parse */
+            uint16_t id;
+            if ((ret = ptls_decode16(&id, &src, end)) != 0)
+                goto Exit;
+            ptls_decode_open_block(src, end, 2, { src = end; });
+            /* check that matching key-share exists */
+            ptls_key_exchange_context_t **found;
+            for (found = key_exchanges; *found != NULL; ++found)
+                if ((*found)->algo->id == id)
+                    break;
+            if (found == NULL) {
+                ret = PTLS_ERROR_INCOMPATIBLE_KEY;
+                goto Exit;
+            }
+        } while (src != end);
+    });
+    /* Process the list of cipher_suites. If they are supported, store in esni context  */
+    ptls_decode_open_block(src, end, 2, {
+        void *newp;
+        do {
+            uint16_t id;
+            if ((ret = ptls_decode16(&id, &src, end)) != 0)
+                goto Exit;
+            size_t i;
+            for (i = 0; ctx->cipher_suites[i] != NULL; ++i)
+                if (ctx->cipher_suites[i]->id == id)
+                    break;
+            if (ctx->cipher_suites[i] != NULL) {
+                if ((newp = realloc(esni->cipher_suites, sizeof(*esni->cipher_suites) * (num_cipher_suites + 1))) == NULL) {
+                    ret = PTLS_ERROR_NO_MEMORY;
+                    goto Exit;
+                }
+                esni->cipher_suites = newp;
+                esni->cipher_suites[num_cipher_suites++].cipher_suite = ctx->cipher_suites[i];
+            }
+        } while (src != end);
+        if ((newp = realloc(esni->cipher_suites, sizeof(*esni->cipher_suites) * (num_cipher_suites + 1))) == NULL) {
+            ret = PTLS_ERROR_NO_MEMORY;
+            goto Exit;
+        }
+        esni->cipher_suites = newp;
+        esni->cipher_suites[num_cipher_suites].cipher_suite = NULL;
+    });
+    /* Parse the padded length, not before, not after parameters */
+    if ((ret = ptls_decode16(&esni->padded_length, &src, end)) != 0)
+        goto Exit;
+    if ((ret = ptls_decode64(&esni->not_before, &src, end)) != 0)
+        goto Exit;
+    if ((ret = ptls_decode64(&esni->not_after, &src, end)) != 0)
+        goto Exit;
+    /* Skip the extension fields */
+    ptls_decode_block(src, end, 2, {
+        while (src != end) {
+            uint16_t ext_type;
+            if ((ret = ptls_decode16(&ext_type, &src, end)) != 0)
+                goto Exit;
+            ptls_decode_open_block(src, end, 2, { src = end; });
+        }
+    });
+
+    { /* calculate digests for every cipher-suite */
+        size_t i;
+        for (i = 0; esni->cipher_suites[i].cipher_suite != NULL; ++i) {
+            if ((ret = ptls_calc_hash(esni->cipher_suites[i].cipher_suite->hash, esni->cipher_suites[i].record_digest,
+                                      esni_keys.base, esni_keys.len)) != 0)
+                goto Exit;
+        }
+    }
+
+    ret = 0;
+Exit:
+    if (ret != 0)
+        ptls_esni_dispose_context(esni);
+    return ret;
+}
+
+
+// Source: picotls.c
+// Lines 5424-5530
+
+
+[ANSWER]
+MUST

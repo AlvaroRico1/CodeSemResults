@@ -1,0 +1,62 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'tp' at line 5
+2. Pointer 'none' at line 9
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+TailoredSet::comparePrefixes(UChar32 c, const UChar *p, const UChar *q) {
+    // Parallel iteration over prefixes of both tables.
+    UCharsTrie::Iterator prefixes(p, 0, errorCode);
+    UCharsTrie::Iterator basePrefixes(q, 0, errorCode);
+    const UnicodeString *tp = NULL;  // Tailoring prefix.
+    const UnicodeString *bp = NULL;  // Base prefix.
+    // Use a string with a U+FFFF as the limit sentinel.
+    // U+FFFF is untailorable and will not occur in prefixes.
+    UnicodeString none((UChar)0xffff);
+    for(;;) {
+        if(tp == NULL) {
+            if(prefixes.next(errorCode)) {
+                tp = &prefixes.getString();
+            } else {
+                tp = &none;
+            }
+        }
+        if(bp == NULL) {
+            if(basePrefixes.next(errorCode)) {
+                bp = &basePrefixes.getString();
+            } else {
+                bp = &none;
+            }
+        }
+        if(tp == &none && bp == &none) { break; }
+        int32_t cmp = tp->compare(*bp);
+        if(cmp < 0) {
+            // tp occurs in the tailoring but not in the base.
+            addPrefix(data, *tp, c, (uint32_t)prefixes.getValue());
+            tp = NULL;
+        } else if(cmp > 0) {
+            // bp occurs in the base but not in the tailoring.
+            addPrefix(baseData, *bp, c, (uint32_t)basePrefixes.getValue());
+            bp = NULL;
+        } else {
+            setPrefix(*tp);
+            compare(c, (uint32_t)prefixes.getValue(), (uint32_t)basePrefixes.getValue());
+            resetPrefix();
+            tp = NULL;
+            bp = NULL;
+        }
+    }
+}
+
+
+// Source: collationsets.cpp
+// Lines 217-259
+
+
+[ANSWER]
+MUST

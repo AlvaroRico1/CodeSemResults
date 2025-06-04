@@ -1,0 +1,27 @@
+h2o_mimemap_t *h2o_mimemap_clone(h2o_mimemap_t *src)
+{
+    h2o_mimemap_t *dst = h2o_mem_alloc_shared(NULL, sizeof(*dst), on_dispose);
+    const char *ext;
+    h2o_mimemap_type_t *type;
+
+    dst->extmap = kh_init(extmap);
+    dst->typeset = kh_init(typeset);
+    kh_foreach(src->extmap, ext, type, {
+        int r;
+        khiter_t iter = kh_put(extmap, dst->extmap, ext, &r);
+        kh_val(dst->extmap, iter) = type;
+        h2o_mem_addref_shared((char *)ext);
+        h2o_mem_addref_shared(type);
+        on_link(dst, type);
+    });
+    dst->default_type = src->default_type;
+    h2o_mem_addref_shared(dst->default_type);
+    on_link(dst, dst->default_type);
+    rebuild_typeset(dst);
+
+    return dst;
+}
+
+
+// Source: mimemap.c
+// Lines 186-208

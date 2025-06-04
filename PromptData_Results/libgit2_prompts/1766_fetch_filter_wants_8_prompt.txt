@@ -1,0 +1,90 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'heads' at line 3
+2. Pointer 'remote_caps' at line 8
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static int filter_wants(git_remote *remote, const git_fetch_options *opts)
+{
+	git_remote_head **heads;
+	git_refspec tagspec, head, *spec;
+	int error = 0;
+	git_odb *odb;
+	size_t i, heads_len;
+	unsigned int remote_caps;
+	unsigned int oid_mask = GIT_REMOTE_CAPABILITY_TIP_OID |
+	                        GIT_REMOTE_CAPABILITY_REACHABLE_OID;
+	git_remote_autotag_option_t tagopt = remote->download_tags;
+
+	if (opts && opts->download_tags != GIT_REMOTE_DOWNLOAD_TAGS_UNSPECIFIED)
+		tagopt = opts->download_tags;
+
+	git_vector_clear(&remote->refs);
+	if ((error = git_refspec__parse(&tagspec, GIT_REFSPEC_TAGS, true)) < 0)
+		return error;
+
+	/*
+	 * The fetch refspec can be NULL, and what this means is that the
+	 * user didn't specify one. This is fine, as it means that we're
+	 * not interested in any particular branch but just the remote's
+	 * HEAD, which will be stored in FETCH_HEAD after the fetch.
+	 */
+	if (remote->active_refspecs.length == 0) {
+		if ((error = git_refspec__parse(&head, "HEAD", true)) < 0)
+			goto cleanup;
+
+		error = git_refspec__dwim_one(&remote->active_refspecs, &head, &remote->refs);
+		git_refspec__dispose(&head);
+
+		if (error < 0)
+			goto cleanup;
+	}
+
+	if ((error = git_repository_odb__weakptr(&odb, remote->repo)) < 0)
+		goto cleanup;
+
+	if ((error = git_remote_ls((const git_remote_head ***)&heads, &heads_len, remote)) < 0 ||
+	    (error = git_remote_capabilities(&remote_caps, remote)) < 0)
+		goto cleanup;
+
+	/* Handle remote heads */
+	for (i = 0; i < heads_len; i++) {
+		if ((error = maybe_want(remote, heads[i], &tagspec, tagopt)) < 0)
+			goto cleanup;
+	}
+
+	/* Handle explicitly specified OID specs */
+	git_vector_foreach(&remote->active_refspecs, i, spec) {
+		if (!git_oid__is_hexstr(spec->src))
+			continue;
+
+		if (!(remote_caps & oid_mask)) {
+			git_error_set(GIT_ERROR_INVALID, "cannot fetch a specific object from the remote repository");
+			error = -1;
+			goto cleanup;
+		}
+
+		if ((error = maybe_want_oid(remote, spec)) < 0)
+			goto cleanup;
+	}
+
+	error = mark_local(remote);
+
+cleanup:
+	git_refspec__dispose(&tagspec);
+
+	return error;
+}
+
+
+// Source: fetch.c
+// Lines 92-162
+
+
+[ANSWER]
+MAY

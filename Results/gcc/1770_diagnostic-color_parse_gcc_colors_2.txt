@@ -1,0 +1,1 @@
+val,gcc/gcc/diagnostic-color.c,3,name,gcc/gcc/diagnostic-color.c,3,2

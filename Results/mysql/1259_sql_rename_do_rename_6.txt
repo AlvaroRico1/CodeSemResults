@@ -1,0 +1,1 @@
+new_alias,mysql/sql/sql_rename.cc,6,new_table_name,mysql/sql/sql_rename.cc,2,1

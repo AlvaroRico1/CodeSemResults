@@ -1,0 +1,1 @@
+opts,libgit2/tests/libgit2/diff/binary.c,4,patch,libgit2/tests/libgit2/diff/binary.c,12,0

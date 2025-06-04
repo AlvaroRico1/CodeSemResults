@@ -1,0 +1,1 @@
+package,protobuf/src/google/protobuf/descriptor.cc,12,file,protobuf/src/google/protobuf/descriptor.cc,2,1

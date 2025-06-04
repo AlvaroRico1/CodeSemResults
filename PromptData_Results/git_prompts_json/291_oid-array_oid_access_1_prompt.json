@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'array' at line 3\n2. Pointer 'table' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic const struct object_id *oid_access(size_t index, const void *table)\n{\n\tconst struct object_id *array = table;\n\treturn &array[index];\n}\n\n\n// Source: oid-array.c\n// Lines 25-29\n",
+  "ANSWER": "MUST"
+}

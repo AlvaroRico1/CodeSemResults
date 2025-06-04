@@ -1,0 +1,1 @@
+new_session_cache,h2o/lib/handler/configurator/proxy.c,11,session_cache,h2o/lib/handler/configurator/proxy.c,1,1

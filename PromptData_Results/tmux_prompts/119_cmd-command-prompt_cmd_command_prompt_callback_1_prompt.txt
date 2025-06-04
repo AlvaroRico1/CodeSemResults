@@ -1,0 +1,73 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'item' at line 6
+2. Pointer 'cdata' at line 4
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+cmd_command_prompt_callback(struct client *c, void *data, const char *s,
+    int done)
+{
+	struct cmd_command_prompt_cdata		 *cdata = data;
+	char					 *error;
+	struct cmdq_item			 *item = cdata->item, *new_item;
+	struct cmd_list				 *cmdlist;
+	struct cmd_command_prompt_prompt	 *prompt;
+	int					  argc = 0;
+	char					**argv = NULL;
+
+	if (s == NULL)
+		goto out;
+	if (done) {
+		if (cdata->flags & PROMPT_INCREMENTAL)
+			goto out;
+
+		cmd_append_argv(&cdata->argc, &cdata->argv, s);
+		if (++cdata->current != cdata->count) {
+			prompt = &cdata->prompts[cdata->current];
+			status_prompt_update(c, prompt->prompt, prompt->input);
+			return (1);
+		}
+	}
+
+	argc = cdata->argc;
+	argv = cmd_copy_argv(cdata->argc, cdata->argv);
+	cmd_append_argv(&argc, &argv, s);
+	if (done) {
+		cdata->argc = argc;
+		cdata->argv = cmd_copy_argv(argc, argv);
+	}
+
+	cmdlist = args_make_commands(cdata->state, argc, argv, &error);
+	if (cmdlist == NULL) {
+		cmdq_append(c, cmdq_get_error(error));
+		free(error);
+	} else if (item == NULL) {
+		new_item = cmdq_get_command(cmdlist, NULL);
+		cmdq_append(c, new_item);
+	} else {
+		new_item = cmdq_get_command(cmdlist, cmdq_get_state(item));
+		cmdq_insert_after(item, new_item);
+	}
+	cmd_free_argv(argc, argv);
+
+	if (c->prompt_inputcb != cmd_command_prompt_callback)
+		return (1);
+
+out:
+	if (item != NULL)
+		cmdq_continue(item);
+	return (0);
+}
+
+
+// Source: cmd-command-prompt.c
+// Lines 169-222
+
+
+[ANSWER]
+MUST

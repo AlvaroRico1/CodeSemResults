@@ -1,0 +1,1 @@
+phdr_ptr,linux/fs/proc/vmcore.c,8,elfptr,linux/fs/proc/vmcore.c,1,1

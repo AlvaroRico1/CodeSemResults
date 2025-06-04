@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'lex' at line 3\n2. Pointer 'thd' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nbool Sql_cmd_show_schema_base::set_metadata_lock(THD *thd) {\n  LEX_STRING lex_str_db;\n  LEX *lex = thd->lex;\n  if (lex_string_strmake(thd->mem_root, &lex_str_db, lex->query_block->db,\n                         strlen(lex->query_block->db)))\n    return true;\n\n  // Acquire IX MDL lock on schema name.\n  MDL_request mdl_request;\n  MDL_REQUEST_INIT(&mdl_request, MDL_key::SCHEMA, lex_str_db.str, \"\",\n                   MDL_INTENTION_EXCLUSIVE, MDL_TRANSACTION);\n  if (thd->mdl_context.acquire_lock(&mdl_request,\n                                    thd->variables.lock_wait_timeout))\n    return true;\n  return false;\n}\n\n\n// Source: sql_show.cc\n// Lines 208-223\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'str' at line 4\n2. Pointer 'out' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint git_hash_fmt(char *out, unsigned char *hash, size_t hash_len)\n{\n\tstatic char hex[] = \"0123456789abcdef\";\n\tchar *str = out;\n\tsize_t i;\n\n\tfor (i = 0; i < hash_len; i++) {\n\t\t*str++ = hex[hash[i] >> 4];\n\t\t*str++ = hex[hash[i] & 0x0f];\n\t}\n\n\t*str++ = '\\0';\n\n\treturn 0;\n}\n\n\n// Source: hash.c\n// Lines 144-158\n",
+  "ANSWER": "MUST"
+}

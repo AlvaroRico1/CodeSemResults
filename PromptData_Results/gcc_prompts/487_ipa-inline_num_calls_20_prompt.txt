@@ -1,0 +1,29 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'e' at line 3
+2. Pointer 'e' at line 3
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+num_calls (struct cgraph_node *n)
+{
+  struct cgraph_edge *e;
+  int num = 0;
+
+  for (e = n->callees; e; e = e->next_callee)
+    if (!is_inexpensive_builtin (e->callee->decl))
+      num++;
+  return num;
+}
+
+
+// Source: ipa-inline.c
+// Lines 629-638
+
+
+[ANSWER]
+MUST

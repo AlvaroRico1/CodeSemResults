@@ -1,0 +1,39 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'table' at line 17
+2. Pointer 'subh' at line 16
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void unregister_sysctl_table(struct ctl_table_header * header)
+{
+	int nr_subheaders;
+	might_sleep();
+
+	if (header == NULL)
+		return;
+
+	nr_subheaders = count_subheaders(header->ctl_table_arg);
+	if (unlikely(nr_subheaders > 1)) {
+		struct ctl_table_header **subheaders;
+		int i;
+
+		subheaders = (struct ctl_table_header **)(header + 1);
+		for (i = nr_subheaders -1; i >= 0; i--) {
+			struct ctl_table_header *subh = subheaders[i];
+			struct ctl_table *table = subh->ctl_table_arg;
+			unregister_sysctl_table(subh);
+			kfree(table);
+		}
+
+
+// Source: proc_sysctl.c
+// Lines 1673-1692
+
+
+[ANSWER]
+MUST

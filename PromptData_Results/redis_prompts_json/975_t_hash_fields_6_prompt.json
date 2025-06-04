@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'key' at line None\n2. Pointer 's' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\n        dict *fields;\n    } *data = userdata;\n\n    /* Odd records are field names, add to dict and check that's not a dup */\n    if (((data->count) & 1) == 0) {\n        unsigned char *str;\n        unsigned int slen;\n        long long vll;\n        if (!ziplistGet(p, &str, &slen, &vll))\n            return 0;\n        sds field = str? sdsnewlen(str, slen): sdsfromlonglong(vll);;\n        if (dictAdd(data->fields, field, NULL) != DICT_OK) {\n            /* Duplicate, return an error */\n            sdsfree(field);\n            return 0;\n        }\n    }\n\n\n// Source: t_hash.c\n// Lines 558-574\n",
+  "ANSWER": "MUST"
+}

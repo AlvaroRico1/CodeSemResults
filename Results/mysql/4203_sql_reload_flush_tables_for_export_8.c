@@ -1,0 +1,50 @@
+bool flush_tables_for_export(THD *thd, TABLE_LIST *all_tables) {
+  Lock_tables_prelocking_strategy lock_tables_prelocking_strategy;
+
+  /*
+    This is called from SQLCOM_FLUSH, the transaction has
+    been committed implicitly.
+  */
+
+  if (thd->locked_tables_mode) {
+    my_error(ER_LOCK_OR_ACTIVE_TRANSACTION, MYF(0));
+    return true;
+  }
+
+  /*
+    Acquire SNW locks on tables to be exported. Don't acquire
+    global IX as this will make this statement incompatible
+    with FLUSH TABLES WITH READ LOCK.
+    We can't acquire SRO locks instead of SNW locks as it will
+    make two concurrent FLUSH TABLE ... FOR EXPORT statements
+    for the same table possible, which creates race between
+    creation/deletion of metadata file.
+  */
+  if (open_and_lock_tables(thd, all_tables, MYSQL_OPEN_SKIP_SCOPED_MDL_LOCK,
+                           &lock_tables_prelocking_strategy)) {
+    return true;
+  }
+
+  // Check if all storage engines support FOR EXPORT.
+  for (TABLE_LIST *table_list = all_tables; table_list;
+       table_list = table_list->next_global) {
+    if (!(table_list->table->file->ha_table_flags() & HA_CAN_EXPORT)) {
+      my_error(ER_ILLEGAL_HA, MYF(0), table_list->table_name);
+      return true;
+    }
+  }
+
+  // Notify the storage engines that the tables should be made ready for export.
+  for (TABLE_LIST *table_list = all_tables; table_list;
+       table_list = table_list->next_global) {
+    handler *handler_file = table_list->table->file;
+    int error = handler_file->ha_extra(HA_EXTRA_EXPORT);
+    if (error) {
+      handler_file->print_error(error, MYF(0));
+      return true;
+    }
+  }
+
+
+// Source: sql_reload.cc
+// Lines 535-580

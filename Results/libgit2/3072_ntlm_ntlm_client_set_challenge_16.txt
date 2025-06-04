@@ -1,0 +1,1 @@
+info_len,libgit2/deps/ntlmclient/ntlm.c,9,type_indicator,libgit2/deps/ntlmclient/ntlm.c,8,2

@@ -1,0 +1,37 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'nIndex' at line 2
+2. Pointer 'nKeyLength' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int completion_hash_exists(HashTable *ht, char *arKey, uint nKeyLength) {
+  uint h, nIndex;
+  Bucket *p;
+
+  h = ht->pHashFunction(arKey, nKeyLength);
+  nIndex = h % ht->nTableSize;
+
+  p = ht->arBuckets[nIndex];
+  while (p) {
+    if ((p->h == h) && (p->nKeyLength == nKeyLength)) {
+      if (!strcmp(p->arKey, arKey)) {
+        return 1;
+      }
+    }
+    p = p->pNext;
+  }
+  return 0;
+}
+
+
+// Source: completion_hash.cc
+// Lines 131-148
+
+
+[ANSWER]
+MUST-NOT

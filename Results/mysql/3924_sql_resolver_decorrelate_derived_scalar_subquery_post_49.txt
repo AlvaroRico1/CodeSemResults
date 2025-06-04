@@ -1,0 +1,1 @@
+field_in_derived,mysql/sql/sql_resolver.cc,15,derived,mysql/sql/sql_resolver.cc,2,1

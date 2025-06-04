@@ -1,0 +1,68 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'cutoff_noresolve' at line 8
+2. Pointer 'cutoff_resolve' at line 9
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void rerere_gc(struct repository *r, struct string_list *rr)
+{
+	struct string_list to_remove = STRING_LIST_INIT_DUP;
+	DIR *dir;
+	struct dirent *e;
+	int i;
+	timestamp_t now = time(NULL);
+	timestamp_t cutoff_noresolve = now - 15 * 86400;
+	timestamp_t cutoff_resolve = now - 60 * 86400;
+
+	if (setup_rerere(r, rr, 0) < 0)
+		return;
+
+	git_config_get_expiry_in_days("gc.rerereresolved", &cutoff_resolve, now);
+	git_config_get_expiry_in_days("gc.rerereunresolved", &cutoff_noresolve, now);
+	git_config(git_default_config, NULL);
+	dir = opendir(git_path("rr-cache"));
+	if (!dir)
+		die_errno(_("unable to open rr-cache directory"));
+	/* Collect stale conflict IDs ... */
+	while ((e = readdir_skip_dot_and_dotdot(dir))) {
+		struct rerere_dir *rr_dir;
+		struct rerere_id id;
+		int now_empty;
+
+		if (!is_rr_cache_dirname(e->d_name))
+			continue; /* or should we remove e->d_name? */
+
+		rr_dir = find_rerere_dir(e->d_name);
+
+		now_empty = 1;
+		for (id.variant = 0, id.collection = rr_dir;
+		     id.variant < id.collection->status_nr;
+		     id.variant++) {
+			prune_one(&id, cutoff_resolve, cutoff_noresolve);
+			if (id.collection->status[id.variant])
+				now_empty = 0;
+		}
+		if (now_empty)
+			string_list_append(&to_remove, e->d_name);
+	}
+	closedir(dir);
+
+	/* ... and then remove the empty directories */
+	for (i = 0; i < to_remove.nr; i++)
+		rmdir(git_path("rr-cache/%s", to_remove.items[i].string));
+	string_list_clear(&to_remove, 0);
+	rollback_lock_file(&write_lock);
+}
+
+
+// Source: rerere.c
+// Lines 1173-1221
+
+
+[ANSWER]
+MAY

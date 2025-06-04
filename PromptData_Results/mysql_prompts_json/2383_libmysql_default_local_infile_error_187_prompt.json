@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'data' at line 3\n2. Pointer 'error_msg' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int default_local_infile_error(void *ptr, char *error_msg,\n                                      uint error_msg_len) {\n  default_local_infile_data *data = (default_local_infile_data *)ptr;\n  if (data) /* If not error on open */\n  {\n    strmake(error_msg, data->error_msg, error_msg_len);\n    return data->error_num;\n  }\n  /* This can only happen if we got error on malloc of handle */\n  my_stpcpy(error_msg, ER_CLIENT(CR_OUT_OF_MEMORY));\n  return CR_OUT_OF_MEMORY;\n}\n\n\n// Source: libmysql.cc\n// Lines 615-626\n",
+  "ANSWER": "MUST-NOT"
+}

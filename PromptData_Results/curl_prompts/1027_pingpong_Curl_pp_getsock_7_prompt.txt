@@ -1,0 +1,33 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'conn' at line 4
+2. Pointer 'data' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int Curl_pp_getsock(struct Curl_easy *data,
+                    struct pingpong *pp, curl_socket_t *socks)
+{
+  struct connectdata *conn = data->conn;
+  socks[0] = conn->sock[FIRSTSOCKET];
+
+  if(pp->sendleft) {
+    /* write mode */
+    return GETSOCK_WRITESOCK(0);
+  }
+
+  /* read mode */
+  return GETSOCK_READSOCK(0);
+}
+
+
+// Source: pingpong.c
+// Lines 458-471
+
+
+[ANSWER]
+MUST

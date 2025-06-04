@@ -1,0 +1,31 @@
+static bool pde_subdir_insert(struct proc_dir_entry *dir,
+			      struct proc_dir_entry *de)
+{
+	struct rb_root *root = &dir->subdir;
+	struct rb_node **new = &root->rb_node, *parent = NULL;
+
+	/* Figure out where to put new node */
+	while (*new) {
+		struct proc_dir_entry *this = rb_entry(*new,
+						       struct proc_dir_entry,
+						       subdir_node);
+		int result = proc_match(de->name, this, de->namelen);
+
+		parent = *new;
+		if (result < 0)
+			new = &(*new)->rb_left;
+		else if (result > 0)
+			new = &(*new)->rb_right;
+		else
+			return false;
+	}
+
+	/* Add new node and rebalance tree. */
+	rb_link_node(&de->subdir_node, parent, new);
+	rb_insert_color(&de->subdir_node, root);
+	return true;
+}
+
+
+// Source: generic.c
+// Lines 90-116

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'p' at line 5\n2. Pointer 'buf' at line 5\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid h2o_http3_send_h3_datagrams(h2o_http3_conn_t *conn, uint64_t flow_id, h2o_iovec_t *datagrams, size_t num_datagrams)\n{\n    for (size_t i = 0; i < num_datagrams; ++i) {\n        h2o_iovec_t *src = datagrams + i;\n        uint8_t buf[quicly_encodev_capacity(flow_id) + src->len], *p = buf;\n        p = quicly_encodev(p, flow_id);\n        memcpy(p, src->base, src->len);\n        p += src->len;\n        ptls_iovec_t payload = ptls_iovec_init(buf, p - buf);\n        quicly_send_datagram_frames(conn->super.quic, &payload, 1);\n    }\n\n\n// Source: common.c\n// Lines 1333-1343\n",
+  "ANSWER": "MUST"
+}

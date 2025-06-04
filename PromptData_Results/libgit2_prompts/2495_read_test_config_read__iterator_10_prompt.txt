@@ -1,0 +1,59 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'entry' at line 14
+2. Pointer 'ret' at line 15
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void test_config_read__iterator(void)
+{
+	const char *keys[] = {
+		"core.dummy2",
+		"core.verylong",
+		"core.dummy",
+		"remote.ab.url",
+		"remote.abba.url",
+		"core.dummy2",
+		"core.global"
+	};
+	git_config *cfg;
+	git_config_iterator *iter;
+	git_config_entry *entry;
+	int count, ret;
+
+	cl_git_pass(git_config_new(&cfg));
+	cl_git_pass(git_config_add_file_ondisk(cfg, cl_fixture("config/config9"),
+		GIT_CONFIG_LEVEL_SYSTEM, NULL, 0));
+	cl_git_pass(git_config_add_file_ondisk(cfg, cl_fixture("config/config15"),
+		GIT_CONFIG_LEVEL_GLOBAL, NULL, 0));
+
+	count = 0;
+	cl_git_pass(git_config_iterator_new(&iter, cfg));
+
+	while ((ret = git_config_next(&entry, iter)) == 0) {
+		cl_assert_equal_s(entry->name, keys[count]);
+		count++;
+	}
+
+	git_config_iterator_free(iter);
+	cl_assert_equal_i(GIT_ITEROVER, ret);
+	cl_assert_equal_i(7, count);
+
+	count = 3;
+	cl_git_pass(git_config_iterator_new(&iter, cfg));
+
+	git_config_iterator_free(iter);
+	git_config_free(cfg);
+}
+
+
+// Source: read.c
+// Lines 341-380
+
+
+[ANSWER]
+MUST-NOT

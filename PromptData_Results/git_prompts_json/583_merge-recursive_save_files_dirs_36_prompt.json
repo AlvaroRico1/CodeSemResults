@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'opt' at line 7\n2. Pointer 'context' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int save_files_dirs(const struct object_id *oid,\n\t\t\t   struct strbuf *base, const char *path,\n\t\t\t   unsigned int mode, void *context)\n{\n\tstruct path_hashmap_entry *entry;\n\tint baselen = base->len;\n\tstruct merge_options *opt = context;\n\n\tstrbuf_addstr(base, path);\n\n\tFLEX_ALLOC_MEM(entry, path, base->buf, base->len);\n\thashmap_entry_init(&entry->e, fspathhash(entry->path));\n\thashmap_add(&opt->priv->current_file_dir_set, &entry->e);\n\n\tstrbuf_setlen(base, baselen);\n\treturn (S_ISDIR(mode) ? READ_TREE_RECURSIVE : 0);\n}\n\n\n// Source: merge-recursive.c\n// Lines 451-467\n",
+  "ANSWER": "MUST"
+}

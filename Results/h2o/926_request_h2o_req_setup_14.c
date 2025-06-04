@@ -1,0 +1,32 @@
+h2o_hostconf_t *h2o_req_setup(h2o_req_t *req)
+{
+    h2o_context_t *ctx = req->conn->ctx;
+    h2o_hostconf_t *hostconf;
+
+    req->processed_at = h2o_get_timestamp(ctx, &req->pool);
+
+    /* find the host context (or use the default if authority is missing or is of zero-length) */
+    if (req->input.authority.len != 0) {
+        if (req->conn->hosts[1] == NULL ||
+            (hostconf = find_hostconf(req->conn->hosts, req->input.authority, req->input.scheme->default_port,
+                                      &req->authority_wildcard_match)) == NULL)
+            hostconf = find_default_hostconf(req->conn->hosts);
+    } else {
+        hostconf = find_default_hostconf(req->conn->hosts);
+        req->input.authority = hostconf->authority.hostport;
+    }
+
+    req->scheme = req->input.scheme;
+    req->method = req->input.method;
+    req->authority = req->input.authority;
+    req->path = req->input.path;
+    req->path_normalized =
+        h2o_url_normalize_path(&req->pool, req->input.path.base, req->input.path.len, &req->query_at, &req->norm_indexes);
+    req->input.query_at = req->query_at; /* we can do this since input.path == path */
+
+    return hostconf;
+}
+
+
+// Source: request.c
+// Lines 130-157

@@ -1,0 +1,346 @@
+elf_add (struct backtrace_state *state, const char *filename, int descriptor,
+	 uintptr_t base_address, backtrace_error_callback error_callback,
+	 void *data, fileline *fileline_fn, int *found_sym, int *found_dwarf,
+	 struct dwarf_data **fileline_entry, int exe, int debuginfo,
+	 const char *with_buildid_data, uint32_t with_buildid_size)
+{
+  struct backtrace_view ehdr_view;
+  b_elf_ehdr ehdr;
+  off_t shoff;
+  unsigned int shnum;
+  unsigned int shstrndx;
+  struct backtrace_view shdrs_view;
+  int shdrs_view_valid;
+  const b_elf_shdr *shdrs;
+  const b_elf_shdr *shstrhdr;
+  size_t shstr_size;
+  off_t shstr_off;
+  struct backtrace_view names_view;
+  int names_view_valid;
+  const char *names;
+  unsigned int symtab_shndx;
+  unsigned int dynsym_shndx;
+  unsigned int i;
+  struct debug_section_info sections[DEBUG_MAX];
+  struct debug_section_info zsections[DEBUG_MAX];
+  struct backtrace_view symtab_view;
+  int symtab_view_valid;
+  struct backtrace_view strtab_view;
+  int strtab_view_valid;
+  struct backtrace_view buildid_view;
+  int buildid_view_valid;
+  const char *buildid_data;
+  uint32_t buildid_size;
+  struct backtrace_view debuglink_view;
+  int debuglink_view_valid;
+  const char *debuglink_name;
+  uint32_t debuglink_crc;
+  struct backtrace_view debugaltlink_view;
+  int debugaltlink_view_valid;
+  const char *debugaltlink_name;
+  const char *debugaltlink_buildid_data;
+  uint32_t debugaltlink_buildid_size;
+  off_t min_offset;
+  off_t max_offset;
+  struct backtrace_view debug_view;
+  int debug_view_valid;
+  unsigned int using_debug_view;
+  uint16_t *zdebug_table;
+  struct elf_ppc64_opd_data opd_data, *opd;
+  struct dwarf_sections dwarf_sections;
+
+  if (!debuginfo)
+    {
+      *found_sym = 0;
+      *found_dwarf = 0;
+    }
+
+  shdrs_view_valid = 0;
+  names_view_valid = 0;
+  symtab_view_valid = 0;
+  strtab_view_valid = 0;
+  buildid_view_valid = 0;
+  buildid_data = NULL;
+  buildid_size = 0;
+  debuglink_view_valid = 0;
+  debuglink_name = NULL;
+  debuglink_crc = 0;
+  debugaltlink_view_valid = 0;
+  debugaltlink_name = NULL;
+  debugaltlink_buildid_data = NULL;
+  debugaltlink_buildid_size = 0;
+  debug_view_valid = 0;
+  opd = NULL;
+
+  if (!backtrace_get_view (state, descriptor, 0, sizeof ehdr, error_callback,
+			   data, &ehdr_view))
+    goto fail;
+
+  memcpy (&ehdr, ehdr_view.data, sizeof ehdr);
+
+  backtrace_release_view (state, &ehdr_view, error_callback, data);
+
+  if (ehdr.e_ident[EI_MAG0] != ELFMAG0
+      || ehdr.e_ident[EI_MAG1] != ELFMAG1
+      || ehdr.e_ident[EI_MAG2] != ELFMAG2
+      || ehdr.e_ident[EI_MAG3] != ELFMAG3)
+    {
+      error_callback (data, "executable file is not ELF", 0);
+      goto fail;
+    }
+  if (ehdr.e_ident[EI_VERSION] != EV_CURRENT)
+    {
+      error_callback (data, "executable file is unrecognized ELF version", 0);
+      goto fail;
+    }
+
+#if BACKTRACE_ELF_SIZE == 32
+#define BACKTRACE_ELFCLASS ELFCLASS32
+#else
+#define BACKTRACE_ELFCLASS ELFCLASS64
+#endif
+
+  if (ehdr.e_ident[EI_CLASS] != BACKTRACE_ELFCLASS)
+    {
+      error_callback (data, "executable file is unexpected ELF class", 0);
+      goto fail;
+    }
+
+  if (ehdr.e_ident[EI_DATA] != ELFDATA2LSB
+      && ehdr.e_ident[EI_DATA] != ELFDATA2MSB)
+    {
+      error_callback (data, "executable file has unknown endianness", 0);
+      goto fail;
+    }
+
+  /* If the executable is ET_DYN, it is either a PIE, or we are running
+     directly a shared library with .interp.  We need to wait for
+     dl_iterate_phdr in that case to determine the actual base_address.  */
+  if (exe && ehdr.e_type == ET_DYN)
+    return -1;
+
+  shoff = ehdr.e_shoff;
+  shnum = ehdr.e_shnum;
+  shstrndx = ehdr.e_shstrndx;
+
+  if ((shnum == 0 || shstrndx == SHN_XINDEX)
+      && shoff != 0)
+    {
+      struct backtrace_view shdr_view;
+      const b_elf_shdr *shdr;
+
+      if (!backtrace_get_view (state, descriptor, shoff, sizeof shdr,
+			       error_callback, data, &shdr_view))
+	goto fail;
+
+      shdr = (const b_elf_shdr *) shdr_view.data;
+
+      if (shnum == 0)
+	shnum = shdr->sh_size;
+
+      if (shstrndx == SHN_XINDEX)
+	{
+	  shstrndx = shdr->sh_link;
+
+	  /* Versions of the GNU binutils between 2.12 and 2.18 did
+	     not handle objects with more than SHN_LORESERVE sections
+	     correctly.  All large section indexes were offset by
+	     0x100.  There is more information at
+	     http://sourceware.org/bugzilla/show_bug.cgi?id-5900 .
+	     Fortunately these object files are easy to detect, as the
+	     GNU binutils always put the section header string table
+	     near the end of the list of sections.  Thus if the
+	     section header string table index is larger than the
+	     number of sections, then we know we have to subtract
+	     0x100 to get the real section index.  */
+	  if (shstrndx >= shnum && shstrndx >= SHN_LORESERVE + 0x100)
+	    shstrndx -= 0x100;
+	}
+
+      backtrace_release_view (state, &shdr_view, error_callback, data);
+    }
+
+  /* To translate PC to file/line when using DWARF, we need to find
+     the .debug_info and .debug_line sections.  */
+
+  /* Read the section headers, skipping the first one.  */
+
+  if (!backtrace_get_view (state, descriptor, shoff + sizeof (b_elf_shdr),
+			   (shnum - 1) * sizeof (b_elf_shdr),
+			   error_callback, data, &shdrs_view))
+    goto fail;
+  shdrs_view_valid = 1;
+  shdrs = (const b_elf_shdr *) shdrs_view.data;
+
+  /* Read the section names.  */
+
+  shstrhdr = &shdrs[shstrndx - 1];
+  shstr_size = shstrhdr->sh_size;
+  shstr_off = shstrhdr->sh_offset;
+
+  if (!backtrace_get_view (state, descriptor, shstr_off, shstrhdr->sh_size,
+			   error_callback, data, &names_view))
+    goto fail;
+  names_view_valid = 1;
+  names = (const char *) names_view.data;
+
+  symtab_shndx = 0;
+  dynsym_shndx = 0;
+
+  memset (sections, 0, sizeof sections);
+  memset (zsections, 0, sizeof zsections);
+
+  /* Look for the symbol table.  */
+  for (i = 1; i < shnum; ++i)
+    {
+      const b_elf_shdr *shdr;
+      unsigned int sh_name;
+      const char *name;
+      int j;
+
+      shdr = &shdrs[i - 1];
+
+      if (shdr->sh_type == SHT_SYMTAB)
+	symtab_shndx = i;
+      else if (shdr->sh_type == SHT_DYNSYM)
+	dynsym_shndx = i;
+
+      sh_name = shdr->sh_name;
+      if (sh_name >= shstr_size)
+	{
+	  error_callback (data, "ELF section name out of range", 0);
+	  goto fail;
+	}
+
+      name = names + sh_name;
+
+      for (j = 0; j < (int) DEBUG_MAX; ++j)
+	{
+	  if (strcmp (name, dwarf_section_names[j]) == 0)
+	    {
+	      sections[j].offset = shdr->sh_offset;
+	      sections[j].size = shdr->sh_size;
+	      sections[j].compressed = (shdr->sh_flags & SHF_COMPRESSED) != 0;
+	      break;
+	    }
+	}
+
+      if (name[0] == '.' && name[1] == 'z')
+	{
+	  for (j = 0; j < (int) DEBUG_MAX; ++j)
+	    {
+	      if (strcmp (name + 2, dwarf_section_names[j] + 1) == 0)
+		{
+		  zsections[j].offset = shdr->sh_offset;
+		  zsections[j].size = shdr->sh_size;
+		  break;
+		}
+	    }
+	}
+
+      /* Read the build ID if present.  This could check for any
+	 SHT_NOTE section with the right note name and type, but gdb
+	 looks for a specific section name.  */
+      if ((!debuginfo || with_buildid_data != NULL)
+	  && !buildid_view_valid
+	  && strcmp (name, ".note.gnu.build-id") == 0)
+	{
+	  const b_elf_note *note;
+
+	  if (!backtrace_get_view (state, descriptor, shdr->sh_offset,
+				   shdr->sh_size, error_callback, data,
+				   &buildid_view))
+	    goto fail;
+
+	  buildid_view_valid = 1;
+	  note = (const b_elf_note *) buildid_view.data;
+	  if (note->type == NT_GNU_BUILD_ID
+	      && note->namesz == 4
+	      && strncmp (note->name, "GNU", 4) == 0
+	      && shdr->sh_size <= 12 + ((note->namesz + 3) & ~ 3) + note->descsz)
+	    {
+	      buildid_data = &note->name[0] + ((note->namesz + 3) & ~ 3);
+	      buildid_size = note->descsz;
+	    }
+
+	  if (with_buildid_size != 0)
+	    {
+	      if (buildid_size != with_buildid_size)
+		goto fail;
+
+	      if (memcmp (buildid_data, with_buildid_data, buildid_size) != 0)
+		goto fail;
+	    }
+	}
+
+      /* Read the debuglink file if present.  */
+      if (!debuginfo
+	  && !debuglink_view_valid
+	  && strcmp (name, ".gnu_debuglink") == 0)
+	{
+	  const char *debuglink_data;
+	  size_t crc_offset;
+
+	  if (!backtrace_get_view (state, descriptor, shdr->sh_offset,
+				   shdr->sh_size, error_callback, data,
+				   &debuglink_view))
+	    goto fail;
+
+	  debuglink_view_valid = 1;
+	  debuglink_data = (const char *) debuglink_view.data;
+	  crc_offset = strnlen (debuglink_data, shdr->sh_size);
+	  crc_offset = (crc_offset + 3) & ~3;
+	  if (crc_offset + 4 <= shdr->sh_size)
+	    {
+	      debuglink_name = debuglink_data;
+	      debuglink_crc = *(const uint32_t*)(debuglink_data + crc_offset);
+	    }
+	}
+
+      if (!debugaltlink_view_valid
+	  && strcmp (name, ".gnu_debugaltlink") == 0)
+	{
+	  const char *debugaltlink_data;
+	  size_t debugaltlink_name_len;
+
+	  if (!backtrace_get_view (state, descriptor, shdr->sh_offset,
+				   shdr->sh_size, error_callback, data,
+				   &debugaltlink_view))
+	    goto fail;
+
+	  debugaltlink_view_valid = 1;
+	  debugaltlink_data = (const char *) debugaltlink_view.data;
+	  debugaltlink_name = debugaltlink_data;
+	  debugaltlink_name_len = strnlen (debugaltlink_data, shdr->sh_size);
+	  if (debugaltlink_name_len < shdr->sh_size)
+	    {
+	      /* Include terminating zero.  */
+	      debugaltlink_name_len += 1;
+
+	      debugaltlink_buildid_data
+		= debugaltlink_data + debugaltlink_name_len;
+	      debugaltlink_buildid_size = shdr->sh_size - debugaltlink_name_len;
+	    }
+	}
+
+      /* Read the .opd section on PowerPC64 ELFv1.  */
+      if (ehdr.e_machine == EM_PPC64
+	  && (ehdr.e_flags & EF_PPC64_ABI) < 2
+	  && shdr->sh_type == SHT_PROGBITS
+	  && strcmp (name, ".opd") == 0)
+	{
+	  if (!backtrace_get_view (state, descriptor, shdr->sh_offset,
+				   shdr->sh_size, error_callback, data,
+				   &opd_data.view))
+	    goto fail;
+
+	  opd = &opd_data;
+	  opd->addr = shdr->sh_addr;
+	  opd->data = (const char *) opd_data.view.data;
+	  opd->size = shdr->sh_size;
+	}
+    }
+
+
+// Source: elf.c
+// Lines 2618-2959

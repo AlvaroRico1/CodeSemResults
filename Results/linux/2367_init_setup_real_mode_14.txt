@@ -1,0 +1,1 @@
+trampoline_pgd,linux/arch/x86/realmode/init.c,11,ptr,linux/arch/x86/realmode/init.c,42,2

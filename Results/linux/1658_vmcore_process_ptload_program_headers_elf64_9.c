@@ -1,0 +1,46 @@
+static int __init process_ptload_program_headers_elf64(char *elfptr,
+						size_t elfsz,
+						size_t elfnotes_sz,
+						struct list_head *vc_list)
+{
+	int i;
+	Elf64_Ehdr *ehdr_ptr;
+	Elf64_Phdr *phdr_ptr;
+	loff_t vmcore_off;
+	struct vmcore *new;
+
+	ehdr_ptr = (Elf64_Ehdr *)elfptr;
+	phdr_ptr = (Elf64_Phdr*)(elfptr + sizeof(Elf64_Ehdr)); /* PT_NOTE hdr */
+
+	/* Skip Elf header, program headers and Elf note segment. */
+	vmcore_off = elfsz + elfnotes_sz;
+
+	for (i = 0; i < ehdr_ptr->e_phnum; i++, phdr_ptr++) {
+		u64 paddr, start, end, size;
+
+		if (phdr_ptr->p_type != PT_LOAD)
+			continue;
+
+		paddr = phdr_ptr->p_offset;
+		start = rounddown(paddr, PAGE_SIZE);
+		end = roundup(paddr + phdr_ptr->p_memsz, PAGE_SIZE);
+		size = end - start;
+
+		/* Add this contiguous chunk of memory to vmcore list.*/
+		new = get_new_element();
+		if (!new)
+			return -ENOMEM;
+		new->paddr = start;
+		new->size = size;
+		list_add_tail(&new->list, vc_list);
+
+		/* Update the program header offset. */
+		phdr_ptr->p_offset = vmcore_off + (paddr - start);
+		vmcore_off = vmcore_off + size;
+	}
+	return 0;
+}
+
+
+// Source: vmcore.c
+// Lines 1078-1119

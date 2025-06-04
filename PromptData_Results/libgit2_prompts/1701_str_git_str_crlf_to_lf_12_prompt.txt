@@ -1,0 +1,65 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'scan_end' at line 4
+2. Pointer 'src' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+int git_str_crlf_to_lf(git_str *tgt, const git_str *src)
+{
+	const char *scan = src->ptr;
+	const char *scan_end = src->ptr + src->size;
+	const char *next = memchr(scan, '\r', src->size);
+	size_t new_size;
+	char *out;
+
+	GIT_ASSERT(tgt != src);
+
+	if (!next)
+		return git_str_set(tgt, src->ptr, src->size);
+
+	/* reduce reallocs while in the loop */
+	GIT_ERROR_CHECK_ALLOC_ADD(&new_size, src->size, 1);
+	if (git_str_grow(tgt, new_size) < 0)
+		return -1;
+
+	out = tgt->ptr;
+	tgt->size = 0;
+
+	/* Find the next \r and copy whole chunk up to there to tgt */
+	for (; next; scan = next + 1, next = memchr(scan, '\r', scan_end - scan)) {
+		if (next > scan) {
+			size_t copylen = (size_t)(next - scan);
+			memcpy(out, scan, copylen);
+			out += copylen;
+		}
+
+		/* Do not drop \r unless it is followed by \n */
+		if (next + 1 == scan_end || next[1] != '\n')
+			*out++ = '\r';
+	}
+
+	/* Copy remaining input into dest */
+	if (scan < scan_end) {
+		size_t remaining = (size_t)(scan_end - scan);
+		memcpy(out, scan, remaining);
+		out += remaining;
+	}
+
+	tgt->size = (size_t)(out - tgt->ptr);
+	tgt->ptr[tgt->size] = '\0';
+
+	return 0;
+}
+
+
+// Source: str.c
+// Lines 1119-1164
+
+
+[ANSWER]
+MUST

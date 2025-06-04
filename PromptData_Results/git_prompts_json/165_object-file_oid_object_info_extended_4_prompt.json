@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'oi' at line 2\n2. Pointer 'sizep' at line None\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint oid_object_info_extended(struct repository *r, const struct object_id *oid,\n\t\t\t     struct object_info *oi, unsigned flags)\n{\n\tint ret;\n\tobj_read_lock();\n\tret = do_oid_object_info_extended(r, oid, oi, flags);\n\tobj_read_unlock();\n\treturn ret;\n}\n\n\n// Source: object-file.c\n// Lines 1589-1597\n",
+  "ANSWER": "MUST"
+}

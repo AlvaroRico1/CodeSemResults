@@ -1,0 +1,340 @@
+bool add_key_fields(THD *thd, JOIN *join, Key_field **key_fields,
+                    uint *and_level, Item *cond, table_map usable_tables,
+                    SARGABLE_PARAM **sargables) {
+  assert(cond->is_bool_func());
+
+  if (cond->type() == Item_func::COND_ITEM) {
+    List_iterator_fast<Item> li(*((Item_cond *)cond)->argument_list());
+    Key_field *org_key_fields = *key_fields;
+
+    if (down_cast<Item_cond *>(cond)->functype() == Item_func::COND_AND_FUNC) {
+      Item *item;
+      while ((item = li++)) {
+        if (add_key_fields(thd, join, key_fields, and_level, item,
+                           usable_tables, sargables))
+          return true;
+      }
+      for (; org_key_fields != *key_fields; org_key_fields++)
+        org_key_fields->level = *and_level;
+    } else {
+      (*and_level)++;
+      if (add_key_fields(thd, join, key_fields, and_level, li++, usable_tables,
+                         sargables))
+        return true;
+      Item *item;
+      while ((item = li++)) {
+        Key_field *start_key_fields = *key_fields;
+        (*and_level)++;
+        if (add_key_fields(thd, join, key_fields, and_level, item,
+                           usable_tables, sargables))
+          return true;
+        *key_fields = merge_key_fields(org_key_fields, start_key_fields,
+                                       *key_fields, ++(*and_level));
+      }
+    }
+    return false;
+  }
+
+  /*
+    Subquery optimization: Conditions that are pushed down into subqueries
+    are wrapped into Item_func_trig_cond. We process the wrapped condition
+    but need to set cond_guard for Key_use elements generated from it.
+  */
+  if (cond->type() == Item::FUNC_ITEM &&
+      down_cast<Item_func *>(cond)->functype() == Item_func::TRIG_COND_FUNC) {
+    Item *const cond_arg = down_cast<Item_func *>(cond)->arguments()[0];
+    if (join->group_list.empty() && join->order.empty() &&
+        join->query_expression()->item &&
+        join->query_expression()->item->substype() == Item_subselect::IN_SUBS &&
+        !join->query_expression()->is_union()) {
+      Key_field *save = *key_fields;
+      if (add_key_fields(thd, join, key_fields, and_level, cond_arg,
+                         usable_tables, sargables))
+        return true;
+      // Indicate that this ref access candidate is for subquery lookup:
+      for (; save != *key_fields; save++)
+        save->cond_guard = ((Item_func_trig_cond *)cond)->get_trig_var();
+    }
+    return false;
+  }
+
+  /* If item is of type 'field op field/constant' add it to key_fields */
+  if (cond->type() != Item::FUNC_ITEM) return false;
+  Item_func *const cond_func = down_cast<Item_func *>(cond);
+  auto optimize = cond_func->select_optimize(thd);
+  // Catch errors that might be thrown during select_optimize()
+  if (thd->is_error()) return true;
+  switch (optimize) {
+    case Item_func::OPTIMIZE_NONE:
+      break;
+    case Item_func::OPTIMIZE_KEY: {
+      Item **values;
+      /*
+        Build list of possible keys for 'a BETWEEN low AND high'.
+        It is handled similar to the equivalent condition
+        'a >= low AND a <= high':
+      */
+      if (cond_func->functype() == Item_func::BETWEEN) {
+        Item_field *field_item;
+        bool equal_func = false;
+        uint num_values = 2;
+        values = cond_func->arguments();
+
+        bool binary_cmp =
+            (values[0]->real_item()->type() == Item::FIELD_ITEM)
+                ? ((Item_field *)values[0]->real_item())->field->binary()
+                : true;
+
+        /*
+          Additional optimization: If 'low = high':
+          Handle as if the condition was "t.key = low".
+        */
+        if (!((Item_func_between *)cond_func)->negated &&
+            values[1]->eq(values[2], binary_cmp)) {
+          equal_func = true;
+          num_values = 1;
+        }
+
+        /*
+          Append keys for 'field <cmp> value[]' if the
+          condition is of the form::
+          '<field> BETWEEN value[1] AND value[2]'
+        */
+        if (is_local_field(values[0])) {
+          field_item = (Item_field *)(values[0]->real_item());
+          if (add_key_equal_fields(thd, key_fields, *and_level, cond_func,
+                                   field_item, equal_func, &values[1],
+                                   num_values, usable_tables, sargables))
+            return true;
+        }
+        /*
+          Append keys for 'value[0] <cmp> field' if the
+          condition is of the form:
+          'value[0] BETWEEN field1 AND field2'
+        */
+        for (uint i = 1; i <= num_values; i++) {
+          if (is_local_field(values[i])) {
+            field_item = (Item_field *)(values[i]->real_item());
+            if (add_key_equal_fields(thd, key_fields, *and_level, cond_func,
+                                     field_item, equal_func, values, 1,
+                                     usable_tables, sargables))
+              return true;
+          }
+        }
+      }  // if ( ... Item_func::BETWEEN)
+      else if (cond_func->functype() == Item_func::MEMBER_OF_FUNC &&
+               is_local_field(cond_func->key_item())) {
+        // The predicate is <val> IN (<typed array>)
+        add_key_equal_fields(thd, key_fields, *and_level, cond_func,
+                             (Item_field *)(cond_func->key_item()->real_item()),
+                             true, cond_func->arguments(), 1, usable_tables,
+                             sargables);
+      } else if (cond_func->functype() == Item_func::JSON_CONTAINS ||
+                 cond_func->functype() == Item_func::JSON_OVERLAPS) {
+        /*
+          Applicability analysis was done during substitute_gc().
+          Check here that a typed array field is used and there's a key over
+          it.
+          1) func has a key item
+          2) key item is a local field
+          3) key item is a typed array field
+          If so, mark appropriate index as available for range optimizer
+        */
+        if (!cond_func->key_item() ||                  // 1
+            !is_local_field(cond_func->key_item()) ||  // 2
+            !cond_func->key_item()->returns_array())   // 3
+          break;
+        const Field *field =
+            (down_cast<const Item_field *>(cond_func->key_item()))->field;
+        JOIN_TAB *tab = field->table->reginfo.join_tab;
+        Key_map possible_keys = field->key_start;
+
+        possible_keys.intersect(field->table->keys_in_use_for_query);
+        tab->keys().merge(possible_keys);      // Add possible keys
+        tab->const_keys.merge(possible_keys);  // Add possible keys
+      }                                        // if (... Item_func::CONTAINS)
+      // The predicate is IN or <>
+      else if (is_local_field(cond_func->key_item()) &&
+               !cond_func->is_outer_reference()) {
+        values = cond_func->arguments() + 1;
+        if (cond_func->functype() == Item_func::NE_FUNC &&
+            is_local_field(cond_func->arguments()[1]))
+          values--;
+        assert(cond_func->functype() != Item_func::IN_FUNC ||
+               cond_func->argument_count() != 2);
+        if (add_key_equal_fields(
+                thd, key_fields, *and_level, cond_func,
+                (Item_field *)(cond_func->key_item()->real_item()), false,
+                values, cond_func->argument_count() - 1, usable_tables,
+                sargables))
+          return true;
+      } else if (cond_func->functype() == Item_func::IN_FUNC &&
+                 cond_func->key_item()->type() == Item::ROW_ITEM) {
+        /*
+          The condition is (column1, column2, ... ) IN ((const1_1, const1_2),
+          ...) and there is an index on (column1, column2, ...)
+
+          The code below makes sure that the row constructor on the lhs indeed
+          contains only column references before calling add_key_field on them.
+
+          We can't do a ref access on IN, yet here we are. Why? We need
+          to run add_key_field() only because it verifies that there are
+          only constant expressions in the rows on the IN's rhs, see
+          comment above the call to add_key_field() below.
+
+          Actually, We could in theory do a ref access if the IN rhs
+          contained just a single row, but there is a hack in the parser
+          causing such IN predicates be parsed as row equalities.
+        */
+        Item_row *lhs_row = static_cast<Item_row *>(cond_func->key_item());
+        if (is_row_of_local_columns(lhs_row)) {
+          for (uint i = 0; i < lhs_row->cols(); ++i) {
+            Item *const lhs_item = lhs_row->element_index(i)->real_item();
+            assert(lhs_item->type() == Item::FIELD_ITEM);
+            Item_field *const lhs_column = static_cast<Item_field *>(lhs_item);
+            // j goes from 1 since arguments()[0] is the lhs of IN.
+            for (uint j = 1; j < cond_func->argument_count(); ++j) {
+              // Here we pick out the i:th column in the j:th row.
+              Item *rhs_item = cond_func->arguments()[j];
+              assert(rhs_item->type() == Item::ROW_ITEM);
+              Item_row *rhs_row = static_cast<Item_row *>(rhs_item);
+              assert(rhs_row->cols() == lhs_row->cols());
+              Item **rhs_expr_ptr = rhs_row->addr(i);
+              /*
+                add_key_field() will write a Key_field on each call
+                here, but we don't care, it will never be used. We only
+                call it for the side effect: update JOIN_TAB::const_keys
+                so the range optimizer can be invoked. We pass a
+                scrap buffer and pointer here.
+              */
+              Key_field scrap_key_field = **key_fields;
+              Key_field *scrap_key_field_ptr = &scrap_key_field;
+              if (add_key_field(thd, &scrap_key_field_ptr, *and_level,
+                                cond_func, lhs_column,
+                                true,  // eq_func
+                                rhs_expr_ptr,
+                                1,  // Number of expressions: one
+                                usable_tables,
+                                nullptr))  // sargables
+                return true;
+              // The pointer is not supposed to increase by more than one.
+              assert(scrap_key_field_ptr <= &scrap_key_field + 1);
+            }
+          }
+        }
+      }
+      break;
+    }
+    case Item_func::OPTIMIZE_OP: {
+      bool equal_func = (cond_func->functype() == Item_func::EQ_FUNC ||
+                         cond_func->functype() == Item_func::EQUAL_FUNC);
+
+      if (is_local_field(cond_func->arguments()[0])) {
+        if (add_key_equal_fields(
+                thd, key_fields, *and_level, cond_func,
+                (Item_field *)(cond_func->arguments()[0])->real_item(),
+                equal_func, cond_func->arguments() + 1, 1, usable_tables,
+                sargables))
+          return true;
+      } else {
+        Item *real_item = cond_func->arguments()[0]->real_item();
+        if (real_item->type() == Item::FUNC_ITEM) {
+          Item_func *func_item = down_cast<Item_func *>(real_item);
+          if (func_item->functype() == Item_func::COLLATE_FUNC) {
+            Item *key_item = func_item->key_item();
+            if (key_item->type() == Item::FIELD_ITEM) {
+              if (add_key_equal_fields(thd, key_fields, *and_level, cond_func,
+                                       down_cast<Item_field *>(key_item),
+                                       equal_func, cond_func->arguments() + 1,
+                                       1, usable_tables, sargables))
+                return true;
+            }
+          }
+        }
+      }
+      if (is_local_field(cond_func->arguments()[1]) &&
+          cond_func->functype() != Item_func::LIKE_FUNC) {
+        if (add_key_equal_fields(
+                thd, key_fields, *and_level, cond_func,
+                (Item_field *)(cond_func->arguments()[1])->real_item(),
+                equal_func, cond_func->arguments(), 1, usable_tables,
+                sargables))
+          return true;
+      } else {
+        Item *real_item = cond_func->arguments()[1]->real_item();
+        if (real_item->type() == Item::FUNC_ITEM) {
+          Item_func *func_item = down_cast<Item_func *>(real_item);
+          if (func_item->functype() == Item_func::COLLATE_FUNC) {
+            Item *key_item = func_item->key_item();
+            if (key_item->type() == Item::FIELD_ITEM) {
+              if (add_key_equal_fields(thd, key_fields, *and_level, cond_func,
+                                       down_cast<Item_field *>(key_item),
+                                       equal_func, cond_func->arguments(), 1,
+                                       usable_tables, sargables))
+                return true;
+            }
+          }
+        }
+      }
+
+      break;
+    }
+    case Item_func::OPTIMIZE_NULL:
+      /* column_name IS [NOT] NULL */
+      if (is_local_field(cond_func->arguments()[0]) &&
+          !cond_func->is_outer_reference()) {
+        Item *tmp = new Item_null;
+        if (tmp == nullptr) return true;
+        if (add_key_equal_fields(
+                thd, key_fields, *and_level, cond_func,
+                (Item_field *)(cond_func->arguments()[0])->real_item(),
+                cond_func->functype() == Item_func::ISNULL_FUNC, &tmp, 1,
+                usable_tables, sargables))
+          return true;
+      }
+      break;
+    case Item_func::OPTIMIZE_EQUAL:
+      Item_equal *item_equal = (Item_equal *)cond;
+      Item *const_item = item_equal->get_const();
+      if (const_item) {
+        /*
+          For each field field1 from item_equal consider the equality
+          field1=const_item as a condition allowing an index access of the table
+          with field1 by the keys value of field1.
+        */
+        Item_equal_iterator it(*item_equal);
+        Item_field *item;
+        while ((item = it++)) {
+          if (add_key_field(thd, key_fields, *and_level, cond_func, item, true,
+                            &const_item, 1, usable_tables, sargables))
+            return true;
+        }
+      } else {
+        /*
+          Consider all pairs of different fields included into item_equal.
+          For each of them (field1, field1) consider the equality
+          field1=field2 as a condition allowing an index access of the table
+          with field1 by the keys value of field2.
+        */
+        Item_equal_iterator outer_it(*item_equal);
+        Item_equal_iterator inner_it(*item_equal);
+        Item_field *outer;
+        while ((outer = outer_it++)) {
+          Item_field *inner;
+          while ((inner = inner_it++)) {
+            if (!outer->field->eq(inner->field)) {
+              if (add_key_field(thd, key_fields, *and_level, cond_func, outer,
+                                true, (Item **)&inner, 1, usable_tables,
+                                sargables))
+                return true;
+            }
+          }
+          inner_it.rewind();
+        }
+      }
+      break;
+  }
+
+
+// Source: sql_optimizer.cc
+// Lines 7059-7394

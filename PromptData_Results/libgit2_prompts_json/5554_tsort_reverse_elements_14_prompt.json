@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'tmp' at line 4\n2. Pointer 'dst' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void reverse_elements(void **dst, ssize_t start, ssize_t end)\n{\n\twhile (start < end) {\n\t\tvoid *tmp = dst[start];\n\t\tdst[start] = dst[end];\n\t\tdst[end] = tmp;\n\n\t\tstart++;\n\t\tend--;\n\t}\n\n\n// Source: tsort.c\n// Lines 108-117\n",
+  "ANSWER": "MUST"
+}

@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'w' at line 12\n2. Pointer 'p' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint is_pack_valid(struct packed_git *p)\n{\n\t/* An already open pack is known to be valid. */\n\tif (p->pack_fd != -1)\n\t\treturn 1;\n\n\t/* If the pack has one window completely covering the\n\t * file size, the pack is known to be valid even if\n\t * the descriptor is not currently open.\n\t */\n\tif (p->windows) {\n\t\tstruct pack_window *w = p->windows;\n\n\t\tif (!w->offset && w->len == p->pack_size)\n\t\t\treturn 1;\n\t}\n\n\n// Source: packfile.c\n// Lines 1968-1983\n",
+  "ANSWER": "MUST"
+}

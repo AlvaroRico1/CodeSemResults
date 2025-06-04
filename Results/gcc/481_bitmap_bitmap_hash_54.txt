@@ -1,0 +1,1 @@
+ptr,gcc/gcc/bitmap.c,3,ptr,gcc/gcc/bitmap.c,3,1

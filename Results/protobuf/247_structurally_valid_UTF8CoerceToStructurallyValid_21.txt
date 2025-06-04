@@ -1,0 +1,1 @@
+src_str,protobuf/src/google/protobuf/stubs/structurally_valid.cc,1,dst,protobuf/src/google/protobuf/stubs/structurally_valid.cc,11,2

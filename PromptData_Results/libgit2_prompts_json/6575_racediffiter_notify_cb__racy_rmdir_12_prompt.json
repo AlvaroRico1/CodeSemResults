@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'diff_so_far' at line 2\n2. Pointer 'pay' at line 7\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int notify_cb__racy_rmdir(\n\tconst git_diff *diff_so_far,\n\tconst git_diff_delta *delta_to_add,\n\tconst char *matched_pathspec,\n\tvoid *payload)\n{\n\tracy_payload *pay = (racy_payload *)payload;\n\n\tif (pay->first_time) {\n\t\tcl_must_pass(p_rmdir(pay->dir));\n\t\tpay->first_time = false;\n\t}\n\n\treturn notify_cb__basic(diff_so_far, delta_to_add, matched_pathspec, pay->basic_payload);\n}\n\n\n// Source: racediffiter.c\n// Lines 90-104\n",
+  "ANSWER": "MUST-NOT"
+}

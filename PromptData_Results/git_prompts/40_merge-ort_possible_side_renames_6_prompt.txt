@@ -1,0 +1,33 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'p' at line None
+2. Pointer 'q' at line None
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+static inline int possible_side_renames(struct rename_info *renames,
+					unsigned side_index)
+{
+	return renames->pairs[side_index].nr > 0 &&
+	       !strintmap_empty(&renames->relevant_sources[side_index]);
+}
+
+static inline int possible_renames(struct rename_info *renames)
+{
+	return possible_side_renames(renames, 1) ||
+	       possible_side_renames(renames, 2) ||
+	       !strmap_empty(&renames->cached_pairs[1]) ||
+	       !strmap_empty(&renames->cached_pairs[2]);
+}
+
+
+// Source: merge-ort.c
+// Lines 2757-2770
+
+
+[ANSWER]
+MUST

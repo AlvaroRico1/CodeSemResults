@@ -1,0 +1,1 @@
+maybe_zero_len,gcc/gcc/c/c-typeck.c,3,first_non_one,gcc/gcc/c/c-typeck.c,4,0

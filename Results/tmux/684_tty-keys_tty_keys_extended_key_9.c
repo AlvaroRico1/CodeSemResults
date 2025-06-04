@@ -1,0 +1,125 @@
+tty_keys_extended_key(struct tty *tty, const char *buf, size_t len,
+    size_t *size, key_code *key)
+{
+	struct client	*c = tty->client;
+	size_t		 end;
+	u_int		 number, modifiers;
+	char		 tmp[64];
+	cc_t		 bspace;
+	key_code	 nkey;
+	key_code	 onlykey;
+
+	*size = 0;
+
+	/* First two bytes are always \033[. */
+	if (buf[0] != '\033')
+		return (-1);
+	if (len == 1)
+		return (1);
+	if (buf[1] != '[')
+		return (-1);
+	if (len == 2)
+		return (1);
+
+	/*
+	 * Look for a terminator. Stop at either '~' or anything that isn't a
+	 * number or ';'.
+	 */
+	for (end = 2; end < len && end != sizeof tmp; end++) {
+		if (buf[end] == '~')
+			break;
+		if (!isdigit((u_char)buf[end]) && buf[end] != ';')
+			break;
+	}
+	if (end == len)
+		return (1);
+	if (end == sizeof tmp || (buf[end] != '~' && buf[end] != 'u'))
+		return (-1);
+
+	/* Copy to the buffer. */
+	memcpy(tmp, buf + 2, end);
+	tmp[end] = '\0';
+
+	/* Try to parse either form of key. */
+	if (buf[end] == '~') {
+		if (sscanf(tmp, "27;%u;%u", &modifiers, &number) != 2)
+			return (-1);
+	} else {
+		if (sscanf(tmp ,"%u;%u", &number, &modifiers) != 2)
+			return (-1);
+	}
+	*size = end + 1;
+
+	/* Store the key. */
+	bspace = tty->tio.c_cc[VERASE];
+	if (bspace != _POSIX_VDISABLE && number == bspace)
+		nkey = KEYC_BSPACE;
+	else
+		nkey = number;
+
+	/* Update the modifiers. */
+	switch (modifiers) {
+	case 2:
+		nkey |= KEYC_SHIFT;
+		break;
+	case 3:
+		nkey |= (KEYC_META|KEYC_IMPLIED_META);
+		break;
+	case 4:
+		nkey |= (KEYC_SHIFT|KEYC_META|KEYC_IMPLIED_META);
+		break;
+	case 5:
+		nkey |= KEYC_CTRL;
+		break;
+	case 6:
+		nkey |= (KEYC_SHIFT|KEYC_CTRL);
+		break;
+	case 7:
+		nkey |= (KEYC_META|KEYC_CTRL);
+		break;
+	case 8:
+		nkey |= (KEYC_SHIFT|KEYC_META|KEYC_IMPLIED_META|KEYC_CTRL);
+		break;
+	case 9:
+		nkey |= (KEYC_META|KEYC_IMPLIED_META);
+		break;
+	default:
+		*key = KEYC_NONE;
+		break;
+	}
+
+	/*
+	 * Don't allow both KEYC_CTRL and as an implied modifier. Also convert
+	 * C-X into C-x and so on.
+	 */
+	if (nkey & KEYC_CTRL) {
+		onlykey = (nkey & KEYC_MASK_KEY);
+		if (onlykey < 32 &&
+		    onlykey != 9 &&
+		    onlykey != 13 &&
+		    onlykey != 27)
+			/* nothing */;
+		else if (onlykey >= 97 && onlykey <= 122)
+			onlykey -= 96;
+		else if (onlykey >= 64 && onlykey <= 95)
+			onlykey -= 64;
+		else if (onlykey == 32)
+			onlykey = 0;
+		else if (onlykey == 63)
+			onlykey = 127;
+		else
+			onlykey |= KEYC_CTRL;
+		nkey = onlykey|((nkey & KEYC_MASK_MODIFIERS) & ~KEYC_CTRL);
+	}
+
+	if (log_get_level() != 0) {
+		log_debug("%s: extended key %.*s is %llx (%s)", c->name,
+		    (int)*size, buf, nkey, key_string_lookup_key(nkey, 1));
+	}
+	*key = nkey;
+	return (0);
+}
+
+
+// Source: tty-keys.c
+// Lines 882-1002

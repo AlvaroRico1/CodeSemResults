@@ -1,0 +1,31 @@
+static void populate_symlink_workdir(void)
+{
+	git_str path = GIT_STR_INIT;
+	git_repository *repo;
+	git_remote *origin;
+	git_object *target;
+
+	const char *url = git_repository_path(g_repo);
+
+	cl_git_pass(git_str_joinpath(&path, clar_sandbox_path(), "symlink.git"));
+	cl_git_pass(git_repository_init(&repo, path.ptr, true));
+	cl_git_pass(git_repository_set_workdir(repo, "symlink", 1));
+
+	/* Delete the `origin` repo (if it exists) so we can recreate it. */
+	git_remote_delete(repo, GIT_REMOTE_ORIGIN);
+
+	cl_git_pass(git_remote_create(&origin, repo, GIT_REMOTE_ORIGIN, url));
+	cl_git_pass(git_remote_fetch(origin, NULL, NULL, NULL));
+	git_remote_free(origin);
+
+	cl_git_pass(git_revparse_single(&target, repo, "remotes/origin/master"));
+	cl_git_pass(git_reset(repo, target, GIT_RESET_HARD, NULL));
+
+	git_object_free(target);
+	git_repository_free(repo);
+	git_str_dispose(&path);
+}
+
+
+// Source: index.c
+// Lines 204-230

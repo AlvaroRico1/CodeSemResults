@@ -1,0 +1,1 @@
+ft,tmux/style.c,2,ft0,tmux/style.c,5,1

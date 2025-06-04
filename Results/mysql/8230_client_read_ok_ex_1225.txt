@@ -1,0 +1,1 @@
+affected_rows,mysql/sql-common/client.cc,4,info,mysql/sql-common/client.cc,11,0

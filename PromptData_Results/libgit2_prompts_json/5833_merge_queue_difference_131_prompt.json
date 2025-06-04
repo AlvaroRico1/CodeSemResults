@@ -1,0 +1,5 @@
+{
+  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
+  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'find_data' at line 3\n2. Pointer 'data' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int queue_difference(const git_index_entry **entries, void *data)\n{\n\tstruct merge_diff_find_data *find_data = data;\n\tbool item_modified = false;\n\tsize_t i;\n\n\tif (!entries[0] || !entries[1] || !entries[2]) {\n\t\titem_modified = true;\n\t} else {\n\t\tfor (i = 1; i < 3; i++) {\n\t\t\tif (index_entry_cmp(entries[0], entries[i]) != 0) {\n\t\t\t\titem_modified = true;\n\t\t\t\tbreak;\n\t\t\t}\n\t\t}\n\t}\n\n\treturn item_modified ?\n\t\tmerge_diff_list_insert_conflict(\n\t\t\tfind_data->diff_list, &find_data->df_data, entries) :\n\t\tmerge_diff_list_insert_unmodified(find_data->diff_list, entries);\n}\n\n\n// Source: merge.c\n// Lines 1799-1820\n",
+  "ANSWER": "MUST"
+}

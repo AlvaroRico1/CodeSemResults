@@ -1,0 +1,29 @@
+[ROLE]
+Pointer analyzer that analyzes whether two pointer in a program alias
+
+[QUESTION]
+Below is a C program. Please analyze the alias relationship between:
+1. Pointer 'to_put' at line 3
+2. Pointer 'entry' at line 1
+
+Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+
+Program to analyze:
+void *oidmap_put(struct oidmap *map, void *entry)
+{
+	struct oidmap_entry *to_put = entry;
+
+	if (!map->map.cmpfn)
+		oidmap_init(map, 0);
+
+	hashmap_entry_init(&to_put->internal_entry, oidhash(&to_put->oid));
+	return hashmap_put(&map->map, &to_put->internal_entry);
+}
+
+
+// Source: oidmap.c
+// Lines 52-61
+
+
+[ANSWER]
+MUST
