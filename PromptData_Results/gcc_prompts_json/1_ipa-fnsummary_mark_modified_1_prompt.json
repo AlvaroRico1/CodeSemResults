@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'b' at line 4\n2. Pointer 'data' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nmark_modified (ao_ref *ao ATTRIBUTE_UNUSED, tree vdef ATTRIBUTE_UNUSED,\n\t       void *data)\n{\n  bool *b = (bool *) data;\n  *b = true;\n  return true;\n}\n\n\n// Source: ipa-fnsummary.c\n// Lines 1094-1100\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'b' at line 4\n2. Pointer 'data' at line 2\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nmark_modified (ao_ref *ao ATTRIBUTE_UNUSED, tree vdef ATTRIBUTE_UNUSED,\n\t       void *data)\n{\n  bool *b = (bool *) data;\n  *b = true;\n  return true;\n}\n\n\n// Source: ipa-fnsummary.c\n// Lines 1094-1100\n",
   "ANSWER": "MUST"
 }

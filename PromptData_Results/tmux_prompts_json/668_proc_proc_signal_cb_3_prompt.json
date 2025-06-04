@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'tp' at line 3\n2. Pointer 'arg' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nproc_signal_cb(int signo, __unused short events, void *arg)\n{\n\tstruct tmuxproc\t*tp = arg;\n\n\ttp->signalcb(signo);\n}\n\n\n// Source: proc.c\n// Lines 122-127\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'tp' at line 3\n2. Pointer 'arg' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nproc_signal_cb(int signo, __unused short events, void *arg)\n{\n\tstruct tmuxproc\t*tp = arg;\n\n\ttp->signalcb(signo);\n}\n\n\n// Source: proc.c\n// Lines 122-127\n",
   "ANSWER": "MUST"
 }

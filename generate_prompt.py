@@ -62,12 +62,12 @@ def create_prompt(c_file_path: Path, txt_file_path: Path) -> tuple[str, dict]:
     
     # 构建问题描述
     question = (
-        f"Below is a C program. Please analyze the alias relationship between:\n"
+        f"Below is a function in C. Please analyze the alias relationship between:\n"
         f"1. Pointer '{ptr1}' at line {line1}\n"
         f"2. Pointer '{ptr2}' at line {line2}\n\n"
-        f"Determine if these pointers MUST alias (always point to the same location), "
+        f"Determine if these two pointers MUST alias (always point to the same location), "
         f"MAY alias (might point to the same location), or "
-        f"MUST-NOT alias (never point to the same location).\n\n"
+        f"MUST-NOT alias (never point to the same location) after the execution of the function.\n\n"
         f"Program to analyze:\n{c_content}"
     )
     

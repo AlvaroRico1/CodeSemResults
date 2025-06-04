@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'w' at line 3\n2. Pointer 'ft' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nformat_cb_window_visible_layout(struct format_tree *ft)\n{\n\tstruct window\t*w = ft->w;\n\n\tif (w == NULL)\n\t\treturn (NULL);\n\n\treturn (layout_dump(w->layout_root));\n}\n\n\n// Source: format.c\n// Lines 780-788\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'w' at line 3\n2. Pointer 'ft' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nformat_cb_window_visible_layout(struct format_tree *ft)\n{\n\tstruct window\t*w = ft->w;\n\n\tif (w == NULL)\n\t\treturn (NULL);\n\n\treturn (layout_dump(w->layout_root));\n}\n\n\n// Source: format.c\n// Lines 780-788\n",
   "ANSWER": "MUST"
 }

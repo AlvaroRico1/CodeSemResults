@@ -2,11 +2,11 @@
 Pointer analyzer that analyzes whether two pointer in a program alias
 
 [QUESTION]
-Below is a C program. Please analyze the alias relationship between:
+Below is a function in C. Please analyze the alias relationship between:
 1. Pointer 'link_table' at line 4
 2. Pointer 'node' at line 6
 
-Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+Determine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.
 
 Program to analyze:
 static struct ctl_table_header *new_links(struct ctl_dir *dir, struct ctl_table *table,

@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'self' at line 3\n2. Pointer '_self' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int begin_raw_message(ptls_message_emitter_t *_self)\n{\n    struct st_ptls_raw_message_emitter_t *self = (void *)_self;\n\n    self->start_off = self->super.buf->off;\n    return 0;\n}\n\n\n// Source: picotls.c\n// Lines 5324-5330\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'self' at line 3\n2. Pointer '_self' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nstatic int begin_raw_message(ptls_message_emitter_t *_self)\n{\n    struct st_ptls_raw_message_emitter_t *self = (void *)_self;\n\n    self->start_off = self->super.buf->off;\n    return 0;\n}\n\n\n// Source: picotls.c\n// Lines 5324-5330\n",
   "ANSWER": "MUST"
 }

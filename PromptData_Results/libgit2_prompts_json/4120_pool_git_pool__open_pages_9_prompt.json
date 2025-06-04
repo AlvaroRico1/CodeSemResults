@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'scan' at line 4\n2. Pointer 'scan' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nuint32_t git_pool__open_pages(git_pool *pool)\n{\n\tuint32_t ct = 0;\n\tgit_pool_page *scan;\n\tfor (scan = pool->pages; scan != NULL; scan = scan->next) ct++;\n\treturn ct;\n}\n\n\n// Source: pool.c\n// Lines 94-100\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'scan' at line 4\n2. Pointer 'scan' at line 4\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nuint32_t git_pool__open_pages(git_pool *pool)\n{\n\tuint32_t ct = 0;\n\tgit_pool_page *scan;\n\tfor (scan = pool->pages; scan != NULL; scan = scan->next) ct++;\n\treturn ct;\n}\n\n\n// Source: pool.c\n// Lines 94-100\n",
   "ANSWER": "MUST"
 }

@@ -2,11 +2,11 @@
 Pointer analyzer that analyzes whether two pointer in a program alias
 
 [QUESTION]
-Below is a C program. Please analyze the alias relationship between:
+Below is a function in C. Please analyze the alias relationship between:
 1. Pointer 'node' at line 3
 2. Pointer 'root' at line 1
 
-Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+Determine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.
 
 Program to analyze:
 h2o_http2_scheduler_node_t *h2o_http2_scheduler_find_parent_by_weight(h2o_http2_scheduler_node_t *root, uint16_t new_weight)

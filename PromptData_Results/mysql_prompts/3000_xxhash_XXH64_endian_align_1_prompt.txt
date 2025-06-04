@@ -2,11 +2,11 @@
 Pointer analyzer that analyzes whether two pointer in a program alias
 
 [QUESTION]
-Below is a C program. Please analyze the alias relationship between:
+Below is a function in C. Please analyze the alias relationship between:
 1. Pointer 'p' at line 3
 2. Pointer 'h64' at line 5
 
-Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+Determine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.
 
 Program to analyze:
 FORCE_INLINE_TEMPLATE U64 XXH64_endian_align(const void* input, size_t len, U64 seed, XXH_endianess endian, XXH_alignment align)

@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'name' at line 1\n2. Pointer 'pb' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\npaste_get_top(const char **name)\n{\n\tstruct paste_buffer\t*pb;\n\n\tpb = RB_MIN(paste_time_tree, &paste_by_time);\n\tif (pb == NULL)\n\t\treturn (NULL);\n\tif (name != NULL)\n\t\t*name = pb->name;\n\treturn (pb);\n}\n\n\n// Source: paste.c\n// Lines 116-126\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'name' at line 1\n2. Pointer 'pb' at line 3\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\npaste_get_top(const char **name)\n{\n\tstruct paste_buffer\t*pb;\n\n\tpb = RB_MIN(paste_time_tree, &paste_by_time);\n\tif (pb == NULL)\n\t\treturn (NULL);\n\tif (name != NULL)\n\t\t*name = pb->name;\n\treturn (pb);\n}\n\n\n// Source: paste.c\n// Lines 116-126\n",
   "ANSWER": "MUST"
 }

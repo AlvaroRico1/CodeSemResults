@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'r' at line 1\n2. Pointer 'next' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void free_line_log_data(struct line_log_data *r)\n{\n\twhile (r) {\n\t\tstruct line_log_data *next = r->next;\n\t\tline_log_data_clear(r);\n\t\tfree(r);\n\t\tr = next;\n\t}\n\n\n// Source: line-log.c\n// Lines 254-261\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'r' at line 1\n2. Pointer 'next' at line 4\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nstatic void free_line_log_data(struct line_log_data *r)\n{\n\twhile (r) {\n\t\tstruct line_log_data *next = r->next;\n\t\tline_log_data_clear(r);\n\t\tfree(r);\n\t\tr = next;\n\t}\n\n\n// Source: line-log.c\n// Lines 254-261\n",
   "ANSWER": "MUST"
 }

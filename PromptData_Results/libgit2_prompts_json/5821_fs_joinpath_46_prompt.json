@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'bl' at line 7\n2. Pointer 'len' at line 4\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic char *joinpath(const char *dir, const char *base, int base_len)\n{\n\tchar *out;\n\tint len;\n\n\tif (base_len == -1) {\n\t\tsize_t bl = strlen(base);\n\n\t\tcl_assert(bl < INT_MAX);\n\t\tbase_len = (int)bl;\n\t}\n\n\n// Source: fs.h\n// Lines 345-355\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'bl' at line 7\n2. Pointer 'len' at line 4\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nstatic char *joinpath(const char *dir, const char *base, int base_len)\n{\n\tchar *out;\n\tint len;\n\n\tif (base_len == -1) {\n\t\tsize_t bl = strlen(base);\n\n\t\tcl_assert(bl < INT_MAX);\n\t\tbase_len = (int)bl;\n\t}\n\n\n// Source: fs.h\n// Lines 345-355\n",
   "ANSWER": "MUST-NOT"
 }

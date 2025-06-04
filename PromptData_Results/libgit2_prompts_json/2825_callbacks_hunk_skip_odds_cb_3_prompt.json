@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'hunk' at line 1\n2. Pointer 'count' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int hunk_skip_odds_cb(const git_diff_hunk *hunk, void *payload)\n{\n\tint *count = (int *)payload;\n\tGIT_UNUSED(hunk);\n\n\treturn ((*count)++ % 2 == 1);\n}\n\n\n// Source: callbacks.c\n// Lines 92-98\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'hunk' at line 1\n2. Pointer 'count' at line 3\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nstatic int hunk_skip_odds_cb(const git_diff_hunk *hunk, void *payload)\n{\n\tint *count = (int *)payload;\n\tGIT_UNUSED(hunk);\n\n\treturn ((*count)++ % 2 == 1);\n}\n\n\n// Source: callbacks.c\n// Lines 92-98\n",
   "ANSWER": "MUST-NOT"
 }

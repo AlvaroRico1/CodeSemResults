@@ -2,11 +2,11 @@
 Pointer analyzer that analyzes whether two pointer in a program alias
 
 [QUESTION]
-Below is a C program. Please analyze the alias relationship between:
+Below is a function in C. Please analyze the alias relationship between:
 1. Pointer 'head' at line 3
 2. Pointer 'target' at line 5
 
-Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+Determine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.
 
 Program to analyze:
 void test_refs_branches_upstream__retrieve_a_remote_tracking_reference_from_a_branch_with_no_remote_returns_GIT_ENOTFOUND(void)

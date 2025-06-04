@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'end' at line 3\n2. Pointer 'string' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic size_t tftp_strnlen(const char *string, size_t maxlen)\n{\n  const char *end = memchr(string, '\\0', maxlen);\n  return end ? (size_t) (end - string) : maxlen;\n}\n\n\n// Source: tftp.c\n// Lines 282-286\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'end' at line 3\n2. Pointer 'string' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nstatic size_t tftp_strnlen(const char *string, size_t maxlen)\n{\n  const char *end = memchr(string, '\\0', maxlen);\n  return end ? (size_t) (end - string) : maxlen;\n}\n\n\n// Source: tftp.c\n// Lines 282-286\n",
   "ANSWER": "MUST"
 }

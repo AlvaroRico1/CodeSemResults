@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'V' at line 2\n2. Pointer 'M' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic inline double float8get(const uchar *M) {\n  double V;\n  memcpy(&V, M, sizeof(double));\n  return V;\n}\n\n\n// Source: little_endian.h\n// Lines 104-108\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'V' at line 2\n2. Pointer 'M' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nstatic inline double float8get(const uchar *M) {\n  double V;\n  memcpy(&V, M, sizeof(double));\n  return V;\n}\n\n\n// Source: little_endian.h\n// Lines 104-108\n",
   "ANSWER": "MUST-NOT"
 }

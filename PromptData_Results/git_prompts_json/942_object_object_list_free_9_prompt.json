@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'p' at line 4\n2. Pointer 'list' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid object_list_free(struct object_list **list)\n{\n\twhile (*list) {\n\t\tstruct object_list *p = *list;\n\t\t*list = p->next;\n\t\tfree(p);\n\t}\n\n\n// Source: object.c\n// Lines 328-334\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'p' at line 4\n2. Pointer 'list' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nvoid object_list_free(struct object_list **list)\n{\n\twhile (*list) {\n\t\tstruct object_list *p = *list;\n\t\t*list = p->next;\n\t\tfree(p);\n\t}\n\n\n// Source: object.c\n// Lines 328-334\n",
   "ANSWER": "MUST"
 }

@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'data' at line 1\n2. Pointer 'n' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int cb(const git_config_entry *entry, void *data)\n{\n\tint *n = (int *) data;\n\n\tGIT_UNUSED(entry);\n\n\t(*n)++;\n\n\treturn 0;\n}\n\n\n// Source: multivar.c\n// Lines 38-47\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'data' at line 1\n2. Pointer 'n' at line 3\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nstatic int cb(const git_config_entry *entry, void *data)\n{\n\tint *n = (int *) data;\n\n\tGIT_UNUSED(entry);\n\n\t(*n)++;\n\n\treturn 0;\n}\n\n\n// Source: multivar.c\n// Lines 38-47\n",
   "ANSWER": "MUST-NOT"
 }

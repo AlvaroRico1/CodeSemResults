@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'value' at line 2\n2. Pointer 'param' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void store_param_int32(NET *net, MYSQL_BIND *param) {\n  int32 value = *(int32 *)param->buffer;\n  int4store(net->write_pos, value);\n  net->write_pos += 4;\n}\n\n\n// Source: bind_params.cc\n// Lines 129-133\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'value' at line 2\n2. Pointer 'param' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nstatic void store_param_int32(NET *net, MYSQL_BIND *param) {\n  int32 value = *(int32 *)param->buffer;\n  int4store(net->write_pos, value);\n  net->write_pos += 4;\n}\n\n\n// Source: bind_params.cc\n// Lines 129-133\n",
   "ANSWER": "MUST-NOT"
 }

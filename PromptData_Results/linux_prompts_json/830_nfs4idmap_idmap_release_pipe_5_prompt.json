@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'idmap' at line 4\n2. Pointer 'rpci' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nidmap_release_pipe(struct inode *inode)\n{\n\tstruct rpc_inode *rpci = RPC_I(inode);\n\tstruct idmap *idmap = (struct idmap *)rpci->private;\n\n\tnfs_idmap_abort_pipe_upcall(idmap, -EPIPE);\n}\n\n\n// Source: nfs4idmap.c\n// Lines 734-740\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'idmap' at line 4\n2. Pointer 'rpci' at line 3\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nidmap_release_pipe(struct inode *inode)\n{\n\tstruct rpc_inode *rpci = RPC_I(inode);\n\tstruct idmap *idmap = (struct idmap *)rpci->private;\n\n\tnfs_idmap_abort_pipe_upcall(idmap, -EPIPE);\n}\n\n\n// Source: nfs4idmap.c\n// Lines 734-740\n",
   "ANSWER": "MUST"
 }

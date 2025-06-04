@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'prefix' at line 3\n2. Pointer 'arg' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nformat_log_debug_cb(const char *key, const char *value, void *arg)\n{\n\tconst char\t*prefix = arg;\n\n\tlog_debug(\"%s: %s=%s\", prefix, key, value);\n}\n\n\n// Source: format.c\n// Lines 3100-3105\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'prefix' at line 3\n2. Pointer 'arg' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nformat_log_debug_cb(const char *key, const char *value, void *arg)\n{\n\tconst char\t*prefix = arg;\n\n\tlog_debug(\"%s: %s=%s\", prefix, key, value);\n}\n\n\n// Source: format.c\n// Lines 3100-3105\n",
   "ANSWER": "MUST"
 }

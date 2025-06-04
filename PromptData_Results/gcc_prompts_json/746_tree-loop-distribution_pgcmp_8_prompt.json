@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'v1' at line 3\n2. Pointer 'v1_' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\npgcmp (const void *v1_, const void *v2_)\n{\n  const vertex *v1 = (const vertex *)v1_;\n  const vertex *v2 = (const vertex *)v2_;\n  return v2->post - v1->post;\n}\n\n\n// Source: tree-loop-distribution.c\n// Lines 2114-2119\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'v1' at line 3\n2. Pointer 'v1_' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\npgcmp (const void *v1_, const void *v2_)\n{\n  const vertex *v1 = (const vertex *)v1_;\n  const vertex *v2 = (const vertex *)v2_;\n  return v2->post - v1->post;\n}\n\n\n// Source: tree-loop-distribution.c\n// Lines 2114-2119\n",
   "ANSWER": "MUST"
 }

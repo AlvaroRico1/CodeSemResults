@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'u' at line 5\n2. Pointer 'key' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nckh_pointer_hash(const void *key, size_t r_hash[2]) {\n\tunion {\n\t\tconst void\t*v;\n\t\tsize_t\t\ti;\n\t} u;\n\n\n// Source: ckh.c\n// Lines 555-559\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'u' at line 5\n2. Pointer 'key' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nckh_pointer_hash(const void *key, size_t r_hash[2]) {\n\tunion {\n\t\tconst void\t*v;\n\t\tsize_t\t\ti;\n\t} u;\n\n\n// Source: ckh.c\n// Lines 555-559\n",
   "ANSWER": "MUST"
 }

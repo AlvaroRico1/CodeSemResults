@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'h' at line 2\n2. Pointer 'handle' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid continent_reset_position(PSI_table_handle *handle) {\n  Continent_Table_Handle *h = (Continent_Table_Handle *)handle;\n  h->m_pos.reset();\n  h->m_next_pos.reset();\n  return;\n}\n\n\n// Source: pfs_example_continent.cc\n// Lines 185-190\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'h' at line 2\n2. Pointer 'handle' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nvoid continent_reset_position(PSI_table_handle *handle) {\n  Continent_Table_Handle *h = (Continent_Table_Handle *)handle;\n  h->m_pos.reset();\n  h->m_next_pos.reset();\n  return;\n}\n\n\n// Source: pfs_example_continent.cc\n// Lines 185-190\n",
   "ANSWER": "MUST"
 }

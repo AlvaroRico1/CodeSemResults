@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'conn' at line 3\n2. Pointer 'data' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid Curl_connect_free(struct Curl_easy *data)\n{\n  struct connectdata *conn = data->conn;\n  struct http_connect_state *s = conn->connect_state;\n  if(s) {\n    free(s);\n    conn->connect_state = NULL;\n  }\n}\n\n\n// Source: http_proxy.c\n// Lines 963-971\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'conn' at line 3\n2. Pointer 'data' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nvoid Curl_connect_free(struct Curl_easy *data)\n{\n  struct connectdata *conn = data->conn;\n  struct http_connect_state *s = conn->connect_state;\n  if(s) {\n    free(s);\n    conn->connect_state = NULL;\n  }\n}\n\n\n// Source: http_proxy.c\n// Lines 963-971\n",
   "ANSWER": "MUST"
 }

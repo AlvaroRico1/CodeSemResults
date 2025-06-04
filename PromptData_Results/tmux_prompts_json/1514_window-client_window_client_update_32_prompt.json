@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'data' at line 3\n2. Pointer 'wme' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nwindow_client_update(struct window_mode_entry *wme)\n{\n\tstruct window_client_modedata\t*data = wme->data;\n\n\tmode_tree_build(data->data);\n\tmode_tree_draw(data->data);\n\tdata->wp->flags |= PANE_REDRAW;\n}\n\n\n// Source: window-client.c\n// Lines 354-361\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'data' at line 3\n2. Pointer 'wme' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nwindow_client_update(struct window_mode_entry *wme)\n{\n\tstruct window_client_modedata\t*data = wme->data;\n\n\tmode_tree_build(data->data);\n\tmode_tree_draw(data->data);\n\tdata->wp->flags |= PANE_REDRAW;\n}\n\n\n// Source: window-client.c\n// Lines 354-361\n",
   "ANSWER": "MUST"
 }

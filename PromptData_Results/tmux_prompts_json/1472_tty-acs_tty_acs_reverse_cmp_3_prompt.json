@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'test' at line 4\n2. Pointer 'key' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\ntty_acs_reverse_cmp(const void *key, const void *value)\n{\n\tconst struct tty_acs_reverse_entry\t*entry = value;\n\tconst char\t\t\t\t*test = key;\n\n\treturn (strcmp(test, entry->string));\n}\n\n\n// Source: tty-acs.c\n// Lines 195-201\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'test' at line 4\n2. Pointer 'key' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\ntty_acs_reverse_cmp(const void *key, const void *value)\n{\n\tconst struct tty_acs_reverse_entry\t*entry = value;\n\tconst char\t\t\t\t*test = key;\n\n\treturn (strcmp(test, entry->string));\n}\n\n\n// Source: tty-acs.c\n// Lines 195-201\n",
   "ANSWER": "MUST"
 }

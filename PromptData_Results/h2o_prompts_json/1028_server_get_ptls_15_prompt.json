@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'conn' at line 3\n2. Pointer '_conn' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic ptls_t *get_ptls(h2o_conn_t *_conn)\n{\n    struct st_h2o_http3_server_conn_t *conn = (void *)_conn;\n    return quicly_get_tls(conn->h3.super.quic);\n}\n\n\n// Source: server.c\n// Lines 493-497\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'conn' at line 3\n2. Pointer '_conn' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nstatic ptls_t *get_ptls(h2o_conn_t *_conn)\n{\n    struct st_h2o_http3_server_conn_t *conn = (void *)_conn;\n    return quicly_get_tls(conn->h3.super.quic);\n}\n\n\n// Source: server.c\n// Lines 493-497\n",
   "ANSWER": "MUST"
 }

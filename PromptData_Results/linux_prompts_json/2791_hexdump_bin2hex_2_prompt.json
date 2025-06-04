@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer '_src' at line 3\n2. Pointer 'dst' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nchar *bin2hex(char *dst, const void *src, size_t count)\n{\n\tconst unsigned char *_src = src;\n\n\twhile (count--)\n\t\tdst = hex_byte_pack(dst, *_src++);\n\treturn dst;\n}\n\n\n// Source: hexdump.c\n// Lines 65-72\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer '_src' at line 3\n2. Pointer 'dst' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nchar *bin2hex(char *dst, const void *src, size_t count)\n{\n\tconst unsigned char *_src = src;\n\n\twhile (count--)\n\t\tdst = hex_byte_pack(dst, *_src++);\n\treturn dst;\n}\n\n\n// Source: hexdump.c\n// Lines 65-72\n",
   "ANSWER": "MAY"
 }

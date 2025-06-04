@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 't' at line 1\n2. Pointer 'e' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nbitmap_tree_rotate_right (bitmap_element * &t)\n{\n  bitmap_element *e = t->prev;\n  t->prev = t->prev->next;\n  e->next = t;\n  t = e;\n}\n\n\n// Source: bitmap.c\n// Lines 453-459\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 't' at line 1\n2. Pointer 'e' at line 3\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nbitmap_tree_rotate_right (bitmap_element * &t)\n{\n  bitmap_element *e = t->prev;\n  t->prev = t->prev->next;\n  e->next = t;\n  t = e;\n}\n\n\n// Source: bitmap.c\n// Lines 453-459\n",
   "ANSWER": "MUST"
 }

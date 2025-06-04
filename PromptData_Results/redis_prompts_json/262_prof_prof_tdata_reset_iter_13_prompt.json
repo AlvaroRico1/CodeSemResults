@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'tsdn' at line 3\n2. Pointer 'arg' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nprof_tdata_reset_iter(prof_tdata_tree_t *tdatas, prof_tdata_t *tdata,\n    void *arg) {\n\ttsdn_t *tsdn = (tsdn_t *)arg;\n\n\treturn (prof_tdata_expire(tsdn, tdata) ? tdata : NULL);\n}\n\n\n// Source: prof.c\n// Lines 2053-2058\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'tsdn' at line 3\n2. Pointer 'arg' at line 2\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nprof_tdata_reset_iter(prof_tdata_tree_t *tdatas, prof_tdata_t *tdata,\n    void *arg) {\n\ttsdn_t *tsdn = (tsdn_t *)arg;\n\n\treturn (prof_tdata_expire(tsdn, tdata) ? tdata : NULL);\n}\n\n\n// Source: prof.c\n// Lines 2053-2058\n",
   "ANSWER": "MUST"
 }

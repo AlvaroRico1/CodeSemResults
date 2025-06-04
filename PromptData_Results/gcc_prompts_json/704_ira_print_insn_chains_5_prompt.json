@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'c' at line 3\n2. Pointer 'c' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nprint_insn_chains (FILE *file)\n{\n  class insn_chain *c;\n  for (c = reload_insn_chain; c ; c = c->next)\n    print_insn_chain (file, c);\n}\n\n\n// Source: ira.c\n// Lines 4081-4086\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'c' at line 3\n2. Pointer 'c' at line 3\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nprint_insn_chains (FILE *file)\n{\n  class insn_chain *c;\n  for (c = reload_insn_chain; c ; c = c->next)\n    print_insn_chain (file, c);\n}\n\n\n// Source: ira.c\n// Lines 4081-4086\n",
   "ANSWER": "MUST"
 }

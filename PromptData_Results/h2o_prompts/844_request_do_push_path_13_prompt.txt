@@ -2,11 +2,11 @@
 Pointer analyzer that analyzes whether two pointer in a program alias
 
 [QUESTION]
-Below is a C program. Please analyze the alias relationship between:
+Below is a function in C. Please analyze the alias relationship between:
 1. Pointer 'req' at line 3
 2. Pointer '_req' at line 1
 
-Determine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).
+Determine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.
 
 Program to analyze:
 static void do_push_path(void *_req, const char *path, size_t path_len, int is_critical)

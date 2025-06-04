@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'blob' at line 3\n2. Pointer '_blob' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid git_blob__free(void *_blob)\n{\n\tgit_blob *blob = (git_blob *) _blob;\n\tif (!blob->raw)\n\t\tgit_odb_object_free(blob->data.odb);\n\tgit__free(blob);\n}\n\n\n// Source: blob.c\n// Lines 47-53\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'blob' at line 3\n2. Pointer '_blob' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nvoid git_blob__free(void *_blob)\n{\n\tgit_blob *blob = (git_blob *) _blob;\n\tif (!blob->raw)\n\t\tgit_odb_object_free(blob->data.odb);\n\tgit__free(blob);\n}\n\n\n// Source: blob.c\n// Lines 47-53\n",
   "ANSWER": "MUST"
 }

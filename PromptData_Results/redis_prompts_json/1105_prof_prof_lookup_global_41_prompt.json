@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'p_gctx' at line 2\n2. Pointer 'gctx' at line 6\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nprof_lookup_global(tsd_t *tsd, prof_bt_t *bt, prof_tdata_t *tdata,\n    void **p_btkey, prof_gctx_t **p_gctx, bool *p_new_gctx) {\n\tunion {\n\t\tprof_gctx_t\t*p;\n\t\tvoid\t\t*v;\n\t} gctx, tgctx;\n\n\n// Source: prof.c\n// Lines 720-725\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'p_gctx' at line 2\n2. Pointer 'gctx' at line 6\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nprof_lookup_global(tsd_t *tsd, prof_bt_t *bt, prof_tdata_t *tdata,\n    void **p_btkey, prof_gctx_t **p_gctx, bool *p_new_gctx) {\n\tunion {\n\t\tprof_gctx_t\t*p;\n\t\tvoid\t\t*v;\n\t} gctx, tgctx;\n\n\n// Source: prof.c\n// Lines 720-725\n",
   "ANSWER": "MUST"
 }

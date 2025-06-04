@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'entry_a' at line 3\n2. Pointer 'a' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int merge_driver_entry_cmp(const void *a, const void *b)\n{\n\tconst git_merge_driver_entry *entry_a = a;\n\tconst git_merge_driver_entry *entry_b = b;\n\n\treturn strcmp(entry_a->name, entry_b->name);\n}\n\n\n// Source: merge_driver.c\n// Lines 139-145\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'entry_a' at line 3\n2. Pointer 'a' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nstatic int merge_driver_entry_cmp(const void *a, const void *b)\n{\n\tconst git_merge_driver_entry *entry_a = a;\n\tconst git_merge_driver_entry *entry_b = b;\n\n\treturn strcmp(entry_a->name, entry_b->name);\n}\n\n\n// Source: merge_driver.c\n// Lines 139-145\n",
   "ANSWER": "MUST"
 }

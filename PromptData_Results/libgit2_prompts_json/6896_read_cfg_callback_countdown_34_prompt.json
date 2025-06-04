@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'entry' at line 1\n2. Pointer 'count' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int cfg_callback_countdown(const git_config_entry *entry, void *payload)\n{\n\tint *count = payload;\n\tGIT_UNUSED(entry);\n\t(*count)--;\n\tif (*count == 0)\n\t\treturn -100;\n\treturn 0;\n}\n\n\n// Source: read.c\n// Lines 309-317\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'entry' at line 1\n2. Pointer 'count' at line 3\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nstatic int cfg_callback_countdown(const git_config_entry *entry, void *payload)\n{\n\tint *count = payload;\n\tGIT_UNUSED(entry);\n\t(*count)--;\n\tif (*count == 0)\n\t\treturn -100;\n\treturn 0;\n}\n\n\n// Source: read.c\n// Lines 309-317\n",
   "ANSWER": "MUST-NOT"
 }

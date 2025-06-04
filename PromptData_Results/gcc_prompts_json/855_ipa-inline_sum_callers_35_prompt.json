@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'e' at line 3\n2. Pointer 'e' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nsum_callers (struct cgraph_node *node, void *data)\n{\n  struct cgraph_edge *e;\n  int *num_calls = (int *)data;\n\n  for (e = node->callers; e; e = e->next_caller)\n    (*num_calls)++;\n  return false;\n}\n\n\n// Source: ipa-inline.c\n// Lines 1862-1870\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'e' at line 3\n2. Pointer 'e' at line 3\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nsum_callers (struct cgraph_node *node, void *data)\n{\n  struct cgraph_edge *e;\n  int *num_calls = (int *)data;\n\n  for (e = node->callers; e; e = e->next_caller)\n    (*num_calls)++;\n  return false;\n}\n\n\n// Source: ipa-inline.c\n// Lines 1862-1870\n",
   "ANSWER": "MUST"
 }

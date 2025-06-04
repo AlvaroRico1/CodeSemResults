@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'db' at line 3\n2. Pointer 'b' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nint git_diff_delta__cmp(const void *a, const void *b)\n{\n\tconst git_diff_delta *da = a, *db = b;\n\tint val = strcmp(diff_delta__path(da), diff_delta__path(db));\n\treturn val ? val : ((int)da->status - (int)db->status);\n}\n\n\n// Source: diff.c\n// Lines 40-45\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'db' at line 3\n2. Pointer 'b' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nint git_diff_delta__cmp(const void *a, const void *b)\n{\n\tconst git_diff_delta *da = a, *db = b;\n\tint val = strcmp(diff_delta__path(da), diff_delta__path(db));\n\treturn val ? val : ((int)da->status - (int)db->status);\n}\n\n\n// Source: diff.c\n// Lines 40-45\n",
   "ANSWER": "MUST"
 }

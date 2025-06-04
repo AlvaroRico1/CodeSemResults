@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'a' at line 3\n2. Pointer '_a' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int pack_info_compare(const void *_a, const void *_b)\n{\n\tstruct pack_info *a = (struct pack_info *)_a;\n\tstruct pack_info *b = (struct pack_info *)_b;\n\treturn strcmp(a->pack_name, b->pack_name);\n}\n\n\n// Source: midx.c\n// Lines 431-436\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'a' at line 3\n2. Pointer '_a' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nstatic int pack_info_compare(const void *_a, const void *_b)\n{\n\tstruct pack_info *a = (struct pack_info *)_a;\n\tstruct pack_info *b = (struct pack_info *)_b;\n\treturn strcmp(a->pack_name, b->pack_name);\n}\n\n\n// Source: midx.c\n// Lines 431-436\n",
   "ANSWER": "MUST"
 }

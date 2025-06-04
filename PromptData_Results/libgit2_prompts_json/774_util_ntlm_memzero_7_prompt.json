@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'scan' at line 3\n2. Pointer 'data' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid ntlm_memzero(void *data, size_t size)\n{\n\tvolatile uint8_t *scan = (volatile uint8_t *)data;\n\n\twhile (size--)\n\t\t*scan++ = 0x0;\n}\n\n\n// Source: util.c\n// Lines 16-22\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'scan' at line 3\n2. Pointer 'data' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nvoid ntlm_memzero(void *data, size_t size)\n{\n\tvolatile uint8_t *scan = (volatile uint8_t *)data;\n\n\twhile (size--)\n\t\t*scan++ = 0x0;\n}\n\n\n// Source: util.c\n// Lines 16-22\n",
   "ANSWER": "MUST"
 }

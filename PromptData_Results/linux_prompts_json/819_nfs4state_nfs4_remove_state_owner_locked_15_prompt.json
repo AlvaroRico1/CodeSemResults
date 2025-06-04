@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'server' at line 3\n2. Pointer 'sp' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nnfs4_remove_state_owner_locked(struct nfs4_state_owner *sp)\n{\n\tstruct nfs_server *server = sp->so_server;\n\n\tif (!RB_EMPTY_NODE(&sp->so_server_node))\n\t\trb_erase(&sp->so_server_node, &server->state_owners);\n}\n\n\n// Source: nfs4state.c\n// Lines 460-466\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'server' at line 3\n2. Pointer 'sp' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nnfs4_remove_state_owner_locked(struct nfs4_state_owner *sp)\n{\n\tstruct nfs_server *server = sp->so_server;\n\n\tif (!RB_EMPTY_NODE(&sp->so_server_node))\n\t\trb_erase(&sp->so_server_node, &server->state_owners);\n}\n\n\n// Source: nfs4state.c\n// Lines 460-466\n",
   "ANSWER": "MUST"
 }

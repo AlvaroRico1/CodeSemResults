@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'self' at line 3\n2. Pointer '_self' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic h2o_headers_command_t **get_headers_commands(h2o_configurator_t *_self)\n{\n    struct proxy_configurator_t *self = (void *)_self;\n    return &self->vars->conf.headers_cmds;\n}\n\n\n// Source: proxy.c\n// Lines 608-612\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'self' at line 3\n2. Pointer '_self' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nstatic h2o_headers_command_t **get_headers_commands(h2o_configurator_t *_self)\n{\n    struct proxy_configurator_t *self = (void *)_self;\n    return &self->vars->conf.headers_cmds;\n}\n\n\n// Source: proxy.c\n// Lines 608-612\n",
   "ANSWER": "MUST"
 }

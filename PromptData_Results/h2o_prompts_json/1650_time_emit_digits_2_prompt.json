@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'p' at line 3\n2. Pointer 'dst' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic char *emit_digits(char *dst, int n, size_t cnt)\n{\n    char *p = dst + cnt;\n\n    /* emit digits from back */\n    do {\n        *--p = '0' + n % 10;\n        n /= 10;\n    } while (p != dst);\n\n    return dst + cnt;\n}\n\n\n// Source: time.c\n// Lines 39-50\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'p' at line 3\n2. Pointer 'dst' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nstatic char *emit_digits(char *dst, int n, size_t cnt)\n{\n    char *p = dst + cnt;\n\n    /* emit digits from back */\n    do {\n        *--p = '0' + n % 10;\n        n /= 10;\n    } while (p != dst);\n\n    return dst + cnt;\n}\n\n\n// Source: time.c\n// Lines 39-50\n",
   "ANSWER": "MUST"
 }

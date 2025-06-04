@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'entry' at line 1\n2. Pointer 'seen' at line 2\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int read_nosection_cb(const git_config_entry *entry, void *payload) {\n\tint *seen = (int*)payload;\n\tif (strcmp(entry->name, \"key\") == 0) {\n\t\t(*seen)++;\n\t}\n\treturn 0;\n}\n\n\n// Source: read.c\n// Lines 933-939\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'entry' at line 1\n2. Pointer 'seen' at line 2\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nstatic int read_nosection_cb(const git_config_entry *entry, void *payload) {\n\tint *seen = (int*)payload;\n\tif (strcmp(entry->name, \"key\") == 0) {\n\t\t(*seen)++;\n\t}\n\treturn 0;\n}\n\n\n// Source: read.c\n// Lines 933-939\n",
   "ANSWER": "MUST-NOT"
 }

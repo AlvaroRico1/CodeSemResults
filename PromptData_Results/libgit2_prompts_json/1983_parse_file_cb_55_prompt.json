@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'delta' at line 1\n2. Pointer 'called' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic int file_cb(const git_diff_delta *delta, float progress, void *payload)\n{\n    int *called = (int *) payload;\n    GIT_UNUSED(delta);\n    GIT_UNUSED(progress);\n    (*called)++;\n    return 0;\n}\n\n\n// Source: parse.c\n// Lines 273-280\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'delta' at line 1\n2. Pointer 'called' at line 3\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nstatic int file_cb(const git_diff_delta *delta, float progress, void *payload)\n{\n    int *called = (int *) payload;\n    GIT_UNUSED(delta);\n    GIT_UNUSED(progress);\n    (*called)++;\n    return 0;\n}\n\n\n// Source: parse.c\n// Lines 273-280\n",
   "ANSWER": "MUST-NOT"
 }

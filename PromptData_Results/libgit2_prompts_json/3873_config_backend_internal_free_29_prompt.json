@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'backend' at line 3\n2. Pointer 'internal' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void backend_internal_free(backend_internal *internal)\n{\n\tgit_config_backend *backend;\n\n\tbackend = internal->backend;\n\tbackend->free(backend);\n\tgit__free(internal);\n}\n\n\n// Source: config.c\n// Lines 40-47\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'backend' at line 3\n2. Pointer 'internal' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nstatic void backend_internal_free(backend_internal *internal)\n{\n\tgit_config_backend *backend;\n\n\tbackend = internal->backend;\n\tbackend->free(backend);\n\tgit__free(internal);\n}\n\n\n// Source: config.c\n// Lines 40-47\n",
   "ANSWER": "MUST"
 }

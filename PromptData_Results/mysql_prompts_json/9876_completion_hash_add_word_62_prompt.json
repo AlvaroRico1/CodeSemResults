@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'pos' at line 3\n2. Pointer 'ht' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid add_word(HashTable *ht, const char *str) {\n  int i;\n  const char *pos = str;\n  for (i = 1; *pos; i++, pos++) completion_hash_update(ht, str, i, str);\n}\n\n\n// Source: completion_hash.cc\n// Lines 204-208\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'pos' at line 3\n2. Pointer 'ht' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nvoid add_word(HashTable *ht, const char *str) {\n  int i;\n  const char *pos = str;\n  for (i = 1; *pos; i++, pos++) completion_hash_update(ht, str, i, str);\n}\n\n\n// Source: completion_hash.cc\n// Lines 204-208\n",
   "ANSWER": "MUST-NOT"
 }

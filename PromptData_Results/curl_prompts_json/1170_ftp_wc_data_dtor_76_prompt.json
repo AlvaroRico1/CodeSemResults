@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'ftpwc' at line 3\n2. Pointer 'ptr' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nstatic void wc_data_dtor(void *ptr)\n{\n  struct ftp_wc *ftpwc = ptr;\n  if(ftpwc && ftpwc->parser)\n    Curl_ftp_parselist_data_free(&ftpwc->parser);\n  free(ftpwc);\n}\n\n\n// Source: ftp.c\n// Lines 3759-3765\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'ftpwc' at line 3\n2. Pointer 'ptr' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nstatic void wc_data_dtor(void *ptr)\n{\n  struct ftp_wc *ftpwc = ptr;\n  if(ftpwc && ftpwc->parser)\n    Curl_ftp_parselist_data_free(&ftpwc->parser);\n  free(ftpwc);\n}\n\n\n// Source: ftp.c\n// Lines 3759-3765\n",
   "ANSWER": "MUST"
 }

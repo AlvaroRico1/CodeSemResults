@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'cf' at line 3\n2. Pointer 'arg' at line 1\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nfile_push_cb(__unused int fd, __unused short events, void *arg)\n{\n\tstruct client_file\t*cf = arg;\n\n\tif (cf->c == NULL || ~cf->c->flags & CLIENT_DEAD)\n\t\tfile_push(cf);\n\tfile_free(cf);\n}\n\n\n// Source: file.c\n// Lines 431-438\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'cf' at line 3\n2. Pointer 'arg' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nfile_push_cb(__unused int fd, __unused short events, void *arg)\n{\n\tstruct client_file\t*cf = arg;\n\n\tif (cf->c == NULL || ~cf->c->flags & CLIENT_DEAD)\n\t\tfile_push(cf);\n\tfile_free(cf);\n}\n\n\n// Source: file.c\n// Lines 431-438\n",
   "ANSWER": "MUST"
 }

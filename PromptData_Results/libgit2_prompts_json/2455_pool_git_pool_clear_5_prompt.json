@@ -1,5 +1,5 @@
 {
   "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a C program. Please analyze the alias relationship between:\n1. Pointer 'next' at line 3\n2. Pointer 'scan' at line 3\n\nDetermine if these pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location).\n\nProgram to analyze:\nvoid git_pool_clear(git_pool *pool)\n{\n\tgit_pool_page *scan, *next;\n\n\tfor (scan = pool->pages; scan != NULL; scan = next) {\n\t\tnext = scan->next;\n\t\tgit__free(scan);\n\t}\n\n\tpool->pages = NULL;\n}\n\n\n// Source: pool.c\n// Lines 49-59\n",
+  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'next' at line 3\n2. Pointer 'scan' at line 3\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nvoid git_pool_clear(git_pool *pool)\n{\n\tgit_pool_page *scan, *next;\n\n\tfor (scan = pool->pages; scan != NULL; scan = next) {\n\t\tnext = scan->next;\n\t\tgit__free(scan);\n\t}\n\n\tpool->pages = NULL;\n}\n\n\n// Source: pool.c\n// Lines 49-59\n",
   "ANSWER": "MUST"
 }
