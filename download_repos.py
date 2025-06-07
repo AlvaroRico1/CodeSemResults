@@ -2,18 +2,18 @@ import os
 import subprocess
 import shutil
 
-# 定义目标目录
+# Define target directory
 REPOS_DIR = os.path.join(os.getcwd(), "Repos")
 
-# 定义要下载的仓库及其版本
+# Define repositories and their versions
 REPOSITORIES = {
     "linux": {
         "url": "https://github.com/torvalds/linux.git",
-        "version": "v5.3"  # 修改为正确的标签格式
+        "version": "v5.3"  # Use correct tag format
     },
     "mysql": {
         "url": "https://github.com/mysql/mysql-server.git",
-        "version": "mysql-8.0.25"  # 添加 mysql- 前缀
+        "version": "mysql-8.0.25"  # Add mysql- prefix
     },
     "gcc": {
         "url": "https://github.com/gcc-mirror/gcc.git",
@@ -21,11 +21,11 @@ REPOSITORIES = {
     },
     "git": {
         "url": "https://github.com/git/git.git",
-        "version": "f443b2"  # 使用完整的commit hash
+        "version": "f443b2"  # Use complete commit hash
     },
     "tmux": {
         "url": "https://github.com/tmux/tmux.git",
-        "version": "5071b82"  # commit hash，无需修改
+        "version": "5071b82"  # commit hash, no need to modify
     },
     "redis": {
         "url": "https://github.com/redis/redis.git",
@@ -33,31 +33,31 @@ REPOSITORIES = {
     },
     "curl": {
         "url": "https://github.com/curl/curl.git",
-        "version": "curl-7_79_0"  # 修改为正确的标签格式
+        "version": "curl-7_79_0"  # Use correct tag format
     },
     "leveldb": {
         "url": "https://github.com/google/leveldb.git",
-        "version": "1.23"  # 移除 v 前缀，使用正确的标签格式
+        "version": "1.23"  # Remove v prefix, use correct tag format
     },
     "h2o": {
         "url": "https://github.com/h2o/h2o.git",
-        "version": "3e4b697"  # commit hash，无需修改
+        "version": "3e4b697"  # commit hash, no need to modify
     },
     "libgit2": {
         "url": "https://github.com/libgit2/libgit2.git",
-        "version": "2fc0fcb"  # commit hash，无需修改
+        "version": "2fc0fcb"  # commit hash, no need to modify
     },
     "the-silver-searcher": {
         "url": "https://github.com/ggreer/the_silver_searcher.git",
-        "version": "a61f178"  # commit hash，无需修改
+        "version": "a61f178"  # commit hash, no need to modify
     },
     "protobuf": {
         "url": "https://github.com/protocolbuffers/protobuf.git",
-        "version": "v3.20.0"  # 添加 v 前缀
+        "version": "v3.20.0"  # Add v prefix
     },
     "aria2": {
         "url": "https://github.com/aria2/aria2.git",
-        "version": "release-1.36.0"  # 修改为正确的标签格式
+        "version": "release-1.36.0"  # Use correct tag format
     },
     "fish": {
         "url": "https://github.com/fish-shell/fish-shell.git",
@@ -66,12 +66,12 @@ REPOSITORIES = {
 }
 
 def clone_repository(name, info):
-    """克隆特定版本的代码库"""
+    """Clone repository with specific version"""
     url = info["url"]
     version = info["version"]
     temp_dir = f"temp_{name}"
     
-    # 定义使用 commit hash 的仓库列表
+    # Define repositories using commit hash
     commit_hash_repos = {
         "git": "f443b2",
         "tmux": "5071b82",
@@ -83,38 +83,38 @@ def clone_repository(name, info):
     print(f"\nProcessing {name}...")
     
     try:
-        # 确保临时目录不存在
+        # Ensure temporary directory doesn't exist
         if os.path.exists(temp_dir):
             print(f"Removing existing {temp_dir}...")
             shutil.rmtree(temp_dir)
         
         if name == "linux":
             print("Using special clone method for Linux...")
-            # 使用 -c core.ignorecase=true 避免大小写冲突
+            # Use -c core.ignorecase=true to avoid case conflicts
             subprocess.run(["git", "-c", "core.ignorecase=true", 
                           "clone", "--depth", "1", 
                           "--branch", version, url, temp_dir], 
                          check=True)
         elif name in commit_hash_repos:
             print(f"Using commit hash clone method for {name}...")
-            # 完整克隆仓库
+            # Full repository clone
             subprocess.run(["git", "clone", url, temp_dir], 
                          check=True)
             
-            # 切换到指定的 commit
+            # Switch to specified commit
             subprocess.run(["git", "checkout", version],
                          cwd=temp_dir, check=True)
             
         else:
             print(f"Trying to clone {name} with version {version}...")
             try:
-                # 首先尝试直接使用版本号
+                # First try using version number directly
                 subprocess.run(["git", "clone", "--branch", version, 
                               "--depth", "1", url, temp_dir], 
                              check=True)
             except subprocess.CalledProcessError:
                 print(f"Failed with version {version}, trying with alternative formats...")
-                # 尝试不同的版本号格式
+                # Try different version number formats
                 alternate_versions = [
                     version,
                     f"v{version}",
@@ -136,7 +136,7 @@ def clone_repository(name, info):
                 if not cloned:
                     raise Exception(f"Failed to clone {name} with any version format")
         
-        # 移动到最终位置
+        # Move to final location
         final_path = os.path.join(REPOS_DIR, name)
         if os.path.exists(final_path):
             print(f"Removing existing {final_path}...")
@@ -147,18 +147,18 @@ def clone_repository(name, info):
         
     except Exception as e:
         print(f"Error processing {name}: {str(e)}")
-        # 清理失败的临时目录
+        # Clean up failed temporary directory
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)
 
 def main():
-    # 确保 Repos 目录存在
+    # Ensure Repos directory exists
     os.makedirs(REPOS_DIR, exist_ok=True)
     
-    # 获取已存在的仓库列表
+    # Get list of existing repositories
     existing_repos = set(os.listdir(REPOS_DIR))
     
-    # 下载缺失的仓库
+    # Download missing repositories
     for name, info in REPOSITORIES.items():
         if name not in existing_repos:
             print(f"\nRepository {name} not found, downloading...")
