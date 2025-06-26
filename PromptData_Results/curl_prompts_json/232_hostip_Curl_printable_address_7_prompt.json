@@ -1,5 +1,0 @@
-{
-  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'sa4' at line 9\n2. Pointer 'ai' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nvoid Curl_printable_address(const struct Curl_addrinfo *ai, char *buf,\n                            size_t bufsize)\n{\n  DEBUGASSERT(bufsize);\n  buf[0] = 0;\n\n  switch(ai->ai_family) {\n  case AF_INET: {\n    const struct sockaddr_in *sa4 = (const void *)ai->ai_addr;\n    const struct in_addr *ipaddr4 = &sa4->sin_addr;\n    (void)Curl_inet_ntop(ai->ai_family, (const void *)ipaddr4, buf, bufsize);\n    break;\n  }\n\n\n// Source: hostip.c\n// Lines 144-156\n",
-  "ANSWER": "MUST"
-}

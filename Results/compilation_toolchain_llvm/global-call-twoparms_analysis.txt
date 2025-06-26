@@ -1,0 +1,12 @@
+Analysis Results - global-call-twoparms
+==================================================
+
+Label: LABEL 1
+Pointers: *pp and *qq
+Ground Truth: MAY
+LLM Result: MAY
+Reason: The function pointer `global.fp` can be set to either `foo` or `bar`, leading to different aliasing outcomes; `foo` makes `*pp` and `*qq` point to different locations, while `bar` makes them point to the same location.
+--------------------------------------------------
+
+Summary (Ground Truth,LLM Result):
+MAY,MAY

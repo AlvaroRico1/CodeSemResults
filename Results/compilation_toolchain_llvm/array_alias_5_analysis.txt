@@ -1,0 +1,12 @@
+Analysis Results - array_alias_5
+==================================================
+
+Label: LABEL 1
+Pointers: s[0].f1 and s[1].f2
+Ground Truth: MAY
+LLM Result: NO
+Reason: Different struct fields never alias due to field sensitivity.
+--------------------------------------------------
+
+Summary (Ground Truth,LLM Result):
+MAY,NO

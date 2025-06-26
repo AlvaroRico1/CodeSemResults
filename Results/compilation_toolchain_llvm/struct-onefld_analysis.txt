@@ -1,0 +1,36 @@
+Analysis Results - struct-onefld
+==================================================
+
+Label: LABEL 1
+Pointers: &pint1->f1 and &pint2->f1
+Ground Truth: MUST
+LLM Result: MUST
+Reason: Both pint1 and pint2 are directly assigned the address of the same struct instance 's', so they must alias.
+--------------------------------------------------
+
+Label: LABEL 2
+Pointers: &pint1->f1 and &s.f1
+Ground Truth: MUST
+LLM Result: MUST
+Reason: Both pint1 and pint2 are directly assigned the address of the same struct instance 's', so &pint1->f1 and &s.f1 must alias as they point to the same memory location.
+--------------------------------------------------
+
+Label: LABEL 3
+Pointers: &qint1->f1 and &qint2->f1
+Ground Truth: MUST
+LLM Result: MUST
+Reason: Both qint1 and qint2 are directly assigned the address of the same struct instance 't', so their field accesses &qint1->f1 and &qint2->f1 must alias.
+--------------------------------------------------
+
+Label: LABEL 4
+Pointers: &qint1->f1 and &t.f1
+Ground Truth: MUST
+LLM Result: MUST
+Reason: Both qint1 and qint2 are directly assigned the address of the same struct instance 't', making &qint1->f1 and &t.f1 point to the same memory location.
+--------------------------------------------------
+
+Summary (Ground Truth,LLM Result):
+MUST,MUST
+MUST,MUST
+MUST,MUST
+MUST,MUST

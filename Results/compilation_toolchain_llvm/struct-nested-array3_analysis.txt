@@ -1,0 +1,44 @@
+Analysis Results - struct-nested-array3
+==================================================
+
+Label: LABEL 1
+Pointers: &p->out4 and &s.out4
+Ground Truth: MUST
+LLM Result: MUST
+Reason: After the assignment p = &s, the pointer p points to the same memory location as s, making &p->out4 and &s.out4 point to the same address.
+--------------------------------------------------
+
+Label: LABEL 2
+Pointers: &p->out3.mid2[10].in1[10] and &s.out3.mid2[4000]
+Ground Truth: MAY
+LLM Result: MAY
+Reason: Array elements with different indices may alias due to uncertain runtime indices, and same fields in different struct array elements may alias under conservative analysis.
+--------------------------------------------------
+
+Label: LABEL 3
+Pointers: &p->out3.mid2[20] and &p->out3.mid2[30]
+Ground Truth: MAY
+LLM Result: MAY
+Reason: Array elements with different indices may alias due to runtime uncertainty in index values.
+--------------------------------------------------
+
+Label: LABEL 4
+Pointers: &p->out3.mid2[3].in3 and &s.out3.mid3[2]
+Ground Truth: NO
+LLM Result: NO
+Reason: Different struct fields never alias, and &p->out3.mid2[3].in3 and &s.out3.mid3[2] access different fields within the struct ArrayStruct.
+--------------------------------------------------
+
+Label: LABEL 5
+Pointers: &p->out3.mid2[0] and &s.out4
+Ground Truth: NO
+LLM Result: NO
+Reason: Different struct fields never alias, and &p->out3.mid2[0] and &s.out4 refer to different fields within the struct.
+--------------------------------------------------
+
+Summary (Ground Truth,LLM Result):
+MUST,MUST
+MAY,MAY
+MAY,MAY
+NO,NO
+NO,NO

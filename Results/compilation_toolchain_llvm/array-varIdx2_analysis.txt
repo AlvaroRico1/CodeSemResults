@@ -1,0 +1,20 @@
+Analysis Results - array-varIdx2
+==================================================
+
+Label: LABEL 1
+Pointers: s[a].f1 and s[b].f2
+Ground Truth: NO
+LLM Result: NO
+Reason: Different struct fields never alias due to field sensitivity.
+--------------------------------------------------
+
+Label: LABEL 2
+Pointers: s[a].f1 and s[b].f1
+Ground Truth: MAY
+LLM Result: MAY
+Reason: Array elements with different indices and same fields may alias due to uncertain runtime indices.
+--------------------------------------------------
+
+Summary (Ground Truth,LLM Result):
+NO,NO
+MAY,MAY

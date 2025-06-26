@@ -1,0 +1,36 @@
+Analysis Results - struct-incompab-typecast-nested
+==================================================
+
+Label: LABEL 1
+Pointers: pdst->f1[9] and &x
+Ground Truth: MAY
+LLM Result: MAY
+Reason: The pointer pdst->f1[9] is part of an array, and since array indices are dynamic and uncertain at runtime, pdst->f1[9] may alias with any element of the array, including pdst->f1[3], which is directly assigned the address of x.
+--------------------------------------------------
+
+Label: LABEL 2
+Pointers: pdst->f3[3].in2 and &y
+Ground Truth: MAY
+LLM Result: MAY
+Reason: Array elements with different indices may alias due to runtime index uncertainty, and pdst is assigned from psrc, which points to the same struct instance.
+--------------------------------------------------
+
+Label: LABEL 3
+Pointers: psrc->f1[2] and &z
+Ground Truth: NO
+LLM Result: NO
+Reason: The pointer psrc->f1[2] is never assigned to point to the address of z, and different struct fields (f1 and f3) never alias.
+--------------------------------------------------
+
+Label: LABEL 4
+Pointers: psrc->f3[1].in2 and &z
+Ground Truth: MAY
+LLM Result: MAY
+Reason: The pointer pdst->f3[1].in2 is assigned the address of &z, and since pdst is assigned from psrc, psrc->f3[1].in2 may also point to &z due to the conservative handling of array indices and struct fields.
+--------------------------------------------------
+
+Summary (Ground Truth,LLM Result):
+MAY,MAY
+MAY,MAY
+NO,NO
+MAY,MAY

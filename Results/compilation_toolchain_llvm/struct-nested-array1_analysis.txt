@@ -1,0 +1,28 @@
+Analysis Results - struct-nested-array1
+==================================================
+
+Label: LABEL 1
+Pointers: &p->f3.f1[10] and q
+Ground Truth: MAY
+LLM Result: MAY
+Reason: Array elements with different indices may alias due to runtime index uncertainty, and q is assigned to an element of the same array.
+--------------------------------------------------
+
+Label: LABEL 2
+Pointers: &p->f3.f1[20] and &p->f3.f1[30]
+Ground Truth: MAY
+LLM Result: MAY
+Reason: Array elements with different indices may alias due to unknown runtime index values.
+--------------------------------------------------
+
+Label: LABEL 3
+Pointers: &p->f3.f1[0] and &s.f4
+Ground Truth: NO
+LLM Result: NO
+Reason: Different struct fields never alias, and &p->f3.f1[0] points to an element within the array field f3.f1, while &s.f4 points to a separate field f4 in the same struct.
+--------------------------------------------------
+
+Summary (Ground Truth,LLM Result):
+MAY,MAY
+MAY,MAY
+NO,NO

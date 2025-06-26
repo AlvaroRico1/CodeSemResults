@@ -1,0 +1,20 @@
+Analysis Results - struct-idx-overflow
+==================================================
+
+Label: LABEL 1
+Pointers: void* and void*
+Ground Truth: NO
+LLM Result: NO
+Reason: c points to field f2 and d points to field f1 of the same struct instance, and different fields in a struct never alias.
+--------------------------------------------------
+
+Label: LABEL 2
+Pointers: c and d
+Ground Truth: NO
+LLM Result: NO
+Reason: Pointers c and d point to different fields of the same struct, and different struct fields never alias.
+--------------------------------------------------
+
+Summary (Ground Truth,LLM Result):
+NO,NO
+NO,NO

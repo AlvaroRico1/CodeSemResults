@@ -1,5 +1,0 @@
-{
-  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'backend' at line 5\n2. Pointer 'connssl' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nstatic void *ossl_get_internals(struct ssl_connect_data *connssl,\n                                CURLINFO info)\n{\n  /* Legacy: CURLINFO_TLS_SESSION must return an SSL_CTX pointer. */\n  struct ssl_backend_data *backend = connssl->backend;\n  return info == CURLINFO_TLS_SESSION ?\n         (void *)backend->ctx : (void *)backend->handle;\n}\n\n\n// Source: openssl.c\n// Lines 4483-4490\n",
-  "ANSWER": "MUST"
-}

@@ -1,5 +1,0 @@
-{
-  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'part' at line 1\n2. Pointer 'mep' at line 4\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nCURLcode curl_mime_encoder(curl_mimepart *part, const char *encoding)\n{\n  CURLcode result = CURLE_BAD_FUNCTION_ARGUMENT;\n  const struct mime_encoder *mep;\n\n  if(!part)\n    return result;\n\n  part->encoder = NULL;\n\n  if(!encoding)\n    return CURLE_OK;    /* Removing current encoder. */\n\n  for(mep = encoders; mep->name; mep++)\n    if(strcasecompare(encoding, mep->name)) {\n      part->encoder = mep;\n      result = CURLE_OK;\n    }\n\n  return result;\n}\n\n\n// Source: mime.c\n// Lines 1503-1523\n",
-  "ANSWER": "MUST"
-}

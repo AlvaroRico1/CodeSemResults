@@ -1,5 +1,0 @@
-{
-  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'prev' at line 7\n2. Pointer 'last' at line 3\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nvoid config_free(struct OperationConfig *config)\n{\n  struct OperationConfig *last = config;\n\n  /* Free each of the structures in reverse order */\n  while(last) {\n    struct OperationConfig *prev = last->prev;\n\n    free_config_fields(last);\n    free(last);\n\n    last = prev;\n  }\n\n\n// Source: tool_cfgable.c\n// Lines 175-187\n",
-  "ANSWER": "MUST"
-}

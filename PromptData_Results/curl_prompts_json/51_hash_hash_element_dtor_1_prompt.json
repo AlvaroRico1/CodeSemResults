@@ -1,5 +1,0 @@
-{
-  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'e' at line 4\n2. Pointer 'element' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nhash_element_dtor(void *user, void *element)\n{\n  struct Curl_hash *h = (struct Curl_hash *) user;\n  struct Curl_hash_element *e = (struct Curl_hash_element *) element;\n\n  if(e->ptr) {\n    h->dtor(e->ptr);\n    e->ptr = NULL;\n  }\n\n  e->key_len = 0;\n\n  free(e);\n}\n\n\n// Source: hash.c\n// Lines 35-48\n",
-  "ANSWER": "MUST"
-}

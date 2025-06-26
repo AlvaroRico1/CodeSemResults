@@ -1,5 +1,0 @@
-{
-  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'list' at line 1\n2. Pointer 'new_item' at line 4\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nstruct slist_wc *slist_wc_append(struct slist_wc *list,\n                                 const char *data)\n{\n  struct curl_slist *new_item = curl_slist_append(NULL, data);\n\n  if(!new_item)\n    return NULL;\n\n  if(!list) {\n    list = malloc(sizeof(struct slist_wc));\n\n    if(!list) {\n      curl_slist_free_all(new_item);\n      return NULL;\n    }\n\n    list->first = new_item;\n    list->last = new_item;\n    return list;\n  }\n\n  list->last->next = new_item;\n  list->last = list->last->next;\n  return list;\n}\n\n\n// Source: slist_wc.c\n// Lines 36-60\n",
-  "ANSWER": "MUST"
-}

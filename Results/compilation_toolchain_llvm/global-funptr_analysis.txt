@@ -1,0 +1,12 @@
+Analysis Results - global-funptr
+==================================================
+
+Label: LABEL 1
+Pointers: q and &y
+Ground Truth: MUST
+LLM Result: MAY
+Reason: The function `foo` assigns the address of `y` to `p`, and then `q` is assigned the value of `p`, so `q` may point to `y`.
+--------------------------------------------------
+
+Summary (Ground Truth,LLM Result):
+MUST,MAY

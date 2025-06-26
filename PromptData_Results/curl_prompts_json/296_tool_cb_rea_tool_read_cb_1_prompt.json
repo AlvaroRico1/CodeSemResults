@@ -1,5 +1,0 @@
-{
-  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'in' at line 4\n2. Pointer 'userdata' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nsize_t tool_read_cb(char *buffer, size_t sz, size_t nmemb, void *userdata)\n{\n  ssize_t rc;\n  struct InStruct *in = userdata;\n\n  rc = read(in->fd, buffer, sz*nmemb);\n  if(rc < 0) {\n    if(errno == EAGAIN) {\n      errno = 0;\n      in->config->readbusy = TRUE;\n      return CURL_READFUNC_PAUSE;\n    }\n    /* since size_t is unsigned we can't return negative values fine */\n    rc = 0;\n  }\n  in->config->readbusy = FALSE;\n  return (size_t)rc;\n}\n\n\n// Source: tool_cb_rea.c\n// Lines 38-55\n",
-  "ANSWER": "MUST"
-}

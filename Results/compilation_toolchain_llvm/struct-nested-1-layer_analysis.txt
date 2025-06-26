@@ -1,0 +1,20 @@
+Analysis Results - struct-nested-1-layer
+==================================================
+
+Label: LABEL 1
+Pointers: pms2->f4 and pms1->f2.f3
+Ground Truth: NO
+LLM Result: NO
+Reason: Different struct fields (f4 and f3) never alias due to field sensitivity.
+--------------------------------------------------
+
+Label: LABEL 2
+Pointers: pms2->f3 and pms1->f2.f3
+Ground Truth: MUST
+LLM Result: MUST
+Reason: Both pointers are initialized to point to the same field `f3` of the same struct instance `ms.f2`, making them always point to the same memory location.
+--------------------------------------------------
+
+Summary (Ground Truth,LLM Result):
+NO,NO
+MUST,MUST

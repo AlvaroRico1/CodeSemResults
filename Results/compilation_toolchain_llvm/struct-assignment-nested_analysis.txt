@@ -1,0 +1,28 @@
+Analysis Results - struct-assignment-nested
+==================================================
+
+Label: LABEL 1
+Pointers: s2.out4 and &x
+Ground Truth: MUST
+LLM Result: MAY
+Reason: The pointer s1.out4 is assigned the address of x, and since s2 is a copy of s1, s2.out4 may also point to the same address as s1.out4, which is &x.
+--------------------------------------------------
+
+Label: LABEL 2
+Pointers: s2.out3.mid2[1].in1[1] and &y
+Ground Truth: MAY
+LLM Result: MAY
+Reason: The assignment `s2 = s1` copies the entire structure, and since `s1.out3.mid2[3].in1[3]` is assigned `&y`, due to conservative array handling, `s2.out3.mid2[1].in1[1]` may alias with `&y` because array indices are uncertain at runtime.
+--------------------------------------------------
+
+Label: LABEL 3
+Pointers: s2.out3.mid2[3].in1[20] and &y
+Ground Truth: MAY
+LLM Result: MAY
+Reason: The assignment `POINTER_OP[p->out3].POINTER_OP[mid2[3].in1][3] = ADDRESS_OF[&y];` means `s1.out3.mid2[3].in1[3]` points to `&y`. Since `s2` is a copy of `s1`, `s2.out3.mid2[3].in1[3]` also points to `&y`. Due to array index uncertainty, `s2.out3.mid2[3].in1[20]` MAY alias with `&y`.
+--------------------------------------------------
+
+Summary (Ground Truth,LLM Result):
+MUST,MAY
+MAY,MAY
+MAY,MAY

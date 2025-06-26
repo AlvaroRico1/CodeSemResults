@@ -1,5 +1,0 @@
-{
-  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'sip' at line 3\n2. Pointer 'instream' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nint tool_mime_stdin_seek(void *instream, curl_off_t offset, int whence)\n{\n  struct tool_mime *sip = (struct tool_mime *) instream;\n\n  switch(whence) {\n  case SEEK_CUR:\n    offset += sip->curpos;\n    break;\n  case SEEK_END:\n    offset += sip->size;\n    break;\n  }\n  if(offset < 0)\n    return CURL_SEEKFUNC_CANTSEEK;\n  if(!sip->data) {\n    if(fseek(stdin, (long) (offset + sip->origin), SEEK_SET))\n      return CURL_SEEKFUNC_CANTSEEK;\n  }\n  sip->curpos = offset;\n  return CURL_SEEKFUNC_OK;\n}\n\n\n// Source: tool_formparse.c\n// Lines 219-239\n",
-  "ANSWER": "MUST"
-}

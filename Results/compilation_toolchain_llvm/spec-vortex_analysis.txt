@@ -1,0 +1,12 @@
+Analysis Results - spec-vortex
+==================================================
+
+Label: LABEL 1
+Pointers: PartLib01 and &Rectangle_draw
+Ground Truth: NO
+LLM Result: NO
+Reason: PartLib01 is assigned through Object_GetImage, which retrieves an address from Theory->ChunkAddr, while &Rectangle_draw is a function pointer assignment, and different struct fields never alias.
+--------------------------------------------------
+
+Summary (Ground Truth,LLM Result):
+NO,NO

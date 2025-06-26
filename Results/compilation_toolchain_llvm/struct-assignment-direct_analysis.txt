@@ -1,0 +1,12 @@
+Analysis Results - struct-assignment-direct
+==================================================
+
+Label: LABEL 1
+Pointers: s2.a and s1.a
+Ground Truth: MUST
+LLM Result: MAY
+Reason: The assignment `s2 = s1` copies the entire struct, including the pointer `s1.a`, to `s2.a`, so `s2.a` may point to the same location as `s1.a`.
+--------------------------------------------------
+
+Summary (Ground Truth,LLM Result):
+MUST,MAY

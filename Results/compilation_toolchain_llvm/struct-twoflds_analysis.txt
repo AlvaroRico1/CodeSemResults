@@ -1,0 +1,52 @@
+Analysis Results - struct-twoflds
+==================================================
+
+Label: LABEL 1
+Pointers: &pint1->f1 and &pint2->f1
+Ground Truth: MUST
+LLM Result: MUST
+Reason: Both pointers pint1 and pint2 are directly assigned the address of the same struct instance 's', so they must alias for the same field 'f1'.
+--------------------------------------------------
+
+Label: LABEL 2
+Pointers: &pint1->f2 and &pint2->f2
+Ground Truth: MUST
+LLM Result: MUST
+Reason: Both pint1 and pint2 are directly assigned the address of the same struct instance 's', so they must alias for the same field 'f2'.
+--------------------------------------------------
+
+Label: LABEL 3
+Pointers: &pint1->f1 and &pint2->f2
+Ground Truth: NO
+LLM Result: NO
+Reason: Different fields within the same struct instance never alias due to field sensitivity.
+--------------------------------------------------
+
+Label: LABEL 4
+Pointers: &qint1->f1 and &qint2->f1
+Ground Truth: MUST
+LLM Result: MAY
+Reason: Both qint1 and qint2 are assigned the address of the same struct instance 't', and since they point to the same struct, the same field 'f1' in both pointers may alias.
+--------------------------------------------------
+
+Label: LABEL 5
+Pointers: &qint1->f2 and &qint2->f2
+Ground Truth: MUST
+LLM Result: MAY
+Reason: Both qint1 and qint2 are assigned the address of the same struct instance 't', and since they point to the same instance, the same field 'f2' in different pointers may alias.
+--------------------------------------------------
+
+Label: LABEL 6
+Pointers: &qint1->f1 and &qint2->f2
+Ground Truth: NO
+LLM Result: NO
+Reason: Different fields within the same struct instance never alias due to field sensitivity.
+--------------------------------------------------
+
+Summary (Ground Truth,LLM Result):
+MUST,MUST
+MUST,MUST
+NO,NO
+MUST,MAY
+MUST,MAY
+NO,NO

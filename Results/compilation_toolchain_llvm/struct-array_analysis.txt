@@ -1,0 +1,36 @@
+Analysis Results - struct-array
+==================================================
+
+Label: LABEL 1
+Pointers: &p->f3[10] and q
+Ground Truth: MAY
+LLM Result: MAY
+Reason: Array elements with different indices may alias due to unknown runtime indices, and q points to an element of the same array.
+--------------------------------------------------
+
+Label: LABEL 2
+Pointers: &p->f3[20] and &p->f3[30]
+Ground Truth: MAY
+LLM Result: MAY
+Reason: Array elements with different indices may alias due to dynamic index resolution at runtime.
+--------------------------------------------------
+
+Label: LABEL 3
+Pointers: &s.f3[0] and &s.f3[99]
+Ground Truth: MAY
+LLM Result: MAY
+Reason: Array elements with different indices may alias due to dynamic index access at runtime.
+--------------------------------------------------
+
+Label: LABEL 4
+Pointers: &p->f3[0] and &s.f4
+Ground Truth: NO
+LLM Result: NO
+Reason: Different struct fields never alias due to field sensitivity.
+--------------------------------------------------
+
+Summary (Ground Truth,LLM Result):
+MAY,MAY
+MAY,MAY
+MAY,MAY
+NO,NO

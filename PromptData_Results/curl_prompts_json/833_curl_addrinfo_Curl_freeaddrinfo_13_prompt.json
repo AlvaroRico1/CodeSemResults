@@ -1,5 +1,0 @@
-{
-  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'ca' at line 4\n2. Pointer 'cahead' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nCurl_freeaddrinfo(struct Curl_addrinfo *cahead)\n{\n  struct Curl_addrinfo *vqualifier canext;\n  struct Curl_addrinfo *ca;\n\n  for(ca = cahead; ca; ca = canext) {\n    canext = ca->ai_next;\n    free(ca);\n  }\n}\n\n\n// Source: curl_addrinfo.c\n// Lines 81-90\n",
-  "ANSWER": "MUST"
-}

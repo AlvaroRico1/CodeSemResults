@@ -1,0 +1,12 @@
+Analysis Results - global-nested-calls
+==================================================
+
+Label: LABEL 1
+Pointers: *pp and *qq
+Ground Truth: MAY
+LLM Result: MAY
+Reason: Both *pp and *qq are assigned to point to the same variable 'x', so they may alias.
+--------------------------------------------------
+
+Summary (Ground Truth,LLM Result):
+MAY,MAY

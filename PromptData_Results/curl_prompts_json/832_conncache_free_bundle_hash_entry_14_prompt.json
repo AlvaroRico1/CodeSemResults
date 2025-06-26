@@ -1,5 +1,0 @@
-{
-  "ROLE": "Pointer analyzer that analyzes whether two pointer in a program alias",
-  "QUESTION": "Below is a function in C. Please analyze the alias relationship between:\n1. Pointer 'b' at line 3\n2. Pointer 'freethis' at line 1\n\nDetermine if these two pointers MUST alias (always point to the same location), MAY alias (might point to the same location), or MUST-NOT alias (never point to the same location) after the execution of the function.\n\nProgram to analyze:\nstatic void free_bundle_hash_entry(void *freethis)\n{\n  struct connectbundle *b = (struct connectbundle *) freethis;\n\n  bundle_destroy(b);\n}\n\n\n// Source: conncache.c\n// Lines 107-112\n",
-  "ANSWER": "MUST"
-}
